@@ -1,0 +1,34 @@
+{
+  "extends": "@tsconfig/strictest/tsconfig.json",
+  "compilerOptions": {
+    "allowArbitraryExtensions": true,
+    "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "importHelpers": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "lib": [
+      "DOM",
+      "ES2024"
+    ],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "skipLibCheck": false,
+    "target": "ES2024",
+    "types": [
+      "node",
+      "obsidian-typings"
+    ],
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "./.markdownlint-cli2.mts",
+    "./commitlint.config.ts",
+    "./eslint.config.*ts",
+    "./scripts/**/*.ts",
+    "./src/**/*.ts",
+    "./vitest.config.ts"
+  ]
+}

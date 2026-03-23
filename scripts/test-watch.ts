@@ -1,0 +1,3 @@
+import { execFromRoot } from './helpers/exec.ts';
+
+await execFromRoot('vitest --project unit-tests');

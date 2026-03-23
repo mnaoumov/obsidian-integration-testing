@@ -1,0 +1,131 @@
+{
+  "name": "obsidian-integration-testing",
+  "version": "0.0.0",
+  "description": "Simplifies integration testing of Obsidian plugins.",
+  "keywords": [
+    "obsidian",
+    "testing",
+    "integration",
+    "vitest"
+  ],
+  "homepage": "https://github.com/mnaoumov/obsidian-integration-testing#readme",
+  "bugs": {
+    "url": "https://github.com/mnaoumov/obsidian-integration-testing/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mnaoumov/obsidian-integration-testing.git"
+  },
+  "license": "MIT",
+  "author": "Michael Naumov",
+  "type": "module",
+  "main": "dist/lib/cjs/index.cjs",
+  "module": "dist/lib/esm/index.mjs",
+  "types": "dist/lib/esm/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/lib/esm/index.d.mts",
+        "default": "./dist/lib/esm/index.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/index.d.cts",
+        "default": "./dist/lib/cjs/index.cjs"
+      }
+    },
+    "./obsidian-plugin-vitest-setup": {
+      "import": {
+        "types": "./dist/lib/esm/integration-global-setup.d.mts",
+        "default": "./dist/lib/esm/integration-global-setup.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/integration-global-setup.d.cts",
+        "default": "./dist/lib/cjs/integration-global-setup.cjs"
+      }
+    }
+  },
+  "files": [
+    "!dist/*.tgz",
+    "**/package.json",
+    "dist/",
+    "LICENSE",
+    "patches/",
+    "README.md",
+    "scripts/postinstall.mjs"
+  ],
+  "scripts": {
+    "build": "jiti scripts/build.ts",
+    "build:clean": "jiti scripts/build-clean.ts",
+    "build:compile": "jiti scripts/build-compile.ts",
+    "build:compile:typescript": "jiti scripts/build-compile-typescript.ts",
+    "build:lib": "jiti scripts/build-lib.ts",
+    "build:types": "jiti scripts/build-types.ts",
+    "commit": "jiti scripts/commit.ts",
+    "format": "jiti scripts/format.ts",
+    "format:check": "jiti scripts/format-check.ts",
+    "lint": "jiti scripts/lint.ts",
+    "lint:fix": "jiti scripts/lint-fix.ts",
+    "lint:md": "jiti scripts/lint-md.ts",
+    "lint:md:fix": "jiti scripts/lint-md-fix.ts",
+    "postinstall": "node scripts/postinstall.mjs",
+    "prepare": "jiti scripts/prepare.ts",
+    "spellcheck": "jiti scripts/spellcheck.ts",
+    "test": "jiti scripts/test.ts",
+    "test:coverage": "jiti scripts/test-coverage.ts",
+    "test:integration": "jiti scripts/test-integration.ts",
+    "test:watch": "jiti scripts/test-watch.ts",
+    "version": "jiti scripts/version.ts"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "latest",
+    "@commitlint/config-conventional": "latest",
+    "@commitlint/types": "latest",
+    "@eslint-community/eslint-plugin-eslint-comments": "latest",
+    "@eslint/compat": "latest",
+    "@eslint/js": "latest",
+    "@stylistic/eslint-plugin": "latest",
+    "@tsconfig/strictest": "latest",
+    "@types/markdown-it": "latest",
+    "@types/semver": "latest",
+    "@types/turndown": "latest",
+    "@typescript-eslint/rule-tester": "latest",
+    "@typescript-eslint/utils": "latest",
+    "@vitest/coverage-v8": "latest",
+    "@vitest/runner": "4.1.0",
+    "commitizen": "latest",
+    "cspell": "latest",
+    "cz-conventional-changelog": "latest",
+    "dprint": "latest",
+    "esbuild": "latest",
+    "eslint": "latest",
+    "eslint-import-resolver-typescript": "latest",
+    "eslint-plugin-import-x": "latest",
+    "eslint-plugin-jsdoc": "latest",
+    "eslint-plugin-perfectionist": "latest",
+    "eslint-plugin-tsdoc": "latest",
+    "globals": "latest",
+    "husky": "latest",
+    "jiti": "latest",
+    "jsdom": "latest",
+    "markdownlint": "latest",
+    "markdownlint-cli2": "latest",
+    "markdownlint-rule-relative-links": "latest",
+    "nano-staged": "latest",
+    "obsidian": "latest",
+    "obsidian-typings": "obsidian-public-latest",
+    "patch-package": "latest",
+    "semver": "latest",
+    "type-fest": "latest",
+    "typescript": "latest",
+    "typescript-eslint": "latest",
+    "vitest": "latest"
+  },
+  "peerDependencies": {
+    "obsidian": "latest",
+    "type-fest": "latest",
+    "vitest": "latest"
+  },
+  "overrides": {
+    "type-fest": "latest"
+  }
+}
