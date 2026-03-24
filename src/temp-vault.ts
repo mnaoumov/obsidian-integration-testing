@@ -1,5 +1,3 @@
-/* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
-
 /**
  * @packageDocumentation
  *

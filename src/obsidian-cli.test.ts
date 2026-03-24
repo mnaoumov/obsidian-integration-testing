@@ -7,6 +7,7 @@ import {
 } from 'vitest';
 
 import { ContextId } from './context-id.ts';
+import { noop } from './noop.ts';
 import { evalInObsidian } from './obsidian-cli.ts';
 
 const mockExec = vi.hoisted(() => vi.fn<() => Promise<string>>());
@@ -57,10 +58,6 @@ function getLastCodeArg(): string {
   const codeArg = cmdArgs[2] ?? '';
   expect(codeArg).toMatch(/^code=/);
   return codeArg.slice('code='.length);
-}
-
-function noop(): void {
-  // Does nothing.
 }
 
 describe('evalInObsidian', () => {
@@ -609,10 +606,11 @@ describe('ContextId', () => {
     }
   });
 
-  it('should support Symbol.asyncDispose', async () => {
+  it('should support await using', async () => {
     mockExec.mockResolvedValue('=> (no output)');
-    const ctx = new ContextId();
-    await ctx[Symbol.asyncDispose]();
+    {
+      await using _ctx = new ContextId();
+    }
     expect(mockExec).toHaveBeenCalled();
   });
 });

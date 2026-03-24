@@ -5,14 +5,10 @@ import {
 } from 'vitest';
 
 import { getFunctionExpressionString } from './function-expression.ts';
-
-function noop(): void {
-  // Does nothing.
-}
-
-async function noopAsync(): Promise<void> {
-  // Does nothing.
-}
+import {
+  noop,
+  noopAsync
+} from './noop.ts';
 
 describe('getFunctionExpressionString', () => {
   it('should return the string as-is for a function declaration', () => {
