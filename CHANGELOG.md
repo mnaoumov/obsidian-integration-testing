@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.1.1
+
+- fix: recreate TempVault instance
+
 ## 1.1.0
 
 - feat: expose tempVault
