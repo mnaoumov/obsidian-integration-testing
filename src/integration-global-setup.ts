@@ -6,6 +6,7 @@
 
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
+import type { PluginManifest } from 'obsidian';
 import type { TestProject } from 'vitest/node';
 
 import { existsSync } from 'node:fs';
@@ -24,69 +25,17 @@ import { TempVault } from './temp-vault.ts';
 
 declare module 'vitest' {
   interface ProvidedContext {
-    tempVaultPath: string;
+    tempVault: TempVault;
   }
 }
 
 /**
- * Type representing the manifest file format for Obsidian plugins.
+ * Returns the temporary vault provided by the global setup.
  *
- * {@link https://docs.obsidian.md/Reference/Manifest}
+ * @returns The temporary vault.
  */
-interface Manifest {
-  /**
-   * The author's name.
-   */
-  author: string;
-
-  /**
-   * A URL to the author's website.
-   */
-  authorUrl?: string;
-
-  /**
-   * A description of your plugin.
-   */
-  description: string;
-
-  /**
-   * A URL or multiple URLs to where the users can support your project financially.
-   */
-  fundingUrl?: Record<string, string> | string;
-
-  /**
-   * The ID of your plugin. The ID can't contain obsidian.
-   */
-  id: string;
-
-  /**
-   * Whether your plugin uses NodeJS or Electron APIs.
-   */
-  isDesktopOnly: boolean;
-
-  /**
-   * The minimum required Obsidian version.
-   */
-  minAppVersion: string;
-
-  /**
-   * The display name.
-   */
-  name: string;
-
-  /**
-   * The version, using [Semantic Versioning](https://semver.org/) in the format `x.y.z`.
-   */
-  version: string;
-}
-
-/**
- * Returns the temporary vault path provided by the global setup.
- *
- * @returns The absolute path to the temporary vault.
- */
-export function getTempVaultPath(): string {
-  return inject('tempVaultPath');
+export function getTempVault(): TempVault {
+  return inject('tempVault');
 }
 
 const DIST_DEV = 'dist/dev';
@@ -109,7 +58,7 @@ let tempVault: TempVault;
 export async function setup(project: TestProject): Promise<void> {
   const projectRoot = findProjectRoot();
   const distPath = await resolveDistPath(projectRoot);
-  const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as Manifest;
+  const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
 
   const mainJs = join(distPath, MAIN_JS);
@@ -134,7 +83,7 @@ export async function setup(project: TestProject): Promise<void> {
     vaultPath: tempVault.path
   });
 
-  project.provide('tempVaultPath', tempVault.path);
+  project.provide('tempVault', tempVault);
 }
 
 /**

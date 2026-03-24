@@ -193,25 +193,27 @@ it('should access the TFile from context', async () => {
 });
 ```
 
+Both `TempVault` and `ContextId` implement `AsyncDisposable`, so you can use `await using` for automatic cleanup.
+
 Parent directories are created automatically. To create an empty folder, use a path ending with `/` and an empty string as content.
 
 ### Test your plugin
 
-Use `getTempVaultPath()` to get the temporary vault created by the global setup:
+Use `getTempVault()` to get the temporary vault created by the global setup:
 
 ```ts
 import { describe, expect, it } from 'vitest';
 import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVaultPath } from 'obsidian-integration-testing/obsidian-plugin-vitest-setup';
+import { getTempVault } from 'obsidian-integration-testing/obsidian-plugin-vitest-setup';
 
 describe('my-plugin', () => {
-  const vaultPath = getTempVaultPath();
+  const vault = getTempVault();
 
   it('should be enabled', async () => {
     const isEnabled = await evalInObsidian({
       args: { pluginId: 'my-plugin' },
       fn: ({ app, pluginId }) => app.plugins.enabledPlugins.has(pluginId),
-      vaultPath
+      vaultPath: vault.path
     });
     expect(isEnabled).toBe(true);
   });
@@ -221,12 +223,12 @@ describe('my-plugin', () => {
       fn: async ({ app }) => {
         await app.vault.create('test.md', '# Hello');
       },
-      vaultPath
+      vaultPath: vault.path
     });
 
     const content = await evalInObsidian({
       fn: ({ app }) => app.vault.adapter.read('test.md'),
-      vaultPath
+      vaultPath: vault.path
     });
     expect(content).toBe('# Hello');
   });
