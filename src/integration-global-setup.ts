@@ -12,17 +12,15 @@ import { existsSync } from 'node:fs';
 import {
   cp,
   mkdir,
-  mkdtemp,
   readFile,
-  rm,
   stat,
   writeFile
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inject } from 'vitest';
 
 import { evalInObsidian } from './obsidian-cli.ts';
+import { TempVault } from './temp-vault.ts';
 
 declare module 'vitest' {
   interface ProvidedContext {
@@ -98,7 +96,7 @@ const OBSIDIAN_CONFIG_DIR = '.obsidian';
 const PLUGINS_DIR = 'plugins';
 const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
 
-let tempVaultPath: string;
+let tempVault: TempVault;
 
 /**
  * Vitest global setup function.
@@ -119,11 +117,11 @@ export async function setup(project: TestProject): Promise<void> {
 
   console.warn(`Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
 
-  tempVaultPath = await mkdtemp(join(tmpdir(), `${pluginId}-`));
-  const pluginDir = join(tempVaultPath, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
+  tempVault = new TempVault();
+  const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
   await mkdir(pluginDir, { recursive: true });
   await cp(distPath, pluginDir, { recursive: true });
-  await writeFile(join(tempVaultPath, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+  await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
 
   await evalInObsidian({
     args: { pluginId },
@@ -132,10 +130,10 @@ export async function setup(project: TestProject): Promise<void> {
       await app.plugins.enablePluginAndSave(pluginId);
     },
     shouldSkipPreflightChecks: true,
-    vaultPath: tempVaultPath
+    vaultPath: tempVault.path
   });
 
-  project.provide('tempVaultPath', tempVaultPath);
+  project.provide('tempVaultPath', tempVault.path);
 }
 
 /**
@@ -144,7 +142,7 @@ export async function setup(project: TestProject): Promise<void> {
  * Removes the temporary vault created during setup.
  */
 export async function teardown(): Promise<void> {
-  await rm(tempVaultPath, { recursive: true });
+  await tempVault.dispose();
 }
 
 /**
