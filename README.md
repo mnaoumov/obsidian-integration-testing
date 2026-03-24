@@ -144,11 +144,11 @@ interface Context {
   file: TFile;
 }
 
-const vault = new TempVault({
-  files: {
-    'note.md': '# Hello',
-    'folder/nested.md': 'nested content',
-  }
+const vault = new TempVault();
+
+vault.populate({
+  'note.md': '# Hello',
+  'folder/nested.md': 'nested content',
 });
 
 const contextId = new ContextId<Context>();

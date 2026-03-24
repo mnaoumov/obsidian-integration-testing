@@ -23,23 +23,6 @@ import {
   unregisterVault
 } from './vault-registry.ts';
 
-/**
- * Parameters for the {@link TempVault} constructor.
- */
-export interface TempVaultParams {
-  /**
-   * Map of file paths to content. Parent directories are created automatically.
-   *
-   * To create an empty folder, use a path ending with `/` and an empty string as content.
-   */
-  files?: Record<string, string>;
-
-  /**
-   * An explicit vault path. If omitted, a temp directory is created.
-   */
-  path?: string;
-}
-
 const RM_RETRY_DELAY_MS = 500;
 const RM_RETRY_TIMEOUT_MS = 10000;
 
@@ -56,14 +39,31 @@ export class TempVault {
   public readonly path: string;
 
   /**
-   * Creates a new temp vault, optionally pre-populated with files.
+   * Creates a new temp vault.
    *
-   * @param params - Configuration for the vault.
+   * @param path - An explicit vault path. If omitted, a temp directory is created.
    */
-  public constructor(params: TempVaultParams = {}) {
-    this.path = params.path ?? mkdtempSync(join(tmpdir(), 'temp-vault-'));
+  public constructor(path?: string) {
+    this.path = path ?? mkdtempSync(join(tmpdir(), 'temp-vault-'));
+  }
 
-    for (const [filePath, content] of Object.entries(params.files ?? {})) {
+  /**
+   * Unregisters the vault from Obsidian and deletes the temp directory.
+   */
+  public async dispose(): Promise<void> {
+    await unregisterVault(this.path);
+    await retryRm(this.path);
+  }
+
+  /**
+   * Writes files and folders into the vault directory.
+   * Parent directories are created automatically.
+   * Paths ending with `/` are treated as empty folders (content must be empty string).
+   *
+   * @param files - Map of file/folder paths to content.
+   */
+  public populate(files: Record<string, string>): void {
+    for (const [filePath, content] of Object.entries(files)) {
       const fullPath = join(this.path, filePath);
       if (filePath.endsWith('/')) {
         if (content !== '') {
@@ -75,14 +75,6 @@ export class TempVault {
         writeFileSync(fullPath, content);
       }
     }
-  }
-
-  /**
-   * Unregisters the vault from Obsidian and deletes the temp directory.
-   */
-  public async dispose(): Promise<void> {
-    await unregisterVault(this.path);
-    await retryRm(this.path);
   }
 
   /**

@@ -7,7 +7,6 @@
 export { ContextId } from './context-id.ts';
 export type { EvalInObsidianParams } from './obsidian-cli.ts';
 export { evalInObsidian } from './obsidian-cli.ts';
-export type { TempVaultParams } from './temp-vault.ts';
 export { TempVault } from './temp-vault.ts';
 export {
   registerVault,
