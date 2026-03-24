@@ -10,7 +10,7 @@ A set of helpers that simplify integration testing of [Obsidian](https://obsidia
 
 ## Prerequisites
 
-- [Obsidian](https://obsidian.md/) must be running with the CLI enabled.
+- [Obsidian](https://obsidian.md/) should have CLI enabled.
 
 ## Installation
 
@@ -234,6 +234,23 @@ describe('my-plugin', () => {
   });
 });
 ```
+
+> [!WARNING]
+>
+> **Parallelism:**
+>
+> The Obsidian CLI does not support executing multiple commands concurrently. If your test runner launches tests in parallel, CLI calls may collide and produce flaky failures. Disable file-level parallelism in your Vitest config:
+>
+> ```ts
+> // vitest.config.ts
+> export default defineConfig({
+>   test: {
+>     fileParallelism: false
+>   }
+> });
+> ```
+
+&nbsp;
 
 > [!WARNING]
 >
