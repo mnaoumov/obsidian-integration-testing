@@ -25,7 +25,7 @@ import { TempVault } from './temp-vault.ts';
 
 declare module 'vitest' {
   interface ProvidedContext {
-    tempVault: TempVault;
+    tempVaultPath: string;
   }
 }
 
@@ -35,7 +35,8 @@ declare module 'vitest' {
  * @returns The temporary vault.
  */
 export function getTempVault(): TempVault {
-  return inject('tempVault');
+  const tempVaultPath = inject('tempVaultPath');
+  return new TempVault(tempVaultPath);
 }
 
 const DIST_DEV = 'dist/dev';
@@ -83,7 +84,7 @@ export async function setup(project: TestProject): Promise<void> {
     vaultPath: tempVault.path
   });
 
-  project.provide('tempVault', tempVault);
+  project.provide('tempVaultPath', tempVault.path);
 }
 
 /**
