@@ -485,7 +485,7 @@ function getNoRestrictedSyntaxRulesConfigs(): Linter.Config[] {
           },
           {
             message: 'Do not use _ prefix on methods or functions. The _ prefix is for unused parameters only (G10e).',
-            selector: 'MethodDefinition[key.name=/^_/]'
+            selector: 'MethodDefinition[key.name=/^_/]:not([override=true])'
           },
           {
             message: 'Do not use _ prefix on methods or functions. The _ prefix is for unused parameters only (G10e).',

@@ -27,4 +27,4 @@ coverage
 /tsconfig.tsbuildinfo
 /.env
 
-/.claude
+.claude/settings.local.json
