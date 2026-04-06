@@ -20,13 +20,13 @@ export function jsonWithFunctions(value: unknown): string {
   const functionMap = new Map<string, string>();
 
   const JSON_INDENT = 2;
-  const json = JSON.stringify(value, (_key, val: unknown) => {
+  const json = JSON.stringify(value, (_key: string, val: unknown): JSONValueF<unknown> => {
     if (typeof val === 'function') {
       const placeholder = `__fn_${String(functionMap.size)}__`;
       functionMap.set(placeholder, getFunctionExpressionString(val));
       return placeholder;
     }
-    return val;
+    return val as JSONValueF<unknown>;
   }, JSON_INDENT);
 
   let result = json;

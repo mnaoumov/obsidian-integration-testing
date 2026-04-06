@@ -81,6 +81,7 @@
     "@eslint/compat": "latest",
     "@eslint/js": "latest",
     "@stylistic/eslint-plugin": "latest",
+    "@total-typescript/ts-reset": "latest",
     "@tsconfig/strictest": "latest",
     "@types/markdown-it": "latest",
     "@types/semver": "latest",
@@ -89,6 +90,7 @@
     "@typescript-eslint/utils": "latest",
     "@vitest/coverage-v8": "latest",
     "@vitest/runner": "4.1.0",
+    "better-typescript-lib": "latest",
     "commitizen": "latest",
     "cspell": "latest",
     "cz-conventional-changelog": "latest",
@@ -122,6 +124,7 @@
     "vitest": "latest"
   },
   "overrides": {
+    "@antfu/utils": "9.2.0",
     "eslint-plugin-import": "npm:eslint-plugin-import-x@latest",
     "type-fest": "latest"
   }
