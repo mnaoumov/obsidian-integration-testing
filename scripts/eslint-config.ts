@@ -30,7 +30,7 @@ import { join } from 'node:path/posix';
 import tseslint from 'typescript-eslint';
 
 import { obsidianDevUtilsPlugin } from './helpers/eslint-rules/obsidian-dev-utils-plugin.ts';
-import { getRootFolder } from './helpers/exec.ts';
+import { getRootFolder } from './helpers/root.ts';
 
 const rootConfigFiles = [
   'commitlint.config.ts',
@@ -498,6 +498,10 @@ function getNoRestrictedSyntaxRulesConfigs(): Linter.Config[] {
           {
             message: 'Avoid dynamic import(). Use static imports instead. Only use dynamic imports for lazy/conditional loading (G10a).',
             selector: 'ImportExpression'
+          },
+          {
+            message: 'Do not use `declare` on class properties. Initialize the property or use a regular type annotation.',
+            selector: 'PropertyDefinition[declare=true]'
           }
         ]
       }
