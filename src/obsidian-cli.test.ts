@@ -252,6 +252,30 @@ describe('pre-flight checks', () => {
     mockExec.mockReset();
   });
 
+  it('should use "where.exe obsidian" (without .com) on Windows', async () => {
+    mockPlatform.value = 'win32';
+    mockExec.mockResolvedValue('=> 1');
+    await evalInObsidian({
+      fn(): number {
+        return 1;
+      }
+    });
+    expect(mockExec).toHaveBeenCalledWith('where.exe obsidian', expect.objectContaining({ isQuiet: true }));
+    mockPlatform.value = 'win32';
+  });
+
+  it('should use "which obsidian" on non-Windows platforms', async () => {
+    mockPlatform.value = 'linux';
+    mockExec.mockResolvedValue('=> 1');
+    await evalInObsidian({
+      fn(): number {
+        return 1;
+      }
+    });
+    expect(mockExec).toHaveBeenCalledWith('which obsidian', expect.objectContaining({ isQuiet: true }));
+    mockPlatform.value = 'win32';
+  });
+
   it('should skip pre-flight checks when shouldSkipPreflightChecks is true', async () => {
     mockIsVaultRegistered.mockReturnValue(false);
     mockIsCliEnabled.mockReturnValue(false);
