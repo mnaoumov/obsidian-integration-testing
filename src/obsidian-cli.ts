@@ -195,7 +195,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
  * @throws If the CLI binary is not found.
  */
 async function assertObsidianCliAvailable(): Promise<void> {
-  const command = process.platform === 'win32' ? 'where.exe obsidian.com' : 'which obsidian';
+  const command = process.platform === 'win32' ? 'where.exe obsidian' : 'which obsidian';
   try {
     await exec(command, { isQuiet: true });
   } catch {
