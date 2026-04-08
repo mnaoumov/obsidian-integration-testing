@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 1.1.2
+
+- fix: workaround for eslint bug <https://github.com/eslint/rewrite/issues/425>
+- fix: use "where.exe obsidian" instead of "where.exe obsidian.com" for CLI detection
+- fix: template
+- chore: unify rules
+- chore: unify scripts
+- docs: improve
+
 ## 1.1.1
 
 - fix: recreate TempVault instance
