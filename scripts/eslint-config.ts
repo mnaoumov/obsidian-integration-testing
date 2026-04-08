@@ -12,7 +12,10 @@
 import type { Linter } from 'eslint';
 
 import commentsConfigs from '@eslint-community/eslint-plugin-eslint-comments/configs';
+// eslint-disable-next-line import-x/named -- see bug https://github.com/eslint/rewrite/issues/425
 import { includeIgnoreFile } from '@eslint/compat';
+// eslint-disable-next-line import-x/named -- see bug https://github.com/eslint/rewrite/issues/425
+import { defineConfig } from '@eslint/config-helpers';
 import eslint from '@eslint/js';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `plugin` is too confusing.
 import stylistic from '@stylistic/eslint-plugin';
@@ -23,7 +26,6 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import { configs as perfectionistConfigs } from 'eslint-plugin-perfectionist';
 /* v8 ignore start -- Declarative ESLint rule/plugin configuration; correctness is verified by running ESLint, not unit tests. */
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc';
-import { defineConfig } from 'eslint/config';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path/posix';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `_default` is too confusing.
