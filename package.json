@@ -79,6 +79,7 @@
     "@commitlint/types": "latest",
     "@eslint-community/eslint-plugin-eslint-comments": "latest",
     "@eslint/compat": "latest",
+    "@eslint/config-helpers": "latest",
     "@eslint/js": "latest",
     "@stylistic/eslint-plugin": "latest",
     "@total-typescript/ts-reset": "latest",
