@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Converts a function into a string that is a valid function expression.
  */

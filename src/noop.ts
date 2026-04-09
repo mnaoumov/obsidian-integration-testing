@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * No-op functions.
  */

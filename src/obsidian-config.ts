@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Reads and queries Obsidian's local configuration (`obsidian.json`).
  */

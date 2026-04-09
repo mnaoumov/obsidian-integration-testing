@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Manages temporary vault lifecycle for integration tests.
  */
