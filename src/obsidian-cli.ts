@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Evaluates a function inside a running Obsidian instance via the Obsidian CLI.
  */

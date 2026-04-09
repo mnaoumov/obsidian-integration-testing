@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Typed context identifiers for persisting non-serializable values
  * across {@link evalInObsidian} calls.

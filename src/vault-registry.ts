@@ -1,7 +1,7 @@
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
 /**
- * @packageDocumentation
+ * @file
  *
  * Manages vault registration in the running Obsidian instance.
  */

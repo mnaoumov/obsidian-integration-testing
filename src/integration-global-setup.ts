@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Contains the global setup and teardown functions for integration tests.
  */

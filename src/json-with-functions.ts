@@ -1,5 +1,5 @@
 /**
- * @packageDocumentation
+ * @file
  *
  * Serializes a value to JSON, preserving function bodies as raw source text.
  */
