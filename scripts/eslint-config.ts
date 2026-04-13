@@ -12,9 +12,7 @@
 import type { Linter } from 'eslint';
 
 import commentsConfigs from '@eslint-community/eslint-plugin-eslint-comments/configs';
-// eslint-disable-next-line import-x/named -- see bug https://github.com/eslint/rewrite/issues/425
 import { includeIgnoreFile } from '@eslint/compat';
-// eslint-disable-next-line import-x/named -- see bug https://github.com/eslint/rewrite/issues/425
 import { defineConfig } from '@eslint/config-helpers';
 import eslint from '@eslint/js';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `plugin` is too confusing.
@@ -174,37 +172,6 @@ function getEslintConfigs(): Linter.Config[] {
         'no-octal-escape': 'error',
         'no-promise-executor-return': 'error',
         'no-proto': 'error',
-        'no-restricted-syntax': [
-          'error',
-          {
-            message: 'Do not use definite assignment assertions (!). Initialize the field or make it optional.',
-            selector: 'PropertyDefinition[definite=true]'
-          },
-          {
-            message: 'Do not use definite assignment assertions (!) on abstract fields.',
-            selector: 'TSAbstractPropertyDefinition[definite=true]'
-          },
-          {
-            message: 'Do not use anonymous inline object types in function parameters. Define a named interface instead.',
-            selector: ':function > Identifier TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types in function return types. Define a named interface instead.',
-            selector: ':function > TSTypeAnnotation TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types in interface/method signatures. Define a named interface instead.',
-            selector: 'TSMethodSignature TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types as type arguments. Define a named interface instead.',
-            selector: 'TSTypeParameterInstantiation TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types in type annotations. Define a named interface instead.',
-            selector: 'TSTypeAnnotation TSTypeLiteral'
-          }
-        ],
         'no-return-assign': 'error',
         'no-script-url': 'error',
         'no-self-compare': 'error',
@@ -504,6 +471,30 @@ function getNoRestrictedSyntaxRulesConfigs(): Linter.Config[] {
           {
             message: 'Do not use `declare` on class properties. Initialize the property or use a regular type annotation.',
             selector: 'PropertyDefinition[declare=true]'
+          },
+          {
+            message: 'Do not use anonymous inline object types in function parameters. Define a named interface instead.',
+            selector: ':function > Identifier TSTypeLiteral'
+          },
+          {
+            message: 'Do not use anonymous inline object types in function return types. Define a named interface instead.',
+            selector: ':function > TSTypeAnnotation TSTypeLiteral'
+          },
+          {
+            message: 'Do not use anonymous inline object types in interface/method signatures. Define a named interface instead.',
+            selector: 'TSMethodSignature TSTypeLiteral'
+          },
+          {
+            message: 'Do not use anonymous inline object types as type arguments. Define a named interface instead.',
+            selector: 'TSTypeParameterInstantiation TSTypeLiteral'
+          },
+          {
+            message: 'Do not use anonymous inline object types in type annotations. Define a named interface instead.',
+            selector: 'TSTypeAnnotation TSTypeLiteral'
+          },
+          {
+            message: 'Do not use anonymous inline object types in type assertions. Define a named interface instead.',
+            selector: 'TSAsExpression TSTypeLiteral'
           }
         ]
       }

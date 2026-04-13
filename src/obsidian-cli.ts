@@ -26,6 +26,15 @@ import {
   isVaultRegistered
 } from './obsidian-config.ts';
 
+interface EnsureObsidianRunningParams {
+  command: string[];
+  cwd: string;
+}
+
+interface ExportsWithDefault {
+  default: unknown;
+}
+
 const NO_OUTPUT = '(no output)';
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
 const AUTO_START_POLL_INTERVAL_MS = 2000;
@@ -212,7 +221,7 @@ async function assertObsidianCliAvailable(): Promise<void> {
  * @param params.cwd - The working directory for the eval command.
  * @returns The result string from the successful eval.
  */
-async function ensureObsidianRunning(params: { command: string[]; cwd: string }): Promise<string> {
+async function ensureObsidianRunning(params: EnsureObsidianRunningParams): Promise<string> {
   console.warn('Obsidian is not running. Starting Obsidian...');
 
   const vaultId = getVaultId(params.cwd);
@@ -304,9 +313,7 @@ function getObsidianModulePluginFn(): void {
   const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
 
   const pluginRequire = require;
-  const pluginExports = exports as {
-    default: unknown;
-  };
+  const pluginExports = exports as ExportsWithDefault;
 
   const obsidianModule = pluginRequire('obsidian') as typeof obsidian;
   obsidianModuleHolder.obsidianModule = obsidianModule;
