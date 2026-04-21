@@ -11,14 +11,9 @@ import type {
   ExecOption,
   ExecResult,
   ExecSimpleOptions
-} from '../../src/exec.ts';
+} from './exec.ts';
 
-import { exec } from '../../src/exec.ts';
-
-export type {
-  CommandPart,
-  ExecArg
-} from '../../src/exec.ts';
+import { exec } from './exec.ts';
 
 export async function execFromRoot(command: CommandPart[] | string, options?: ExecSimpleOptions): Promise<string>;
 export function execFromRoot(command: CommandPart[] | string, options: ExecDetailedOptions): Promise<ExecResult>;
