@@ -183,6 +183,8 @@ const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
  * (which Obsidian uses as its vault registry on mobile) and pushing files to the device.
  */
 export class AppiumTransport implements ObsidianTransport {
+  /** */
+  public readonly isMobile = true;
   private readonly appId: string;
   private readonly browser: AppiumBrowser;
   private readonly platform: 'android' | 'ios';

@@ -33,6 +33,9 @@ const VAULT_CLOSE_DELAY_MS = 1000;
  * and manages vaults via Electron IPC.
  */
 export class DesktopCliTransport implements ObsidianTransport {
+  /** */
+  public readonly isMobile = false;
+
   /**
    * Evaluates a JavaScript expression inside Obsidian via `obsidian eval`.
    *

@@ -19,6 +19,7 @@ const mockTransportUnregisterVault = vi.hoisted(() => vi.fn<ObsidianTransport['u
 
 const mockTransport: ObsidianTransport = {
   evaluate: mockTransportEvaluate,
+  isMobile: false,
   preflightCheck: mockTransportPreflightCheck,
   registerVault: mockTransportRegisterVault,
   unregisterVault: mockTransportUnregisterVault

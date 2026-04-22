@@ -100,6 +100,8 @@ const AUTO_START_TIMEOUT_MS = 30000;
  * commands, and routes expressions to the correct vault target.
  */
 export class DesktopCdpTransport implements ObsidianTransport {
+  /** */
+  public readonly isMobile = false;
   private activeVaultPath: null | string = null;
   private readonly cdpUrl: string;
   private readonly commandTimeoutMs: number;

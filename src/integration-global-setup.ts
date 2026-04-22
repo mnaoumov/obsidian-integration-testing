@@ -22,6 +22,7 @@ import { inject } from 'vitest';
 
 import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
+import { getTransport } from './transport-state.ts';
 
 declare module 'vitest' {
   interface ProvidedContext {
@@ -61,6 +62,13 @@ export async function setup(project: TestProject): Promise<void> {
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
+
+  const transport = getTransport();
+  if (transport.isMobile && manifestJson.isDesktopOnly) {
+    throw new Error(
+      `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
+    );
+  }
 
   const mainJs = join(distPath, MAIN_JS);
   const buildStat = await stat(mainJs);
