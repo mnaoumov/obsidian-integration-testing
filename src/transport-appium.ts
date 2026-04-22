@@ -2,7 +2,7 @@
  * @file
  *
  * Appium transport — evaluates expressions inside Obsidian Mobile via WebView
- * JavaScript injection. Manages vault lifecycle via file push and app restart.
+ * JavaScript injection. Manages vault lifecycle via localStorage and file push.
  *
  * This transport works with any Appium client (e.g. WebDriverIO's `remote()`)
  * that satisfies the {@link AppiumBrowser} interface. No `webdriverio` dependency
@@ -28,6 +28,23 @@
  *
  * For BrowserStack, point the WebDriverIO `remote()` at the BrowserStack hub URL
  * with the appropriate capabilities — the transport itself is hub-agnostic.
+ *
+ * ## How vault registration works on mobile
+ *
+ * Obsidian Mobile stores its vault registry in the WebView's `localStorage`:
+ *
+ * - `mobile-external-vaults` — JSON array of registered vault paths
+ * - `mobile-selected-vault` — the currently active vault path
+ * - `enable-plugin-<vaultPath>` — `"true"` to enable the plugin system for the vault
+ *
+ * To register a vault programmatically (without UI interaction):
+ *
+ * 1. Push vault files to the device (e.g. `/sdcard/Documents/<Name>/.obsidian/app.json`)
+ * 2. Switch to `WEBVIEW_md.obsidian` context
+ * 3. Set the localStorage entries
+ * 4. Call `location.reload()` — Obsidian re-reads localStorage and opens the vault
+ *
+ * This avoids the onboarding flow entirely.
  */
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
@@ -137,7 +154,7 @@ export interface AppiumTransportConfig {
    * Base path on the device where Obsidian stores vaults.
    *
    * Defaults:
-   * - Android: `/sdcard/Documents/Obsidian/`
+   * - Android: `/sdcard/Documents/`
    * - iOS: `@md.obsidian:documents/`
    */
   vaultBasePath?: string;
@@ -145,6 +162,7 @@ export interface AppiumTransportConfig {
 
 const NO_OUTPUT = '(no output)';
 const APP_STATE_FOREGROUND = 4;
+const WEBVIEW_CONTEXT_PREFIX = 'WEBVIEW_md.obsidian';
 const WEBVIEW_POLL_INTERVAL_MS = 500;
 const WEBVIEW_POLL_TIMEOUT_MS = 30000;
 const LAYOUT_READY_POLL_INTERVAL_MS = 500;
@@ -153,16 +171,16 @@ const APP_RESTART_DELAY_MS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 
 const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
-  android: '/sdcard/Documents/Obsidian/',
+  android: '/sdcard/Documents/',
   ios: '@md.obsidian:documents/'
 };
 
 /**
  * Transport that communicates with Obsidian Mobile via Appium WebView JS injection.
  *
- * Evaluates expressions by switching to the Obsidian WebView context and
- * calling `execute()`. Manages vaults by pushing files to the device and
- * restarting the app.
+ * Evaluates expressions by switching to the `WEBVIEW_md.obsidian` context and
+ * calling `execute()`. Manages vaults by writing to the WebView's `localStorage`
+ * (which Obsidian uses as its vault registry on mobile) and pushing files to the device.
  */
 export class AppiumTransport implements ObsidianTransport {
   private readonly appId: string;
@@ -179,7 +197,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.browser = config.browser;
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
-    this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/Obsidian/';
+    this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
   }
 
   /**
@@ -192,11 +210,11 @@ export class AppiumTransport implements ObsidianTransport {
   /**
    * Evaluates a JavaScript expression inside Obsidian Mobile's WebView.
    *
-   * Switches to the WebView context, executes the expression, and returns
-   * the result string.
+   * Switches to the `WEBVIEW_md.obsidian` context, executes the expression,
+   * and returns the result string.
    *
    * @param expression - The JavaScript expression to evaluate.
-   * @param _options - Evaluation options (cwd is not used on mobile — vault targeting is via app state).
+   * @param _options - Evaluation options (cwd is not used on mobile — vault targeting is via localStorage).
    * @returns The normalized result string.
    */
   public async evaluate(expression: string, _options: TransportEvalOptions): Promise<string> {
@@ -229,14 +247,13 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
-   * Pushes vault files to the device and restarts Obsidian to pick them up.
+   * Pushes vault files to the device.
    *
    * @param vaultPath - The vault path (used as the vault directory name on device).
    * @param files - Map of relative file paths to content strings.
    */
   public async pushFiles(vaultPath: string, files: Record<string, string>): Promise<void> {
-    const vaultName = extractVaultName(vaultPath);
-    const deviceVaultPath = `${this.vaultBasePath}${vaultName}`;
+    const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
 
     for (const [filePath, content] of Object.entries(files)) {
       const deviceFilePath = `${deviceVaultPath}/${filePath}`;
@@ -246,74 +263,112 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
-   * Registers a vault on mobile by pushing files and restarting the app.
+   * Registers a vault on mobile by pushing files and configuring localStorage.
    *
-   * On mobile, vault registration works by:
-   * 1. Pushing vault files to the device's Obsidian vault directory
-   * 2. Restarting the app so it discovers the new vault
-   * 3. Waiting for the WebView and layout to become ready
+   * The registration flow:
+   * 1. Push a minimal `.obsidian/app.json` to the device so Obsidian recognizes the vault
+   * 2. Switch to the WebView context
+   * 3. Add the vault to localStorage (`mobile-external-vaults`, `mobile-selected-vault`,
+   *    `enable-plugin-<path>`)
+   * 4. Trigger `location.reload()` so Obsidian re-reads localStorage and opens the vault
+   * 5. Wait for `app.workspace.layoutReady`
+   *
+   * Existing vault registrations in localStorage are preserved (append, not overwrite).
    *
    * @param vaultPath - The absolute path to the vault on the host machine.
    */
   public async registerVault(vaultPath: string): Promise<void> {
+    const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
+
     // Push a minimal .obsidian directory so Obsidian recognizes it as a vault.
-    const vaultName = extractVaultName(vaultPath);
-    const deviceVaultPath = `${this.vaultBasePath}${vaultName}`;
     const obsidianMarker = `${deviceVaultPath}/.obsidian/app.json`;
     const base64Content = Buffer.from('{}', 'utf-8').toString('base64');
     await this.browser.pushFile(obsidianMarker, base64Content);
 
-    // Restart Obsidian so it discovers the vault.
-    await this.restartApp();
-
-    // Wait for the WebView to become available and layout ready.
+    // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
+
+    await this.browser.execute<undefined>(`
+      const vaultPath = ${JSON.stringify(deviceVaultPath)};
+      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') || '[]');
+      if (!existing.includes(vaultPath)) {
+        existing.push(vaultPath);
+        localStorage.setItem('mobile-external-vaults', JSON.stringify(existing));
+      }
+      localStorage.setItem('mobile-selected-vault', vaultPath);
+      localStorage.setItem('enable-plugin-' + vaultPath, 'true');
+      location.reload();
+    `);
+
+    // Wait for reload + vault initialization.
     await this.waitForLayoutReady();
   }
 
   /**
-   * Unregisters a vault on mobile by restarting the app.
+   * Unregisters a vault on mobile by removing it from localStorage.
    *
-   * Note: File cleanup on the device is not performed automatically.
-   * The test harness or CI environment should handle device cleanup.
+   * Preserves other vault registrations. If the unregistered vault was selected,
+   * switches to the first remaining vault (or clears the selection).
    *
-   * @param _vaultPath - The vault path (not used for cleanup on mobile).
+   * Note: Vault files on the device are not deleted. The test harness or CI
+   * environment should handle device cleanup.
+   *
+   * @param vaultPath - The absolute path to the vault on the host machine.
    */
-  public async unregisterVault(_vaultPath: string): Promise<void> {
-    await this.restartApp();
+  public async unregisterVault(vaultPath: string): Promise<void> {
+    const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
+
+    await this.ensureWebViewContext();
+
+    await this.browser.execute<undefined>(`
+      const vaultPath = ${JSON.stringify(deviceVaultPath)};
+      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') || '[]');
+      const filtered = existing.filter(v => v !== vaultPath);
+      localStorage.setItem('mobile-external-vaults', JSON.stringify(filtered));
+      localStorage.removeItem('enable-plugin-' + vaultPath);
+      if (localStorage.getItem('mobile-selected-vault') === vaultPath) {
+        if (filtered.length > 0) {
+          localStorage.setItem('mobile-selected-vault', filtered[0]);
+        } else {
+          localStorage.removeItem('mobile-selected-vault');
+        }
+      }
+    `);
   }
 
   /**
-   * Switches the driver to the Obsidian WebView context.
+   * Switches the driver to the `WEBVIEW_md.obsidian` context.
    *
-   * Polls until a WEBVIEW context becomes available (the app may still be loading).
+   * Polls until the context becomes available (the app may still be loading).
+   * Uses the `WEBVIEW_md.obsidian` context specifically to avoid connecting
+   * to Chrome or other WebViews on the device.
    */
   private async ensureWebViewContext(): Promise<void> {
     const deadline = Date.now() + WEBVIEW_POLL_TIMEOUT_MS;
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
-      const webviewContext = contexts.find((ctx) => ctx.startsWith('WEBVIEW'));
+      const obsidianContext = contexts.find((ctx) => ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
 
-      if (webviewContext) {
-        await this.browser.switchContext(webviewContext);
+      if (obsidianContext) {
+        await this.browser.switchContext(obsidianContext);
         return;
       }
 
       await delay(WEBVIEW_POLL_INTERVAL_MS);
     }
 
-    throw new Error(`No WebView context found within ${String(WEBVIEW_POLL_TIMEOUT_MS)}ms. Is the Obsidian app fully loaded?`);
+    throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(WEBVIEW_POLL_TIMEOUT_MS)}ms. Is the Obsidian app fully loaded?`);
   }
 
   /**
-   * Terminates and relaunches the Obsidian app.
+   * Converts a host-side vault path to the device-side path.
+   *
+   * @param vaultPath - Absolute path on the host machine.
+   * @returns The device-side vault path.
    */
-  private async restartApp(): Promise<void> {
-    await this.browser.terminateApp(this.appId);
-    await delay(APP_RESTART_DELAY_MS);
-    await this.browser.activateApp(this.appId);
-    await delay(APP_RESTART_DELAY_MS);
+  private getDeviceVaultPath(vaultPath: string): string {
+    return `${this.vaultBasePath}${extractVaultName(vaultPath)}`;
   }
 
   /**
@@ -331,7 +386,7 @@ export class AppiumTransport implements ObsidianTransport {
           return;
         }
       } catch {
-        // App not ready yet.
+        // App not ready yet (page may be reloading).
       }
 
       await delay(LAYOUT_READY_POLL_INTERVAL_MS);
