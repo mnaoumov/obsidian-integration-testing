@@ -55,8 +55,10 @@ function createManifest(params: CreateManifestParams): string {
 }
 
 /**
- * Loads a plugin inside Obsidian, captures any error from console.error,
- * and checks the enabled state.
+ * Loads a plugin inside Obsidian and captures any load error.
+ *
+ * Monkey-patches `app.plugins.loadPlugin` to intercept errors before
+ * Obsidian's `enablePlugin` try-catch swallows them.
  */
 async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadTestResult> {
   return evalInObsidian({
@@ -68,19 +70,25 @@ async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadT
       }
 
       let errorMessage: string | undefined;
-      const origConsoleError = console.error;
-      console.error = (...args: unknown[]): void => {
-        if (String(args[0]).includes('Plugin failure:')) {
-          const err = args[1];
-          errorMessage = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
+      const origLoadPlugin = app.plugins.loadPlugin;
+      // eslint-disable-next-line func-names -- Anonymous wrapper for monkey-patch.
+      app.plugins.loadPlugin = async function (...args: unknown[]): Promise<unknown> {
+        try {
+          const result = await origLoadPlugin.apply(this, args);
+          errorMessage = undefined;
+          return result;
+        } catch (error) {
+          errorMessage = error instanceof Error ? error.message : String(error);
+          throw error;
         }
-        origConsoleError.apply(console, args);
       };
 
       try {
         await app.plugins.enablePluginAndSave(pluginId);
       } finally {
-        console.error = origConsoleError;
+        // eslint-disable-next-line require-atomic-updates -- Intentional restore of monkey-patch.
+        app.plugins.loadPlugin = origLoadPlugin;
       }
 
       return {

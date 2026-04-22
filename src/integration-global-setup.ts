@@ -83,38 +83,37 @@ export async function setup(project: TestProject): Promise<void> {
   await tempVault.syncToDevice();
   await tempVault.register();
 
-  // Enable the plugin and verify it loaded. Obsidian catches onload() errors
-  // Internally via console.error("Plugin failure: ...", error) and disables
-  // The plugin. We monkey-patch console.error to capture the actual error.
+  // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
+  // LoadPlugin() in a try-catch that swallows errors and returns false.
+  // We monkey-patch loadPlugin() to capture the error before it's swallowed.
   await evalInObsidian({
     args: { pluginId },
     // eslint-disable-next-line no-shadow -- No actual shadowing as the function is executed externally.
     fn: async ({ app, pluginId }): Promise<void> => {
-      let loadError: string | undefined;
-      const origConsoleError = console.error;
-      console.error = (...args: unknown[]): void => {
-        const prefix = String(args[0]);
-        if (prefix.includes('Plugin failure:')) {
-          const err = args[1];
-          loadError = err instanceof Error ? err.message : String(err);
+      let loadError: Error | undefined;
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
+      const origLoadPlugin = app.plugins.loadPlugin;
+      // eslint-disable-next-line func-names -- Anonymous wrapper for monkey-patch.
+      app.plugins.loadPlugin = async function (...args: unknown[]): Promise<unknown> {
+        try {
+          const result = await origLoadPlugin.apply(this, args);
+          loadError = undefined;
+          return result;
+        } catch (error) {
+          loadError = error instanceof Error ? error : new Error(String(error));
+          throw error;
         }
-        origConsoleError.apply(console, args);
       };
 
       try {
         await app.plugins.enablePluginAndSave(pluginId);
-      } catch (error) {
-        throw new Error(`Plugin "${pluginId}" crashed during load`, { cause: error });
       } finally {
-        console.error = origConsoleError;
+        // eslint-disable-next-line require-atomic-updates -- Intentional restore of monkey-patch.
+        app.plugins.loadPlugin = origLoadPlugin;
       }
 
       if (loadError) {
-        throw new Error(`Plugin "${pluginId}" failed to load: ${loadError}`);
-      }
-
-      if (!app.plugins.enabledPlugins.has(pluginId)) {
-        throw new Error(`Plugin "${pluginId}" failed to load. Obsidian disabled it after an error.`);
+        throw new Error(`Plugin "${pluginId}" failed to load: ${loadError.message}`, { cause: loadError });
       }
     },
     shouldSkipPreflightChecks: true,
