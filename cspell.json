@@ -39,8 +39,12 @@
     "spyable",
     "Tsdocs",
     "TSES",
+    "appops",
+    "chromedriver",
     "sdcard",
+    "udid",
     "UiAutomator",
+    "wdio",
     "wikilinks"
   ],
   "ignoreWords": [],

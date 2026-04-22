@@ -302,6 +302,106 @@ const title2 = await evalInObsidian({
 });
 ```
 
+### Android integration tests
+
+You can run the same tests against Obsidian Mobile on an Android emulator (or a real device via BrowserStack).
+
+#### Prerequisites
+
+- [Appium](https://appium.io/) with the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver)
+- [WebDriverIO](https://webdriver.io/) (`npm install --save-dev webdriverio`)
+- Android emulator (or real device) with Obsidian installed
+- Storage permission granted: `adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow`
+
+#### Setup
+
+Add two environment variables to your `.env`:
+
+```env
+OBSIDIAN_APPIUM_URL=http://localhost:4723
+OBSIDIAN_APPIUM_DEVICE_ID=emulator-5554
+```
+
+Add vitest projects for both desktop and Android:
+
+```ts
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    projects: [
+      {
+        test: {
+          name: 'integration-desktop',
+          include: ['src/**/*.integration.test.ts'],
+          exclude: ['src/**/*.android.integration.test.ts'],
+          globalSetup: 'obsidian-integration-testing/obsidian-plugin-vitest-setup',
+        },
+      },
+      {
+        test: {
+          name: 'integration-android',
+          include: ['src/**/*.android.integration.test.ts'],
+          globalSetup: 'obsidian-integration-testing/obsidian-plugin-android-setup',
+        },
+      },
+    ],
+  },
+});
+```
+
+#### File naming convention
+
+| Pattern                            | Runs on      |
+|------------------------------------|--------------|
+| `*.integration.test.ts`            | Desktop only |
+| `*.android.integration.test.ts`    | Android only |
+
+#### Writing Android tests
+
+Android tests use the same `evalInObsidian` API:
+
+```ts
+// src/plugin.android.integration.test.ts
+import { describe, expect, it } from 'vitest';
+import { evalInObsidian } from 'obsidian-integration-testing';
+import { getTempVault } from 'obsidian-integration-testing/obsidian-plugin-vitest-setup';
+
+describe('my-plugin on Android', () => {
+  const vault = getTempVault();
+
+  it('should load on mobile', async () => {
+    const isMobile = await evalInObsidian({
+      fn: ({ app }) => app.isMobile,
+      vaultPath: vault.path,
+    });
+    expect(isMobile).toBe(true);
+  });
+});
+```
+
+#### Reusing desktop tests on Android
+
+To run existing desktop tests on Android, re-export them:
+
+```ts
+// src/plugin.android.integration.test.ts
+export * from './plugin.integration.test.ts';
+```
+
+#### Running
+
+```bash
+# Desktop tests (default)
+npx vitest run --project integration-desktop
+
+# Android tests (requires Appium + emulator running)
+npx vitest run --project integration-android
+```
+
+> [!NOTE]
+>
+> Plugins with `isDesktopOnly: true` in `manifest.json` will automatically skip Android tests — the setup throws an error before any test runs.
+
 ## Support
 
 <!-- markdownlint-disable MD033 -->
