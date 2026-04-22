@@ -33,6 +33,16 @@
         "default": "./dist/lib/cjs/index.cjs"
       }
     },
+    "./obsidian-plugin-android-setup": {
+      "import": {
+        "types": "./dist/lib/esm/integration-android-setup.d.mts",
+        "default": "./dist/lib/esm/integration-android-setup.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/integration-android-setup.d.cts",
+        "default": "./dist/lib/cjs/integration-android-setup.cjs"
+      }
+    },
     "./obsidian-plugin-vitest-setup": {
       "import": {
         "types": "./dist/lib/esm/integration-global-setup.d.mts",
