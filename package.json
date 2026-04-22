@@ -42,6 +42,16 @@
         "types": "./dist/lib/cjs/integration-global-setup.d.cts",
         "default": "./dist/lib/cjs/integration-global-setup.cjs"
       }
+    },
+    "./transport-desktop-cdp": {
+      "import": {
+        "types": "./dist/lib/esm/transport-desktop-cdp.d.mts",
+        "default": "./dist/lib/esm/transport-desktop-cdp.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/transport-desktop-cdp.d.cts",
+        "default": "./dist/lib/cjs/transport-desktop-cdp.cjs"
+      }
     }
   },
   "files": [
