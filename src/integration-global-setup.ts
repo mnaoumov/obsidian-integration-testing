@@ -83,23 +83,38 @@ export async function setup(project: TestProject): Promise<void> {
   await tempVault.syncToDevice();
   await tempVault.register();
 
-  // Enable the plugin and verify it loaded. If it crashes during onload(),
-  // Obsidian catches the error internally and disables the plugin.
-  // We detect this by checking enabledPlugins after enablePluginAndSave.
+  // Enable the plugin and verify it loaded. Obsidian catches onload() errors
+  // Internally via console.error("Plugin failure: ...", error) and disables
+  // The plugin. We monkey-patch console.error to capture the actual error.
   await evalInObsidian({
     args: { pluginId },
     // eslint-disable-next-line no-shadow -- No actual shadowing as the function is executed externally.
     fn: async ({ app, pluginId }): Promise<void> => {
+      let loadError: string | undefined;
+      const origConsoleError = console.error;
+      console.error = (...args: unknown[]): void => {
+        const prefix = String(args[0]);
+        if (prefix.includes('Plugin failure:')) {
+          const err = args[1];
+          loadError = err instanceof Error ? err.message : String(err);
+        }
+        origConsoleError.apply(console, args);
+      };
+
       try {
         await app.plugins.enablePluginAndSave(pluginId);
       } catch (error) {
         throw new Error(`Plugin "${pluginId}" crashed during load`, { cause: error });
+      } finally {
+        console.error = origConsoleError;
+      }
+
+      if (loadError) {
+        throw new Error(`Plugin "${pluginId}" failed to load: ${loadError}`);
       }
 
       if (!app.plugins.enabledPlugins.has(pluginId)) {
-        throw new Error(
-          `Plugin "${pluginId}" failed to load. Obsidian disabled it after an error in onload() or constructor.`
-        );
+        throw new Error(`Plugin "${pluginId}" failed to load. Obsidian disabled it after an error.`);
       }
     },
     shouldSkipPreflightChecks: true,

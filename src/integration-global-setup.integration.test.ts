@@ -38,8 +38,8 @@ interface ManifestCheckParams {
 }
 
 interface PluginLoadTestResult {
+  errorMessage: string | undefined;
   isEnabled: boolean;
-  isInPlugins: boolean;
 }
 
 function createManifest(params: CreateManifestParams): string {
@@ -55,11 +55,8 @@ function createManifest(params: CreateManifestParams): string {
 }
 
 /**
- * Loads a plugin inside Obsidian and checks its enabled state.
- *
- * Obsidian catches `onload()` exceptions internally and disables the plugin
- * rather than rethrowing. We detect crashes by checking `enabledPlugins.has(pluginId)`
- * after `enablePluginAndSave()`.
+ * Loads a plugin inside Obsidian, captures any error from console.error,
+ * and checks the enabled state.
  */
 async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadTestResult> {
   return evalInObsidian({
@@ -70,11 +67,25 @@ async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadT
         await app.plugins.setEnable(true);
       }
 
-      await app.plugins.enablePluginAndSave(pluginId);
+      let errorMessage: string | undefined;
+      const origConsoleError = console.error;
+      console.error = (...args: unknown[]): void => {
+        if (String(args[0]).includes('Plugin failure:')) {
+          const err = args[1];
+          errorMessage = err instanceof Error ? err.message : String(err);
+        }
+        origConsoleError.apply(console, args);
+      };
+
+      try {
+        await app.plugins.enablePluginAndSave(pluginId);
+      } finally {
+        console.error = origConsoleError;
+      }
 
       return {
-        isEnabled: app.plugins.enabledPlugins.has(pluginId),
-        isInPlugins: pluginId in app.plugins.plugins
+        errorMessage,
+        isEnabled: app.plugins.enabledPlugins.has(pluginId)
       };
     },
     shouldSkipPreflightChecks: true,
@@ -115,6 +126,7 @@ module.exports = P; exports.default = P;
 `;
 
 interface PluginTestCase {
+  expectedError?: string;
   id: string;
   mainJs: string;
   name: string;
@@ -124,9 +136,9 @@ interface PluginTestCase {
 const TEST_CASES: PluginTestCase[] = [
   { id: 'test-sync-ok', mainJs: SYNC_OK_MAIN, name: 'sync onload (no error)', shouldBeEnabled: true },
   { id: 'test-async-ok', mainJs: ASYNC_OK_MAIN, name: 'async onload (no error)', shouldBeEnabled: true },
-  { id: 'test-sync-crash', mainJs: SYNC_CRASH_MAIN, name: 'sync onload (crash)', shouldBeEnabled: false },
-  { id: 'test-async-crash', mainJs: ASYNC_CRASH_MAIN, name: 'async onload (crash)', shouldBeEnabled: false },
-  { id: 'test-ctor-crash', mainJs: CONSTRUCTOR_CRASH_MAIN, name: 'constructor (crash)', shouldBeEnabled: false }
+  { expectedError: 'sync onload crash', id: 'test-sync-crash', mainJs: SYNC_CRASH_MAIN, name: 'sync onload (crash)', shouldBeEnabled: false },
+  { expectedError: 'async onload crash', id: 'test-async-crash', mainJs: ASYNC_CRASH_MAIN, name: 'async onload (crash)', shouldBeEnabled: false },
+  { expectedError: 'constructor crash', id: 'test-ctor-crash', mainJs: CONSTRUCTOR_CRASH_MAIN, name: 'constructor (crash)', shouldBeEnabled: false }
 ];
 
 describe('plugin load detection', () => {
@@ -167,13 +179,19 @@ describe('plugin load detection', () => {
   });
 
   for (const tc of TEST_CASES) {
-    it(`${tc.name}: enabledPlugins.has() should be ${String(tc.shouldBeEnabled)}`, async () => {
+    it(tc.name, async () => {
       const result = await loadPluginAndCheck({
         pluginId: tc.id,
         vaultPath: vault.path
       });
 
       expect(result.isEnabled).toBe(tc.shouldBeEnabled);
+
+      if (tc.expectedError) {
+        expect(result.errorMessage).toContain(tc.expectedError);
+      } else {
+        expect(result.errorMessage).toBeUndefined();
+      }
     });
   }
 });
