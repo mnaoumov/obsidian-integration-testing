@@ -84,7 +84,8 @@ export async function setup(project: TestProject): Promise<void> {
   await tempVault.register();
 
   // Enable the plugin and verify it loaded. If it crashes during onload(),
-  // Fail immediately rather than running all tests.
+  // Obsidian catches the error internally and disables the plugin.
+  // We detect this by checking enabledPlugins after enablePluginAndSave.
   await evalInObsidian({
     args: { pluginId },
     // eslint-disable-next-line no-shadow -- No actual shadowing as the function is executed externally.
@@ -95,8 +96,10 @@ export async function setup(project: TestProject): Promise<void> {
         throw new Error(`Plugin "${pluginId}" crashed during load`, { cause: error });
       }
 
-      if (!(pluginId in app.plugins.plugins)) {
-        throw new Error(`Plugin "${pluginId}" failed to load. Check the plugin's onload() for errors.`);
+      if (!app.plugins.enabledPlugins.has(pluginId)) {
+        throw new Error(
+          `Plugin "${pluginId}" failed to load. Obsidian disabled it after an error in onload() or constructor.`
+        );
       }
     },
     shouldSkipPreflightChecks: true,

@@ -65,7 +65,15 @@ export class DesktopCliTransport implements ObsidianTransport {
       throw new Error(`Unexpected empty response from Obsidian for path: ${options.cwd}`);
     }
 
-    return resultStr.startsWith('=> ') ? resultStr.slice('=> '.length) : resultStr;
+    // The CLI may prepend error/warning lines before the result.
+    // Find the last `=> ` line which contains the actual result.
+    const lines = resultStr.split('\n');
+    const resultLine = lines.findLast((line) => line.startsWith('=> '));
+    if (resultLine) {
+      return resultLine.slice('=> '.length);
+    }
+
+    return resultStr;
   }
 
   /**

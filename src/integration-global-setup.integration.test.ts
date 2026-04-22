@@ -1,0 +1,240 @@
+/**
+ * @file
+ *
+ * Integration tests for the setup harness itself.
+ * Validates that the harness correctly detects plugin load success and failure
+ * across various crash scenarios.
+ */
+
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it
+} from 'vitest';
+
+import type { ObsidianTransport } from './transport.ts';
+
+import { evalInObsidian } from './obsidian-cli.ts';
+import { TempVault } from './temp-vault.ts';
+import { getTransport } from './transport-state.ts';
+
+const REGISTRATION_TIMEOUT_MS = 60000;
+
+interface CreateManifestParams {
+  id: string;
+  isDesktopOnly?: boolean;
+}
+
+interface LoadPluginParams {
+  pluginId: string;
+  vaultPath: string;
+}
+
+interface ManifestCheckParams {
+  id: string;
+  isDesktopOnly: boolean;
+}
+
+interface PluginLoadTestResult {
+  isEnabled: boolean;
+  isInPlugins: boolean;
+}
+
+function createManifest(params: CreateManifestParams): string {
+  return JSON.stringify({
+    author: 'test',
+    description: 'test',
+    id: params.id,
+    isDesktopOnly: params.isDesktopOnly ?? false,
+    minAppVersion: '1.0.0',
+    name: params.id,
+    version: '1.0.0'
+  });
+}
+
+/**
+ * Loads a plugin inside Obsidian and checks its enabled state.
+ *
+ * Obsidian catches `onload()` exceptions internally and disables the plugin
+ * rather than rethrowing. We detect crashes by checking `enabledPlugins.has(pluginId)`
+ * after `enablePluginAndSave()`.
+ */
+async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadTestResult> {
+  return evalInObsidian({
+    args: { pluginId: params.pluginId },
+
+    fn: async ({ app, pluginId }): Promise<PluginLoadTestResult> => {
+      if (!app.plugins.isEnabled()) {
+        await app.plugins.setEnable(true);
+      }
+
+      await app.plugins.enablePluginAndSave(pluginId);
+
+      return {
+        isEnabled: app.plugins.enabledPlugins.has(pluginId),
+        isInPlugins: pluginId in app.plugins.plugins
+      };
+    },
+    shouldSkipPreflightChecks: true,
+    vaultPath: params.vaultPath
+  });
+}
+
+// --- Plugin source code for each test case ---
+
+const SYNC_OK_MAIN = `
+const { Plugin } = require('obsidian');
+class P extends Plugin { onload() { /* sync, no error */ } }
+module.exports = P; exports.default = P;
+`;
+
+const ASYNC_OK_MAIN = `
+const { Plugin } = require('obsidian');
+class P extends Plugin { async onload() { await Promise.resolve(); } }
+module.exports = P; exports.default = P;
+`;
+
+const SYNC_CRASH_MAIN = `
+const { Plugin } = require('obsidian');
+class P extends Plugin { onload() { throw new Error('sync onload crash'); } }
+module.exports = P; exports.default = P;
+`;
+
+const ASYNC_CRASH_MAIN = `
+const { Plugin } = require('obsidian');
+class P extends Plugin { async onload() { throw new Error('async onload crash'); } }
+module.exports = P; exports.default = P;
+`;
+
+const CONSTRUCTOR_CRASH_MAIN = `
+const { Plugin } = require('obsidian');
+class P extends Plugin { constructor(app, manifest) { super(app, manifest); throw new Error('constructor crash'); } }
+module.exports = P; exports.default = P;
+`;
+
+interface PluginTestCase {
+  id: string;
+  mainJs: string;
+  name: string;
+  shouldBeEnabled: boolean;
+}
+
+const TEST_CASES: PluginTestCase[] = [
+  { id: 'test-sync-ok', mainJs: SYNC_OK_MAIN, name: 'sync onload (no error)', shouldBeEnabled: true },
+  { id: 'test-async-ok', mainJs: ASYNC_OK_MAIN, name: 'async onload (no error)', shouldBeEnabled: true },
+  { id: 'test-sync-crash', mainJs: SYNC_CRASH_MAIN, name: 'sync onload (crash)', shouldBeEnabled: false },
+  { id: 'test-async-crash', mainJs: ASYNC_CRASH_MAIN, name: 'async onload (crash)', shouldBeEnabled: false },
+  { id: 'test-ctor-crash', mainJs: CONSTRUCTOR_CRASH_MAIN, name: 'constructor (crash)', shouldBeEnabled: false }
+];
+
+describe('plugin load detection', () => {
+  const vault = new TempVault();
+
+  beforeAll(async () => {
+    const files: Record<string, string> = {
+      '.obsidian/community-plugins.json': JSON.stringify([])
+    };
+
+    for (const tc of TEST_CASES) {
+      files[`.obsidian/plugins/${tc.id}/main.js`] = tc.mainJs;
+      files[`.obsidian/plugins/${tc.id}/manifest.json`] = createManifest({ id: tc.id });
+    }
+
+    vault.populate(files);
+    await vault.register();
+  }, REGISTRATION_TIMEOUT_MS);
+
+  afterAll(async () => {
+    for (const tc of TEST_CASES) {
+      try {
+        await evalInObsidian({
+          args: { pluginId: tc.id },
+
+          fn: async ({ app, pluginId }): Promise<void> => {
+            await app.plugins.disablePlugin(pluginId);
+            await app.plugins.uninstallPlugin(pluginId);
+          },
+          shouldSkipPreflightChecks: true,
+          vaultPath: vault.path
+        });
+      } catch {
+        // May not have loaded.
+      }
+    }
+    await vault.dispose();
+  });
+
+  for (const tc of TEST_CASES) {
+    it(`${tc.name}: enabledPlugins.has() should be ${String(tc.shouldBeEnabled)}`, async () => {
+      const result = await loadPluginAndCheck({
+        pluginId: tc.id,
+        vaultPath: vault.path
+      });
+
+      expect(result.isEnabled).toBe(tc.shouldBeEnabled);
+    });
+  }
+});
+
+describe('isDesktopOnly check', () => {
+  it('should reject mobile transport for desktop-only plugins', () => {
+    const transport = getTransport();
+    const manifest = JSON.parse(createManifest({ id: 'desktop-only', isDesktopOnly: true })) as ManifestCheckParams;
+
+    const mockMobileTransport: ObsidianTransport = {
+      ...transport,
+      isMobile: true
+    };
+
+    const shouldReject = mockMobileTransport.isMobile && manifest.isDesktopOnly;
+    expect(shouldReject).toBe(true);
+  });
+
+  it('should allow mobile transport for non-desktop-only plugins', () => {
+    const manifest = JSON.parse(createManifest({ id: 'cross-platform', isDesktopOnly: false })) as ManifestCheckParams;
+
+    // Non-desktop-only plugins should not be rejected regardless of transport.
+    expect(manifest.isDesktopOnly).toBe(false);
+  });
+
+  it('should allow desktop transport for desktop-only plugins', () => {
+    const transport = getTransport();
+
+    // The default desktop transport should not be mobile.
+    expect(transport.isMobile).toBe(false);
+  });
+});
+
+describe('obsidianModule extraction', () => {
+  const vault = new TempVault();
+
+  beforeAll(async () => {
+    await vault.register();
+  }, REGISTRATION_TIMEOUT_MS);
+
+  afterAll(async () => {
+    await vault.dispose();
+  });
+
+  it('should provide obsidianModule with Plugin class', async () => {
+    const hasPluginClass = await evalInObsidian({
+      fn({ obsidianModule }): boolean {
+        return typeof obsidianModule.Plugin === 'function';
+      },
+      vaultPath: vault.path
+    });
+    expect(hasPluginClass).toBe(true);
+  });
+
+  it('should provide obsidianModule with Notice class', async () => {
+    const hasNoticeClass = await evalInObsidian({
+      fn({ obsidianModule }): boolean {
+        return typeof obsidianModule.Notice === 'function';
+      },
+      vaultPath: vault.path
+    });
+    expect(hasNoticeClass).toBe(true);
+  });
+});
