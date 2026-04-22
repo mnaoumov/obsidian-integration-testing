@@ -72,6 +72,7 @@ export async function setup(project: TestProject): Promise<void> {
   await mkdir(pluginDir, { recursive: true });
   await cp(distPath, pluginDir, { recursive: true });
   await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+  await tempVault.syncToDevice();
   await tempVault.register();
 
   await evalInObsidian({
