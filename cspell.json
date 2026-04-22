@@ -39,6 +39,8 @@
     "spyable",
     "Tsdocs",
     "TSES",
+    "sdcard",
+    "UiAutomator",
     "wikilinks"
   ],
   "ignoreWords": [],

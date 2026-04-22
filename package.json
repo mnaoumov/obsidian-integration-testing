@@ -43,6 +43,16 @@
         "default": "./dist/lib/cjs/integration-global-setup.cjs"
       }
     },
+    "./transport-appium": {
+      "import": {
+        "types": "./dist/lib/esm/transport-appium.d.mts",
+        "default": "./dist/lib/esm/transport-appium.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/transport-appium.d.cts",
+        "default": "./dist/lib/cjs/transport-appium.cjs"
+      }
+    },
     "./transport-desktop-cdp": {
       "import": {
         "types": "./dist/lib/esm/transport-desktop-cdp.d.mts",
