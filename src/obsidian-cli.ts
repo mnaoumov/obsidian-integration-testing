@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * Evaluates a function inside a running Obsidian instance via the Obsidian CLI.
+ * Evaluates a function inside a running Obsidian instance via a pluggable transport.
  */
 
 import type { App } from 'obsidian';
@@ -17,28 +17,15 @@ import type {
   ContextId
 } from './context-id.ts';
 
-import { exec } from './exec.ts';
 import { getFunctionExpressionString } from './function-expression.ts';
 import { jsonWithFunctions } from './json-with-functions.ts';
-import {
-  getVaultId,
-  isCliEnabled,
-  isVaultRegistered
-} from './obsidian-config.ts';
-
-interface EnsureObsidianRunningParams {
-  command: string[];
-  cwd: string;
-}
+import { getTransport } from './transport-state.ts';
 
 interface ExportsWithDefault {
   default: unknown;
 }
 
 const NO_OUTPUT = '(no output)';
-const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
-const AUTO_START_POLL_INTERVAL_MS = 2000;
-const AUTO_START_TIMEOUT_MS = 30000;
 
 /**
  * Common arguments automatically provided to every {@link evalInObsidian} callback.
@@ -100,7 +87,7 @@ export type GenericObject = Record<string, unknown>;
 
 /**
  * Evaluates a function inside the running Obsidian instance
- * via the Obsidian CLI and returns the parsed result.
+ * via the active transport and returns the parsed result.
  *
  * The function receives an args object that includes `app`, `obsidianModule`,
  * `context`, and any additional `args` passed by the caller.
@@ -120,26 +107,15 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   const { args = {}, contextId, fn, shouldSkipPreflightChecks = false, vaultPath } = params;
   const cwd = vaultPath ?? process.cwd();
 
-  // Check 1: Vault path exists on disk.
+  // Check: Vault path exists on disk.
   if (vaultPath !== undefined && !existsSync(vaultPath)) {
     throw new Error(`Vault path does not exist: ${vaultPath}`);
   }
 
+  const transport = getTransport();
+
   if (!shouldSkipPreflightChecks) {
-    // Check 2: Vault is registered in Obsidian.
-    if (!isVaultRegistered(cwd)) {
-      throw new Error(
-        `Vault is not registered in Obsidian: ${cwd}. Register the vault first with registerVault() or TempVault.register().`
-      );
-    }
-
-    // Check 3: CLI is enabled in Obsidian settings.
-    if (!isCliEnabled()) {
-      throw new Error('Obsidian CLI is disabled. Enable it in Obsidian Settings \u2192 General \u2192 CLI.');
-    }
-
-    // Check 4: Obsidian CLI binary is in PATH.
-    await assertObsidianCliAvailable();
+    await transport.preflightCheck(cwd);
   }
 
   const SLICE_START = 2;
@@ -167,88 +143,17 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   return JSON.stringify(await fn${randomSuffix}(fullArgs${randomSuffix}));
 })()`;
 
-  const command = ['obsidian', 'eval', `code=${expression}`];
+  const resultStr = await transport.evaluate(expression, { cwd });
 
-  let resultStr: string;
-  try {
-    resultStr = await exec(command, { cwd, isQuiet: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
-      // Check 5: Obsidian is not running — auto-start it.
-      resultStr = await ensureObsidianRunning({ command, cwd });
-    } else {
-      throw error;
-    }
-  }
-
-  if (resultStr === '' || resultStr === 'Vault not found.') {
-    throw new Error(`Unexpected empty response from Obsidian CLI for path: ${cwd}`);
-  }
-
-  const resultJson = resultStr.startsWith('=> ') ? resultStr.slice('=> '.length) : resultStr;
-  if (resultJson === NO_OUTPUT) {
+  if (resultStr === NO_OUTPUT) {
     return undefined as Result;
   }
 
   try {
-    return JSON.parse(resultJson) as Result;
+    return JSON.parse(resultStr) as Result;
   } catch {
     throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${resultStr}`);
   }
-}
-
-/**
- * Checks whether the Obsidian CLI binary is available in the system PATH.
- *
- * @throws If the CLI binary is not found.
- */
-async function assertObsidianCliAvailable(): Promise<void> {
-  const command = process.platform === 'win32' ? 'where.exe obsidian' : 'which obsidian';
-  try {
-    await exec(command, { isQuiet: true });
-  } catch {
-    throw new Error('Obsidian CLI is not available. Ensure Obsidian is installed and its CLI is in your PATH.');
-  }
-}
-
-/**
- * Launches Obsidian via the `obsidian://` URI protocol and retries the eval
- * until Obsidian becomes available.
- *
- * @param params - The exec parameters for the eval command.
- * @param params.command - The CLI command array to retry.
- * @param params.cwd - The working directory for the eval command.
- * @returns The result string from the successful eval.
- */
-async function ensureObsidianRunning(params: EnsureObsidianRunningParams): Promise<string> {
-  console.warn('Obsidian is not running. Starting Obsidian...');
-
-  const vaultId = getVaultId(params.cwd);
-  const uri = vaultId ? `obsidian://open?vault=${vaultId}` : 'obsidian://open';
-
-  try {
-    await exec(getOpenUriCommand(uri), { isQuiet: true });
-  } catch {
-    // The open command may fail on some systems — we'll still try polling.
-  }
-
-  const deadline = Date.now() + AUTO_START_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    await new Promise((r) => {
-      setTimeout(r, AUTO_START_POLL_INTERVAL_MS);
-    });
-    try {
-      return await exec(params.command, { cwd: params.cwd, isQuiet: true });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
-        throw error;
-      }
-    }
-  }
-
-  throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_MS)}ms.`);
 }
 
 /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */
@@ -283,7 +188,7 @@ async function getObsidianModule(): Promise<typeof obsidian> {
     description: '',
     dir,
     id: tempModuleName,
-    isDesktopOnly: true,
+    isDesktopOnly: false,
     minAppVersion: '',
     name: tempModuleName,
     version: ''
@@ -321,21 +226,3 @@ function getObsidianModulePluginFn(): void {
 }
 
 /* v8 ignore stop */
-
-/**
- * Returns the platform-specific command to open a URI.
- *
- * @param uri - The URI to open.
- * @returns The shell command string.
- */
-function getOpenUriCommand(uri: string): string {
-  if (process.platform === 'win32') {
-    return `start "" "${uri}"`;
-  }
-
-  if (process.platform === 'darwin') {
-    return `open "${uri}"`;
-  }
-
-  return `xdg-open "${uri}"`;
-}
