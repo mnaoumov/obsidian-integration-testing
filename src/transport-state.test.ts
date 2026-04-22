@@ -28,6 +28,7 @@ vi.mock('./transport-desktop-cli.ts', () => ({
 function createMockTransport(): ObsidianTransport {
   return {
     evaluate: vi.fn(),
+    isMobile: false,
     preflightCheck: vi.fn(),
     registerVault: vi.fn(),
     unregisterVault: vi.fn()

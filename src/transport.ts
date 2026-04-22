@@ -34,6 +34,14 @@ export interface ObsidianTransport {
   evaluate(expression: string, options: TransportEvalOptions): Promise<string>;
 
   /**
+   * Whether this transport targets a mobile Obsidian instance.
+   *
+   * When `true`, desktop-only plugins (with `isDesktopOnly: true` in manifest)
+   * will refuse to run integration tests.
+   */
+  isMobile: boolean;
+
+  /**
    * Runs transport-specific preflight checks before evaluation.
    *
    * For example, the CLI transport verifies that the vault is registered,
