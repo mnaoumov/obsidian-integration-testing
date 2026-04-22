@@ -83,11 +83,21 @@ export async function setup(project: TestProject): Promise<void> {
   await tempVault.syncToDevice();
   await tempVault.register();
 
+  // Enable the plugin and verify it loaded. If it crashes during onload(),
+  // Fail immediately rather than running all tests.
   await evalInObsidian({
     args: { pluginId },
     // eslint-disable-next-line no-shadow -- No actual shadowing as the function is executed externally.
-    fn: async ({ app, pluginId }) => {
-      await app.plugins.enablePluginAndSave(pluginId);
+    fn: async ({ app, pluginId }): Promise<void> => {
+      try {
+        await app.plugins.enablePluginAndSave(pluginId);
+      } catch (error) {
+        throw new Error(`Plugin "${pluginId}" crashed during load`, { cause: error });
+      }
+
+      if (!(pluginId in app.plugins.plugins)) {
+        throw new Error(`Plugin "${pluginId}" failed to load. Check the plugin's onload() for errors.`);
+      }
     },
     shouldSkipPreflightChecks: true,
     vaultPath: tempVault.path
