@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.2.0
+
+- feat: add CDP and Android testing
+
 ## 1.1.2
 
 - fix: workaround for eslint bug <https://github.com/eslint/rewrite/issues/425>
