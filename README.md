@@ -375,10 +375,6 @@ Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. 
    }
    ```
 
-> [!NOTE]
->
-> If Obsidian is not running, the `CDP` transport attempts to auto-start it via the `obsidian://open` URI protocol.
-
 #### Obsidian Android Appium transport
 
 Runs tests against Obsidian Mobile on an Android emulator or real device via Appium WebView injection.
