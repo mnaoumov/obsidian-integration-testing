@@ -465,15 +465,19 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'integration-desktop',
+          name: 'integration-desktop-cli',
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
+          // default, can be omitted
+          environmentOptions: {
+            obsidianTransport: { type: 'obsidian-cdp' },
+          },
         },
       },
       {
         test: {
-          name: 'integration-cdp',
+          name: 'integration-desktop-cdp',
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
