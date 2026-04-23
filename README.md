@@ -29,7 +29,7 @@ export default defineConfig({
 });
 ```
 
-By default this uses the **CLI transport** (requires CLI enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
+By default this uses the **`CLI` transport** (requires `CLI` enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
 
 ### Write integration tests
 
@@ -235,7 +235,7 @@ describe('my-plugin', () => {
 >
 > **Parallelism:**
 >
-> The Obsidian CLI does not support executing multiple commands concurrently. If your test runner launches tests in parallel, CLI calls may collide and produce flaky failures. Disable file-level parallelism in your Vitest config:
+> The Obsidian `CLI` does not support executing multiple commands concurrently. If your test runner launches tests in parallel, `CLI` calls may collide and produce flaky failures. Disable file-level parallelism in your Vitest config:
 >
 > ```ts
 > // vitest.config.ts
@@ -302,26 +302,26 @@ const title2 = await evalInObsidian({
 
 The transport determines how the library communicates with Obsidian. Configure it via `environmentOptions.obsidianTransport` in your vitest project config:
 
-| Type                       | Platform | Mechanism                      |
-|----------------------------|----------|--------------------------------|
-| `obsidian-cli` (default)   | Desktop  | Obsidian CLI (`obsidian eval`) |
-| `obsidian-cdp`             | Desktop  | Chrome DevTools Protocol (CDP) |
-| `obsidian-android-appium`  | Mobile   | Appium WebView JS injection    |
+| Type                       | Platform | Mechanism                                                   |
+|----------------------------|----------|-------------------------------------------------------------|
+| `obsidian-cli` (default)   | Desktop  | Obsidian `Command Line Interface` (`CLI`) (`obsidian eval`) |
+| `obsidian-cdp`             | Desktop  | Obsidian `Chrome DevTools Protocol` (`CDP`)                 |
+| `obsidian-android-appium`  | Mobile   | Obsidian Android Appium WebView JS injection                |
 
-#### CLI transport (default)
+#### `CLI` transport (default)
 
 Shells out to the Obsidian `Command Line Interface` (`CLI`) binary for each eval call. This is the default when no `obsidianTransport` is configured.
 
 **Setup:**
 
-1. [Install the Obsidian CLI](https://obsidian.md/help/cli#Install+Obsidian+CLI)
-2. Enable CLI in Obsidian: Settings → General → Developer tools → Enable CLI
+1. [Install the Obsidian `CLI`](https://obsidian.md/help/cli#Install+Obsidian+CLI).
+2. Enable `CLI` in Obsidian: `Settings → General → Developer tools → Enable CLI`.
 
-No additional vitest configuration needed — CLI is the default transport.
+No additional vitest configuration needed — `CLI` is the default transport.
 
-#### CDP transport
+#### `CDP` transport
 
-Connects via WebSocket to Obsidian's `Chrome DevTools Protocol` (`CDP`) endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
+Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. No `CLI` binary needed, no `CLI enabled` setting required, and lower overhead per eval.
 
 **Setup:**
 
@@ -345,7 +345,7 @@ Connects via WebSocket to Obsidian's `Chrome DevTools Protocol` (`CDP`) endpoint
    obsidian --remote-debugging-port=8315
    ```
 
-2. Ensure Node.js 22+ (uses built-in `WebSocket` and `fetch` globals)
+2. Ensure [`Node.js`](https://nodejs.org/) 22+ is installed (uses built-in `WebSocket` and `fetch` globals).
 3. Configure vitest:
 
 ```ts
@@ -377,9 +377,9 @@ environmentOptions: {
 
 > [!NOTE]
 >
-> If Obsidian is not running, the CDP transport attempts to auto-start it via the `obsidian://open` URI protocol.
+> If Obsidian is not running, the `CDP` transport attempts to auto-start it via the `obsidian://open` URI protocol.
 
-#### Android transport
+#### Obsidian Android Appium transport
 
 Runs tests against Obsidian Mobile on an Android emulator or real device via Appium WebView injection.
 
