@@ -385,34 +385,56 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 **Setup:**
 
-1. Install [Appium](https://appium.io/) and the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
+1. Install [Android Studio](https://developer.android.com/studio), which includes the Android SDK and `adb` command-line tools
+
+2. Set up a device — either an emulator or a real device:
+
+   **Emulator:**
+
+   - Open Android Studio → Device Manager → Create Virtual Device
+   - Select a phone profile (e.g. Pixel 7) and a system image (e.g. API 34)
+   - Start the emulator
+
+   **Real device:**
+
+   - Enable Developer Options: Settings → About phone → tap "Build number" 7 times
+   - Enable USB Debugging: Settings → Developer options → USB debugging
+   - Connect via USB and accept the debugging prompt on the device
+   - Verify the device is detected:
+
+     ```bash
+     adb devices
+     ```
+
+3. Install Obsidian on the device (via Play Store or APK sideload) and grant storage permission:
+
+   ```bash
+   adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
+   ```
+
+4. Install [Appium](https://appium.io/) and the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
 
    ```bash
    npm install -g appium
    appium driver install uiautomator2
    ```
 
-2. Start an Android emulator (via Android Studio) or connect a real device
-
-3. Install Obsidian on the device and grant storage permission:
-
-   ```bash
-   adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
-   ```
-
-4. Start the Appium server:
+5. Start the Appium server:
 
    ```bash
    appium
    ```
 
-5. Find the device ID:
+6. Find the device ID (use the value from the `adb devices` output):
 
    ```bash
    adb devices
+   # Example output:
+   # emulator-5554   device
+   # R5CR1234567     device   ← real device
    ```
 
-6. Configure vitest:
+7. Configure vitest:
 
 ```ts
 // vitest.config.ts

@@ -39,6 +39,7 @@
     "prepatch",
     "Promisable",
     "sdcard",
+    "sideload",
     "Sidedock",
     "spyable",
     "Tsdocs",
