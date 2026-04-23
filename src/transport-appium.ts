@@ -49,85 +49,12 @@
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
+import type { Browser } from 'webdriverio';
+
 import type {
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
-
-/**
- * Minimal interface for an Appium browser/driver instance.
- *
- * Satisfied by WebDriverIO's `Browser` object returned from `remote()`.
- * Only the methods used by the transport are required.
- */
-export interface AppiumBrowser {
-  /**
-   * Launches (or brings to foreground) an app by its package/bundle ID.
-   *
-   * @param appId - The application identifier.
-   */
-  activateApp(appId: string): Promise<void>;
-
-  /**
-   * Ends the Appium session and releases the device.
-   */
-  deleteSession(): Promise<void>;
-
-  /**
-   * Executes a JavaScript snippet in the current context (NATIVE or WEBVIEW).
-   *
-   * In a WEBVIEW context, this evaluates JS in the WebView's page.
-   *
-   * @param script - The script body (function body string).
-   * @param args - Arguments passed as `arguments[0]`, `arguments[1]`, etc.
-   * @returns The script's return value.
-   */
-  execute<T>(script: string, args?: unknown[]): Promise<T>;
-
-  /**
-   * Returns the list of available contexts (e.g. `['NATIVE_APP', 'WEBVIEW_md.obsidian']`).
-   *
-   * @returns An array of context identifiers.
-   */
-  getContexts(): Promise<string[]>;
-
-  /**
-   * Pushes a file to the device.
-   *
-   * @param path - The device-side file path.
-   * @param base64Content - The file content as a base64-encoded string.
-   */
-  pushFile(path: string, base64Content: string): Promise<void>;
-
-  /**
-   * Queries the state of an app.
-   *
-   * Returns a numeric state:
-   * - `0` — not installed
-   * - `1` — not running
-   * - `2` — running in background (suspended)
-   * - `3` — running in background
-   * - `4` — running in foreground
-   *
-   * @param appId - The application identifier.
-   * @returns The app state code.
-   */
-  queryAppState(appId: string): Promise<number>;
-
-  /**
-   * Switches the driver context (e.g. from NATIVE_APP to WEBVIEW).
-   *
-   * @param contextId - The context identifier.
-   */
-  switchContext(contextId: string): Promise<void>;
-
-  /**
-   * Stops a running app.
-   *
-   * @param appId - The application identifier.
-   */
-  terminateApp(appId: string): Promise<void>;
-}
 
 /**
  * Configuration for the Appium transport.
@@ -143,7 +70,7 @@ export interface AppiumTransportConfig {
    * The Appium browser/driver instance.
    * Created by the consumer via e.g. WebDriverIO's `remote()`.
    */
-  browser: AppiumBrowser;
+  browser: Browser;
 
   /**
    * Target platform. Determines WebView context naming and device file paths.
@@ -186,7 +113,7 @@ export class AppiumTransport implements ObsidianTransport {
   /** */
   public readonly isMobile = true;
   private readonly appId: string;
-  private readonly browser: AppiumBrowser;
+  private readonly browser: Browser;
   private readonly platform: 'android' | 'ios';
   private readonly vaultBasePath: string;
 
@@ -222,7 +149,7 @@ export class AppiumTransport implements ObsidianTransport {
   public async evaluate(expression: string, _options: TransportEvalOptions): Promise<string> {
     await this.ensureWebViewContext();
 
-    const result = await this.browser.execute<null | string | undefined>(
+    const result = await this.browser.execute<null | string | undefined, []>(
       `return (${expression})`
     );
 
@@ -290,7 +217,7 @@ export class AppiumTransport implements ObsidianTransport {
     // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
 
-    await this.browser.execute<undefined>(`
+    await this.browser.execute<undefined, []>(`
       const vaultPath = ${JSON.stringify(deviceVaultPath)};
       const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') || '[]');
       if (!existing.includes(vaultPath)) {
@@ -322,7 +249,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     await this.ensureWebViewContext();
 
-    await this.browser.execute<undefined>(`
+    await this.browser.execute<undefined, []>(`
       const vaultPath = ${JSON.stringify(deviceVaultPath)};
       const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') || '[]');
       const filtered = existing.filter(v => v !== vaultPath);
@@ -350,7 +277,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
-      const obsidianContext = contexts.find((ctx) => ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
+      const obsidianContext = contexts.find((ctx) => ctx instanceof String && ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
 
       if (obsidianContext) {
         await this.browser.switchContext(obsidianContext);
@@ -381,7 +308,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     while (Date.now() < deadline) {
       try {
-        const isReady = await this.browser.execute<boolean>(
+        const isReady = await this.browser.execute<boolean, []>(
           'return typeof app !== "undefined" && app.workspace && app.workspace.layoutReady === true'
         );
         if (isReady) {

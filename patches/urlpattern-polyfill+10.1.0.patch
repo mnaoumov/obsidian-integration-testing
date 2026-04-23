@@ -1,0 +1,13 @@
+diff --git a/node_modules/urlpattern-polyfill/dist/index.d.ts b/node_modules/urlpattern-polyfill/dist/index.d.ts
+index 429e17c..534a0a1 100644
+--- a/node_modules/urlpattern-polyfill/dist/index.d.ts
++++ b/node_modules/urlpattern-polyfill/dist/index.d.ts
+@@ -2,8 +2,5 @@ import type * as Types from "./types.js";
+ export { URLPattern } from "./types.js";
+ 
+ declare global {
+-  class URLPattern extends Types.URLPattern {}
+-  type URLPatternInit = Types.URLPatternInit;
+-  type URLPatternResult = Types.URLPatternResult;
+   type URLPatternComponentResult = Types.URLPatternComponentResult;
+ }
