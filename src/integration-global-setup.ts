@@ -6,10 +6,7 @@
 
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
-import type {
-  Plugin,
-  PluginManifest
-} from 'obsidian';
+import type { PluginManifest } from 'obsidian';
 import type { TestProject } from 'vitest/node';
 
 import { existsSync } from 'node:fs';
@@ -23,6 +20,7 @@ import {
 import { join } from 'node:path';
 import { inject } from 'vitest';
 
+import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
 import { getTransport } from './transport-state.ts';
@@ -89,38 +87,16 @@ export async function setup(project: TestProject): Promise<void> {
   // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
   // LoadPlugin() in a try-catch that swallows errors and returns false.
   // We monkey-patch loadPlugin() to capture the error before it's swallowed.
-  await evalInObsidian({
+  const { errorMessage } = await evalInObsidian({
     args: { pluginId },
-    // eslint-disable-next-line no-shadow -- No actual shadowing as the function is executed externally.
-    fn: async ({ app, pluginId }): Promise<void> => {
-      let loadError: Error | undefined;
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
-      const origLoadPlugin = app.plugins.loadPlugin;
-      app.plugins.loadPlugin = async function loadPlugin(id: string, isUserEnabled?: boolean): Promise<Plugin> {
-        try {
-          const result = await origLoadPlugin.call(this, id, isUserEnabled);
-          loadError = undefined;
-          return result;
-        } catch (error) {
-          loadError = error instanceof Error ? error : new Error(String(error));
-          throw error;
-        }
-      };
-
-      try {
-        await app.plugins.enablePluginAndSave(pluginId);
-      } finally {
-        // eslint-disable-next-line require-atomic-updates -- Intentional restore of monkey-patch.
-        app.plugins.loadPlugin = origLoadPlugin;
-      }
-
-      if (loadError) {
-        throw new Error(`Plugin "${pluginId}" failed to load: ${loadError.message}`, { cause: loadError });
-      }
-    },
+    fn: enablePluginWithErrorCapture,
     shouldSkipPreflightChecks: true,
     vaultPath: tempVault.path
   });
+
+  if (errorMessage) {
+    throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
+  }
 
   project.provide('tempVaultPath', tempVault.path);
 }

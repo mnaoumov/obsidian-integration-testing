@@ -6,8 +6,6 @@
  * across various crash scenarios.
  */
 
-import type { Plugin } from 'obsidian';
-
 import {
   afterAll,
   beforeAll,
@@ -16,8 +14,10 @@ import {
   it
 } from 'vitest';
 
+import type { EnablePluginResult } from './enable-plugin.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
 import { getTransport } from './transport-state.ts';
@@ -39,10 +39,7 @@ interface ManifestCheckParams {
   isDesktopOnly: boolean;
 }
 
-interface PluginLoadTestResult {
-  errorMessage: string | undefined;
-  isEnabled: boolean;
-}
+type PluginLoadTestResult = EnablePluginResult;
 
 function createManifest(params: CreateManifestParams): string {
   return JSON.stringify({
@@ -59,44 +56,14 @@ function createManifest(params: CreateManifestParams): string {
 /**
  * Loads a plugin inside Obsidian and captures any load error.
  *
- * Monkey-patches `app.plugins.loadPlugin` to intercept errors before
+ * Uses the shared {@link enablePluginWithErrorCapture} helper which
+ * monkey-patches `app.plugins.loadPlugin` to intercept errors before
  * Obsidian's `enablePlugin` try-catch swallows them.
  */
 async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadTestResult> {
   return evalInObsidian({
     args: { pluginId: params.pluginId },
-
-    fn: async ({ app, pluginId }): Promise<PluginLoadTestResult> => {
-      if (!app.plugins.isEnabled()) {
-        await app.plugins.setEnable(true);
-      }
-
-      let errorMessage: string | undefined;
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
-      const origLoadPlugin = app.plugins.loadPlugin;
-      app.plugins.loadPlugin = async function loadPlugin(id: string, isUserEnabled?: boolean): Promise<Plugin> {
-        try {
-          const result = await origLoadPlugin.call(this, id, isUserEnabled);
-          errorMessage = undefined;
-          return result;
-        } catch (error) {
-          errorMessage = error instanceof Error ? error.message : String(error);
-          throw error;
-        }
-      };
-
-      try {
-        await app.plugins.enablePluginAndSave(pluginId);
-      } finally {
-        // eslint-disable-next-line require-atomic-updates -- Intentional restore of monkey-patch.
-        app.plugins.loadPlugin = origLoadPlugin;
-      }
-
-      return {
-        errorMessage,
-        isEnabled: app.plugins.enabledPlugins.has(pluginId)
-      };
-    },
+    fn: enablePluginWithErrorCapture,
     shouldSkipPreflightChecks: true,
     vaultPath: params.vaultPath
   });
