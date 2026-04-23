@@ -25,8 +25,8 @@ const mockTransport: ObsidianTransport = {
   unregisterVault: mockTransportUnregisterVault
 };
 
-vi.mock('./transport-state.ts', () => ({
-  getTransport: (): ObsidianTransport => mockTransport
+vi.mock('./transport-factory.ts', () => ({
+  getOrCreateTransport: (): Promise<ObsidianTransport> => Promise.resolve(mockTransport)
 }));
 
 const mockExistsSync = vi.hoisted(() => vi.fn<(path: string) => boolean>().mockReturnValue(true));

@@ -20,16 +20,13 @@ import {
 import { join } from 'node:path';
 import { inject } from 'vitest';
 
+import type { ObsidianTransportOptions } from './transport-options.ts';
+import type { ObsidianTransport } from './transport.ts';
+
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
-import { getTransport } from './transport-state.ts';
-
-declare module 'vitest' {
-  interface ProvidedContext {
-    tempVaultPath: string;
-  }
-}
+import { createTransportFromOptions } from './transport-factory.ts';
 
 /**
  * Returns the temporary vault provided by the global setup.
@@ -49,6 +46,7 @@ const PLUGINS_DIR = 'plugins';
 const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
 
 let tempVault: TempVault;
+let transport: ObsidianTransport;
 
 /**
  * Vitest global setup function.
@@ -59,12 +57,14 @@ let tempVault: TempVault;
  * @param project - The Vitest project.
  */
 export async function setup(project: TestProject): Promise<void> {
+  const transportOptions = project.config.environmentOptions['obsidianTransport'] as ObsidianTransportOptions | undefined;
+  transport = await createTransportFromOptions(transportOptions);
+
   const projectRoot = findProjectRoot();
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
 
-  const transport = getTransport();
   if (transport.isMobile && manifestJson.isDesktopOnly) {
     throw new Error(
       `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
@@ -98,6 +98,7 @@ export async function setup(project: TestProject): Promise<void> {
     throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
   }
 
+  project.provide('obsidianTransport', transportOptions);
   project.provide('tempVaultPath', tempVault.path);
 }
 
@@ -108,6 +109,7 @@ export async function setup(project: TestProject): Promise<void> {
  */
 export async function teardown(): Promise<void> {
   await tempVault.dispose();
+  await transport.dispose?.();
 }
 
 /**

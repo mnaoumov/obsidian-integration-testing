@@ -4,30 +4,21 @@
  * Appium transport — evaluates expressions inside Obsidian Mobile via WebView
  * JavaScript injection. Manages vault lifecycle via localStorage and file push.
  *
- * This transport works with any Appium client (e.g. WebDriverIO's `remote()`)
- * that satisfies the {@link AppiumBrowser} interface. No `webdriverio` dependency
- * is required in this library — the consumer provides the browser instance.
+ * Configured via `environmentOptions.obsidianTransport` in vitest config:
  *
- * Usage:
  * ```typescript
- * import { remote } from 'webdriverio';
- * import { AppiumTransport } from 'obsidian-integration-testing/transport-appium';
- * import { setTransport } from 'obsidian-integration-testing';
- *
- * const browser = await remote({
- *   hostname: 'localhost',
- *   port: 4723,
- *   capabilities: {
- *     platformName: 'Android',
- *     'appium:automationName': 'UiAutomator2',
- *     'appium:app': '/path/to/obsidian.apk',
+ * // vitest.config.ts
+ * environmentOptions: {
+ *   obsidianTransport: {
+ *     type: 'obsidian-android-appium',
+ *     appiumUrl: 'http://localhost:4723',
+ *     deviceId: 'emulator-5554',
  *   },
- * });
- * setTransport(new AppiumTransport({ browser, platform: 'android' }));
+ * }
  * ```
  *
- * For BrowserStack, point the WebDriverIO `remote()` at the BrowserStack hub URL
- * with the appropriate capabilities — the transport itself is hub-agnostic.
+ * For BrowserStack, set `appiumUrl` to the BrowserStack hub URL
+ * — the transport itself is hub-agnostic.
  *
  * ## How vault registration works on mobile
  *

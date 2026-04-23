@@ -20,8 +20,9 @@ import {
   join,
   relative
 } from 'node:path';
+import { inject } from 'vitest';
 
-import { getTransport } from './transport-state.ts';
+import { getOrCreateTransport } from './transport-factory.ts';
 import {
   registerVault,
   unregisterVault
@@ -108,7 +109,7 @@ export class TempVault {
    * a mobile transport.
    */
   public async syncToDevice(): Promise<void> {
-    const transport = getTransport();
+    const transport = await getOrCreateTransport(inject('obsidianTransport'));
     if (!transport.pushFiles) {
       return;
     }

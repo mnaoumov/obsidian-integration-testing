@@ -4,10 +4,12 @@
  * @file
  *
  * Manages vault registration in the running Obsidian instance.
- * Delegates to the active transport.
+ * Delegates to the transport resolved from vitest-provided options.
  */
 
-import { getTransport } from './transport-state.ts';
+import { inject } from 'vitest';
+
+import { getOrCreateTransport } from './transport-factory.ts';
 
 /**
  * Registers a vault path in the running Obsidian instance.
@@ -17,7 +19,8 @@ import { getTransport } from './transport-state.ts';
  * @param vaultPath - The absolute path to the vault folder.
  */
 export async function registerVault(vaultPath: string): Promise<void> {
-  await getTransport().registerVault(vaultPath);
+  const transport = await getOrCreateTransport(inject('obsidianTransport'));
+  await transport.registerVault(vaultPath);
 }
 
 /**
@@ -28,7 +31,8 @@ export async function registerVault(vaultPath: string): Promise<void> {
  * @param vaultPath - The absolute path to the vault folder.
  */
 export async function unregisterVault(vaultPath: string): Promise<void> {
-  await getTransport().unregisterVault(vaultPath);
+  const transport = await getOrCreateTransport(inject('obsidianTransport'));
+  await transport.unregisterVault(vaultPath);
 }
 
 /* v8 ignore stop */
