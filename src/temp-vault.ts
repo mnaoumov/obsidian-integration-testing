@@ -98,6 +98,8 @@ export class TempVault {
     return this.dispose();
   }
 
+  /* v8 ignore start -- Integration-time code that requires a running transport via inject(). */
+
   /**
    * Pushes all files from the local staging directory to the target device
    * via the active transport's `pushFiles()`.
@@ -108,7 +110,6 @@ export class TempVault {
    * Call this after {@link populate} and before {@link register} when using
    * a mobile transport.
    */
-  /* v8 ignore start -- Integration-time code that requires a running transport via inject(). */
   public async syncToDevice(): Promise<void> {
     const transport = await getOrCreateTransport(inject('obsidianTransport'));
     if (!transport.pushFiles) {
