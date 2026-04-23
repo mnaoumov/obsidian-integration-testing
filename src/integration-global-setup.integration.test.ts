@@ -6,6 +6,8 @@
  * across various crash scenarios.
  */
 
+import type { Plugin } from 'obsidian';
+
 import {
   afterAll,
   beforeAll,
@@ -72,10 +74,9 @@ async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadT
       let errorMessage: string | undefined;
       // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
       const origLoadPlugin = app.plugins.loadPlugin;
-      // eslint-disable-next-line func-names -- Anonymous wrapper for monkey-patch.
-      app.plugins.loadPlugin = async function (...args: unknown[]): Promise<unknown> {
+      app.plugins.loadPlugin = async function loadPlugin(id: string, isUserEnabled?: boolean): Promise<Plugin> {
         try {
-          const result = await origLoadPlugin.apply(this, args);
+          const result = await origLoadPlugin.call(this, id, isUserEnabled);
           errorMessage = undefined;
           return result;
         } catch (error) {
