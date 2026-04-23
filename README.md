@@ -472,6 +472,7 @@ export default defineConfig({
           name: 'integration-desktop',
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
+          exclude: ['src/**/*.android.integration.test.ts'],
         },
       },
       {
@@ -479,6 +480,7 @@ export default defineConfig({
           name: 'integration-cdp',
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
+          exclude: ['src/**/*.android.integration.test.ts'],
           environmentOptions: {
             obsidianTransport: { type: 'obsidian-cdp' },
           },
@@ -488,7 +490,7 @@ export default defineConfig({
         test: {
           name: 'integration-android',
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
-          include: ['src/**/*.integration.test.ts'],
+          include: ['src/**/*.android.integration.test.ts'],
           environmentOptions: {
             obsidianTransport: {
               type: 'obsidian-android-appium',
