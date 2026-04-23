@@ -6,10 +6,11 @@ A library that provides helpers for integration testing Obsidian plugins against
 
 The package exports three entry points:
 
-| Entry point                                                  | Purpose                                                  |
-|--------------------------------------------------------------|----------------------------------------------------------|
-| `obsidian-integration-testing`                               | Main — `evalInObsidian`, `ContextId`, `TempVault`, types |
-| `obsidian-integration-testing/obsidian-plugin-vitest-setup`  | Vitest global `setup`/`teardown` + `getTempVaultPath()`  |
+| Entry point                                                       | Purpose                                                                 |
+|-------------------------------------------------------------------|-------------------------------------------------------------------------|
+| `obsidian-integration-testing`                                    | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types    |
+| `obsidian-integration-testing/obsidian-plugin-vitest-setup`       | Vitest global `setup`/`teardown` + `getTempVaultPath()`                 |
+| `obsidian-integration-testing/obsidian-plugin-android-setup`      | Android Appium global `setup`/`teardown` (env-var configured)           |
 
 Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`) are not re-exported.
 
