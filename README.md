@@ -352,6 +352,7 @@ Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. 
    // vitest.config.ts
    export default defineConfig({
      test: {
+       fileParallelism: false,
        globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
        environmentOptions: {
          obsidianTransport: { type: 'obsidian-cdp' },
@@ -436,6 +437,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    // vitest.config.ts
    export default defineConfig({
      test: {
+       fileParallelism: false,
        globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
        environmentOptions: {
          obsidianTransport: {
@@ -466,6 +468,7 @@ export default defineConfig({
       {
         test: {
           name: 'integration-tests-desktop-cli',
+          fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
@@ -478,6 +481,7 @@ export default defineConfig({
       {
         test: {
           name: 'integration-tests-desktop-cdp',
+          fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
@@ -489,6 +493,7 @@ export default defineConfig({
       {
         test: {
           name: 'integration-tests-android-appium',
+          fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.android.integration.test.ts'],
           environmentOptions: {
