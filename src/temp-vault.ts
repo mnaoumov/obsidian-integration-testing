@@ -28,8 +28,8 @@ import {
   unregisterVault
 } from './vault-registry.ts';
 
-const RM_RETRY_DELAY_MS = 500;
-const RM_RETRY_TIMEOUT_MS = 10000;
+const RM_RETRY_DELAY_IN_MILLISECONDS = 500;
+const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
 
 /**
  * A temporary Obsidian vault for integration tests.
@@ -151,14 +151,14 @@ export class TempVault {
  * @returns A promise that resolves when the directory is removed.
  */
 async function retryRm(path: string): Promise<void> {
-  const deadline = Date.now() + RM_RETRY_TIMEOUT_MS;
+  const deadline = Date.now() + RM_RETRY_TIMEOUT_IN_MILLISECONDS;
   while (Date.now() < deadline) {
     try {
       await rm(path, { force: true, recursive: true });
       return;
     } catch {
       await new Promise((resolve) => {
-        setTimeout(resolve, RM_RETRY_DELAY_MS);
+        setTimeout(resolve, RM_RETRY_DELAY_IN_MILLISECONDS);
       });
     }
   }

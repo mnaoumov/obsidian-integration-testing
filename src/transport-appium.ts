@@ -81,11 +81,11 @@ export interface AppiumTransportConfig {
 const NO_OUTPUT = '(no output)';
 const APP_STATE_FOREGROUND = 4;
 const WEBVIEW_CONTEXT_PREFIX = 'WEBVIEW_md.obsidian';
-const WEBVIEW_POLL_INTERVAL_MS = 500;
-const WEBVIEW_POLL_TIMEOUT_MS = 30000;
-const LAYOUT_READY_POLL_INTERVAL_MS = 500;
-const LAYOUT_READY_POLL_TIMEOUT_MS = 30000;
-const APP_RESTART_DELAY_MS = 2000;
+const WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS = 500;
+const WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
+const LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 
 const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
@@ -160,7 +160,7 @@ export class AppiumTransport implements ObsidianTransport {
     const state = await this.browser.queryAppState(this.appId);
     if (state !== APP_STATE_FOREGROUND) {
       await this.browser.activateApp(this.appId);
-      await delay(APP_RESTART_DELAY_MS);
+      await delay(APP_RESTART_DELAY_IN_MILLISECONDS);
     }
 
     await this.ensureWebViewContext();
@@ -262,7 +262,7 @@ export class AppiumTransport implements ObsidianTransport {
    * to Chrome or other WebViews on the device.
    */
   private async ensureWebViewContext(): Promise<void> {
-    const deadline = Date.now() + WEBVIEW_POLL_TIMEOUT_MS;
+    const deadline = Date.now() + WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
@@ -273,10 +273,10 @@ export class AppiumTransport implements ObsidianTransport {
         return;
       }
 
-      await delay(WEBVIEW_POLL_INTERVAL_MS);
+      await delay(WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(WEBVIEW_POLL_TIMEOUT_MS)}ms. Is the Obsidian app fully loaded?`);
+    throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS)}ms. Is the Obsidian app fully loaded?`);
   }
 
   /**
@@ -293,7 +293,7 @@ export class AppiumTransport implements ObsidianTransport {
    * Polls until `app.workspace.layoutReady` is `true` in the WebView.
    */
   private async waitForLayoutReady(): Promise<void> {
-    const deadline = Date.now() + LAYOUT_READY_POLL_TIMEOUT_MS;
+    const deadline = Date.now() + LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS;
 
     while (Date.now() < deadline) {
       try {
@@ -307,10 +307,10 @@ export class AppiumTransport implements ObsidianTransport {
         // App not ready yet (page may be reloading).
       }
 
-      await delay(LAYOUT_READY_POLL_INTERVAL_MS);
+      await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(`Obsidian layout did not become ready within ${String(LAYOUT_READY_POLL_TIMEOUT_MS)}ms`);
+    throw new Error(`Obsidian layout did not become ready within ${String(LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
   }
 }
 

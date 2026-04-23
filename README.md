@@ -366,9 +366,11 @@ Optional configuration:
 environmentOptions: {
   obsidianTransport: {
     type: 'obsidian-cdp',
-    host: 'localhost',       // default
-    port: 8315,              // default
-    commandTimeoutMs: 30000, // default
+
+    // default values can be omitted
+    host: 'localhost',
+    port: 8315,
+    commandTimeoutInMilliseconds: 30000
   },
 }
 ```

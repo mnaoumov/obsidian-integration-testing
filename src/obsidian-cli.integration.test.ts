@@ -21,12 +21,12 @@ interface AbArgs {
 const tempVault = new TempVault();
 let vaultPath: string;
 
-const REGISTRATION_TIMEOUT_MS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
 
 beforeAll(async () => {
   await tempVault.register();
   vaultPath = tempVault.path;
-}, REGISTRATION_TIMEOUT_MS);
+}, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
 afterAll(async () => {
   await tempVault.dispose();

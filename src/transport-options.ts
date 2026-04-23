@@ -48,7 +48,7 @@ export interface ObsidianCdpTransportOptions {
    * Timeout in milliseconds for individual CDP commands.
    * Defaults to 30000
    */
-  commandTimeoutMs?: number;
+  commandTimeoutInMilliseconds?: number;
 
   /**
    * CDP host.

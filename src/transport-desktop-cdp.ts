@@ -49,7 +49,7 @@ export interface DesktopCdpTransportConfig {
    * Timeout in milliseconds for individual CDP commands.
    * Defaults to `30000`.
    */
-  commandTimeoutMs?: number;
+  commandTimeoutInMilliseconds?: number;
 }
 
 interface CdpExceptionDetails {
@@ -85,13 +85,13 @@ interface CdpValue {
 }
 
 const CDP_DEFAULT_PORT = 8315;
-const COMMAND_TIMEOUT_MS = 30000;
+const COMMAND_TIMEOUT_IN_MILLISECONDS = 30000;
 const NO_OUTPUT = '(no output)';
-const VAULT_POLL_INTERVAL_MS = 500;
-const VAULT_POLL_TIMEOUT_MS = 30000;
-const VAULT_CLOSE_DELAY_MS = 1000;
-const AUTO_START_POLL_INTERVAL_MS = 2000;
-const AUTO_START_TIMEOUT_MS = 30000;
+const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
+const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
+const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
+const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
 
 /**
  * Transport that communicates with Desktop Obsidian via Chrome DevTools Protocol.
@@ -104,7 +104,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   public readonly isMobile = false;
   private activeVaultPath: null | string = null;
   private readonly cdpUrl: string;
-  private readonly commandTimeoutMs: number;
+  private readonly commandTimeoutInMilliseconds: number;
   private messageId = 0;
   private ws: null | WebSocket = null;
 
@@ -117,7 +117,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const host = config?.cdpHost ?? 'localhost';
     const port = config?.cdpPort ?? CDP_DEFAULT_PORT;
     this.cdpUrl = `http://${host}:${String(port)}`;
-    this.commandTimeoutMs = config?.commandTimeoutMs ?? COMMAND_TIMEOUT_MS;
+    this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
   }
 
   /**
@@ -212,7 +212,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       ipcWs.close();
     }
 
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_MS;
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
         await this.findTargetForVault(vaultPath);
@@ -220,9 +220,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
       } catch {
         // Vault target not ready yet.
       }
-      await delay(VAULT_POLL_INTERVAL_MS);
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
     }
-    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_MS)}ms`);
+    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
   }
 
   /**
@@ -258,7 +258,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       this.disconnect();
     }
 
-    await delay(VAULT_CLOSE_DELAY_MS);
+    await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
 
     const targets = await this.getPageTargets();
     if (targets.length > 0) {
@@ -342,9 +342,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
       // The open command may fail on some systems — we'll still try polling.
     }
 
-    const deadline = Date.now() + AUTO_START_TIMEOUT_MS;
+    const deadline = Date.now() + AUTO_START_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
-      await delay(AUTO_START_POLL_INTERVAL_MS);
+      await delay(AUTO_START_POLL_INTERVAL_IN_MILLISECONDS);
       try {
         const targets = await this.getPageTargets();
         if (targets.length > 0) {
@@ -355,7 +355,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
     }
 
-    throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_MS)}ms. Ensure Obsidian has remote debugging enabled on port ${this.cdpUrl}.`);
+    throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms. Ensure Obsidian has remote debugging enabled on port ${this.cdpUrl}.`);
   }
 
   /**
@@ -439,8 +439,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
     return new Promise<CdpResponse>((resolve, reject) => {
       const timeout = setTimeout(() => {
         ws.removeEventListener('message', handler);
-        reject(new Error(`CDP command timed out after ${String(this.commandTimeoutMs)}ms: ${method}`));
-      }, this.commandTimeoutMs);
+        reject(new Error(`CDP command timed out after ${String(this.commandTimeoutInMilliseconds)}ms: ${method}`));
+      }, this.commandTimeoutInMilliseconds);
 
       function handler(event: MessageEvent): void {
         const msg = JSON.parse(String(event.data)) as CdpResponse;

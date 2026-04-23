@@ -23,7 +23,7 @@ import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
-const REGISTRATION_TIMEOUT_MS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
 
 interface CreateManifestParams {
   id: string;
@@ -133,7 +133,7 @@ describe('plugin load detection', () => {
 
     vault.populate(files);
     await vault.register();
-  }, REGISTRATION_TIMEOUT_MS);
+  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
   afterAll(async () => {
     for (const tc of TEST_CASES) {
@@ -207,7 +207,7 @@ describe('obsidianModule extraction', () => {
 
   beforeAll(async () => {
     await vault.register();
-  }, REGISTRATION_TIMEOUT_MS);
+  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
   afterAll(async () => {
     await vault.dispose();
