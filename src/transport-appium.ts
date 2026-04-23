@@ -217,17 +217,16 @@ export class AppiumTransport implements ObsidianTransport {
     // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
 
-    await this.browser.execute<undefined, []>(`
-      const vaultPath = ${JSON.stringify(deviceVaultPath)};
-      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') || '[]');
-      if (!existing.includes(vaultPath)) {
-        existing.push(vaultPath);
+    await this.browser.execute((path: string) => {
+      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
+      if (!existing.includes(path)) {
+        existing.push(path);
         localStorage.setItem('mobile-external-vaults', JSON.stringify(existing));
       }
-      localStorage.setItem('mobile-selected-vault', vaultPath);
-      localStorage.setItem('enable-plugin-' + vaultPath, 'true');
+      localStorage.setItem('mobile-selected-vault', path);
+      localStorage.setItem(`enable-plugin-${path}`, 'true');
       location.reload();
-    `);
+    }, deviceVaultPath);
 
     // Wait for reload + vault initialization.
     await this.waitForLayoutReady();
@@ -249,20 +248,19 @@ export class AppiumTransport implements ObsidianTransport {
 
     await this.ensureWebViewContext();
 
-    await this.browser.execute<undefined, []>(`
-      const vaultPath = ${JSON.stringify(deviceVaultPath)};
-      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') || '[]');
-      const filtered = existing.filter(v => v !== vaultPath);
+    await this.browser.execute((path: string) => {
+      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
+      const filtered = existing.filter((v) => v !== path);
       localStorage.setItem('mobile-external-vaults', JSON.stringify(filtered));
-      localStorage.removeItem('enable-plugin-' + vaultPath);
-      if (localStorage.getItem('mobile-selected-vault') === vaultPath) {
+      localStorage.removeItem(`enable-plugin-${path}`);
+      if (localStorage.getItem('mobile-selected-vault') === path) {
         if (filtered.length > 0) {
-          localStorage.setItem('mobile-selected-vault', filtered[0]);
+          localStorage.setItem('mobile-selected-vault', filtered[0] ?? '');
         } else {
           localStorage.removeItem('mobile-selected-vault');
         }
       }
-    `);
+    }, deviceVaultPath);
   }
 
   /**
@@ -277,7 +275,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
-      const obsidianContext = contexts.find((ctx) => ctx instanceof String && ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
+      const obsidianContext = contexts.find((ctx): ctx is string => typeof ctx === 'string' && ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
 
       if (obsidianContext) {
         await this.browser.switchContext(obsidianContext);
