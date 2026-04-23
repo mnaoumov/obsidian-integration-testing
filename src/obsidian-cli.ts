@@ -16,6 +16,7 @@ import type {
   ContextArgs,
   ContextId
 } from './context-id.ts';
+import type { ObsidianTransport } from './transport.ts';
 
 import { getFunctionExpressionString } from './function-expression.ts';
 import { jsonWithFunctions } from './json-with-functions.ts';
@@ -75,6 +76,12 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
   shouldSkipPreflightChecks?: boolean;
 
   /**
+   * Override the transport for this call. When omitted, uses the global
+   * transport (determined by `OBSIDIAN_DESKTOP_TRANSPORT` env var or {@link setTransport}).
+   */
+  transport?: ObsidianTransport;
+
+  /**
    * The path to the Obsidian vault. Defaults to `process.cwd()`.
    */
   vaultPath?: string;
@@ -104,7 +111,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   params: EvalInObsidianParams<Args, Result, TContextId>
 ): Promise<Result> {
   // eslint-disable-next-line @typescript-eslint/unbound-method -- `fn` can be unbound.
-  const { args = {}, contextId, fn, shouldSkipPreflightChecks = false, vaultPath } = params;
+  const { args = {}, contextId, fn, shouldSkipPreflightChecks = false, transport: transportOverride, vaultPath } = params;
   const cwd = vaultPath ?? process.cwd();
 
   // Check: Vault path exists on disk.
@@ -112,7 +119,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     throw new Error(`Vault path does not exist: ${vaultPath}`);
   }
 
-  const transport = getTransport();
+  const transport = transportOverride ?? getTransport();
 
   if (!shouldSkipPreflightChecks) {
     await transport.preflightCheck(cwd);
