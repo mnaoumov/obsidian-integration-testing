@@ -310,7 +310,7 @@ The transport determines how the library communicates with Obsidian. Configure i
 
 #### CLI transport (default)
 
-Shells out to the `obsidian` CLI binary for each eval call. This is the default when no `obsidianTransport` is configured.
+Shells out to the Obsidian `Command Line Interface` (`CLI`) binary for each eval call. This is the default when no `obsidianTransport` is configured.
 
 **Setup:**
 
