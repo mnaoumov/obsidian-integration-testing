@@ -321,7 +321,7 @@ No additional vitest configuration needed — CLI is the default transport.
 
 #### CDP transport
 
-Connects via WebSocket to Obsidian's Chrome DevTools Protocol (`CDP`) endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
+Connects via WebSocket to Obsidian's `Chrome DevTools Protocol` (`CDP`) endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
 
 **Setup:**
 
