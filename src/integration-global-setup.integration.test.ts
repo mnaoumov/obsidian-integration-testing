@@ -11,6 +11,7 @@ import {
   beforeAll,
   describe,
   expect,
+  inject,
   it
 } from 'vitest';
 
@@ -20,7 +21,7 @@ import type { ObsidianTransport } from './transport.ts';
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
-import { getTransport } from './transport-state.ts';
+import { getOrCreateTransport } from './transport-factory.ts';
 
 const REGISTRATION_TIMEOUT_MS = 60000;
 
@@ -173,8 +174,8 @@ describe('plugin load detection', () => {
 });
 
 describe('isDesktopOnly check', () => {
-  it('should reject mobile transport for desktop-only plugins', () => {
-    const transport = getTransport();
+  it('should reject mobile transport for desktop-only plugins', async () => {
+    const transport = await getOrCreateTransport(inject('obsidianTransport'));
     const manifest = JSON.parse(createManifest({ id: 'desktop-only', isDesktopOnly: true })) as ManifestCheckParams;
 
     const mockMobileTransport: ObsidianTransport = {
@@ -193,8 +194,8 @@ describe('isDesktopOnly check', () => {
     expect(manifest.isDesktopOnly).toBe(false);
   });
 
-  it('should allow desktop transport for desktop-only plugins', () => {
-    const transport = getTransport();
+  it('should allow desktop transport for desktop-only plugins', async () => {
+    const transport = await getOrCreateTransport(inject('obsidianTransport'));
 
     // The default desktop transport should not be mobile.
     expect(transport.isMobile).toBe(false);

@@ -11,6 +11,7 @@ import type { Promisable } from 'type-fest';
 
 import { existsSync } from 'node:fs';
 import process from 'node:process';
+import { inject } from 'vitest';
 
 import type {
   ContextArgs,
@@ -20,7 +21,7 @@ import type { ObsidianTransport } from './transport.ts';
 
 import { getFunctionExpressionString } from './function-expression.ts';
 import { jsonWithFunctions } from './json-with-functions.ts';
-import { getTransport } from './transport-state.ts';
+import { getOrCreateTransport } from './transport-factory.ts';
 
 interface ExportsWithDefault {
   default: unknown;
@@ -76,8 +77,8 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
   shouldSkipPreflightChecks?: boolean;
 
   /**
-   * Override the transport for this call. When omitted, uses the global
-   * transport (determined by `OBSIDIAN_DESKTOP_TRANSPORT` env var or {@link setTransport}).
+   * Override the transport for this call. When omitted, uses the transport
+   * configured via `environmentOptions.obsidianTransport` in vitest config.
    */
   transport?: ObsidianTransport;
 
@@ -119,7 +120,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     throw new Error(`Vault path does not exist: ${vaultPath}`);
   }
 
-  const transport = transportOverride ?? getTransport();
+  const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
 
   if (!shouldSkipPreflightChecks) {
     await transport.preflightCheck(cwd);
