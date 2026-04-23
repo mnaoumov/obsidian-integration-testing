@@ -79,7 +79,8 @@
     "**/package.json",
     "dist/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "scripts/postinstall.mjs"
   ],
   "scripts": {
     "build": "jiti scripts/build.ts",
@@ -95,6 +96,7 @@
     "lint:fix": "jiti scripts/lint-fix.ts",
     "lint:md": "jiti scripts/lint-md.ts",
     "lint:md:fix": "jiti scripts/lint-md-fix.ts",
+    "postinstall": "node scripts/postinstall.mjs",
     "prepare": "jiti scripts/prepare.ts",
     "spellcheck": "jiti scripts/spellcheck.ts",
     "test": "jiti scripts/test.ts",
@@ -121,6 +123,8 @@
     "@typescript-eslint/utils": "latest",
     "@vitest/coverage-v8": "latest",
     "@vitest/runner": "4.1.0",
+    "@wdio/protocols": "9.27.0",
+    "@wdio/types": "9.27.0",
     "better-typescript-lib": "latest",
     "commitizen": "latest",
     "cspell": "latest",
@@ -143,10 +147,12 @@
     "nano-staged": "latest",
     "obsidian": "latest",
     "obsidian-typings": "obsidian-public-latest",
+    "puppeteer-core": "latest",
     "semver": "latest",
     "type-fest": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
+    "urlpattern-polyfill": "10.1.0",
     "vitest": "latest"
   },
   "peerDependencies": {
@@ -158,5 +164,8 @@
     "@antfu/utils": "9.2.0",
     "eslint-plugin-import": "npm:eslint-plugin-import-x@latest",
     "type-fest": "latest"
+  },
+  "dependencies": {
+    "webdriverio": "^9.27.0"
   }
 }

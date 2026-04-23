@@ -25,7 +25,7 @@
 
 import type { TestProject } from 'vitest/node';
 
-import type { AppiumBrowser } from './transport-appium.ts';
+import { remote } from 'webdriverio';
 
 import {
   setup as baseSetup,
@@ -57,17 +57,18 @@ export async function setup(project: TestProject): Promise<void> {
 
   const url = new URL(appiumUrl);
 
-  // Dynamic import — webdriverio is a consumer dependency, not ours.
-  // eslint-disable-next-line no-restricted-syntax, import-x/no-unresolved -- Dynamic import of optional consumer dependency.
-  const wdio = await import('webdriverio') as { remote(opts: Record<string, unknown>): Promise<AppiumBrowser> };
+  const port = Number(url.port);
+  if (isNaN(port)) {
+    throw new Error(`Invalid port: ${url.port}`);
+  }
 
-  const browser = await wdio.remote({
+  const browser = await remote({
     capabilities: {
       'appium:appActivity': APP_ACTIVITY,
       'appium:appPackage': APP_PACKAGE,
       'appium:autoGrantPermissions': true,
       'appium:automationName': 'UiAutomator2',
-      'appium:chromedriverAutodownload': true,
+      // 'appium:chromedriverAutodownload': true,
       'appium:newCommandTimeout': COMMAND_TIMEOUT_MS,
       'appium:noReset': true,
       'appium:skipServerInstallation': true,
@@ -77,7 +78,7 @@ export async function setup(project: TestProject): Promise<void> {
     },
     hostname: url.hostname,
     path: url.pathname,
-    port: Number(url.port) || undefined
+    port
   });
 
   transport = new AppiumTransport({ browser, platform: 'android' });
