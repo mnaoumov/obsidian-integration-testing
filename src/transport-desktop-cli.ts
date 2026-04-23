@@ -22,11 +22,11 @@ import {
 } from './obsidian-config.ts';
 
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
-const AUTO_START_POLL_INTERVAL_MS = 2000;
-const AUTO_START_TIMEOUT_MS = 30000;
-const VAULT_POLL_INTERVAL_MS = 500;
-const VAULT_POLL_TIMEOUT_MS = 30000;
-const VAULT_CLOSE_DELAY_MS = 1000;
+const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
+const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
+const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
+const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 
 /**
  * Transport that communicates with Desktop Obsidian via the `obsidian eval` CLI command
@@ -116,7 +116,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       'return JSON.stringify(app.vault.adapter.getBasePath());'
     );
 
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_MS;
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
         const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
@@ -126,9 +126,9 @@ export class DesktopCliTransport implements ObsidianTransport {
       } catch {
         // Vault not ready yet.
       }
-      await delay(VAULT_POLL_INTERVAL_MS);
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
     }
-    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_MS)}ms`);
+    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
   }
 
   /**
@@ -153,7 +153,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       // The window may have closed before the response was sent — that's OK.
     }
 
-    await delay(VAULT_CLOSE_DELAY_MS);
+    await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
 
     const removeExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
@@ -192,9 +192,9 @@ export class DesktopCliTransport implements ObsidianTransport {
       // The open command may fail on some systems — we'll still try polling.
     }
 
-    const deadline = Date.now() + AUTO_START_TIMEOUT_MS;
+    const deadline = Date.now() + AUTO_START_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
-      await delay(AUTO_START_POLL_INTERVAL_MS);
+      await delay(AUTO_START_POLL_INTERVAL_IN_MILLISECONDS);
       try {
         return await exec(command, { cwd, isQuiet: true });
       } catch (error) {
@@ -205,7 +205,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       }
     }
 
-    throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_MS)}ms.`);
+    throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms.`);
   }
 }
 

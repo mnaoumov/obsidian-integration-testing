@@ -20,8 +20,8 @@ import { DesktopCliTransport } from './transport-desktop-cli.ts';
 
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
-const COMMAND_TIMEOUT_MS = 300;
-const SERVER_LAUNCH_TIMEOUT_MS = 30000;
+const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
+const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 30000;
 
 let cachedTransport: ObsidianTransport | undefined;
 
@@ -40,7 +40,7 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
     return new DesktopCdpTransport({
       ...(options.host !== undefined && { cdpHost: options.host }),
       ...(options.port !== undefined && { cdpPort: options.port }),
-      ...(options.commandTimeoutMs !== undefined && { commandTimeoutMs: options.commandTimeoutMs })
+      ...(options.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds })
     });
   }
 
@@ -90,14 +90,14 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
       'appium:appPackage': appId,
       'appium:autoGrantPermissions': true,
       'appium:automationName': 'UiAutomator2',
-      'appium:newCommandTimeout': COMMAND_TIMEOUT_MS,
+      'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
       'appium:noReset': true,
       'appium:settings': {
         'appium:chromedriverAutodownload': true
       },
       'appium:skipServerInstallation': true,
       'appium:udid': options.deviceId,
-      'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_MS,
+      'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
       'platformName': 'Android'
     },
     hostname: url.hostname,
