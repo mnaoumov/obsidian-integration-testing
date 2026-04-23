@@ -325,7 +325,19 @@ Connects via WebSocket to Obsidian's Chrome DevTools Protocol endpoint. No CLI b
 
 **Setup:**
 
-1. Enable remote debugging in Obsidian: Settings → General → Developer tools → Enable CDP
+1. Launch Obsidian with the `--remote-debugging-port` flag:
+
+   ```bash
+   # Windows
+   & "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe" --remote-debugging-port=8315
+
+   # macOS
+   /Applications/Obsidian.app/Contents/MacOS/Obsidian --remote-debugging-port=8315
+
+   # Linux
+   obsidian --remote-debugging-port=8315
+   ```
+
 2. Ensure Node.js 22+ (uses built-in `WebSocket` and `fetch` globals)
 3. Configure vitest:
 
