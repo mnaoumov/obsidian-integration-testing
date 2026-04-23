@@ -327,10 +327,17 @@ Connects via WebSocket to Obsidian's Chrome DevTools Protocol endpoint. No CLI b
 
 1. Launch Obsidian with the `--remote-debugging-port` flag:
 
-   ```bash
-   # Windows
+   ```powershell
+   # Windows (PowerShell)
    & "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe" --remote-debugging-port=8315
+   ```
 
+   ```cmd
+   # Windows (CMD)
+   "%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe" --remote-debugging-port=8315
+   ```
+
+   ```bash
    # macOS
    /Applications/Obsidian.app/Contents/MacOS/Obsidian --remote-debugging-port=8315
 
