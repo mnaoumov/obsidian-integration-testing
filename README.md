@@ -302,6 +302,51 @@ const title2 = await evalInObsidian({
 });
 ```
 
+### Transport modes
+
+By default, `evalInObsidian` uses the **CLI transport** (`DesktopCliTransport`), which shells out to the `obsidian` CLI binary. You can switch to a different transport by calling `setTransport()` before any `evalInObsidian` calls.
+
+Three transports are available:
+
+| Transport              | Platform | Mechanism                          | Requirements                        |
+|------------------------|----------|------------------------------------|-------------------------------------|
+| `DesktopCliTransport`  | Desktop  | Obsidian CLI (`obsidian eval`)     | CLI enabled in Obsidian settings    |
+| `DesktopCdpTransport`  | Desktop  | Chrome DevTools Protocol (CDP)     | Obsidian running with remote debug  |
+| `AppiumTransport`      | Mobile   | Appium WebView JS injection        | Appium + device/emulator            |
+
+### CDP transport (Desktop)
+
+The CDP transport connects to Obsidian's built-in Chrome DevTools Protocol endpoint over WebSocket. This avoids the CLI binary entirely — no installation needed, no "CLI enabled" setting required, and lower overhead (WebSocket vs. process spawn per eval).
+
+#### Prerequisites
+
+- Obsidian must be running with remote debugging enabled (port 8315 by default)
+- Node.js 22+ (uses built-in `WebSocket` and `fetch` globals)
+
+#### Setup
+
+```ts
+import { DesktopCdpTransport, setTransport } from 'obsidian-integration-testing';
+
+setTransport(new DesktopCdpTransport());
+```
+
+Optionally configure the host, port, or command timeout:
+
+```ts
+setTransport(new DesktopCdpTransport({
+  cdpHost: 'localhost',
+  cdpPort: 8315,
+  commandTimeoutMs: 30000,
+}));
+```
+
+After calling `setTransport()`, all `evalInObsidian` calls, `TempVault` operations, and the global setup will use CDP instead of the CLI.
+
+> [!NOTE]
+>
+> If Obsidian is not running when a preflight check runs, the CDP transport will attempt to auto-start it via the `obsidian://open` URI protocol and poll until CDP becomes available.
+
 ### Android integration tests
 
 You can run the same tests against Obsidian Mobile on an Android emulator (or a real device via BrowserStack).
