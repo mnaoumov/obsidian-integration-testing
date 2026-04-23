@@ -348,32 +348,32 @@ Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. 
 2. Ensure [`Node.js`](https://nodejs.org/) 22+ is installed (uses built-in `WebSocket` and `fetch` globals).
 3. Configure vitest:
 
-```ts
-// vitest.config.ts
-export default defineConfig({
-  test: {
-    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
-    environmentOptions: {
-      obsidianTransport: { type: 'obsidian-cdp' },
-    },
-  },
-});
-```
+   ```ts
+   // vitest.config.ts
+   export default defineConfig({
+     test: {
+       globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+       environmentOptions: {
+         obsidianTransport: { type: 'obsidian-cdp' },
+       },
+     },
+   });
+   ```
 
-Optional configuration:
+   Optional configuration:
 
-```ts
-environmentOptions: {
-  obsidianTransport: {
-    type: 'obsidian-cdp',
+   ```ts
+   environmentOptions: {
+     obsidianTransport: {
+       type: 'obsidian-cdp',
 
-    // default values can be omitted
-    host: 'localhost',
-    port: 8315,
-    commandTimeoutInMilliseconds: 30000
-  },
-}
-```
+       // default values can be omitted
+       host: 'localhost',
+       port: 8315,
+       commandTimeoutInMilliseconds: 30000
+     },
+   }
+   ```
 
 > [!NOTE]
 >
@@ -436,21 +436,21 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 7. Configure vitest:
 
-```ts
-// vitest.config.ts
-export default defineConfig({
-  test: {
-    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
-    environmentOptions: {
-      obsidianTransport: {
-        type: 'obsidian-android-appium',
-        appiumUrl: 'http://localhost:4723',
-        deviceId: 'emulator-5554',
-      },
-    },
-  },
-});
-```
+   ```ts
+   // vitest.config.ts
+   export default defineConfig({
+     test: {
+       globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+       environmentOptions: {
+         obsidianTransport: {
+           type: 'obsidian-android-appium',
+           appiumUrl: 'http://localhost:4723',
+           deviceId: 'emulator-5554',
+         },
+       },
+     },
+   });
+   ```
 
 > [!NOTE]
 >
