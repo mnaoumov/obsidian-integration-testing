@@ -16,7 +16,6 @@ import type {
 
 import { exec } from './exec.ts';
 import {
-  getVaultId,
   isCliEnabled,
   isVaultRegistered
 } from './obsidian-config.ts';
@@ -174,7 +173,7 @@ export class DesktopCliTransport implements ObsidianTransport {
   }
 
   /**
-   * Launches Obsidian via URI protocol and retries the eval until it responds.
+   * Launches Obsidian binary and retries the eval until it responds.
    *
    * @param command - The CLI command array to retry.
    * @param cwd - The working directory.
@@ -183,13 +182,10 @@ export class DesktopCliTransport implements ObsidianTransport {
   private async ensureObsidianRunningAndRetry(command: string[], cwd: string): Promise<string> {
     console.warn('Obsidian is not running. Starting Obsidian...');
 
-    const vaultId = getVaultId(cwd);
-    const uri = vaultId ? `obsidian://open?vault=${vaultId}` : 'obsidian://open';
-
     try {
-      await exec(getOpenUriCommand(uri), { isQuiet: true });
+      await exec(getObsidianLaunchCommand(), { isQuiet: true });
     } catch {
-      // The open command may fail on some systems — we'll still try polling.
+      // The launch command may fail on some systems — we'll still try polling.
     }
 
     const deadline = Date.now() + AUTO_START_TIMEOUT_IN_MILLISECONDS;
@@ -248,21 +244,20 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Returns the platform-specific command to open a URI.
+ * Returns the platform-specific command to launch the Obsidian binary.
  *
- * @param uri - The URI to open.
  * @returns The shell command string.
  */
-function getOpenUriCommand(uri: string): string {
+function getObsidianLaunchCommand(): string {
   if (process.platform === 'win32') {
-    return `start "" "${uri}"`;
+    return 'start "" "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe"';
   }
 
   if (process.platform === 'darwin') {
-    return `open "${uri}"`;
+    return '/Applications/Obsidian.app/Contents/MacOS/Obsidian &';
   }
 
-  return `xdg-open "${uri}"`;
+  return 'obsidian &';
 }
 
 /* v8 ignore stop */
