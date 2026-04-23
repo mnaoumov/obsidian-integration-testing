@@ -406,7 +406,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
      adb devices
      ```
 
-3. Install Obsidian on the device (via Play Store or APK sideload) and grant storage permission:
+3. Install [Obsidian](https://obsidian.md/download) on the device (via Play Store or APK sideload) and grant storage permission:
 
    ```bash
    adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
