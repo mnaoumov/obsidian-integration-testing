@@ -103,6 +103,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   /** */
   public readonly isMobile = false;
   private activeVaultPath: null | string = null;
+  private readonly cdpPort: number;
   private readonly cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
   private messageId = 0;
@@ -115,8 +116,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public constructor(config?: DesktopCdpTransportConfig) {
     const host = config?.cdpHost ?? 'localhost';
-    const port = config?.cdpPort ?? CDP_DEFAULT_PORT;
-    this.cdpUrl = `http://${host}:${String(port)}`;
+    this.cdpPort = config?.cdpPort ?? CDP_DEFAULT_PORT;
+    this.cdpUrl = `http://${host}:${String(this.cdpPort)}`;
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
   }
 
@@ -331,15 +332,15 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
-   * Launches Obsidian via URI protocol and polls until CDP becomes available.
+   * Launches Obsidian with `--remote-debugging-port` and polls until CDP becomes available.
    */
   private async ensureObsidianRunning(): Promise<void> {
-    console.warn('Obsidian CDP not reachable. Starting Obsidian...');
+    console.warn('Obsidian CDP not reachable. Starting Obsidian with remote debugging...');
 
     try {
-      await exec(getOpenUriCommand('obsidian://open'), { isQuiet: true });
+      await exec(getObsidianLaunchCommand(this.cdpPort), { isQuiet: true });
     } catch {
-      // The open command may fail on some systems — we'll still try polling.
+      // The launch command may fail on some systems — we'll still try polling.
     }
 
     const deadline = Date.now() + AUTO_START_TIMEOUT_IN_MILLISECONDS;
@@ -355,7 +356,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
     }
 
-    throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms. Ensure Obsidian has remote debugging enabled on port ${this.cdpUrl}.`);
+    throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms. Ensure Obsidian is installed and accessible.`);
   }
 
   /**
@@ -485,21 +486,23 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Returns the platform-specific command to open a URI.
+ * Returns the platform-specific command to launch Obsidian with remote debugging enabled.
  *
- * @param uri - The URI to open.
+ * @param port - The CDP port to use.
  * @returns The shell command string.
  */
-function getOpenUriCommand(uri: string): string {
+function getObsidianLaunchCommand(port: number): string {
+  const flag = `--remote-debugging-port=${String(port)}`;
+
   if (process.platform === 'win32') {
-    return `start "" "${uri}"`;
+    return `start "" "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe" ${flag}`;
   }
 
   if (process.platform === 'darwin') {
-    return `open "${uri}"`;
+    return `/Applications/Obsidian.app/Contents/MacOS/Obsidian ${flag} &`;
   }
 
-  return `xdg-open "${uri}"`;
+  return `obsidian ${flag} &`;
 }
 
 /* v8 ignore stop */
