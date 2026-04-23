@@ -11,9 +11,13 @@ import {
   isVaultRegistered
 } from './obsidian-config.ts';
 
+interface MockEnv {
+  APPDATA: string | undefined;
+}
+
 const mockReadFileSync = vi.hoisted(() => vi.fn<(path: string, encoding: string) => string>());
 const mockPlatform = vi.hoisted(() => ({ value: 'win32' }));
-const mockEnv = vi.hoisted(() => ({ APPDATA: 'C:\\Users\\test\\AppData\\Roaming' as string | undefined }));
+const mockEnv = vi.hoisted((): MockEnv => ({ APPDATA: 'C:\\Users\\test\\AppData\\Roaming' }));
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();

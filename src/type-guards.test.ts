@@ -12,7 +12,7 @@ import {
 describe('assertNonNullable', () => {
   it('should not throw for a defined value', () => {
     expect(() => {
-      assertNonNullable('hello' as string | undefined);
+      assertNonNullable<string | undefined>('hello');
     }).not.toThrow();
   });
 
@@ -44,7 +44,7 @@ describe('assertNonNullable', () => {
 
 describe('ensureNonNullable', () => {
   it('should return the value when not null or undefined', () => {
-    expect(ensureNonNullable('hello' as string | undefined)).toBe('hello');
+    expect(ensureNonNullable<string | undefined>('hello')).toBe('hello');
   });
 
   it('should throw for null', () => {
