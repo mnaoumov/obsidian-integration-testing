@@ -6,11 +6,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/mnaoumov/obsidian-integration-testing)](https://github.com/mnaoumov/obsidian-integration-testing/releases)
 [![Coverage: 100%](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/mnaoumov/obsidian-integration-testing)
 
-A set of helpers that simplify integration testing of [Obsidian](https://obsidian.md/) plugins against a running Obsidian instance via the [Obsidian CLI](https://obsidian.md/help/cli/).
-
-## Prerequisites
-
-- [Obsidian](https://obsidian.md/) should have CLI enabled.
+A set of helpers that simplify integration testing of [Obsidian](https://obsidian.md/) plugins against a running Obsidian instance.
 
 ## Installation
 
@@ -18,22 +14,22 @@ A set of helpers that simplify integration testing of [Obsidian](https://obsidia
 npm install --save-dev obsidian-integration-testing
 ```
 
-## Usage
+## Quick start
 
-### Plugin Vitest setup
-
-> **This entry point is designed for Obsidian plugin repos only.** It expects your built plugin in `dist/dev` or `dist/build` (whichever has a newer `main.js`), with a `manifest.json` at the root of the chosen folder. The setup creates a temporary vault, copies the build into it, and enables the plugin via the Obsidian CLI.
-
-Add it as a Vitest global setup:
+Add the global setup to your Vitest config. It expects your built plugin in `dist/dev` or `dist/build` (whichever has a newer `main.js`), with a `manifest.json` at the root of the chosen folder. The setup creates a temporary vault, copies the build into it, and enables the plugin.
 
 ```ts
 // vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
 export default defineConfig({
   test: {
-    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup']
-  }
+    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+  },
 });
 ```
+
+By default this uses the **CLI transport** (requires CLI enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
 
 ### Write integration tests
 
@@ -304,89 +300,113 @@ const title2 = await evalInObsidian({
 
 ### Transport modes
 
-By default, `evalInObsidian` uses the **CLI transport** (`DesktopCliTransport`), which shells out to the `obsidian` CLI binary. You can switch to a different transport by calling `setTransport()` before any `evalInObsidian` calls.
+The transport determines how the library communicates with Obsidian. Configure it via `environmentOptions.obsidianTransport` in your vitest project config:
 
-Three transports are available:
+| Type                       | Platform | Mechanism                      | Requirements                       |
+|----------------------------|----------|--------------------------------|------------------------------------|
+| `obsidian-cli` (default)   | Desktop  | Obsidian CLI (`obsidian eval`) | CLI enabled in Obsidian settings   |
+| `obsidian-cdp`             | Desktop  | Chrome DevTools Protocol (CDP) | Obsidian running with remote debug |
+| `obsidian-android-appium`  | Mobile   | Appium WebView JS injection    | Appium + device/emulator           |
 
-| Transport              | Platform | Mechanism                          | Requirements                        |
-|------------------------|----------|------------------------------------|-------------------------------------|
-| `DesktopCliTransport`  | Desktop  | Obsidian CLI (`obsidian eval`)     | CLI enabled in Obsidian settings    |
-| `DesktopCdpTransport`  | Desktop  | Chrome DevTools Protocol (CDP)     | Obsidian running with remote debug  |
-| `AppiumTransport`      | Mobile   | Appium WebView JS injection        | Appium + device/emulator            |
+#### CDP transport
 
-### CDP transport (Desktop)
+The CDP transport connects via WebSocket to Obsidian's Chrome DevTools Protocol endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
 
-The CDP transport connects to Obsidian's built-in Chrome DevTools Protocol endpoint over WebSocket. This avoids the CLI binary entirely — no installation needed, no "CLI enabled" setting required, and lower overhead (WebSocket vs. process spawn per eval).
-
-#### Prerequisites
-
-- Obsidian must be running with remote debugging enabled (port 8315 by default)
-- Node.js 22+ (uses built-in `WebSocket` and `fetch` globals)
-
-#### Setup
-
-```ts
-import { DesktopCdpTransport, setTransport } from 'obsidian-integration-testing';
-
-setTransport(new DesktopCdpTransport());
-```
-
-Optionally configure the host, port, or command timeout:
-
-```ts
-setTransport(new DesktopCdpTransport({
-  cdpHost: 'localhost',
-  cdpPort: 8315,
-  commandTimeoutMs: 30000,
-}));
-```
-
-After calling `setTransport()`, all `evalInObsidian` calls, `TempVault` operations, and the global setup will use CDP instead of the CLI.
-
-> [!NOTE]
->
-> If Obsidian is not running when a preflight check runs, the CDP transport will attempt to auto-start it via the `obsidian://open` URI protocol and poll until CDP becomes available.
-
-### Android integration tests
-
-You can run the same tests against Obsidian Mobile on an Android emulator (or a real device via BrowserStack).
-
-#### Prerequisites
-
-- [Appium](https://appium.io/) with the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver)
-- [WebDriverIO](https://webdriver.io/) (`npm install --save-dev webdriverio`)
-- Android emulator (or real device) with Obsidian installed
-- Storage permission granted: `adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow`
-
-#### Setup
-
-Add two environment variables to your `.env`:
-
-```env
-OBSIDIAN_APPIUM_URL=http://localhost:4723
-OBSIDIAN_APPIUM_DEVICE_ID=emulator-5554
-```
-
-Add vitest projects for both desktop and Android:
+Prerequisites: Obsidian running with remote debugging (port 8315 by default), Node.js 22+.
 
 ```ts
 // vitest.config.ts
+export default defineConfig({
+  test: {
+    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+    environmentOptions: {
+      obsidianTransport: { type: 'obsidian-cdp' },
+    },
+  },
+});
+```
+
+Optional configuration:
+
+```ts
+environmentOptions: {
+  obsidianTransport: {
+    type: 'obsidian-cdp',
+    host: 'localhost',  // default
+    port: 8315,         // default
+    commandTimeoutMs: 30000, // default
+  },
+}
+```
+
+> [!NOTE]
+>
+> If Obsidian is not running, the CDP transport attempts to auto-start it via the `obsidian://open` URI protocol.
+
+#### Android transport
+
+Run the same tests against Obsidian Mobile on an Android emulator or real device.
+
+Prerequisites:
+
+- [Appium](https://appium.io/) with the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver)
+- Android emulator (or real device) with Obsidian installed
+- Storage permission: `adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow`
+
+```ts
+environmentOptions: {
+  obsidianTransport: {
+    type: 'obsidian-android-appium',
+    appiumUrl: 'http://localhost:4723',
+    deviceId: 'emulator-5554',
+  },
+}
+```
+
+> [!NOTE]
+>
+> Plugins with `isDesktopOnly: true` in `manifest.json` automatically reject Android tests.
+
+### Running multiple platforms
+
+Use vitest projects to run the same tests on multiple platforms:
+
+```ts
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
 export default defineConfig({
   test: {
     projects: [
       {
         test: {
           name: 'integration-desktop',
+          globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
-          exclude: ['src/**/*.android.integration.test.ts'],
-          globalSetup: 'obsidian-integration-testing/obsidian-plugin-vitest-setup',
+        },
+      },
+      {
+        test: {
+          name: 'integration-cdp',
+          globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+          include: ['src/**/*.integration.test.ts'],
+          environmentOptions: {
+            obsidianTransport: { type: 'obsidian-cdp' },
+          },
         },
       },
       {
         test: {
           name: 'integration-android',
-          include: ['src/**/*.android.integration.test.ts'],
-          globalSetup: 'obsidian-integration-testing/obsidian-plugin-android-setup',
+          globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+          include: ['src/**/*.integration.test.ts'],
+          environmentOptions: {
+            obsidianTransport: {
+              type: 'obsidian-android-appium',
+              appiumUrl: 'http://localhost:4723',
+              deviceId: 'emulator-5554',
+            },
+          },
         },
       },
     ],
@@ -394,58 +414,21 @@ export default defineConfig({
 });
 ```
 
-#### File naming convention
-
-| Pattern                            | Runs on      |
-|------------------------------------|--------------|
-| `*.integration.test.ts`            | Desktop only |
-| `*.android.integration.test.ts`    | Android only |
-
-#### Writing Android tests
-
-Android tests use the same `evalInObsidian` API:
-
-```ts
-// src/plugin.android.integration.test.ts
-import { describe, expect, it } from 'vitest';
-import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVault } from 'obsidian-integration-testing/obsidian-plugin-vitest-setup';
-
-describe('my-plugin on Android', () => {
-  const vault = getTempVault();
-
-  it('should load on mobile', async () => {
-    const isMobile = await evalInObsidian({
-      fn: ({ app }) => app.isMobile,
-      vaultPath: vault.path,
-    });
-    expect(isMobile).toBe(true);
-  });
-});
-```
-
-#### Reusing desktop tests on Android
-
-To run existing desktop tests on Android, re-export them:
-
-```ts
-// src/plugin.android.integration.test.ts
-export * from './plugin.integration.test.ts';
-```
-
-#### Running
+Run specific platforms:
 
 ```bash
-# Desktop tests (default)
+# All platforms
+npx vitest run
+
+# Desktop CLI only
 npx vitest run --project integration-desktop
 
-# Android tests (requires Appium + emulator running)
+# CDP only
+npx vitest run --project integration-cdp
+
+# Android only (requires Appium + emulator running)
 npx vitest run --project integration-android
 ```
-
-> [!NOTE]
->
-> Plugins with `isDesktopOnly: true` in `manifest.json` will automatically skip Android tests — the setup throws an error before any test runs.
 
 ## Support
 
