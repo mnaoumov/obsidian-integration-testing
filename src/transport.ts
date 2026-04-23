@@ -10,8 +10,8 @@
  *
  * Implementations handle the platform-specific details:
  * - {@link DesktopCliTransport} — Desktop Obsidian via CLI (`obsidian eval`)
- * - CDP transport — Desktop Obsidian via Chrome DevTools Protocol (future)
- * - Appium transport — Mobile Obsidian via Appium WebView JS injection (future)
+ * - {@link DesktopCdpTransport} — Desktop Obsidian via Chrome DevTools Protocol
+ * - {@link AppiumTransport} — Mobile Obsidian via Appium WebView JS injection
  */
 export interface ObsidianTransport {
   /**
