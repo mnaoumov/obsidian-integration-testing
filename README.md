@@ -317,11 +317,11 @@ Shells out to the `obsidian` CLI binary for each eval call. This is the default 
 1. [Install the Obsidian CLI](https://obsidian.md/help/cli#Install+Obsidian+CLI)
 2. Enable CLI in Obsidian: Settings → General → Developer tools → Enable CLI
 
-No vitest configuration needed — CLI is the default transport.
+No additional vitest configuration needed — CLI is the default transport.
 
 #### CDP transport
 
-Connects via WebSocket to Obsidian's Chrome DevTools Protocol endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
+Connects via WebSocket to Obsidian's Chrome DevTools Protocol (`CDP`) endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
 
 **Setup:**
 
