@@ -302,17 +302,32 @@ const title2 = await evalInObsidian({
 
 The transport determines how the library communicates with Obsidian. Configure it via `environmentOptions.obsidianTransport` in your vitest project config:
 
-| Type                       | Platform | Mechanism                      | Requirements                       |
-|----------------------------|----------|--------------------------------|------------------------------------|
-| `obsidian-cli` (default)   | Desktop  | Obsidian CLI (`obsidian eval`) | CLI enabled in Obsidian settings   |
-| `obsidian-cdp`             | Desktop  | Chrome DevTools Protocol (CDP) | Obsidian running with remote debug |
-| `obsidian-android-appium`  | Mobile   | Appium WebView JS injection    | Appium + device/emulator           |
+| Type                       | Platform | Mechanism                      |
+|----------------------------|----------|--------------------------------|
+| `obsidian-cli` (default)   | Desktop  | Obsidian CLI (`obsidian eval`) |
+| `obsidian-cdp`             | Desktop  | Chrome DevTools Protocol (CDP) |
+| `obsidian-android-appium`  | Mobile   | Appium WebView JS injection    |
+
+#### CLI transport (default)
+
+Shells out to the `obsidian` CLI binary for each eval call. This is the default when no `obsidianTransport` is configured.
+
+**Setup:**
+
+1. [Install the Obsidian CLI](https://obsidian.md/help/cli#Install+Obsidian+CLI)
+2. Enable CLI in Obsidian: Settings → General → Developer tools → Enable CLI
+
+No vitest configuration needed — CLI is the default transport.
 
 #### CDP transport
 
-The CDP transport connects via WebSocket to Obsidian's Chrome DevTools Protocol endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
+Connects via WebSocket to Obsidian's Chrome DevTools Protocol endpoint. No CLI binary needed, no "CLI enabled" setting required, and lower overhead per eval.
 
-Prerequisites: Obsidian running with remote debugging (port 8315 by default), Node.js 22+.
+**Setup:**
+
+1. Enable remote debugging in Obsidian: Settings → General → Developer tools → Enable CDP
+2. Ensure Node.js 22+ (uses built-in `WebSocket` and `fetch` globals)
+3. Configure vitest:
 
 ```ts
 // vitest.config.ts
@@ -332,8 +347,8 @@ Optional configuration:
 environmentOptions: {
   obsidianTransport: {
     type: 'obsidian-cdp',
-    host: 'localhost',  // default
-    port: 8315,         // default
+    host: 'localhost',       // default
+    port: 8315,              // default
     commandTimeoutMs: 30000, // default
   },
 }
@@ -345,22 +360,53 @@ environmentOptions: {
 
 #### Android transport
 
-Run the same tests against Obsidian Mobile on an Android emulator or real device.
+Runs tests against Obsidian Mobile on an Android emulator or real device via Appium WebView injection.
 
-Prerequisites:
+**Setup:**
 
-- [Appium](https://appium.io/) with the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver)
-- Android emulator (or real device) with Obsidian installed
-- Storage permission: `adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow`
+1. Install [Appium](https://appium.io/) and the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
+
+   ```bash
+   npm install -g appium
+   appium driver install uiautomator2
+   ```
+
+2. Start an Android emulator (via Android Studio) or connect a real device
+
+3. Install Obsidian on the device and grant storage permission:
+
+   ```bash
+   adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
+   ```
+
+4. Start the Appium server:
+
+   ```bash
+   appium
+   ```
+
+5. Find the device ID:
+
+   ```bash
+   adb devices
+   ```
+
+6. Configure vitest:
 
 ```ts
-environmentOptions: {
-  obsidianTransport: {
-    type: 'obsidian-android-appium',
-    appiumUrl: 'http://localhost:4723',
-    deviceId: 'emulator-5554',
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+    environmentOptions: {
+      obsidianTransport: {
+        type: 'obsidian-android-appium',
+        appiumUrl: 'http://localhost:4723',
+        deviceId: 'emulator-5554',
+      },
+    },
   },
-}
+});
 ```
 
 > [!NOTE]

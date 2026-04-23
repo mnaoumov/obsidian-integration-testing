@@ -4,12 +4,13 @@ A library that provides helpers for integration testing Obsidian plugins against
 
 ## L1. Architecture
 
-The package exports three entry points:
+The package exports two entry points:
 
-| Entry point                                                       | Purpose                                                                 |
-|-------------------------------------------------------------------|-------------------------------------------------------------------------|
-| `obsidian-integration-testing`                               | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types |
-| `obsidian-integration-testing/obsidian-plugin-vitest-setup`  | Vitest global `setup`/`teardown` + `getTempVault()`                  |
+| Entry point                                                      | Purpose                                                              |
+|------------------------------------------------------------------|----------------------------------------------------------------------|
+| `obsidian-integration-testing`                                   | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types |
+| `obsidian-integration-testing/obsidian-plugin-vitest-setup`      | Vitest global `setup`/`teardown` + `getTempVault()`                  |
+
 Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`) are not re-exported.
 
 ## L2. Build
