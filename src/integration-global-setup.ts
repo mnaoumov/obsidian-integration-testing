@@ -6,7 +6,10 @@
 
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
-import type { PluginManifest } from 'obsidian';
+import type {
+  Plugin,
+  PluginManifest
+} from 'obsidian';
 import type { TestProject } from 'vitest/node';
 
 import { existsSync } from 'node:fs';
@@ -93,10 +96,9 @@ export async function setup(project: TestProject): Promise<void> {
       let loadError: Error | undefined;
       // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
       const origLoadPlugin = app.plugins.loadPlugin;
-      // eslint-disable-next-line func-names -- Anonymous wrapper for monkey-patch.
-      app.plugins.loadPlugin = async function (...args: unknown[]): Promise<unknown> {
+      app.plugins.loadPlugin = async function loadPlugin(id: string, isUserEnabled?: boolean): Promise<Plugin> {
         try {
-          const result = await origLoadPlugin.apply(this, args);
+          const result = await origLoadPlugin.call(this, id, isUserEnabled);
           loadError = undefined;
           return result;
         } catch (error) {
