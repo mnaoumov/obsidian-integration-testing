@@ -68,9 +68,11 @@ export async function setup(project: TestProject): Promise<void> {
       'appium:appPackage': APP_PACKAGE,
       'appium:autoGrantPermissions': true,
       'appium:automationName': 'UiAutomator2',
-      // 'appium:chromedriverAutodownload': true,
       'appium:newCommandTimeout': COMMAND_TIMEOUT_MS,
       'appium:noReset': true,
+      'appium:settings': {
+        'appium:chromedriverAutodownload': true
+      },
       'appium:skipServerInstallation': true,
       'appium:udid': udid,
       'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_MS,
