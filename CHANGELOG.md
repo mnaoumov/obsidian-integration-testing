@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.3.1
+
+- chore: resubmit
+
 ## 1.3.0
 
 - docs: update
