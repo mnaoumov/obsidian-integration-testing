@@ -8,7 +8,7 @@
  * and `inject('obsidianTransport')` / `inject('tempVaultPath')`.
  */
 
-import type { ObsidianTransportOptions } from './transport-options.ts';
+import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 declare module 'vitest' {
   interface ProvidedContext {
