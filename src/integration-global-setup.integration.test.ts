@@ -118,6 +118,44 @@ const TEST_CASES: PluginTestCase[] = [
   { expectedError: 'constructor crash', id: 'test-ctor-crash', mainJs: CONSTRUCTOR_CRASH_MAIN, name: 'constructor (crash)', shouldBeEnabled: false }
 ];
 
+describe('vault trust dialog', () => {
+  const vault = new TempVault();
+
+  beforeAll(async () => {
+    vault.populate({
+      '.obsidian/community-plugins.json': JSON.stringify(['dummy-plugin']),
+      '.obsidian/plugins/dummy-plugin/main.js': `
+        const { Plugin } = require('obsidian');
+        class P extends Plugin { onload() {} }
+        module.exports = P; exports.default = P;
+      `,
+      '.obsidian/plugins/dummy-plugin/manifest.json': createManifest({ id: 'dummy-plugin' })
+    });
+    await vault.register();
+  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+
+  afterAll(async () => {
+    await vault.dispose();
+  });
+
+  it('should not show "Do you trust the author" dialog after registration', async () => {
+    const hasTrustDialog = await evalInObsidian({
+      fn(): boolean {
+        const modals = document.querySelectorAll('.modal-container');
+        for (const modal of modals) {
+          if (modal.textContent.includes('Do you trust the author')) {
+            return true;
+          }
+        }
+        return false;
+      },
+      shouldSkipPreflightChecks: true,
+      vaultPath: vault.path
+    });
+    expect(hasTrustDialog).toBe(false);
+  });
+});
+
 describe('plugin load detection', () => {
   const vault = new TempVault();
 
