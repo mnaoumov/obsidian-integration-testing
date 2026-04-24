@@ -49,6 +49,7 @@
     "**/package.json",
     "dist/",
     "LICENSE",
+    "patches/",
     "README.md",
     "scripts/postinstall.mjs"
   ],
