@@ -56,7 +56,7 @@ async function main(): Promise<void> {
 
 function rewriteImportExtensions(content: string, targetExt: string): string {
   return content.replace(
-    /(?<prefix>from\s+['"])(?<path>[^'"]*?)\.ts(?<quote>['"])/g,
+    /(?<prefix>(?:from|import)\s+['"])(?<path>[^'"]*?)\.ts(?<quote>['"])/g,
     `$<prefix>$<path>${targetExt}$<quote>`
   );
 }
