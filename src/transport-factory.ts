@@ -6,6 +6,7 @@
 
 /* v8 ignore start -- Integration-time factory covered by integration tests, not unit tests. */
 
+import http from 'node:http';
 import { remote } from 'webdriverio';
 
 import type {
@@ -20,6 +21,10 @@ import { DesktopCliTransport } from './transport-desktop-cli.ts';
 
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
+const APPIUM_CONNECTION_RETRY_COUNT = 1;
+const APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
+const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
+const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 30000;
 
@@ -33,10 +38,12 @@ let cachedTransport: ObsidianTransport | undefined;
  */
 export async function createTransportFromOptions(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   if (!options || options.type === 'obsidian-cli') {
+    console.warn('[transport-factory] Creating DesktopCliTransport (no options or type=obsidian-cli)');
     return new DesktopCliTransport();
   }
 
   if (options.type === 'obsidian-cdp') {
+    console.warn(`[transport-factory] Creating DesktopCdpTransport (host=${options.host ?? 'localhost'}, port=${String(options.port ?? CDP_DEFAULT_PORT)})`);
     return new DesktopCdpTransport({
       ...(options.host !== undefined && { cdpHost: options.host }),
       ...(options.port !== undefined && { cdpPort: options.port }),
@@ -44,6 +51,7 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
     });
   }
 
+  console.warn(`[transport-factory] Creating AppiumTransport (url=${options.appiumUrl}, device=${options.deviceId})`);
   return createAppiumTransport(options);
 }
 
@@ -69,6 +77,39 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
 }
 
 /**
+ * Performs a quick HTTP check against the Appium server's status endpoint.
+ *
+ * Fails fast (within {@link APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS}) with
+ * a clear error message instead of letting WebDriverIO retry silently for minutes.
+ *
+ * @param url - The parsed Appium URL.
+ */
+function checkAppiumReachable(url: URL): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const statusUrl = new URL('/status', url);
+    const req = http.get(statusUrl, { timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (res) => {
+      res.resume();
+      resolve();
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      reject(
+        new Error(
+          `Appium server at ${url.origin} did not respond within ${String(APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS)}ms. Is the Appium server running?`
+        )
+      );
+    });
+    req.on('error', (err) => {
+      reject(
+        new Error(
+          `Cannot reach Appium server at ${url.origin}: ${err.message}. Is the Appium server running?`
+        )
+      );
+    });
+  });
+}
+
+/**
  * Creates an Appium transport by establishing a WebDriverIO session.
  *
  * @param options - Android Appium transport options.
@@ -84,6 +125,11 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
 
   const appId = options.appId ?? APP_PACKAGE;
 
+  console.warn(`[transport-factory] Checking Appium server at ${options.appiumUrl}...`);
+  await checkAppiumReachable(url);
+  console.warn('[transport-factory] Appium server is reachable.');
+
+  console.warn(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
   const browser = await remote({
     capabilities: {
       'appium:appActivity': APP_ACTIVITY,
@@ -100,11 +146,14 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
       'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
       'platformName': 'Android'
     },
+    connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
+    connectionRetryTimeout: APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
     hostname: url.hostname,
     path: url.pathname,
     port
   });
 
+  console.warn('[transport-factory] Appium session established.');
   return new AppiumTransport({
     appId,
     browser,

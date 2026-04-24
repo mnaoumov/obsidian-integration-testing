@@ -58,9 +58,12 @@ let transport: ObsidianTransport;
  */
 export async function setup(project: TestProject): Promise<void> {
   const transportOptions = project.config.environmentOptions['obsidianTransport'] as ObsidianTransportOptions | undefined;
+  console.warn('[integration-setup] Creating transport...');
   transport = await createTransportFromOptions(transportOptions);
+  console.warn(`[integration-setup] Transport created: ${transport.constructor.name}`);
 
   const projectRoot = findProjectRoot();
+  console.warn(`[integration-setup] Project root: ${projectRoot}`);
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
@@ -74,19 +77,25 @@ export async function setup(project: TestProject): Promise<void> {
   const mainJs = join(distPath, MAIN_JS);
   const buildStat = await stat(mainJs);
 
-  console.warn(`Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+  console.warn(`[integration-setup] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
 
   tempVault = new TempVault();
+  console.warn(`[integration-setup] Created temp vault: ${tempVault.path}`);
   const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
   await mkdir(pluginDir, { recursive: true });
   await cp(distPath, pluginDir, { recursive: true });
   await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+
+  console.warn('[integration-setup] Syncing vault to device...');
   await tempVault.syncToDevice();
+  console.warn('[integration-setup] Registering vault...');
   await tempVault.register();
+  console.warn('[integration-setup] Vault registered.');
 
   // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
   // LoadPlugin() in a try-catch that swallows errors and returns false.
   // We monkey-patch loadPlugin() to capture the error before it's swallowed.
+  console.warn(`[integration-setup] Enabling plugin "${pluginId}"...`);
   const { errorMessage } = await evalInObsidian({
     args: { pluginId },
     fn: enablePluginWithErrorCapture,
@@ -98,6 +107,7 @@ export async function setup(project: TestProject): Promise<void> {
     throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
   }
 
+  console.warn(`[integration-setup] Plugin "${pluginId}" enabled successfully.`);
   project.provide('obsidianTransport', transportOptions);
   project.provide('tempVaultPath', tempVault.path);
 }

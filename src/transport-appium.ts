@@ -157,13 +157,17 @@ export class AppiumTransport implements ObsidianTransport {
    * @param _vaultPath - Not used on mobile.
    */
   public async preflightCheck(_vaultPath: string): Promise<void> {
+    console.warn('[appium-transport] Running preflight check...');
     const state = await this.browser.queryAppState(this.appId);
+    console.warn(`[appium-transport] App state: ${String(state)} (need ${String(APP_STATE_FOREGROUND)}=foreground)`);
     if (state !== APP_STATE_FOREGROUND) {
+      console.warn(`[appium-transport] Activating app ${this.appId}...`);
       await this.browser.activateApp(this.appId);
       await delay(APP_RESTART_DELAY_IN_MILLISECONDS);
     }
 
     await this.ensureWebViewContext();
+    console.warn('[appium-transport] Preflight check passed.');
   }
 
   /**
@@ -198,6 +202,7 @@ export class AppiumTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault on the host machine.
    */
   public async registerVault(vaultPath: string): Promise<void> {
+    console.warn(`[appium-transport] Registering vault: ${vaultPath}`);
     const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
 
     // Push a minimal .obsidian directory so Obsidian recognizes it as a vault.
@@ -263,16 +268,19 @@ export class AppiumTransport implements ObsidianTransport {
    */
   private async ensureWebViewContext(): Promise<void> {
     const deadline = Date.now() + WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
+    console.warn(`[appium-transport] Waiting for ${WEBVIEW_CONTEXT_PREFIX} context (timeout=${String(WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
       const obsidianContext = contexts.find((ctx): ctx is string => typeof ctx === 'string' && ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
 
       if (obsidianContext) {
+        console.warn(`[appium-transport] Found WebView context: ${obsidianContext}`);
         await this.browser.switchContext(obsidianContext);
         return;
       }
 
+      console.warn(`[appium-transport] WebView not ready, available contexts: ${JSON.stringify(contexts)}. Retrying...`);
       await delay(WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
@@ -294,6 +302,7 @@ export class AppiumTransport implements ObsidianTransport {
    */
   private async waitForLayoutReady(): Promise<void> {
     const deadline = Date.now() + LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS;
+    console.warn(`[appium-transport] Waiting for layout ready (timeout=${String(LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
 
     while (Date.now() < deadline) {
       try {
@@ -301,6 +310,7 @@ export class AppiumTransport implements ObsidianTransport {
           'return typeof app !== "undefined" && app.workspace && app.workspace.layoutReady === true'
         );
         if (isReady) {
+          console.warn('[appium-transport] Layout is ready.');
           return;
         }
       } catch {

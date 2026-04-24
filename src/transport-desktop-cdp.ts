@@ -169,6 +169,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The vault path (used for vault registration check).
    */
   public async preflightCheck(vaultPath: string): Promise<void> {
+    console.warn(`[cdp-transport] Running preflight check for vault: ${vaultPath}`);
     if (!isVaultRegistered(vaultPath)) {
       throw new Error(
         `Vault is not registered in Obsidian: ${vaultPath}. Register the vault first with registerVault() or TempVault.register().`
@@ -180,6 +181,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       if (targets.length === 0) {
         throw new Error('No page targets');
       }
+      console.warn(`[cdp-transport] CDP reachable, ${String(targets.length)} target(s) found.`);
     } catch {
       await this.ensureObsidianRunning();
     }
@@ -194,6 +196,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async registerVault(vaultPath: string): Promise<void> {
+    console.warn(`[cdp-transport] Registering vault: ${vaultPath}`);
     const targets = await this.getPageTargets();
     if (targets.length === 0) {
       throw new Error('No Obsidian CDP targets available. Is Obsidian running?');
@@ -213,10 +216,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
       ipcWs.close();
     }
 
+    console.warn(`[cdp-transport] Polling for vault target (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
         await this.findTargetForVault(vaultPath);
+        console.warn('[cdp-transport] Vault target found.');
         return;
       } catch {
         // Vault target not ready yet.
@@ -335,7 +340,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * Launches Obsidian with `--remote-debugging-port` and polls until CDP becomes available.
    */
   private async ensureObsidianRunning(): Promise<void> {
-    console.warn('Obsidian CDP not reachable. Starting Obsidian with remote debugging...');
+    console.warn('[cdp-transport] Obsidian CDP not reachable. Starting Obsidian with remote debugging...');
 
     try {
       await exec(getObsidianLaunchCommand(this.cdpPort), { isQuiet: true });
@@ -343,16 +348,18 @@ export class DesktopCdpTransport implements ObsidianTransport {
       // The launch command may fail on some systems — we'll still try polling.
     }
 
+    console.warn(`[cdp-transport] Polling for CDP endpoint at ${this.cdpUrl} (timeout=${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + AUTO_START_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       await delay(AUTO_START_POLL_INTERVAL_IN_MILLISECONDS);
       try {
         const targets = await this.getPageTargets();
         if (targets.length > 0) {
+          console.warn(`[cdp-transport] Obsidian CDP ready, ${String(targets.length)} target(s) found.`);
           return;
         }
       } catch {
-        // Not ready yet.
+        console.warn('[cdp-transport] CDP not ready yet, retrying...');
       }
     }
 
