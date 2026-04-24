@@ -101,28 +101,3 @@ export type ObsidianTransportOptions =
   | ObsidianAndroidAppiumTransportOptions
   | ObsidianCdpTransportOptions
   | ObsidianCliTransportOptions;
-
-declare module 'vitest' {
-  interface EnvironmentOptions {
-    /**
-     * Configures the transport used by `obsidian-integration-testing` to
-     * communicate with a running Obsidian instance.
-     *
-     * When omitted, defaults to the CLI transport (`obsidian-cli`).
-     */
-    obsidianTransport?: ObsidianTransportOptions;
-  }
-
-  interface ProvidedContext {
-    /**
-     * Transport options provided by the global setup, consumed by
-     * `evalInObsidian` and other library functions via `inject()`.
-     */
-    obsidianTransport?: ObsidianTransportOptions;
-
-    /**
-     * Path to the temporary vault created by the global setup.
-     */
-    tempVaultPath: string;
-  }
-}
