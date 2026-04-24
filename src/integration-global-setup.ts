@@ -45,8 +45,8 @@ const OBSIDIAN_CONFIG_DIR = '.obsidian';
 const PLUGINS_DIR = 'plugins';
 const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
 
-let tempVault: TempVault;
-let transport: ObsidianTransport;
+let tempVault: TempVault | undefined;
+let transport: ObsidianTransport | undefined;
 
 /**
  * Vitest global setup function.
@@ -118,8 +118,8 @@ export async function setup(project: TestProject): Promise<void> {
  * Removes the temporary vault created during setup.
  */
 export async function teardown(): Promise<void> {
-  await tempVault.dispose();
-  await transport.dispose?.();
+  await tempVault?.dispose();
+  await transport?.dispose?.();
 }
 
 /**
