@@ -82,52 +82,67 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   const transport = await createTransportFromOptions(transportOptions);
   log(`[integration-setup] Transport created: ${transport.constructor.name}`);
 
-  log(`[integration-setup] Project root: ${projectRoot}`);
-  const distPath = await resolveDistPath(projectRoot);
-  const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
-  const pluginId = manifestJson.id;
+  let tempVault: TempVault | undefined;
 
-  if (transport.isMobile && manifestJson.isDesktopOnly) {
-    throw new Error(
-      `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
-    );
+  try {
+    log(`[integration-setup] Project root: ${projectRoot}`);
+    const distPath = await resolveDistPath(projectRoot);
+    const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
+    const pluginId = manifestJson.id;
+
+    if (transport.isMobile && manifestJson.isDesktopOnly) {
+      throw new Error(
+        `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
+      );
+    }
+
+    const mainJs = join(distPath, MAIN_JS);
+    const buildStat = await stat(mainJs);
+
+    log(`[integration-setup] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+
+    tempVault = new TempVault();
+    log(`[integration-setup] Created temp vault: ${tempVault.path}`);
+    const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
+    await mkdir(pluginDir, { recursive: true });
+    await cp(distPath, pluginDir, { recursive: true });
+    await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+
+    log('[integration-setup] Syncing vault to device...');
+    await tempVault.syncToDevice(transport);
+    log('[integration-setup] Registering vault...');
+    await tempVault.register(transport);
+    log('[integration-setup] Vault registered.');
+
+    // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
+    // LoadPlugin() in a try-catch that swallows errors and returns false.
+    // We monkey-patch loadPlugin() to capture the error before it's swallowed.
+    log(`[integration-setup] Enabling plugin "${pluginId}"...`);
+    const { errorMessage } = await evalInObsidian({
+      args: { pluginId },
+      fn: enablePluginWithErrorCapture,
+      shouldSkipPreflightChecks: true,
+      transport,
+      vaultPath: tempVault.path
+    });
+
+    if (errorMessage) {
+      throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
+    }
+
+    log(`[integration-setup] Plugin "${pluginId}" enabled successfully.`);
+  } catch (error: unknown) {
+    log('[integration-setup] Setup failed, cleaning up...');
+    try {
+      if (tempVault) {
+        await tempVault.dispose(transport);
+      }
+      await transport.dispose?.();
+    } catch (cleanupError: unknown) {
+      log(`[integration-setup] Cleanup error (non-fatal): ${String(cleanupError)}`);
+    }
+    throw error;
   }
-
-  const mainJs = join(distPath, MAIN_JS);
-  const buildStat = await stat(mainJs);
-
-  log(`[integration-setup] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
-
-  const tempVault = new TempVault();
-  log(`[integration-setup] Created temp vault: ${tempVault.path}`);
-  const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
-  await mkdir(pluginDir, { recursive: true });
-  await cp(distPath, pluginDir, { recursive: true });
-  await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
-
-  log('[integration-setup] Syncing vault to device...');
-  await tempVault.syncToDevice(transport);
-  log('[integration-setup] Registering vault...');
-  await tempVault.register(transport);
-  log('[integration-setup] Vault registered.');
-
-  // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
-  // LoadPlugin() in a try-catch that swallows errors and returns false.
-  // We monkey-patch loadPlugin() to capture the error before it's swallowed.
-  log(`[integration-setup] Enabling plugin "${pluginId}"...`);
-  const { errorMessage } = await evalInObsidian({
-    args: { pluginId },
-    fn: enablePluginWithErrorCapture,
-    shouldSkipPreflightChecks: true,
-    transport,
-    vaultPath: tempVault.path
-  });
-
-  if (errorMessage) {
-    throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
-  }
-
-  log(`[integration-setup] Plugin "${pluginId}" enabled successfully.`);
 
   return { tempVault, transport, transportOptions };
 }

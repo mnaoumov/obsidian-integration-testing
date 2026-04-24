@@ -8,7 +8,10 @@
 
 import type { ChildProcess } from 'node:child_process';
 
-import { spawn } from 'node:child_process';
+import {
+  execFile,
+  spawn
+} from 'node:child_process';
 import http from 'node:http';
 import { remote } from 'webdriverio';
 
@@ -25,8 +28,9 @@ import { DesktopCliTransport } from './transport-desktop-cli.ts';
 
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
+const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_CONNECTION_RETRY_COUNT = 1;
-const APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
+const APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 60000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
@@ -116,6 +120,44 @@ function checkAppiumReachable(url: URL): Promise<void> {
 }
 
 /**
+ * Verifies that the specified device is connected via ADB.
+ *
+ * Runs `adb devices` and checks the output for the given device ID in the
+ * `device` state. Throws a clear error if the device is not found.
+ *
+ * @param deviceId - The device UDID to check (e.g. `'emulator-5554'`).
+ */
+async function checkDeviceConnected(deviceId: string): Promise<void> {
+  log(`[transport-factory] Checking device ${deviceId} is connected via ADB...`);
+
+  const output = await new Promise<string>((resolve, reject) => {
+    execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`Failed to run 'adb devices': ${error.message}. Is ADB installed and in PATH?`));
+        return;
+      }
+      if (stderr) {
+        log(`[transport-factory] ADB stderr: ${stderr.trim()}`);
+      }
+      resolve(stdout);
+    });
+  });
+
+  const lines = output.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+  const deviceLine = lines.find((line) => line.startsWith(deviceId));
+
+  if (!deviceLine?.includes('\tdevice')) {
+    const connectedDevices = lines.slice(1).join('\n  ') || '(none)';
+    throw new Error(
+      `Device "${deviceId}" is not connected. Start the emulator before running integration tests.\n`
+        + `  Connected devices:\n  ${connectedDevices}`
+    );
+  }
+
+  log(`[transport-factory] Device ${deviceId} is connected.`);
+}
+
+/**
  * Creates an Appium transport by establishing a WebDriverIO session.
  *
  * @param options - Android Appium transport options.
@@ -148,48 +190,58 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
     log('[transport-factory] Auto-started Appium server is ready.');
   }
 
-  log(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
-  const browser = await remote({
-    capabilities: {
-      'appium:appActivity': APP_ACTIVITY,
-      'appium:appPackage': appId,
-      'appium:autoGrantPermissions': true,
-      'appium:automationName': 'UiAutomator2',
-      'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
-      'appium:noReset': true,
-      'appium:settings': {
-        'appium:chromedriverAutodownload': true
+  try {
+    await checkDeviceConnected(options.deviceId);
+
+    log(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
+    const browser = await remote({
+      capabilities: {
+        'appium:appActivity': APP_ACTIVITY,
+        'appium:appPackage': appId,
+        'appium:autoGrantPermissions': true,
+        'appium:automationName': 'UiAutomator2',
+        'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
+        'appium:noReset': true,
+        'appium:settings': {
+          'appium:chromedriverAutodownload': true
+        },
+        'appium:skipServerInstallation': true,
+        'appium:udid': options.deviceId,
+        'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
+        'platformName': 'Android'
       },
-      'appium:skipServerInstallation': true,
-      'appium:udid': options.deviceId,
-      'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
-      'platformName': 'Android'
-    },
-    connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
-    connectionRetryTimeout: APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
-    hostname: url.hostname,
-    path: url.pathname,
-    port
-  });
+      connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
+      connectionRetryTimeout: APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
+      hostname: url.hostname,
+      path: url.pathname,
+      port
+    });
 
-  log('[transport-factory] Appium session established.');
-  const transport = new AppiumTransport({
-    appId,
-    browser,
-    platform: 'android',
-    ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath })
-  });
+    log('[transport-factory] Appium session established.');
+    const transport = new AppiumTransport({
+      appId,
+      browser,
+      platform: 'android',
+      ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath })
+    });
 
-  if (appiumProcess) {
-    const originalDispose = transport.dispose.bind(transport);
-    transport.dispose = async (): Promise<void> => {
-      await originalDispose();
+    if (appiumProcess) {
+      const originalDispose = transport.dispose.bind(transport);
+      transport.dispose = async (): Promise<void> => {
+        await originalDispose();
+        appiumProcess.kill();
+        log('[transport-factory] Auto-started Appium server stopped.');
+      };
+    }
+
+    return transport;
+  } catch (error: unknown) {
+    if (appiumProcess) {
       appiumProcess.kill();
-      log('[transport-factory] Auto-started Appium server stopped.');
-    };
+      log('[transport-factory] Killed auto-started Appium server after connection failure.');
+    }
+    throw error;
   }
-
-  return transport;
 }
 
 /**
@@ -202,7 +254,7 @@ function startAppiumServer(port: number): ChildProcess {
   const child = spawn(`npx appium --log-timestamp --port ${String(port)}`, {
     detached: true,
     shell: true,
-    stdio: 'inherit'
+    stdio: ['ignore', 'inherit', 'inherit']
   });
 
   child.unref();
