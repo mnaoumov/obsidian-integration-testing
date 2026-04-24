@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.2.3
+
+- fix: backtick-escape @default
+- feat: auto-start Appium server when unreachable
+- fix: guard teardown against undefined
+
 ## 1.2.2
 
 - fix: dependencies
