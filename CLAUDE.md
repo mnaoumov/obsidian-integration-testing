@@ -1,16 +1,19 @@
 # Project: obsidian-integration-testing
 
-A library that provides helpers for integration testing Obsidian plugins against a running Obsidian instance via the Obsidian CLI.
+A library that provides helpers for integration testing Obsidian plugins against a running Obsidian instance.
 
 ## L1. Architecture
 
-The package exports three entry points:
+The package exports these entry points:
 
-| Entry point                                                 | Purpose                                                                          |
-|-------------------------------------------------------------|----------------------------------------------------------------------------------|
-| `obsidian-integration-testing`                              | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types             |
-| `obsidian-integration-testing/obsidian-plugin-vitest-setup` | Vitest global `setup`/`teardown` + `getTempVault()`                              |
-| `obsidian-integration-testing/vitest`                       | Vitest `declare module` augmentation (types-only, auto-included via main entry)  |
+| Entry point                                              | Purpose                                                                         |
+|----------------------------------------------------------|---------------------------------------------------------------------------------|
+| `obsidian-integration-testing`                           | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types            |
+| `obsidian-integration-testing/vitest-global-setup`       | Vitest global `setup`/`teardown` + `getTempVault()`                             |
+| `obsidian-integration-testing/vitest-typings`            | Vitest `declare module` augmentation (types-only, auto-included via main entry) |
+| `obsidian-integration-testing/jest-global-setup`         | Jest global `setup`/`teardown` + `getTempVault()`                               |
+
+Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
 Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`) are not re-exported.
 
@@ -28,8 +31,8 @@ Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-gu
 
 ## L4. Peer dependencies
 
-Consumers must have `obsidian`, `type-fest`, and `vitest` installed.
+Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` or `jest`) installed.
 
 ## L5. Transport configuration
 
-Transport is configured via `environmentOptions.obsidianTransport` in vitest project config. The discriminated union `ObsidianTransportOptions` (`type: 'obsidian-cli' | 'obsidian-cdp' | 'obsidian-android-appium'`) drives which transport the globalSetup creates. No global mutable state — transport options are provided via vitest `inject()`, and each worker caches its own transport instance.
+Transport is configured via the framework adapter's config mechanism. The discriminated union `ObsidianTransportOptions` (`type: 'obsidian-cli' | 'obsidian-cdp' | 'obsidian-android-appium'`) drives which transport the globalSetup creates. Vitest uses `environmentOptions.obsidianTransport`; Jest uses `globalThis.__obsidianIntegrationTesting.transportOptions`. Other frameworks can register a custom resolver via `setTransportOptionsResolver()`.

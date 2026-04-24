@@ -16,7 +16,9 @@ npm install --save-dev obsidian-integration-testing
 
 ## Quick start
 
-Add the global setup to your Vitest config. It expects your built plugin in `dist/dev` or `dist/build` (whichever has a newer `main.js`), with a `manifest.json` at the root of the chosen folder. The setup creates a temporary vault, copies the build into it, and enables the plugin.
+The global setup expects your built plugin in `dist/dev` or `dist/build` (whichever has a newer `main.js`), with a `manifest.json` at the root of the chosen folder. The setup creates a temporary vault, copies the build into it, and enables the plugin.
+
+### Vitest
 
 ```ts
 // vitest.config.ts
@@ -24,14 +26,33 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+    globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
   },
 });
 ```
 
-By default this uses the **`CLI` transport** (requires `CLI` enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
-
 Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('tempVaultPath')`) are included automatically when you import from `obsidian-integration-testing` — no extra `tsconfig.json` configuration needed.
+
+### Jest
+
+```ts
+// jest.config.ts
+export default {
+  globalSetup: 'obsidian-integration-testing/jest-global-setup',
+};
+```
+
+To configure transport options with Jest, populate `globalThis.__obsidianIntegrationTesting` before the global setup runs (e.g., in a setup file or via Jest `globals`):
+
+```ts
+globalThis.__obsidianIntegrationTesting = {
+  transportOptions: { type: 'obsidian-cdp' },
+};
+```
+
+After setup, `globalThis.__obsidianIntegrationTesting.tempVaultPath` is available in test workers.
+
+By default this uses the **`CLI` transport** (requires `CLI` enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
 
 ### Write integration tests
 
@@ -199,10 +220,12 @@ Parent directories are created automatically. To create an empty folder, use a p
 
 Use `getTempVault()` to get the temporary vault created by the global setup:
 
+**Vitest:**
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVault } from 'obsidian-integration-testing/obsidian-plugin-vitest-setup';
+import { getTempVault } from 'obsidian-integration-testing/vitest-global-setup';
 
 describe('my-plugin', () => {
   const vault = getTempVault();
@@ -229,6 +252,26 @@ describe('my-plugin', () => {
       vaultPath: vault.path
     });
     expect(content).toBe('# Hello');
+  });
+});
+```
+
+**Jest:**
+
+```ts
+import { evalInObsidian } from 'obsidian-integration-testing';
+import { getTempVault } from 'obsidian-integration-testing/jest-global-setup';
+
+describe('my-plugin', () => {
+  const vault = getTempVault();
+
+  it('should be enabled', async () => {
+    const isEnabled = await evalInObsidian({
+      args: { pluginId: 'my-plugin' },
+      fn: ({ app, pluginId }) => app.plugins.enabledPlugins.has(pluginId),
+      vaultPath: vault.path
+    });
+    expect(isEnabled).toBe(true);
   });
 });
 ```
@@ -302,7 +345,7 @@ const title2 = await evalInObsidian({
 
 ### Transport modes
 
-The transport determines how the library communicates with Obsidian. Configure it via `environmentOptions.obsidianTransport` in your vitest project config:
+The transport determines how the library communicates with Obsidian. Configure it via transport options in your test framework's config (see [Quick start](#quick-start)):
 
 | Type                       | Platform | Mechanism                                                   |
 |----------------------------|----------|-------------------------------------------------------------|
@@ -355,7 +398,7 @@ Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. 
    export default defineConfig({
      test: {
        fileParallelism: false,
-       globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+       globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
        environmentOptions: {
          obsidianTransport: { type: 'obsidian-cdp' },
        },
@@ -440,7 +483,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    export default defineConfig({
      test: {
        fileParallelism: false,
-       globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+       globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
        environmentOptions: {
          obsidianTransport: {
            type: 'obsidian-android-appium',
@@ -471,7 +514,7 @@ export default defineConfig({
         test: {
           name: 'integration-tests:desktop-cli',
           fileParallelism: false,
-          globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+          globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
           // default, can be omitted
@@ -484,7 +527,7 @@ export default defineConfig({
         test: {
           name: 'integration-tests:desktop-cdp',
           fileParallelism: false,
-          globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+          globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
           environmentOptions: {
@@ -496,7 +539,7 @@ export default defineConfig({
         test: {
           name: 'integration-tests:android-appium',
           fileParallelism: false,
-          globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
+          globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
           include: ['src/**/*.android.integration.test.ts'],
           environmentOptions: {
             obsidianTransport: {
