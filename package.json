@@ -118,7 +118,6 @@
     "nano-staged": "latest",
     "obsidian": "latest",
     "obsidian-typings": "obsidian-public-latest",
-    "puppeteer-core": "latest",
     "semver": "latest",
     "type-fest": "latest",
     "typescript": "latest",
@@ -137,6 +136,7 @@
     "type-fest": "latest"
   },
   "dependencies": {
-    "webdriverio": "^9.27.0"
+    "puppeteer-core": "latest",
+    "webdriverio": "latest"
   }
 }
