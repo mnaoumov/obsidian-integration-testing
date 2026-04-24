@@ -12,6 +12,7 @@
   "dictionaries": [],
   "words": [
     "appops",
+    "avds",
     "chromedriver",
     "creatordate",
     "dcts",
@@ -19,6 +20,7 @@
     "debouncer",
     "Debouncer",
     "dmts",
+    "getprop",
     "Jsdocs",
     "Keymap",
     "linkinator",

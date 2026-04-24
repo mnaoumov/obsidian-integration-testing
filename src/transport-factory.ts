@@ -12,7 +12,10 @@ import {
   execFile,
   spawn
 } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import http from 'node:http';
+import { join } from 'node:path';
+import process from 'node:process';
 import { remote } from 'webdriverio';
 
 import type {
@@ -36,7 +39,20 @@ const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
 const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
+const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
+const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 30000;
+
+/**
+ * Parameters for {@link ensureDeviceConnected}.
+ */
+interface EnsureDeviceConnectedParams {
+  /** AVD name to auto-start if the device is not connected. */
+  avdName?: string | undefined;
+
+  /** Device UDID to check (e.g. `'emulator-5554'`). */
+  deviceId: string;
+}
 
 let cachedTransport: ObsidianTransport | undefined;
 
@@ -120,16 +136,12 @@ function checkAppiumReachable(url: URL): Promise<void> {
 }
 
 /**
- * Verifies that the specified device is connected via ADB.
- *
- * Runs `adb devices` and checks the output for the given device ID in the
- * `device` state. Throws a clear error if the device is not found.
+ * Checks whether the specified device is connected via ADB.
  *
  * @param deviceId - The device UDID to check (e.g. `'emulator-5554'`).
+ * @returns `true` if the device is connected and in the `device` state.
  */
-async function checkDeviceConnected(deviceId: string): Promise<void> {
-  log(`[transport-factory] Checking device ${deviceId} is connected via ADB...`);
-
+async function checkDeviceConnected(deviceId: string): Promise<boolean> {
   const output = await new Promise<string>((resolve, reject) => {
     execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
       if (error) {
@@ -145,16 +157,7 @@ async function checkDeviceConnected(deviceId: string): Promise<void> {
 
   const lines = output.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
   const deviceLine = lines.find((line) => line.startsWith(deviceId));
-
-  if (!deviceLine?.includes('\tdevice')) {
-    const connectedDevices = lines.slice(1).join('\n  ') || '(none)';
-    throw new Error(
-      `Device "${deviceId}" is not connected. Start the emulator before running integration tests.\n`
-        + `  Connected devices:\n  ${connectedDevices}`
-    );
-  }
-
-  log(`[transport-factory] Device ${deviceId} is connected.`);
+  return deviceLine?.includes('\tdevice') ?? false;
 }
 
 /**
@@ -190,8 +193,13 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
     log('[transport-factory] Auto-started Appium server is ready.');
   }
 
+  let emulatorProcess: ChildProcess | undefined;
+
   try {
-    await checkDeviceConnected(options.deviceId);
+    emulatorProcess = await ensureDeviceConnected({
+      avdName: options.avdName,
+      deviceId: options.deviceId
+    });
 
     log(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
     const browser = await remote({
@@ -225,14 +233,18 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
       ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath })
     });
 
-    if (appiumProcess) {
-      const originalDispose = transport.dispose.bind(transport);
-      transport.dispose = async (): Promise<void> => {
-        await originalDispose();
+    const originalDispose = transport.dispose.bind(transport);
+    transport.dispose = async (): Promise<void> => {
+      await originalDispose();
+      if (appiumProcess) {
         appiumProcess.kill();
         log('[transport-factory] Auto-started Appium server stopped.');
-      };
-    }
+      }
+      if (emulatorProcess) {
+        emulatorProcess.kill();
+        log('[transport-factory] Auto-started emulator stopped.');
+      }
+    };
 
     return transport;
   } catch (error: unknown) {
@@ -240,7 +252,79 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
       appiumProcess.kill();
       log('[transport-factory] Killed auto-started Appium server after connection failure.');
     }
+    if (emulatorProcess) {
+      emulatorProcess.kill();
+      log('[transport-factory] Killed auto-started emulator after connection failure.');
+    }
     throw error;
+  }
+}
+
+/**
+ * Ensures the specified device is connected, optionally auto-starting an
+ * emulator if an AVD name is provided.
+ *
+ * @param params - Device and optional AVD configuration.
+ * @param params.avdName - AVD name to auto-start if the device is not connected.
+ * @param params.deviceId - Device UDID to check.
+ * @returns The emulator child process if one was auto-started, or `undefined`.
+ */
+async function ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<ChildProcess | undefined> {
+  const { avdName, deviceId } = params;
+  log(`[transport-factory] Checking device ${deviceId} is connected via ADB...`);
+
+  if (await checkDeviceConnected(deviceId)) {
+    log(`[transport-factory] Device ${deviceId} is connected.`);
+    return undefined;
+  }
+
+  if (!avdName) {
+    throw new Error(
+      `Device "${deviceId}" is not connected. Start the emulator before running integration tests,`
+        + ' or set avdName in transport options to auto-start it.'
+    );
+  }
+
+  log(`[transport-factory] Device ${deviceId} not found, starting emulator AVD "${avdName}"...`);
+  const emulatorProcess = startEmulator(avdName);
+  await waitForDevice(deviceId);
+  log(`[transport-factory] Emulator "${avdName}" started, device ${deviceId} is connected.`);
+  return emulatorProcess;
+}
+
+/**
+ * Resolves the path to the Android emulator binary.
+ *
+ * Checks (in order):
+ * 1. `ANDROID_HOME` / `ANDROID_SDK_ROOT` environment variables
+ * 2. Common scoop install path on Windows
+ * 3. Falls back to `emulator` (assumes it's in PATH)
+ *
+ * @returns The path to the emulator binary.
+ */
+function resolveEmulatorBinary(): string {
+  const sdkRoot = process.env['ANDROID_HOME'] ?? process.env['ANDROID_SDK_ROOT'];
+  if (sdkRoot) {
+    return join(sdkRoot, 'emulator', 'emulator');
+  }
+
+  const candidates = [
+    ...findScoopEmulatorCandidates()
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return 'emulator';
+
+  function findScoopEmulatorCandidates(): string[] {
+    const scoopRoot = process.env['SCOOP'] ?? join(process.env['USERPROFILE'] ?? '', 'scoop');
+    return [
+      join(scoopRoot, 'apps', 'android-clt', 'current', 'emulator', 'emulator.exe')
+    ];
   }
 }
 
@@ -255,6 +339,24 @@ function startAppiumServer(port: number): ChildProcess {
     detached: true,
     shell: true,
     stdio: ['ignore', 'inherit', 'inherit']
+  });
+
+  child.unref();
+  return child;
+}
+
+/**
+ * Spawns an Android emulator as a background process.
+ *
+ * @param avdName - The AVD name to start.
+ * @returns The spawned child process.
+ */
+function startEmulator(avdName: string): ChildProcess {
+  const emulatorBinary = resolveEmulatorBinary();
+  log(`[transport-factory] Running: ${emulatorBinary} -avd ${avdName} -no-snapshot-save`);
+  const child = spawn(emulatorBinary, ['-avd', avdName, '-no-snapshot-save'], {
+    detached: true,
+    stdio: ['ignore', 'ignore', 'ignore']
   });
 
   child.unref();
@@ -282,6 +384,67 @@ async function waitForAppiumReady(url: URL): Promise<void> {
 
   throw new Error(
     `Auto-started Appium server did not become ready within ${String(APPIUM_START_TIMEOUT_IN_MILLISECONDS)}ms`
+  );
+}
+
+/**
+ * Waits for the device to finish booting by polling `sys.boot_completed`.
+ *
+ * @param deviceId - The device UDID.
+ * @param deadline - Absolute timestamp deadline.
+ */
+async function waitForBoot(deviceId: string, deadline: number): Promise<void> {
+  while (Date.now() < deadline) {
+    const isBooted = await new Promise<boolean>((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'shell', 'getprop', 'sys.boot_completed'],
+        { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+        (_error, stdout) => {
+          resolve(stdout.trim() === '1');
+        }
+      );
+    });
+
+    if (isBooted) {
+      log(`[transport-factory] Device ${deviceId} boot completed.`);
+      return;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS);
+    });
+  }
+
+  throw new Error(
+    `Device "${deviceId}" connected but did not finish booting within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`
+  );
+}
+
+/**
+ * Polls `adb devices` until the specified device appears in the `device` state.
+ *
+ * Also waits for the device to finish booting by checking `sys.boot_completed`.
+ *
+ * @param deviceId - The device UDID to wait for.
+ */
+async function waitForDevice(deviceId: string): Promise<void> {
+  const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS;
+
+  while (Date.now() < deadline) {
+    if (await checkDeviceConnected(deviceId)) {
+      log(`[transport-factory] Device ${deviceId} appeared in ADB, waiting for boot to complete...`);
+      await waitForBoot(deviceId, deadline);
+      return;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS);
+    });
+  }
+
+  throw new Error(
+    `Emulator device "${deviceId}" did not appear within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`
   );
 }
 
