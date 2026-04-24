@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.0.3
+
+- fix: fail early if ANDROID_HOME/ANDROID_SDK_ROOT is not set
+- feat: auto-start Android emulator when avdName is configured
+- fix: improve Appium DX — ADB preflight check, local timestamps, cleanup on failure
+
 ## 2.0.2
 
 - fix: resolve %LOCALAPPDATA% in Node.js
