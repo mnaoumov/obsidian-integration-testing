@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.2.1
+
+- feat: add verbose logging to setup and transport polling loops
+- chore: publish patches
+- docs: namespaces
+
 ## 1.2.0
 
 - feat: add CDP and Android testing
