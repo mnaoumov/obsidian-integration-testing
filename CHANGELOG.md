@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 1.3.2
+
+- fix: normalize absolute paths to relative in markdownlint helper
+- feat: auto-include vitest augmentations
+- fix: move EnvironmentOptions augmentation to vitest/node module
+- fix: pass transport through globalSetup to avoid inject() in wrong context
+
 ## 1.3.1
 
 - chore: resubmit
