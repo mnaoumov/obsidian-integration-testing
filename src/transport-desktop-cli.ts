@@ -15,6 +15,7 @@ import type {
 } from './transport.ts';
 
 import { exec } from './exec.ts';
+import { log } from './log.ts';
 import {
   getVaultId,
   isCliEnabled,
@@ -85,7 +86,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async preflightCheck(vaultPath: string): Promise<void> {
-    console.warn(`[cli-transport] Running preflight check for vault: ${vaultPath}`);
+    log(`[cli-transport] Running preflight check for vault: ${vaultPath}`);
     if (!isVaultRegistered(vaultPath)) {
       throw new Error(
         `Vault is not registered in Obsidian: ${vaultPath}. Register the vault first with registerVault() or TempVault.register().`
@@ -97,7 +98,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     }
 
     await this.assertCliAvailable();
-    console.warn('[cli-transport] Preflight check passed.');
+    log('[cli-transport] Preflight check passed.');
   }
 
   /**
@@ -109,7 +110,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async registerVault(vaultPath: string): Promise<void> {
-    console.warn(`[cli-transport] Registering vault: ${vaultPath}`);
+    log(`[cli-transport] Registering vault: ${vaultPath}`);
     const registerExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-open', ${JSON.stringify(vaultPath)}, false);`
     );
@@ -121,13 +122,13 @@ export class DesktopCliTransport implements ObsidianTransport {
       'return JSON.stringify(app.vault.adapter.getBasePath());'
     );
 
-    console.warn(`[cli-transport] Polling for vault readiness (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    log(`[cli-transport] Polling for vault readiness (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
         const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
         if (JSON.parse(basePath) === vaultPath) {
-          console.warn('[cli-transport] Vault is ready.');
+          log('[cli-transport] Vault is ready.');
           return;
         }
       } catch {
@@ -193,7 +194,7 @@ export class DesktopCliTransport implements ObsidianTransport {
   private async enablePluginsInLocalStorage(vaultPath: string): Promise<void> {
     const vaultId = getVaultId(vaultPath);
     if (!vaultId) {
-      console.warn('[cli-transport] Could not find vault ID — skipping localStorage trust flag.');
+      log('[cli-transport] Could not find vault ID — skipping localStorage trust flag.');
       return;
     }
 
@@ -201,7 +202,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`
     );
     await this.evaluate(enableExpr, { cwd: process.cwd() });
-    console.warn(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
+    log(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
 
   /**
@@ -212,7 +213,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @returns The result string from the successful eval.
    */
   private async ensureObsidianRunningAndRetry(command: string[], cwd: string): Promise<string> {
-    console.warn('[cli-transport] Obsidian is not running. Starting Obsidian...');
+    log('[cli-transport] Obsidian is not running. Starting Obsidian...');
 
     try {
       await exec(getObsidianLaunchCommand(), { isQuiet: true });
@@ -220,20 +221,20 @@ export class DesktopCliTransport implements ObsidianTransport {
       // The launch command may fail on some systems — we'll still try polling.
     }
 
-    console.warn(`[cli-transport] Polling for Obsidian CLI (timeout=${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    log(`[cli-transport] Polling for Obsidian CLI (timeout=${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + AUTO_START_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       await delay(AUTO_START_POLL_INTERVAL_IN_MILLISECONDS);
       try {
         const result = await exec(command, { cwd, isQuiet: true });
-        console.warn('[cli-transport] Obsidian CLI responded.');
+        log('[cli-transport] Obsidian CLI responded.');
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (!message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
           throw error;
         }
-        console.warn('[cli-transport] Obsidian not ready yet, retrying...');
+        log('[cli-transport] Obsidian not ready yet, retrying...');
       }
     }
 

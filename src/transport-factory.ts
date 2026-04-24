@@ -18,6 +18,7 @@ import type {
 } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { log } from './log.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { DesktopCliTransport } from './transport-desktop-cli.ts';
@@ -28,7 +29,7 @@ const APPIUM_CONNECTION_RETRY_COUNT = 1;
 const APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 30000;
+const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
 const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 30000;
@@ -43,12 +44,12 @@ let cachedTransport: ObsidianTransport | undefined;
  */
 export async function createTransportFromOptions(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   if (!options || options.type === 'obsidian-cli') {
-    console.warn('[transport-factory] Creating DesktopCliTransport (no options or type=obsidian-cli)');
+    log('[transport-factory] Creating DesktopCliTransport (no options or type=obsidian-cli)');
     return new DesktopCliTransport();
   }
 
   if (options.type === 'obsidian-cdp') {
-    console.warn(`[transport-factory] Creating DesktopCdpTransport (host=${options.host ?? 'localhost'}, port=${String(options.port ?? CDP_DEFAULT_PORT)})`);
+    log(`[transport-factory] Creating DesktopCdpTransport (host=${options.host ?? 'localhost'}, port=${String(options.port ?? CDP_DEFAULT_PORT)})`);
     return new DesktopCdpTransport({
       ...(options.host !== undefined && { cdpHost: options.host }),
       ...(options.port !== undefined && { cdpPort: options.port }),
@@ -56,7 +57,7 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
     });
   }
 
-  console.warn(`[transport-factory] Creating AppiumTransport (url=${options.appiumUrl}, device=${options.deviceId})`);
+  log(`[transport-factory] Creating AppiumTransport (url=${options.appiumUrl}, device=${options.deviceId})`);
   return createAppiumTransport(options);
 }
 
@@ -130,24 +131,24 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
 
   const appId = options.appId ?? APP_PACKAGE;
 
-  console.warn(`[transport-factory] Checking Appium server at ${options.appiumUrl}...`);
+  log(`[transport-factory] Checking Appium server at ${options.appiumUrl}...`);
   let appiumProcess: ChildProcess | undefined;
 
   try {
     await checkAppiumReachable(url);
-    console.warn('[transport-factory] Appium server is reachable.');
+    log('[transport-factory] Appium server is reachable.');
   } catch (error: unknown) {
     if (options.shouldAutoStartAppium === false) {
       throw error;
     }
 
-    console.warn(`[transport-factory] Appium not reachable, auto-starting on port ${String(port)}...`);
+    log(`[transport-factory] Appium not reachable, auto-starting on port ${String(port)}...`);
     appiumProcess = startAppiumServer(port);
     await waitForAppiumReady(url);
-    console.warn('[transport-factory] Auto-started Appium server is ready.');
+    log('[transport-factory] Auto-started Appium server is ready.');
   }
 
-  console.warn(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
+  log(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
   const browser = await remote({
     capabilities: {
       'appium:appActivity': APP_ACTIVITY,
@@ -171,7 +172,7 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
     port
   });
 
-  console.warn('[transport-factory] Appium session established.');
+  log('[transport-factory] Appium session established.');
   const transport = new AppiumTransport({
     appId,
     browser,
@@ -184,7 +185,7 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
     transport.dispose = async (): Promise<void> => {
       await originalDispose();
       appiumProcess.kill();
-      console.warn('[transport-factory] Auto-started Appium server stopped.');
+      log('[transport-factory] Auto-started Appium server stopped.');
     };
   }
 
@@ -198,10 +199,10 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
  * @returns The spawned child process.
  */
 function startAppiumServer(port: number): ChildProcess {
-  const child = spawn('npx', ['appium', '--port', String(port)], {
+  const child = spawn(`npx appium --log-timestamp --port ${String(port)}`, {
     detached: true,
     shell: true,
-    stdio: 'ignore'
+    stdio: 'inherit'
   });
 
   child.unref();

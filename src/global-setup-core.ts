@@ -25,6 +25,7 @@ import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
+import { log } from './log.ts';
 import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
@@ -77,11 +78,11 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   }
 
   const transportOptions = params?.transportOptions;
-  console.warn('[integration-setup] Creating transport...');
+  log('[integration-setup] Creating transport...');
   const transport = await createTransportFromOptions(transportOptions);
-  console.warn(`[integration-setup] Transport created: ${transport.constructor.name}`);
+  log(`[integration-setup] Transport created: ${transport.constructor.name}`);
 
-  console.warn(`[integration-setup] Project root: ${projectRoot}`);
+  log(`[integration-setup] Project root: ${projectRoot}`);
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
@@ -95,25 +96,25 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   const mainJs = join(distPath, MAIN_JS);
   const buildStat = await stat(mainJs);
 
-  console.warn(`[integration-setup] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+  log(`[integration-setup] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
 
   const tempVault = new TempVault();
-  console.warn(`[integration-setup] Created temp vault: ${tempVault.path}`);
+  log(`[integration-setup] Created temp vault: ${tempVault.path}`);
   const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
   await mkdir(pluginDir, { recursive: true });
   await cp(distPath, pluginDir, { recursive: true });
   await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
 
-  console.warn('[integration-setup] Syncing vault to device...');
+  log('[integration-setup] Syncing vault to device...');
   await tempVault.syncToDevice(transport);
-  console.warn('[integration-setup] Registering vault...');
+  log('[integration-setup] Registering vault...');
   await tempVault.register(transport);
-  console.warn('[integration-setup] Vault registered.');
+  log('[integration-setup] Vault registered.');
 
   // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
   // LoadPlugin() in a try-catch that swallows errors and returns false.
   // We monkey-patch loadPlugin() to capture the error before it's swallowed.
-  console.warn(`[integration-setup] Enabling plugin "${pluginId}"...`);
+  log(`[integration-setup] Enabling plugin "${pluginId}"...`);
   const { errorMessage } = await evalInObsidian({
     args: { pluginId },
     fn: enablePluginWithErrorCapture,
@@ -126,7 +127,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
   }
 
-  console.warn(`[integration-setup] Plugin "${pluginId}" enabled successfully.`);
+  log(`[integration-setup] Plugin "${pluginId}" enabled successfully.`);
 
   return { tempVault, transport, transportOptions };
 }
