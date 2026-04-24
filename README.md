@@ -467,7 +467,7 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'integration-tests-desktop-cli',
+          name: 'integration-tests:desktop-cli',
           fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
@@ -480,7 +480,7 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'integration-tests-desktop-cdp',
+          name: 'integration-tests:desktop-cdp',
           fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.integration.test.ts'],
@@ -492,7 +492,7 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'integration-tests-android-appium',
+          name: 'integration-tests:android-appium',
           fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/obsidian-plugin-vitest-setup'],
           include: ['src/**/*.android.integration.test.ts'],
@@ -513,17 +513,20 @@ export default defineConfig({
 Run specific platforms:
 
 ```bash
-# All platforms
+# All tests
 npx vitest run
 
 # Desktop CLI only
-npx vitest run --project integration-tests-desktop-cli
+npx vitest run --project integration-tests:desktop-cli
 
 # Desktop CDP only
-npx vitest run --project integration-tests-desktop-cdp
+npx vitest run --project integration-tests:desktop-cdp
 
 # Android only (requires Appium + emulator running)
-npx vitest run --project integration-tests-android-appium
+npx vitest run --project integration-tests:android-appium
+
+# All platforms
+npx vitest run --project integration-tests:*
 ```
 
 ## Support
