@@ -9,6 +9,8 @@
 
 import { inject } from 'vitest';
 
+import type { ObsidianTransport } from './transport.ts';
+
 import { getOrCreateTransport } from './transport-factory.ts';
 
 /**
@@ -17,9 +19,11 @@ import { getOrCreateTransport } from './transport-factory.ts';
  * Delegates to the active transport's {@link ObsidianTransport.registerVault}.
  *
  * @param vaultPath - The absolute path to the vault folder.
+ * @param transportOverride - An explicit transport to use. When omitted,
+ *   falls back to `inject('obsidianTransport')` (requires vitest worker context).
  */
-export async function registerVault(vaultPath: string): Promise<void> {
-  const transport = await getOrCreateTransport(inject('obsidianTransport'));
+export async function registerVault(vaultPath: string, transportOverride?: ObsidianTransport): Promise<void> {
+  const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
   await transport.registerVault(vaultPath);
 }
 
@@ -29,9 +33,11 @@ export async function registerVault(vaultPath: string): Promise<void> {
  * Delegates to the active transport's {@link ObsidianTransport.unregisterVault}.
  *
  * @param vaultPath - The absolute path to the vault folder.
+ * @param transportOverride - An explicit transport to use. When omitted,
+ *   falls back to `inject('obsidianTransport')` (requires vitest worker context).
  */
-export async function unregisterVault(vaultPath: string): Promise<void> {
-  const transport = await getOrCreateTransport(inject('obsidianTransport'));
+export async function unregisterVault(vaultPath: string, transportOverride?: ObsidianTransport): Promise<void> {
+  const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
   await transport.unregisterVault(vaultPath);
 }
 

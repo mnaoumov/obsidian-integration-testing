@@ -22,6 +22,8 @@ import {
 } from 'node:path';
 import { inject } from 'vitest';
 
+import type { ObsidianTransport } from './transport.ts';
+
 import { getOrCreateTransport } from './transport-factory.ts';
 import {
   registerVault,
@@ -54,9 +56,12 @@ export class TempVault {
 
   /**
    * Unregisters the vault from Obsidian and deletes the temp directory.
+   *
+   * @param transportOverride - An explicit transport to use when unregistering.
+   *   When omitted, falls back to `inject('obsidianTransport')`.
    */
-  public async dispose(): Promise<void> {
-    await unregisterVault(this.path);
+  public async dispose(transportOverride?: ObsidianTransport): Promise<void> {
+    await unregisterVault(this.path, transportOverride);
     await retryRm(this.path);
   }
 
@@ -84,9 +89,12 @@ export class TempVault {
 
   /**
    * Registers this vault in the running Obsidian instance so the CLI can target it.
+   *
+   * @param transportOverride - An explicit transport to use. When omitted,
+   *   falls back to `inject('obsidianTransport')`.
    */
-  public async register(): Promise<void> {
-    await registerVault(this.path);
+  public async register(transportOverride?: ObsidianTransport): Promise<void> {
+    await registerVault(this.path, transportOverride);
   }
 
   /**
@@ -109,9 +117,12 @@ export class TempVault {
    *
    * Call this after {@link populate} and before {@link register} when using
    * a mobile transport.
+   *
+   * @param transportOverride - An explicit transport to use. When omitted,
+   *   falls back to `inject('obsidianTransport')`.
    */
-  public async syncToDevice(): Promise<void> {
-    const transport = await getOrCreateTransport(inject('obsidianTransport'));
+  public async syncToDevice(transportOverride?: ObsidianTransport): Promise<void> {
+    const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
     if (!transport.pushFiles) {
       return;
     }

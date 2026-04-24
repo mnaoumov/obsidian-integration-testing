@@ -115,7 +115,7 @@ describe('register', () => {
   it('should call registerVault with the vault path', async () => {
     const vault = new TempVault('/vault');
     await vault.register();
-    expect(mockRegisterVault).toHaveBeenCalledWith('/vault');
+    expect(mockRegisterVault).toHaveBeenCalledWith('/vault', undefined);
   });
 });
 
@@ -123,7 +123,7 @@ describe('dispose', () => {
   it('should unregister and remove the vault directory', async () => {
     const vault = new TempVault('/vault');
     await vault.dispose();
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault');
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
     expect(mockRm).toHaveBeenCalledWith('/vault', { force: true, recursive: true });
   });
 
@@ -168,7 +168,7 @@ describe('Symbol.asyncDispose', () => {
     {
       await using _vault = new TempVault('/vault');
     }
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault');
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
     expect(mockRm).toHaveBeenCalled();
   });
 });
