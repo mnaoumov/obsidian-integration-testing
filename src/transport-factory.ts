@@ -12,7 +12,6 @@ import {
   execFile,
   spawn
 } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import http from 'node:http';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -295,10 +294,8 @@ async function ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promi
 /**
  * Resolves the path to the Android emulator binary.
  *
- * Checks (in order):
- * 1. `ANDROID_HOME` / `ANDROID_SDK_ROOT` environment variables
- * 2. Common scoop install path on Windows
- * 3. Falls back to `emulator` (assumes it's in PATH)
+ * Uses `ANDROID_HOME` or `ANDROID_SDK_ROOT` environment variable if set,
+ * otherwise falls back to `emulator` (assumes it's in PATH).
  *
  * @returns The path to the emulator binary.
  */
@@ -307,25 +304,7 @@ function resolveEmulatorBinary(): string {
   if (sdkRoot) {
     return join(sdkRoot, 'emulator', 'emulator');
   }
-
-  const candidates = [
-    ...findScoopEmulatorCandidates()
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
   return 'emulator';
-
-  function findScoopEmulatorCandidates(): string[] {
-    const scoopRoot = process.env['SCOOP'] ?? join(process.env['USERPROFILE'] ?? '', 'scoop');
-    return [
-      join(scoopRoot, 'apps', 'android-clt', 'current', 'emulator', 'emulator.exe')
-    ];
-  }
 }
 
 /**
