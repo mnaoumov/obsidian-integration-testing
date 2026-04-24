@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
+const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 export const config = defineConfig({
@@ -21,7 +22,7 @@ export const config = defineConfig({
       {
         test: {
           environment: 'node',
-          exclude: [...SHARED_EXCLUDE, INTEGRATION_TEST_FILES],
+          exclude: [...SHARED_EXCLUDE, INTEGRATION_TEST_FILES, JEST_TEST_FILES],
           include: ['src/**/*.test.ts'],
           name: 'unit-tests'
         }

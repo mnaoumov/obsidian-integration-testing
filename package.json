@@ -33,22 +33,32 @@
         "default": "./dist/lib/cjs/index.cjs"
       }
     },
-    "./vitest": {
+    "./jest-global-setup": {
       "import": {
-        "types": "./dist/lib/esm/vitest.d.mts"
+        "types": "./dist/lib/esm/jest/global-setup.d.mts",
+        "default": "./dist/lib/esm/jest/global-setup.mjs"
       },
       "require": {
-        "types": "./dist/lib/cjs/vitest.d.cts"
+        "types": "./dist/lib/cjs/jest/global-setup.d.cts",
+        "default": "./dist/lib/cjs/jest/global-setup.cjs"
       }
     },
-    "./obsidian-plugin-vitest-setup": {
+    "./vitest-global-setup": {
       "import": {
-        "types": "./dist/lib/esm/integration-global-setup.d.mts",
-        "default": "./dist/lib/esm/integration-global-setup.mjs"
+        "types": "./dist/lib/esm/vitest/global-setup.d.mts",
+        "default": "./dist/lib/esm/vitest/global-setup.mjs"
       },
       "require": {
-        "types": "./dist/lib/cjs/integration-global-setup.d.cts",
-        "default": "./dist/lib/cjs/integration-global-setup.cjs"
+        "types": "./dist/lib/cjs/vitest/global-setup.d.cts",
+        "default": "./dist/lib/cjs/vitest/global-setup.cjs"
+      }
+    },
+    "./vitest-typings": {
+      "import": {
+        "types": "./dist/lib/esm/vitest/typings.d.mts"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/vitest/typings.d.cts"
       }
     }
   },
@@ -80,6 +90,7 @@
     "spellcheck": "jiti scripts/spellcheck.ts",
     "test": "jiti scripts/test.ts",
     "test:coverage": "jiti scripts/test-coverage.ts",
+    "test:jest": "jiti scripts/test-jest.ts",
     "test:integration": "jiti scripts/test-integration.ts",
     "test:watch": "jiti scripts/test-watch.ts",
     "version": "jiti scripts/version.ts"
@@ -95,6 +106,7 @@
     "@stylistic/eslint-plugin": "latest",
     "@total-typescript/ts-reset": "latest",
     "@tsconfig/strictest": "latest",
+    "@types/jest": "latest",
     "@types/markdown-it": "latest",
     "@types/semver": "latest",
     "@types/turndown": "latest",
@@ -118,6 +130,7 @@
     "eslint-plugin-tsdoc": "latest",
     "globals": "latest",
     "husky": "latest",
+    "jest": "latest",
     "jiti": "latest",
     "jsdom": "latest",
     "markdownlint": "latest",
@@ -127,6 +140,7 @@
     "obsidian": "latest",
     "obsidian-typings": "obsidian-public-latest",
     "semver": "latest",
+    "ts-jest": "latest",
     "type-fest": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
@@ -135,11 +149,11 @@
   },
   "peerDependencies": {
     "obsidian": "latest",
-    "type-fest": "latest",
-    "vitest": "latest"
+    "type-fest": "latest"
   },
   "overrides": {
     "@antfu/utils": "9.2.0",
+    "@sinonjs/fake-timers": "13.0.5",
     "eslint-plugin-import": "npm:eslint-plugin-import-x@latest",
     "type-fest": "latest"
   },
