@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0.1
+
+- fix: add timestamps to log output, fix DEP0190 warning, increase Appium timeout
+
 ## 2.0.0
 
 - feat: add support for jest
