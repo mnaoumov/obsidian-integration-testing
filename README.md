@@ -31,15 +31,7 @@ export default defineConfig({
 
 By default this uses the **`CLI` transport** (requires `CLI` enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
 
-For full intellisense on `environmentOptions.obsidianTransport` and `inject('obsidianTransport')` / `inject('tempVaultPath')`, add the vitest augmentation to your `tsconfig.json`:
-
-```json
-{
-  "compilerOptions": {
-    "types": ["obsidian-integration-testing/vitest"]
-  }
-}
-```
+Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('tempVaultPath')`) are included automatically when you import from `obsidian-integration-testing` — no extra `tsconfig.json` configuration needed.
 
 ### Write integration tests
 
