@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.0.0
+
+- feat: add support for jest
+- fix: suppress trust dialog when registering temp vaults
+
 ## 1.3.2
 
 - fix: normalize absolute paths to relative in markdownlint helper
