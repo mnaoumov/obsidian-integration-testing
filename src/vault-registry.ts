@@ -4,13 +4,12 @@
  * @file
  *
  * Manages vault registration in the running Obsidian instance.
- * Delegates to the transport resolved from vitest-provided options.
+ * Delegates to the transport resolved from the context provider.
  */
-
-import { inject } from 'vitest';
 
 import type { ObsidianTransport } from './transport.ts';
 
+import { getTransportOptions } from './context-provider.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
 /**
@@ -20,10 +19,10 @@ import { getOrCreateTransport } from './transport-factory.ts';
  *
  * @param vaultPath - The absolute path to the vault folder.
  * @param transportOverride - An explicit transport to use. When omitted,
- *   falls back to `inject('obsidianTransport')` (requires vitest worker context).
+ *   falls back to the transport configured via the context provider.
  */
 export async function registerVault(vaultPath: string, transportOverride?: ObsidianTransport): Promise<void> {
-  const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
+  const transport = transportOverride ?? await getOrCreateTransport(getTransportOptions());
   await transport.registerVault(vaultPath);
 }
 
@@ -34,10 +33,10 @@ export async function registerVault(vaultPath: string, transportOverride?: Obsid
  *
  * @param vaultPath - The absolute path to the vault folder.
  * @param transportOverride - An explicit transport to use. When omitted,
- *   falls back to `inject('obsidianTransport')` (requires vitest worker context).
+ *   falls back to the transport configured via the context provider.
  */
 export async function unregisterVault(vaultPath: string, transportOverride?: ObsidianTransport): Promise<void> {
-  const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
+  const transport = transportOverride ?? await getOrCreateTransport(getTransportOptions());
   await transport.unregisterVault(vaultPath);
 }
 
