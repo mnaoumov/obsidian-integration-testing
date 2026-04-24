@@ -57,7 +57,8 @@ let transport: ObsidianTransport | undefined;
  * @param project - The Vitest project.
  */
 export async function setup(project: TestProject): Promise<void> {
-  const transportOptions = project.config.environmentOptions['obsidianTransport'] as ObsidianTransportOptions | undefined;
+  const environmentOptions = project.config.environmentOptions as Record<string, unknown> | undefined;
+  const transportOptions = environmentOptions?.['obsidianTransport'] as ObsidianTransportOptions | undefined;
   console.warn('[integration-setup] Creating transport...');
   transport = await createTransportFromOptions(transportOptions);
   console.warn(`[integration-setup] Transport created: ${transport.constructor.name}`);
