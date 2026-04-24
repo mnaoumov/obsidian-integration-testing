@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.3.0
+
+- docs: update
+- feat: vitest types
+
 ## 1.2.3
 
 - fix: backtick-escape @default
