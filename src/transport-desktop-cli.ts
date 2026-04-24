@@ -16,6 +16,7 @@ import type {
 
 import { exec } from './exec.ts';
 import {
+  getVaultId,
   isCliEnabled,
   isVaultRegistered
 } from './obsidian-config.ts';
@@ -114,6 +115,8 @@ export class DesktopCliTransport implements ObsidianTransport {
     );
     await this.evaluate(registerExpr, { cwd: process.cwd() });
 
+    await this.enablePluginsInLocalStorage(vaultPath);
+
     const pollExpr = buildSimpleExpression(
       'return JSON.stringify(app.vault.adapter.getBasePath());'
     );
@@ -175,6 +178,30 @@ export class DesktopCliTransport implements ObsidianTransport {
     } catch {
       throw new Error('Obsidian CLI is not available. Ensure Obsidian is installed and its CLI is in your PATH.');
     }
+  }
+
+  /**
+   * Sets `enable-plugin-<vaultId>` in Obsidian's localStorage to prevent
+   * the "Do you trust the author of this vault?" dialog from appearing
+   * when a vault with community plugins is opened for the first time.
+   *
+   * Must be called after the `vault-open` IPC (so the vault ID exists in
+   * `obsidian.json`) and before the new vault window finishes loading.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async enablePluginsInLocalStorage(vaultPath: string): Promise<void> {
+    const vaultId = getVaultId(vaultPath);
+    if (!vaultId) {
+      console.warn('[cli-transport] Could not find vault ID — skipping localStorage trust flag.');
+      return;
+    }
+
+    const enableExpr = buildSimpleExpression(
+      `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`
+    );
+    await this.evaluate(enableExpr, { cwd: process.cwd() });
+    console.warn(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
 
   /**
