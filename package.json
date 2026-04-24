@@ -33,6 +33,14 @@
         "default": "./dist/lib/cjs/index.cjs"
       }
     },
+    "./vitest": {
+      "import": {
+        "types": "./dist/lib/esm/vitest.d.mts"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/vitest.d.cts"
+      }
+    },
     "./obsidian-plugin-vitest-setup": {
       "import": {
         "types": "./dist/lib/esm/integration-global-setup.d.mts",

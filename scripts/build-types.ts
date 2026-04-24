@@ -15,11 +15,6 @@ import {
 
 import { execFromRoot } from './helpers/root.ts';
 
-interface AugmentationTarget {
-  indexPath: string;
-  refPath: string;
-}
-
 const ESM_DIR = 'dist/lib/esm';
 const CJS_DIR = 'dist/lib/cjs';
 
@@ -34,30 +29,6 @@ function collectFiles(dir: string, ext: string): string[] {
     }
   }
   return result;
-}
-
-/**
- * Injects `/// <reference path="..." />` directives into the index declaration
- * files so that consumers who `import` this package also pick up the ambient
- * `declare module 'vitest'` augmentation from transport-options.
- *
- * TypeScript strips `/// <reference path>` during declaration emit, and
- * `export type` re-exports don't cause TypeScript to process the source
- * module's ambient augmentations. This post-build injection bridges the gap.
- */
-async function injectAugmentationReferences(): Promise<void> {
-  const targets: AugmentationTarget[] = [
-    { indexPath: `${ESM_DIR}/index.d.mts`, refPath: './transport-options.d.mts' },
-    { indexPath: `${CJS_DIR}/index.d.cts`, refPath: './transport-options.d.cts' }
-  ];
-
-  for (const { indexPath, refPath } of targets) {
-    const content = await readFile(indexPath, 'utf8');
-    const directive = `/// <reference path="${refPath}" />\n`;
-    if (!content.includes(directive.trim())) {
-      await writeFile(indexPath, directive + content, 'utf8');
-    }
-  }
 }
 
 async function main(): Promise<void> {
@@ -81,8 +52,6 @@ async function main(): Promise<void> {
 
     unlinkSync(filePath);
   }
-
-  await injectAugmentationReferences();
 }
 
 function rewriteImportExtensions(content: string, targetExt: string): string {
