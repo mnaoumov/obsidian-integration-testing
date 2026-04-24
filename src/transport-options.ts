@@ -26,6 +26,17 @@ export interface ObsidianAndroidAppiumTransportOptions {
   deviceId: string;
 
   /**
+   * Whether to automatically start the Appium server if it is not reachable.
+   *
+   * When `true` (the default), the transport factory spawns `npx appium`
+   * as a background process when the preflight check fails, and kills it
+   * on transport disposal.
+   *
+   * @default true
+   */
+  shouldAutoStartAppium?: boolean;
+
+  /**
    * Discriminant for the transport type.
    */
   type: 'obsidian-android-appium';
