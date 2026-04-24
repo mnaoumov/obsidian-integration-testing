@@ -301,10 +301,12 @@ async function ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promi
  */
 function resolveEmulatorBinary(): string {
   const sdkRoot = process.env['ANDROID_HOME'] ?? process.env['ANDROID_SDK_ROOT'];
-  if (sdkRoot) {
-    return join(sdkRoot, 'emulator', 'emulator');
+  if (!sdkRoot) {
+    throw new Error(
+      'Cannot find Android emulator: neither ANDROID_HOME nor ANDROID_SDK_ROOT environment variable is set.'
+    );
   }
-  return 'emulator';
+  return join(sdkRoot, 'emulator', 'emulator');
 }
 
 /**
