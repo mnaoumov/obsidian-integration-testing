@@ -287,7 +287,8 @@ function delay(ms: number): Promise<void> {
  */
 function getObsidianLaunchCommand(): string {
   if (process.platform === 'win32') {
-    return 'start "" "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe"';
+    const localAppData = process.env['LOCALAPPDATA'] ?? '';
+    return `start "" "${localAppData}\\Programs\\Obsidian\\Obsidian.exe"`;
   }
 
   if (process.platform === 'darwin') {
