@@ -3,8 +3,8 @@
  *
  * Vitest module augmentation for `obsidian-integration-testing`.
  *
- * Add `"obsidian-integration-testing/vitest"` to `compilerOptions.types`
- * in your `tsconfig.json` to get intellisense for `environmentOptions.obsidianTransport`
+ * Automatically included when importing from `obsidian-integration-testing`.
+ * Provides intellisense for `environmentOptions.obsidianTransport`
  * and `inject('obsidianTransport')` / `inject('tempVaultPath')`.
  */
 
