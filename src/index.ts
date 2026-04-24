@@ -4,10 +4,9 @@
  * Contains the entry point for the integration testing module.
  */
 
-// eslint-disable-next-line import-x/no-unassigned-import -- Side-effect import to include vitest module augmentations in the declaration output.
-import './vitest.ts';
-
 export { ContextId } from './context-id.ts';
+export type { TransportOptionsResolver } from './context-provider.ts';
+export { setTransportOptionsResolver } from './context-provider.ts';
 export type { EvalInObsidianParams } from './obsidian-cli.ts';
 export { evalInObsidian } from './obsidian-cli.ts';
 export { TempVault } from './temp-vault.ts';

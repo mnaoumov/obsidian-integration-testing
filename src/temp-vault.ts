@@ -20,10 +20,10 @@ import {
   join,
   relative
 } from 'node:path';
-import { inject } from 'vitest';
 
 import type { ObsidianTransport } from './transport.ts';
 
+import { getTransportOptions } from './context-provider.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 import {
   registerVault,
@@ -58,7 +58,7 @@ export class TempVault {
    * Unregisters the vault from Obsidian and deletes the temp directory.
    *
    * @param transportOverride - An explicit transport to use when unregistering.
-   *   When omitted, falls back to `inject('obsidianTransport')`.
+   *   When omitted, falls back to the transport configured via the context provider.
    */
   public async dispose(transportOverride?: ObsidianTransport): Promise<void> {
     await unregisterVault(this.path, transportOverride);
@@ -91,7 +91,7 @@ export class TempVault {
    * Registers this vault in the running Obsidian instance so the CLI can target it.
    *
    * @param transportOverride - An explicit transport to use. When omitted,
-   *   falls back to `inject('obsidianTransport')`.
+   *   falls back to the transport configured via the context provider.
    */
   public async register(transportOverride?: ObsidianTransport): Promise<void> {
     await registerVault(this.path, transportOverride);
@@ -106,7 +106,7 @@ export class TempVault {
     return this.dispose();
   }
 
-  /* v8 ignore start -- Integration-time code that requires a running transport via inject(). */
+  /* v8 ignore start -- Integration-time code that requires a running transport. */
 
   /**
    * Pushes all files from the local staging directory to the target device
@@ -119,10 +119,10 @@ export class TempVault {
    * a mobile transport.
    *
    * @param transportOverride - An explicit transport to use. When omitted,
-   *   falls back to `inject('obsidianTransport')`.
+   *   falls back to the transport configured via the context provider.
    */
   public async syncToDevice(transportOverride?: ObsidianTransport): Promise<void> {
-    const transport = transportOverride ?? await getOrCreateTransport(inject('obsidianTransport'));
+    const transport = transportOverride ?? await getOrCreateTransport(getTransportOptions());
     if (!transport.pushFiles) {
       return;
     }
