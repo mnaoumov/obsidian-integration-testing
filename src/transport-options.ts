@@ -32,7 +32,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * as a background process when the preflight check fails, and kills it
    * on transport disposal.
    *
-   * @default true
+   * @default `true`
    */
   shouldAutoStartAppium?: boolean;
 
