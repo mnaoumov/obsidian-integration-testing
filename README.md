@@ -31,6 +31,16 @@ export default defineConfig({
 
 By default this uses the **`CLI` transport** (requires `CLI` enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
 
+For full intellisense on `environmentOptions.obsidianTransport` and `inject('obsidianTransport')` / `inject('tempVaultPath')`, add the vitest augmentation to your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "types": ["obsidian-integration-testing/vitest"]
+  }
+}
+```
+
 ### Write integration tests
 
 Use `evalInObsidian()` to run code inside the Obsidian process. The `vaultPath` is optional — it defaults to `process.cwd()`:
