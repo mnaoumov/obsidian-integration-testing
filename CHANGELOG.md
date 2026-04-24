@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.2.2
+
+- fix: dependencies
+
 ## 1.2.1
 
 - feat: add verbose logging to setup and transport polling loops
