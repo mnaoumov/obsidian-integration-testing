@@ -88,9 +88,9 @@ export async function setup(project: TestProject): Promise<void> {
   await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
 
   console.warn('[integration-setup] Syncing vault to device...');
-  await tempVault.syncToDevice();
+  await tempVault.syncToDevice(transport);
   console.warn('[integration-setup] Registering vault...');
-  await tempVault.register();
+  await tempVault.register(transport);
   console.warn('[integration-setup] Vault registered.');
 
   // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
@@ -101,6 +101,7 @@ export async function setup(project: TestProject): Promise<void> {
     args: { pluginId },
     fn: enablePluginWithErrorCapture,
     shouldSkipPreflightChecks: true,
+    transport,
     vaultPath: tempVault.path
   });
 
@@ -119,7 +120,7 @@ export async function setup(project: TestProject): Promise<void> {
  * Removes the temporary vault created during setup.
  */
 export async function teardown(): Promise<void> {
-  await tempVault?.dispose();
+  await tempVault?.dispose(transport);
   await transport?.dispose?.();
 }
 
