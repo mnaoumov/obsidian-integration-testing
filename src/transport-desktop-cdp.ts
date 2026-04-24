@@ -533,7 +533,8 @@ function getObsidianLaunchCommand(port: number): string {
   const flag = `--remote-debugging-port=${String(port)}`;
 
   if (process.platform === 'win32') {
-    return `start "" "%LOCALAPPDATA%\\Programs\\Obsidian\\Obsidian.exe" ${flag}`;
+    const localAppData = process.env['LOCALAPPDATA'] ?? '';
+    return `start "" "${localAppData}\\Programs\\Obsidian\\Obsidian.exe" ${flag}`;
   }
 
   if (process.platform === 'darwin') {
