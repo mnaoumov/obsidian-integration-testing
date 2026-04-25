@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.2.0
+
+- fix: detect plugins that are enabled but fail to load
+- fix: make coreTeardown resilient to cleanup failures
+- refactor: rename obsidian-cli.ts to eval-in-obsidian.ts
+
 ## 2.1.0
 
 - refactor: extract serializeError and capture eval errors
