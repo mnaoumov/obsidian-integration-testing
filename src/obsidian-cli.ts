@@ -21,7 +21,10 @@ import type { ObsidianTransport } from './transport.ts';
 import { getTransportOptions } from './context-provider.ts';
 import { getFunctionExpressionString } from './function-expression.ts';
 import { jsonWithFunctions } from './json-with-functions.ts';
+import { serializeError } from './serialize-error.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
+
+const EVAL_ERROR_MARKER = '__obsidianEvalError__';
 
 interface ExportsWithDefault {
   default: unknown;
@@ -145,10 +148,15 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     ${getFunctionExpressionString(getObsidianModule)}
     return await getObsidianModule();
   })();
+  ${getFunctionExpressionString(serializeError)}
   const args${randomSuffix} = ${jsonWithFunctions(args)};
   const context${randomSuffix} = ${contextExpr};
   const fullArgs${randomSuffix} = Object.assign(args${randomSuffix}, { app, obsidianModule: obsidianModule${randomSuffix}, context: context${randomSuffix} });
-  return JSON.stringify(await fn${randomSuffix}(fullArgs${randomSuffix}));
+  try {
+    return JSON.stringify(await fn${randomSuffix}(fullArgs${randomSuffix}));
+  } catch (evalError${randomSuffix}) {
+    return JSON.stringify({ ${EVAL_ERROR_MARKER}: serializeError(evalError${randomSuffix}) });
+  }
 })()`;
 
   const resultStr = await transport.evaluate(expression, { cwd });
@@ -157,11 +165,19 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     return undefined as Result;
   }
 
+  let parsed: unknown;
   try {
-    return JSON.parse(resultStr) as Result;
+    parsed = JSON.parse(resultStr);
   } catch {
     throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${resultStr}`);
   }
+
+  if (parsed !== null && typeof parsed === 'object' && EVAL_ERROR_MARKER in parsed) {
+    const errorDetail = (parsed as Record<string, unknown>)[EVAL_ERROR_MARKER];
+    throw new Error(`evalInObsidian: Error inside Obsidian:\n${String(errorDetail)}`);
+  }
+
+  return parsed as Result;
 }
 
 /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */

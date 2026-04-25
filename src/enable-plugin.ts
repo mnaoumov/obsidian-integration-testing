@@ -37,6 +37,15 @@ export interface EnablePluginResult {
 }
 
 /**
+ * Injected into the IIFE scope by {@link evalInObsidian} at runtime.
+ * Not importable — exists only inside the generated expression.
+ *
+ * @param error - The error to serialize.
+ * @returns A formatted error string with stack trace and cause chain.
+ */
+declare function serializeError(error: unknown): string;
+
+/**
  * Enables a plugin inside Obsidian and captures any load error.
  *
  * Monkey-patches `app.plugins.loadPlugin` to intercept errors before
@@ -64,23 +73,10 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
       errorMessage = undefined;
       return result;
     } catch (error) {
-      errorMessage = serializeErrorFull(error);
+      errorMessage = serializeError(error);
       throw error;
     }
   };
-
-  function serializeErrorFull(error: unknown): string {
-    if (!(error instanceof Error)) {
-      return String(error);
-    }
-
-    let result = error.stack ?? `${error.name}: ${error.message}`;
-    if (error.cause !== undefined) {
-      result += `\n[cause]: ${serializeErrorFull(error.cause)}`;
-    }
-
-    return result;
-  }
 
   try {
     await app.plugins.enablePluginAndSave(pluginId);

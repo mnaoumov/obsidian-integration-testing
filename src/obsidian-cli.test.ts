@@ -146,6 +146,15 @@ describe('evalInObsidian', () => {
     expect(expression).not.toContain('__obsidianContexts__');
   });
 
+  it('should throw with error details when Obsidian returns an eval error marker', async () => {
+    mockTransportEvaluate.mockResolvedValue(JSON.stringify({ __obsidianEvalError__: 'Error: something broke\n    at fn (eval:1:1)' }));
+    await expect(evalInObsidian({
+      fn(): string {
+        return 'ok';
+      }
+    })).rejects.toThrow('evalInObsidian: Error inside Obsidian:\nError: something broke\n    at fn (eval:1:1)');
+  });
+
   it('should throw with descriptive message when Obsidian returns non-JSON output', async () => {
     mockTransportEvaluate.mockResolvedValue('Error: something went wrong');
     await expect(evalInObsidian({
