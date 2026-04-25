@@ -182,7 +182,7 @@ export class AppiumTransport implements ObsidianTransport {
     const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
 
     for (const [filePath, content] of Object.entries(files)) {
-      const deviceFilePath = `${deviceVaultPath}/${filePath}`;
+      const deviceFilePath = `${deviceVaultPath}/${filePath.replace(/\\/g, '/')}`;
       const base64Content = Buffer.from(content, 'utf-8').toString('base64');
       await this.browser.pushFile(deviceFilePath, base64Content);
     }
