@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.0.6
+
+- fix: ensure Appium/emulator processes are killed even if session disposal fails
+- fix: normalize backslash separators in Appium pushFiles device paths On Windows
+
 ## 2.0.5
 
 - feat: log timeout and poll interval when waiting
