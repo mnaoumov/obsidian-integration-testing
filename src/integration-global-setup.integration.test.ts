@@ -108,14 +108,36 @@ interface PluginTestCase {
   mainJs: string;
   name: string;
   shouldBeEnabled: boolean;
+  shouldBeLoaded: boolean;
 }
 
 const TEST_CASES: PluginTestCase[] = [
-  { id: 'test-sync-ok', mainJs: SYNC_OK_MAIN, name: 'sync onload (no error)', shouldBeEnabled: true },
-  { id: 'test-async-ok', mainJs: ASYNC_OK_MAIN, name: 'async onload (no error)', shouldBeEnabled: true },
-  { expectedError: 'sync onload crash', id: 'test-sync-crash', mainJs: SYNC_CRASH_MAIN, name: 'sync onload (crash)', shouldBeEnabled: false },
-  { expectedError: 'async onload crash', id: 'test-async-crash', mainJs: ASYNC_CRASH_MAIN, name: 'async onload (crash)', shouldBeEnabled: false },
-  { expectedError: 'constructor crash', id: 'test-ctor-crash', mainJs: CONSTRUCTOR_CRASH_MAIN, name: 'constructor (crash)', shouldBeEnabled: false }
+  { id: 'test-sync-ok', mainJs: SYNC_OK_MAIN, name: 'sync onload (no error)', shouldBeEnabled: true, shouldBeLoaded: true },
+  { id: 'test-async-ok', mainJs: ASYNC_OK_MAIN, name: 'async onload (no error)', shouldBeEnabled: true, shouldBeLoaded: true },
+  {
+    expectedError: 'sync onload crash',
+    id: 'test-sync-crash',
+    mainJs: SYNC_CRASH_MAIN,
+    name: 'sync onload (crash)',
+    shouldBeEnabled: false,
+    shouldBeLoaded: false
+  },
+  {
+    expectedError: 'async onload crash',
+    id: 'test-async-crash',
+    mainJs: ASYNC_CRASH_MAIN,
+    name: 'async onload (crash)',
+    shouldBeEnabled: false,
+    shouldBeLoaded: false
+  },
+  {
+    expectedError: 'constructor crash',
+    id: 'test-ctor-crash',
+    mainJs: CONSTRUCTOR_CRASH_MAIN,
+    name: 'constructor (crash)',
+    shouldBeEnabled: false,
+    shouldBeLoaded: false
+  }
 ];
 
 describe('vault trust dialog', () => {
@@ -201,6 +223,7 @@ describe('plugin load detection', () => {
       });
 
       expect(result.isEnabled).toBe(tc.shouldBeEnabled);
+      expect(result.isLoaded).toBe(tc.shouldBeLoaded);
 
       if (tc.expectedError) {
         expect(result.errorMessage).toContain(tc.expectedError);

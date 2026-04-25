@@ -32,8 +32,15 @@ export interface EnablePluginResult {
 
   /**
    * Whether the plugin is in the enabled set after the enable attempt.
+   * A plugin can be "enabled" (configured) but not "loaded" (failed to initialize).
    */
   isEnabled: boolean;
+
+  /**
+   * Whether the plugin instance actually exists in `app.plugins.plugins`.
+   * This is the definitive check — a plugin that is enabled but not loaded has failed.
+   */
+  isLoaded: boolean;
 }
 
 /**
@@ -85,9 +92,18 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
     app.plugins.loadPlugin = origLoadPlugin;
   }
 
+  const isLoaded = pluginId in app.plugins.plugins;
+
+  if (!errorMessage && !isLoaded) {
+    errorMessage = `Plugin "${pluginId}" is in the enabled set but not loaded. `
+      + 'Obsidian may have caught the error before the monkey-patch. '
+      + 'Check the Obsidian console for details.';
+  }
+
   return {
     errorMessage,
-    isEnabled: app.plugins.enabledPlugins.has(pluginId)
+    isEnabled: app.plugins.enabledPlugins.has(pluginId),
+    isLoaded
   };
 }
 
