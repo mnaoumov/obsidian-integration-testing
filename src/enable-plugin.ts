@@ -9,7 +9,7 @@
 
 import type { Plugin } from 'obsidian';
 
-import type { CommonArgs } from './obsidian-cli.ts';
+import type { CommonArgs } from './eval-in-obsidian.ts';
 
 /**
  * Parameters for {@link enablePluginWithErrorCapture}.
