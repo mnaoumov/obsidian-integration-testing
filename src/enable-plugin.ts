@@ -64,10 +64,23 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
       errorMessage = undefined;
       return result;
     } catch (error) {
-      errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessage = serializeErrorFull(error);
       throw error;
     }
   };
+
+  function serializeErrorFull(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return String(error);
+    }
+
+    let result = error.stack ?? `${error.name}: ${error.message}`;
+    if (error.cause !== undefined) {
+      result += `\n[cause]: ${serializeErrorFull(error.cause)}`;
+    }
+
+    return result;
+  }
 
   try {
     await app.plugins.enablePluginAndSave(pluginId);

@@ -233,6 +233,7 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
       connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
       connectionRetryTimeout: APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
       hostname: url.hostname,
+      logLevel: 'warn',
       path: url.pathname,
       port
     });
