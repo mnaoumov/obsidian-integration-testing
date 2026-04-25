@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0.4
+
+- fix: parallelize Appium/emulator startup and wake screen
+
 ## 2.0.3
 
 - fix: fail early if ANDROID_HOME/ANDROID_SDK_ROOT is not set
