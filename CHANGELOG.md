@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.0.5
+
+- feat: log timeout and poll interval when waiting
+- fix: make screen wake best-effort to prevent hanging on keyevent
+
 ## 2.0.4
 
 - fix: parallelize Appium/emulator startup and wake screen
