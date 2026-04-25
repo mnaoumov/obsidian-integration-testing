@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.1.0
+
+- refactor: extract serializeError and capture eval errors
+- fix: suppress verbose webdriver DATA logs
+
 ## 2.0.7
 
 - fix: retry switchContext failures and ensure cleanup steps are independent
