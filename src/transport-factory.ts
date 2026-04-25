@@ -247,14 +247,17 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
 
     const originalDispose = transport.dispose.bind(transport);
     transport.dispose = async (): Promise<void> => {
-      await originalDispose();
-      if (appiumProcess) {
-        appiumProcess.kill();
-        log('[transport-factory] Auto-started Appium server stopped.');
-      }
-      if (emulatorProcess) {
-        emulatorProcess.kill();
-        log('[transport-factory] Auto-started emulator stopped.');
+      try {
+        await originalDispose();
+      } finally {
+        if (appiumProcess) {
+          appiumProcess.kill();
+          log('[transport-factory] Auto-started Appium server stopped.');
+        }
+        if (emulatorProcess) {
+          emulatorProcess.kill();
+          log('[transport-factory] Auto-started emulator stopped.');
+        }
       }
     };
 
