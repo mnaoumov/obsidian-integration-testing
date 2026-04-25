@@ -319,6 +319,34 @@ function resolveEmulatorBinary(): string {
 }
 
 /**
+ * Sends a key event to a device via ADB. Failures are logged as warnings
+ * instead of throwing, since key events are best-effort (e.g., the screen
+ * may already be on).
+ *
+ * @param deviceId - The device UDID.
+ * @param keyCode - The Android keycode to send.
+ * @param description - Human-readable description for log messages.
+ */
+async function sendKeyEvent(deviceId: string, keyCode: number, description: string): Promise<void> {
+  await new Promise<void>((resolve) => {
+    execFile(
+      'adb',
+      ['-s', deviceId, 'shell', 'input', 'keyevent', String(keyCode)],
+      { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+      (error) => {
+        if (error) {
+          log(
+            `[transport-factory] Warning: failed to ${description} (keyevent ${String(keyCode)}): ${error instanceof Error ? error.message : 'unknown error'}`
+          );
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+/**
  * Starts the Appium server and emulator in parallel when both need auto-starting.
  *
  * @param params - Configuration for Appium and emulator startup.
@@ -491,35 +519,8 @@ async function waitForDevice(deviceId: string): Promise<void> {
 async function wakeScreen(deviceId: string): Promise<void> {
   log(`[transport-factory] Waking screen on device ${deviceId}...`);
 
-  await new Promise<void>((resolve, reject) => {
-    execFile(
-      'adb',
-      ['-s', deviceId, 'shell', 'input', 'keyevent', String(KEYCODE_WAKEUP)],
-      { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
-      (error) => {
-        if (error) {
-          reject(new Error(`Failed to wake screen: ${error instanceof Error ? error.message : 'unknown error'}`));
-        } else {
-          resolve();
-        }
-      }
-    );
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    execFile(
-      'adb',
-      ['-s', deviceId, 'shell', 'input', 'keyevent', String(KEYCODE_MENU)],
-      { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
-      (error) => {
-        if (error) {
-          reject(new Error(`Failed to dismiss lock screen: ${error instanceof Error ? error.message : 'unknown error'}`));
-        } else {
-          resolve();
-        }
-      }
-    );
-  });
+  await sendKeyEvent(deviceId, KEYCODE_WAKEUP, 'wake screen');
+  await sendKeyEvent(deviceId, KEYCODE_MENU, 'dismiss lock screen');
 
   log(`[transport-factory] Screen wake complete on device ${deviceId}.`);
 }
