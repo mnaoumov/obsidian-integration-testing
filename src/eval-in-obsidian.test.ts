@@ -10,7 +10,7 @@ import {
 import type { ObsidianTransport } from './transport.ts';
 
 import { ContextId } from './context-id.ts';
-import { evalInObsidian } from './obsidian-cli.ts';
+import { evalInObsidian } from './eval-in-obsidian.ts';
 
 const mockTransportEvaluate = vi.hoisted(() => vi.fn<ObsidianTransport['evaluate']>());
 const mockTransportPreflightCheck = vi.hoisted(() => vi.fn<ObsidianTransport['preflightCheck']>().mockResolvedValue(undefined));

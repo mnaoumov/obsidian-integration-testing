@@ -19,7 +19,7 @@ import type { EnablePluginResult } from './enable-plugin.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
-import { evalInObsidian } from './obsidian-cli.ts';
+import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TempVault } from './temp-vault.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 

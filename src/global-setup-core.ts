@@ -25,8 +25,8 @@ import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
+import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
-import { evalInObsidian } from './obsidian-cli.ts';
 import { TempVault } from './temp-vault.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 

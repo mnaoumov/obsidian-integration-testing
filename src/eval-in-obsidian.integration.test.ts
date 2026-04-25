@@ -10,7 +10,7 @@ import {
 } from 'vitest';
 
 import { ContextId } from './context-id.ts';
-import { evalInObsidian } from './obsidian-cli.ts';
+import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TempVault } from './temp-vault.ts';
 
 interface AbArgs {
@@ -32,7 +32,7 @@ afterAll(async () => {
   await tempVault.dispose();
 });
 
-describe('obsidian-cli integration', () => {
+describe('eval-in-obsidian integration', () => {
   it('should access the vault base path via app.vault.adapter.getBasePath()', async () => {
     const basePath = await evalInObsidian({
       fn({ app }): string {

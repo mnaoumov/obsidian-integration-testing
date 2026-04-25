@@ -5,7 +5,7 @@
  * across {@link evalInObsidian} calls.
  */
 
-import { evalInObsidian } from './obsidian-cli.ts';
+import { evalInObsidian } from './eval-in-obsidian.ts';
 
 /**
  * Wraps a {@link ContextOf} extraction into an object with a `context` property.
