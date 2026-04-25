@@ -159,8 +159,21 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
  * @param result - The result from {@link coreSetup}. When `undefined`, does nothing.
  */
 export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
-  await result?.tempVault.dispose(result.transport);
-  await result?.transport.dispose?.();
+  if (!result) {
+    return;
+  }
+
+  try {
+    await result.tempVault.dispose(result.transport);
+  } catch (error: unknown) {
+    log(`[integration-teardown] Vault cleanup error (non-fatal): ${String(error)}`);
+  }
+
+  try {
+    await result.transport.dispose?.();
+  } catch (error: unknown) {
+    log(`[integration-teardown] Transport cleanup error (non-fatal): ${String(error)}`);
+  }
 }
 
 /**
