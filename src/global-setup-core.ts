@@ -137,9 +137,13 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
       if (tempVault) {
         await tempVault.dispose(transport);
       }
+    } catch (cleanupError: unknown) {
+      log(`[integration-setup] Vault cleanup error (non-fatal): ${String(cleanupError)}`);
+    }
+    try {
       await transport.dispose?.();
     } catch (cleanupError: unknown) {
-      log(`[integration-setup] Cleanup error (non-fatal): ${String(cleanupError)}`);
+      log(`[integration-setup] Transport cleanup error (non-fatal): ${String(cleanupError)}`);
     }
     throw error;
   }
