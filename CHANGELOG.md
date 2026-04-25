@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.0.7
+
+- fix: retry switchContext failures and ensure cleanup steps are independent
+
 ## 2.0.6
 
 - fix: ensure Appium/emulator processes are killed even if session disposal fails

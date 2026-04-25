@@ -1,6 +1,6 @@
 {
   "name": "obsidian-integration-testing",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "description": "Simplifies integration testing of Obsidian plugins.",
   "keywords": [
     "obsidian",
