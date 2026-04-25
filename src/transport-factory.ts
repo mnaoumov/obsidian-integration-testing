@@ -40,6 +40,8 @@ const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
+const KEYCODE_MENU = 82;
+const KEYCODE_WAKEUP = 224;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 30000;
 
 /**
@@ -51,6 +53,26 @@ interface EnsureDeviceConnectedParams {
 
   /** Device UDID to check (e.g. `'emulator-5554'`). */
   deviceId: string;
+}
+
+/**
+ * Parameters for {@link startAppiumAndEmulator}.
+ */
+interface StartAppiumAndEmulatorParams {
+  /** The Appium server URL. */
+  appiumUrl: URL;
+
+  /** AVD name to auto-start if the device is not connected. */
+  avdName?: string | undefined;
+
+  /** Device UDID. */
+  deviceId: string;
+
+  /** The Appium server port. */
+  port: number;
+
+  /** Whether Appium auto-start is allowed. */
+  shouldAutoStartAppium?: boolean | undefined;
 }
 
 let cachedTransport: ObsidianTransport | undefined;
@@ -175,29 +197,16 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
 
   const appId = options.appId ?? APP_PACKAGE;
 
-  log(`[transport-factory] Checking Appium server at ${options.appiumUrl}...`);
   let appiumProcess: ChildProcess | undefined;
-
-  try {
-    await checkAppiumReachable(url);
-    log('[transport-factory] Appium server is reachable.');
-  } catch (error: unknown) {
-    if (options.shouldAutoStartAppium === false) {
-      throw error;
-    }
-
-    log(`[transport-factory] Appium not reachable, auto-starting on port ${String(port)}...`);
-    appiumProcess = startAppiumServer(port);
-    await waitForAppiumReady(url);
-    log('[transport-factory] Auto-started Appium server is ready.');
-  }
-
   let emulatorProcess: ChildProcess | undefined;
 
   try {
-    emulatorProcess = await ensureDeviceConnected({
+    [appiumProcess, emulatorProcess] = await startAppiumAndEmulator({
+      appiumUrl: url,
       avdName: options.avdName,
-      deviceId: options.deviceId
+      deviceId: options.deviceId,
+      port,
+      shouldAutoStartAppium: options.shouldAutoStartAppium
     });
 
     log(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
@@ -310,6 +319,47 @@ function resolveEmulatorBinary(): string {
 }
 
 /**
+ * Starts the Appium server and emulator in parallel when both need auto-starting.
+ *
+ * @param params - Configuration for Appium and emulator startup.
+ * @returns A tuple of `[appiumProcess, emulatorProcess]`, either of which may be `undefined`.
+ */
+async function startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<[ChildProcess | undefined, ChildProcess | undefined]> {
+  const { appiumUrl, avdName, deviceId, port, shouldAutoStartAppium } = params;
+
+  let needsAppiumStart = false;
+
+  log(`[transport-factory] Checking Appium server at ${appiumUrl.href}...`);
+  try {
+    await checkAppiumReachable(appiumUrl);
+    log('[transport-factory] Appium server is reachable.');
+  } catch (error: unknown) {
+    if (shouldAutoStartAppium === false) {
+      throw error;
+    }
+    needsAppiumStart = true;
+  }
+
+  let appiumProcess: ChildProcess | undefined;
+
+  if (needsAppiumStart) {
+    log(`[transport-factory] Appium not reachable, auto-starting on port ${String(port)}...`);
+    appiumProcess = startAppiumServer(port);
+  }
+
+  const [, emulatorProcess] = await Promise.all([
+    needsAppiumStart
+      ? waitForAppiumReady(appiumUrl).then(() => {
+        log('[transport-factory] Auto-started Appium server is ready.');
+      })
+      : Promise.resolve(),
+    ensureDeviceConnected({ avdName, deviceId })
+  ]);
+
+  return [appiumProcess, emulatorProcess];
+}
+
+/**
  * Spawns an Appium server as a detached background process.
  *
  * @param port - The port to start Appium on.
@@ -416,6 +466,7 @@ async function waitForDevice(deviceId: string): Promise<void> {
     if (await checkDeviceConnected(deviceId)) {
       log(`[transport-factory] Device ${deviceId} appeared in ADB, waiting for boot to complete...`);
       await waitForBoot(deviceId, deadline);
+      await wakeScreen(deviceId);
       return;
     }
 
@@ -427,6 +478,50 @@ async function waitForDevice(deviceId: string): Promise<void> {
   throw new Error(
     `Emulator device "${deviceId}" did not appear within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`
   );
+}
+
+/**
+ * Wakes the emulator screen and dismisses the lock screen.
+ *
+ * After boot, the emulator screen may be off. Sends `KEYCODE_WAKEUP` to turn
+ * on the display and `KEYCODE_MENU` to dismiss the lock screen.
+ *
+ * @param deviceId - The device UDID.
+ */
+async function wakeScreen(deviceId: string): Promise<void> {
+  log(`[transport-factory] Waking screen on device ${deviceId}...`);
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      'adb',
+      ['-s', deviceId, 'shell', 'input', 'keyevent', String(KEYCODE_WAKEUP)],
+      { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+      (error) => {
+        if (error) {
+          reject(new Error(`Failed to wake screen: ${error instanceof Error ? error.message : 'unknown error'}`));
+        } else {
+          resolve();
+        }
+      }
+    );
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      'adb',
+      ['-s', deviceId, 'shell', 'input', 'keyevent', String(KEYCODE_MENU)],
+      { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+      (error) => {
+        if (error) {
+          reject(new Error(`Failed to dismiss lock screen: ${error instanceof Error ? error.message : 'unknown error'}`));
+        } else {
+          resolve();
+        }
+      }
+    );
+  });
+
+  log(`[transport-factory] Screen wake complete on device ${deviceId}.`);
 }
 
 /* v8 ignore stop */

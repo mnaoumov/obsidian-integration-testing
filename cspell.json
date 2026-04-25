@@ -22,6 +22,7 @@
     "dmts",
     "getprop",
     "Jsdocs",
+    "keyevent",
     "Keymap",
     "linkinator",
     "linkpath",
@@ -49,6 +50,7 @@
     "udid",
     "UiAutomator",
     "urlpattern",
+    "WAKEUP",
     "wdio",
     "wikilinks"
   ],
