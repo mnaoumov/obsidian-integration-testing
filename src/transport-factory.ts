@@ -209,7 +209,11 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
       shouldAutoStartAppium: options.shouldAutoStartAppium
     });
 
-    log(`[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId})...`);
+    log(
+      `[transport-factory] Connecting to Appium (device=${options.deviceId}, app=${appId}, retryTimeout: ${
+        String(APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS)
+      }ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
+    );
     const browser = await remote({
       capabilities: {
         'appium:appActivity': APP_ACTIVITY,
@@ -428,6 +432,11 @@ function startEmulator(avdName: string): ChildProcess {
  * @param url - The Appium server URL.
  */
 async function waitForAppiumReady(url: URL): Promise<void> {
+  log(
+    `[transport-factory] Waiting for Appium at ${url.href} (timeout: ${String(APPIUM_START_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${
+      String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)
+    }ms)...`
+  );
   const deadline = Date.now() + APPIUM_START_TIMEOUT_IN_MILLISECONDS;
 
   while (Date.now() < deadline) {
@@ -453,6 +462,13 @@ async function waitForAppiumReady(url: URL): Promise<void> {
  * @param deadline - Absolute timestamp deadline.
  */
 async function waitForBoot(deviceId: string, deadline: number): Promise<void> {
+  const remainingMs = Math.max(0, deadline - Date.now());
+  log(
+    `[transport-factory] Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${
+      String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)
+    }ms)...`
+  );
+
   while (Date.now() < deadline) {
     const isBooted = await new Promise<boolean>((resolve) => {
       execFile(
@@ -488,6 +504,11 @@ async function waitForBoot(deviceId: string, deadline: number): Promise<void> {
  * @param deviceId - The device UDID to wait for.
  */
 async function waitForDevice(deviceId: string): Promise<void> {
+  log(
+    `[transport-factory] Waiting for device ${deviceId} to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${
+      String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)
+    }ms)...`
+  );
   const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS;
 
   while (Date.now() < deadline) {
