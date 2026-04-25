@@ -102,13 +102,23 @@ class P extends Plugin { constructor(app, manifest) { super(app, manifest); thro
 module.exports = P; exports.default = P;
 `;
 
+const INVALID_EXPORT_MAIN = `
+module.exports = {}; exports.default = {};
+`;
+
 interface PluginTestCase {
+  /**
+   * When set, asserts that `errorMessage` contains this substring.
+   * When `undefined` and `shouldHaveError` is `true`, asserts `errorMessage` is defined (any value).
+   * When `undefined` and `shouldHaveError` is falsy, asserts `errorMessage` is `undefined`.
+   */
   expectedError?: string;
   id: string;
   mainJs: string;
   name: string;
   shouldBeEnabled: boolean;
   shouldBeLoaded: boolean;
+  shouldHaveError?: boolean;
 }
 
 const TEST_CASES: PluginTestCase[] = [
@@ -137,6 +147,14 @@ const TEST_CASES: PluginTestCase[] = [
     name: 'constructor (crash)',
     shouldBeEnabled: false,
     shouldBeLoaded: false
+  },
+  {
+    id: 'test-invalid-export',
+    mainJs: INVALID_EXPORT_MAIN,
+    name: 'invalid export (not a Plugin class)',
+    shouldBeEnabled: true,
+    shouldBeLoaded: false,
+    shouldHaveError: true
   }
 ];
 
@@ -227,6 +245,8 @@ describe('plugin load detection', () => {
 
       if (tc.expectedError) {
         expect(result.errorMessage).toContain(tc.expectedError);
+      } else if (tc.shouldHaveError) {
+        expect(result.errorMessage).toBeDefined();
       } else {
         expect(result.errorMessage).toBeUndefined();
       }
