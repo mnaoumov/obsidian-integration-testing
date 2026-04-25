@@ -61,8 +61,11 @@ export class TempVault {
    *   When omitted, falls back to the transport configured via the context provider.
    */
   public async dispose(transportOverride?: ObsidianTransport): Promise<void> {
-    await unregisterVault(this.path, transportOverride);
-    await retryRm(this.path);
+    try {
+      await unregisterVault(this.path, transportOverride);
+    } finally {
+      await retryRm(this.path);
+    }
   }
 
   /**

@@ -278,8 +278,12 @@ export class AppiumTransport implements ObsidianTransport {
 
       if (obsidianContext) {
         log(`[appium-transport] Found WebView context: ${obsidianContext}`);
-        await this.browser.switchContext(obsidianContext);
-        return;
+        try {
+          await this.browser.switchContext(obsidianContext);
+          return;
+        } catch (error: unknown) {
+          log(`[appium-transport] switchContext failed: ${String(error)}. Retrying...`);
+        }
       }
 
       log(`[appium-transport] WebView not ready, available contexts: ${JSON.stringify(contexts)}. Retrying...`);
