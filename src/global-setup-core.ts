@@ -201,26 +201,19 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
 
   log(`[integration-teardown:${result.transportLabel}] Tearing down...`);
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Hard failsafe — Vite's module runner may patch timers, preventing
+  // Promise.race timeouts from firing.
+  const forceExitTimer = setTimeout(() => {
+    log(`[integration-teardown:${result.transportLabel}] Teardown timed out after ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms, forcing exit...`);
+    process.exit(1);
+  }, TEARDOWN_TIMEOUT_IN_MILLISECONDS);
+
   try {
-    await Promise.race([
-      teardownAsync(result),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          reject(
-            new Error(
-              `Teardown for "${result.transportLabel}" timed out after ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms`
-            )
-          );
-        }, TEARDOWN_TIMEOUT_IN_MILLISECONDS);
-      })
-    ]);
+    await teardownAsync(result);
   } catch (error: unknown) {
     log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${String(error)}`);
   } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
+    clearTimeout(forceExitTimer);
     activeSetups.delete(result);
   }
 }
