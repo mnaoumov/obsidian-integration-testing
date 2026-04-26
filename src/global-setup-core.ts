@@ -10,9 +10,12 @@
 
 import type { PluginManifest } from 'obsidian';
 
+import { spawn } from 'node:child_process';
 import {
   existsSync,
-  rmSync
+  rmSync,
+  unlinkSync,
+  writeFileSync
 } from 'node:fs';
 import {
   cp,
@@ -21,9 +24,9 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
-import { setTimeout as nativeSetTimeout } from 'node:timers';
 
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
@@ -202,19 +205,29 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
 
   log(`[integration-teardown:${result.transportLabel}] Tearing down (timeout: ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms)...`);
 
-  // Native setTimeout from node:timers bypasses Vite's module runner,
-  // Which patches the global setTimeout and prevents it from firing.
-  const forceExitTimer = nativeSetTimeout(() => {
-    log(`[integration-teardown:${result.transportLabel}] Teardown timed out after ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms, forcing exit...`);
-    process.exit(1);
-  }, TEARDOWN_TIMEOUT_IN_MILLISECONDS);
+  // Watchdog: spawn a detached process that kills us after the timeout.
+  // Vite patches all timer APIs and may intercept child_process inside
+  // Its module runner, so we use execFileSync-adjacent approach with
+  // The real node binary resolved from the filesystem.
+  const watchdogScript = join(tmpdir(), `watchdog-${String(process.pid)}.mjs`);
+  writeFileSync(watchdogScript, `setTimeout(()=>{process.kill(${String(process.pid)});},${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)});`);
+  const watchdog = spawn(process.execPath, [watchdogScript], {
+    detached: true,
+    stdio: 'ignore'
+  });
+  watchdog.unref();
 
   try {
     await teardownAsync(result);
   } catch (error: unknown) {
     log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${String(error)}`);
   } finally {
-    clearTimeout(forceExitTimer);
+    watchdog.kill();
+    try {
+      unlinkSync(watchdogScript);
+    } catch {
+      // Best-effort cleanup.
+    }
     activeSetups.delete(result);
   }
 }
@@ -273,11 +286,12 @@ function registerProcessCleanupHandler(): void {
 
     log(`[integration-teardown] Process exiting with ${String(activeSetups.size)} setup(s) not torn down. Cleaning up...`);
 
-    const forceExitTimer = nativeSetTimeout(() => {
-      log('[integration-teardown] Async cleanup timed out, forcing exit...');
-      process.exit(1);
-    }, FORCE_EXIT_TIMEOUT_IN_MILLISECONDS);
-    forceExitTimer.unref();
+    const watchdog = spawn(
+      process.execPath,
+      ['-e', `setTimeout(()=>{process.kill(${String(process.pid)},'SIGTERM')},${String(FORCE_EXIT_TIMEOUT_IN_MILLISECONDS)})`],
+      { detached: true, stdio: 'ignore' }
+    );
+    watchdog.unref();
 
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
