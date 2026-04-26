@@ -26,7 +26,7 @@ export function log(message: string): void {
  * Formats a date as a local-timezone timestamp string.
  *
  * @param date - The date to format.
- * @returns A string like `2026-04-24 16:41:31.609 -0600`.
+ * @returns A string like `2026-04-24T16:41:31.609-06:00`.
  */
 function formatLocalTimestamp(date: Date): string {
   const year = String(date.getFullYear());
@@ -37,11 +37,11 @@ function formatLocalTimestamp(date: Date): string {
   const seconds = String(date.getSeconds()).padStart(DATE_COMPONENT_PAD_LENGTH, '0');
   const milliseconds = String(date.getMilliseconds()).padStart(MILLISECOND_PAD_LENGTH, '0');
   const offset = formatTimezoneOffset(date.getTimezoneOffset());
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds} ${offset}`;
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}${offset}`;
 }
 
 /**
- * Formats a timezone offset in minutes to a string like `+0530` or `-0600`.
+ * Formats a timezone offset in minutes to an ISO 8601 string like `+05:30` or `-06:00`.
  *
  * @param offsetMinutes - The timezone offset in minutes (negative = ahead of UTC).
  * @returns The formatted offset string.
@@ -51,7 +51,7 @@ function formatTimezoneOffset(offsetMinutes: number): string {
   const absMinutes = Math.abs(offsetMinutes);
   const offsetHours = String(Math.floor(absMinutes / MINUTES_PER_HOUR)).padStart(DATE_COMPONENT_PAD_LENGTH, '0');
   const offsetMins = String(absMinutes % MINUTES_PER_HOUR).padStart(DATE_COMPONENT_PAD_LENGTH, '0');
-  return `${sign}${offsetHours}${offsetMins}`;
+  return `${sign}${offsetHours}:${offsetMins}`;
 }
 
 /* v8 ignore stop */
