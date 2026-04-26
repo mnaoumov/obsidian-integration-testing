@@ -48,7 +48,11 @@ const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
  * runner aborts before tearing down already-initialized projects).
  */
 const activeSetups = new Set<CoreSetupResult>();
+const disposedResults = new WeakSet<CoreSetupResult>();
 let isCleanupHandlerRegistered = false;
+
+const TEARDOWN_TIMEOUT_IN_MILLISECONDS = 15000;
+const FORCE_EXIT_TIMEOUT_IN_MILLISECONDS = 20000;
 
 /**
  * Parameters for {@link coreSetup}.
@@ -190,22 +194,22 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
  * @param result - The result from {@link coreSetup}. When `undefined`, does nothing.
  */
 export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
-  if (!result) {
+  if (!result || disposedResults.has(result)) {
     return;
   }
+  disposedResults.add(result);
 
-  activeSetups.delete(result);
-
-  try {
-    await result.tempVault.dispose(result.transport);
-  } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${String(error)}`);
-  }
+  log(`[integration-teardown:${result.transportLabel}] Tearing down...`);
 
   try {
-    await result.transport.dispose?.();
+    await Promise.race([
+      teardownAsync(result),
+      rejectAfterTimeout(TEARDOWN_TIMEOUT_IN_MILLISECONDS, `Teardown for "${result.transportLabel}"`)
+    ]);
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${String(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${String(error)}`);
+  } finally {
+    activeSetups.delete(result);
   }
 }
 
@@ -262,6 +266,13 @@ function registerProcessCleanupHandler(): void {
     }
 
     log(`[integration-teardown] Process exiting with ${String(activeSetups.size)} setup(s) not torn down. Cleaning up...`);
+
+    const forceExitTimer = setTimeout(() => {
+      log('[integration-teardown] Async cleanup timed out, forcing exit...');
+      process.exit(1);
+    }, FORCE_EXIT_TIMEOUT_IN_MILLISECONDS);
+    forceExitTimer.unref();
+
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
         log(`[integration-teardown] Process cleanup error (non-fatal): ${String(error)}`);
@@ -305,6 +316,22 @@ function registerProcessCleanupHandler(): void {
 }
 
 /**
+ * Returns a promise that rejects after the given timeout.
+ *
+ * @param timeoutMs - Timeout in milliseconds.
+ * @param label - Label for the error message.
+ * @returns A promise that rejects with a timeout error.
+ */
+function rejectAfterTimeout(timeoutMs: number, label: string): Promise<never> {
+  return new Promise<never>((_resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${String(timeoutMs)}ms`));
+    }, timeoutMs);
+    timer.unref();
+  });
+}
+
+/**
  * Resolves the dist path to use for integration tests.
  *
  * Picks whichever of `dist/dev` and `dist/build` has a newer `main.js`.
@@ -334,4 +361,23 @@ async function resolveDistPath(projectRoot: string): Promise<string> {
   }
 
   throw new Error('No build found. Run `npm run build` or `npm run dev` first.');
+}
+
+/**
+ * Performs the async teardown work (vault disposal + transport disposal).
+ *
+ * @param result - The setup result to tear down.
+ */
+async function teardownAsync(result: CoreSetupResult): Promise<void> {
+  try {
+    await result.tempVault.dispose(result.transport);
+  } catch (error: unknown) {
+    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${String(error)}`);
+  }
+
+  try {
+    await result.transport.dispose?.();
+  } catch (error: unknown) {
+    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${String(error)}`);
+  }
 }
