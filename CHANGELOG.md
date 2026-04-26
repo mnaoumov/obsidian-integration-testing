@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2.2.2
+
+- feat: include transport type in setup/teardown log messages
+- fix: tear down active setups on unhandled rejections
+- fix: tear down all active setups when one setup fails
+- fix: sync cleanup of orphaned setups on process.exit()
+
 ## 2.2.1
 
 - fix: log note about misleading "No test files found"
