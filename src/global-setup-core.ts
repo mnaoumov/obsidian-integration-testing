@@ -201,14 +201,26 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
 
   log(`[integration-teardown:${result.transportLabel}] Tearing down...`);
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       teardownAsync(result),
-      rejectAfterTimeout(TEARDOWN_TIMEOUT_IN_MILLISECONDS, `Teardown for "${result.transportLabel}"`)
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(
+              `Teardown for "${result.transportLabel}" timed out after ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms`
+            )
+          );
+        }, TEARDOWN_TIMEOUT_IN_MILLISECONDS);
+      })
     ]);
   } catch (error: unknown) {
     log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${String(error)}`);
   } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
     activeSetups.delete(result);
   }
 }
@@ -312,22 +324,6 @@ function registerProcessCleanupHandler(): void {
       }
     }
     activeSetups.clear();
-  });
-}
-
-/**
- * Returns a promise that rejects after the given timeout.
- *
- * @param timeoutMs - Timeout in milliseconds.
- * @param label - Label for the error message.
- * @returns A promise that rejects with a timeout error.
- */
-function rejectAfterTimeout(timeoutMs: number, label: string): Promise<never> {
-  return new Promise<never>((_resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${String(timeoutMs)}ms`));
-    }, timeoutMs);
-    timer.unref();
   });
 }
 
