@@ -15,6 +15,7 @@ import {
 import { assertNonNullable } from './type-guards.ts';
 
 interface MockChild extends EventEmitter {
+  kill: ReturnType<typeof vi.fn>;
   stderr: PassThrough;
   stdin: PassThrough;
   stdout: PassThrough;
@@ -22,6 +23,7 @@ interface MockChild extends EventEmitter {
 
 function createMockChild(): MockChild {
   const child = new EventEmitter() as MockChild;
+  child.kill = vi.fn();
   child.stdin = new PassThrough();
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
@@ -441,6 +443,40 @@ describe('exec', () => {
     await promise;
     expect(mockStdoutWrite).toHaveBeenCalledWith(Buffer.from('out'));
     expect(mockStderrWrite).toHaveBeenCalledWith(Buffer.from('err'));
+  });
+
+  it('should reject when command times out', async () => {
+    vi.useFakeTimers();
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const TIMEOUT_MS = 5000;
+    const promise = exec('slow-cmd', { isQuiet: true, timeoutInMilliseconds: TIMEOUT_MS });
+
+    vi.advanceTimersByTime(TIMEOUT_MS);
+
+    await expect(promise).rejects.toThrow(`Command timed out after ${String(TIMEOUT_MS)}ms`);
+    expect(child.kill).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('should clear timeout when command completes before timeout', async () => {
+    vi.useFakeTimers();
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const TIMEOUT_MS = 5000;
+    const promise = exec('fast-cmd', { isQuiet: true, timeoutInMilliseconds: TIMEOUT_MS });
+
+    child.stdout.push(Buffer.from('done'));
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    const result = await promise;
+    expect(result).toBe('done');
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
   });
 
   it('should trim one trailing newline from stdout and stderr', async () => {
