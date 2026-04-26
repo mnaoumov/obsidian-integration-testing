@@ -235,6 +235,9 @@ function findProjectRoot(): string {
  *   async teardown (unregister vaults, dispose transports). Does NOT fire
  *   when `process.exit()` is called directly.
  *
+ * - `unhandledRejection` — catches async errors that bypass `coreSetup`'s
+ *   catch block. Performs full async teardown while we still can.
+ *
  * - `exit` — fires on every exit, including `process.exit()`. Only synchronous
  *   work is possible, so this handler does best-effort cleanup: kills child
  *   processes via `disposeSync()` and removes temp vault directories with
@@ -257,6 +260,19 @@ function registerProcessCleanupHandler(): void {
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
         log(`[integration-teardown] Process cleanup error (non-fatal): ${String(error)}`);
+      });
+    }
+  });
+
+  process.on('unhandledRejection', () => {
+    if (activeSetups.size === 0) {
+      return;
+    }
+
+    log(`[integration-teardown] Unhandled rejection detected. Tearing down ${String(activeSetups.size)} active setup(s)...`);
+    for (const result of [...activeSetups]) {
+      coreTeardown(result).catch((error: unknown) => {
+        log(`[integration-teardown] Rejection cleanup error (non-fatal): ${String(error)}`);
       });
     }
   });
