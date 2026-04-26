@@ -10,7 +10,10 @@
 
 import type { PluginManifest } from 'obsidian';
 
-import { existsSync } from 'node:fs';
+import {
+  existsSync,
+  rmSync
+} from 'node:fs';
 import {
   cp,
   mkdir,
@@ -213,14 +216,21 @@ function findProjectRoot(): string {
 }
 
 /**
- * Registers a `beforeExit` handler that tears down any setups that were never
- * explicitly torn down. This handles the case where one test project's setup
- * fails and the runner exits without calling teardown for already-initialized
- * projects.
+ * Registers cleanup handlers for orphaned setups that were never explicitly
+ * torn down.
  *
- * Uses `beforeExit` because teardown is async. Unlike `exit`, `beforeExit`
- * allows async work — the event loop stays alive until the cleanup completes.
- * Note: `beforeExit` does not fire when `process.exit()` is called directly.
+ * Two handlers cover different exit scenarios:
+ *
+ * - `beforeExit` — fires when the event loop drains naturally. Allows full
+ *   async teardown (unregister vaults, dispose transports). Does NOT fire
+ *   when `process.exit()` is called directly.
+ *
+ * - `exit` — fires on every exit, including `process.exit()`. Only synchronous
+ *   work is possible, so this handler does best-effort cleanup: kills child
+ *   processes via `disposeSync()` and removes temp vault directories with
+ *   `rmSync`. Unregistering vaults (which requires IPC with Obsidian) is
+ *   skipped — a stale vault entry is an acceptable trade-off vs. leaked
+ *   processes and temp directories.
  */
 function registerProcessCleanupHandler(): void {
   if (isCleanupHandlerRegistered) {
@@ -239,6 +249,27 @@ function registerProcessCleanupHandler(): void {
         log(`[integration-teardown] Process cleanup error (non-fatal): ${String(error)}`);
       });
     }
+  });
+
+  process.on('exit', () => {
+    if (activeSetups.size === 0) {
+      return;
+    }
+
+    log(`[integration-teardown] Sync cleanup: ${String(activeSetups.size)} orphaned setup(s).`);
+    for (const result of [...activeSetups]) {
+      try {
+        result.transport.disposeSync?.();
+      } catch (error: unknown) {
+        log(`[integration-teardown] Sync transport cleanup error (non-fatal): ${String(error)}`);
+      }
+      try {
+        rmSync(result.tempVault.path, { force: true, recursive: true });
+      } catch (error: unknown) {
+        log(`[integration-teardown] Sync vault cleanup error (non-fatal): ${String(error)}`);
+      }
+    }
+    activeSetups.clear();
   });
 }
 
