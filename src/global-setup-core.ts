@@ -33,6 +33,7 @@ import { log } from './log.ts';
 import { TempVault } from './temp-vault.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 
+const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
 const DIST_DEV = 'dist/dev';
 const DIST_BUILD = 'dist/build';
 const MAIN_JS = 'main.js';
@@ -68,6 +69,9 @@ export interface CoreSetupResult {
   /** The transport instance used during setup. */
   transport: ObsidianTransport;
 
+  /** Short label for log messages (e.g. `"obsidian-cli"`, `"obsidian-cdp"`). */
+  transportLabel: string;
+
   /** The transport options that were resolved. */
   transportOptions: ObsidianTransportOptions | undefined;
 }
@@ -90,14 +94,15 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   }
 
   const transportOptions = params?.transportOptions;
-  log('[integration-setup] Creating transport...');
+  const label = transportOptions?.type ?? DEFAULT_TRANSPORT_TYPE;
+  log(`[integration-setup:${label}] Creating transport...`);
   const transport = await createTransportFromOptions(transportOptions);
-  log(`[integration-setup] Transport created: ${transport.constructor.name}`);
+  log(`[integration-setup:${label}] Transport created: ${transport.constructor.name}`);
 
   let tempVault: TempVault | undefined;
 
   try {
-    log(`[integration-setup] Project root: ${projectRoot}`);
+    log(`[integration-setup:${label}] Project root: ${projectRoot}`);
     const distPath = await resolveDistPath(projectRoot);
     const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
     const pluginId = manifestJson.id;
@@ -111,25 +116,25 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     const mainJs = join(distPath, MAIN_JS);
     const buildStat = await stat(mainJs);
 
-    log(`[integration-setup] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+    log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
 
     tempVault = new TempVault();
-    log(`[integration-setup] Created temp vault: ${tempVault.path}`);
+    log(`[integration-setup:${label}] Created temp vault: ${tempVault.path}`);
     const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
     await mkdir(pluginDir, { recursive: true });
     await cp(distPath, pluginDir, { recursive: true });
     await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
 
-    log('[integration-setup] Syncing vault to device...');
+    log(`[integration-setup:${label}] Syncing vault to device...`);
     await tempVault.syncToDevice(transport);
-    log('[integration-setup] Registering vault...');
+    log(`[integration-setup:${label}] Registering vault...`);
     await tempVault.register(transport);
-    log('[integration-setup] Vault registered.');
+    log(`[integration-setup:${label}] Vault registered.`);
 
     // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
     // LoadPlugin() in a try-catch that swallows errors and returns false.
     // We monkey-patch loadPlugin() to capture the error before it's swallowed.
-    log(`[integration-setup] Enabling plugin "${pluginId}"...`);
+    log(`[integration-setup:${label}] Enabling plugin "${pluginId}"...`);
     const { errorMessage } = await evalInObsidian({
       args: { pluginId },
       fn: enablePluginWithErrorCapture,
@@ -142,20 +147,20 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
       throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
     }
 
-    log(`[integration-setup] Plugin "${pluginId}" enabled successfully.`);
+    log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
   } catch (error: unknown) {
-    log('[integration-setup] Setup failed, cleaning up...');
+    log(`[integration-setup:${label}] Setup failed, cleaning up...`);
     try {
       if (tempVault) {
         await tempVault.dispose(transport);
       }
     } catch (cleanupError: unknown) {
-      log(`[integration-setup] Vault cleanup error (non-fatal): ${String(cleanupError)}`);
+      log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${String(cleanupError)}`);
     }
     try {
       await transport.dispose?.();
     } catch (cleanupError: unknown) {
-      log(`[integration-setup] Transport cleanup error (non-fatal): ${String(cleanupError)}`);
+      log(`[integration-setup:${label}] Transport cleanup error (non-fatal): ${String(cleanupError)}`);
     }
 
     // Tear down any previously successful setups. The test runner will abort
@@ -163,15 +168,15 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     // While we're still in async context avoids relying on the sync `exit`
     // Handler (which can only do best-effort cleanup).
     for (const activeResult of [...activeSetups]) {
-      log('[integration-setup] Tearing down previously successful setup...');
+      log(`[integration-setup:${label}] Tearing down previously successful setup (${activeResult.transportLabel})...`);
       await coreTeardown(activeResult);
     }
 
-    log('[integration-setup] NOTE: If the test runner reports "No test files found", ignore it — it is a side effect of the setup failure above.');
+    log(`[integration-setup:${label}] NOTE: If the test runner reports "No test files found", ignore it — it is a side effect of the setup failure above.`);
     throw error;
   }
 
-  const result: CoreSetupResult = { tempVault, transport, transportOptions };
+  const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions };
   activeSetups.add(result);
   registerProcessCleanupHandler();
   return result;
@@ -194,13 +199,13 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   try {
     await result.tempVault.dispose(result.transport);
   } catch (error: unknown) {
-    log(`[integration-teardown] Vault cleanup error (non-fatal): ${String(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${String(error)}`);
   }
 
   try {
     await result.transport.dispose?.();
   } catch (error: unknown) {
-    log(`[integration-teardown] Transport cleanup error (non-fatal): ${String(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${String(error)}`);
   }
 }
 
@@ -287,12 +292,12 @@ function registerProcessCleanupHandler(): void {
       try {
         result.transport.disposeSync?.();
       } catch (error: unknown) {
-        log(`[integration-teardown] Sync transport cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Sync transport cleanup error (non-fatal): ${String(error)}`);
       }
       try {
         rmSync(result.tempVault.path, { force: true, recursive: true });
       } catch (error: unknown) {
-        log(`[integration-teardown] Sync vault cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${String(error)}`);
       }
     }
     activeSetups.clear();
