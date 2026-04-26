@@ -157,6 +157,16 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     } catch (cleanupError: unknown) {
       log(`[integration-setup] Transport cleanup error (non-fatal): ${String(cleanupError)}`);
     }
+
+    // Tear down any previously successful setups. The test runner will abort
+    // After this error and won't call their teardown functions. Doing it here
+    // While we're still in async context avoids relying on the sync `exit`
+    // Handler (which can only do best-effort cleanup).
+    for (const activeResult of [...activeSetups]) {
+      log('[integration-setup] Tearing down previously successful setup...');
+      await coreTeardown(activeResult);
+    }
+
     log('[integration-setup] NOTE: If the test runner reports "No test files found", ignore it — it is a side effect of the setup failure above.');
     throw error;
   }
