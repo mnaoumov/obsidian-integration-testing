@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.2.3
+
+- fix: make desktop / android tests running independently
+
 ## 2.2.2
 
 - feat: include transport type in setup/teardown log messages
