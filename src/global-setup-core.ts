@@ -275,7 +275,7 @@ function registerProcessCleanupHandler(): void {
 
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
-        log(`[integration-teardown] Process cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Process cleanup error (non-fatal): ${String(error)}`);
       });
     }
   });
@@ -288,7 +288,7 @@ function registerProcessCleanupHandler(): void {
     log(`[integration-teardown] Unhandled rejection detected. Tearing down ${String(activeSetups.size)} active setup(s)...`);
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
-        log(`[integration-teardown] Rejection cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Rejection cleanup error (non-fatal): ${String(error)}`);
       });
     }
   });
