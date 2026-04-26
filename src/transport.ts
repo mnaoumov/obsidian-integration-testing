@@ -100,4 +100,9 @@ export interface TransportEvalOptions {
    * The working directory (vault path) for the evaluation.
    */
   readonly cwd: string;
+
+  /**
+   * Timeout in milliseconds for the evaluation command.
+   */
+  readonly timeoutInMilliseconds?: number;
 }

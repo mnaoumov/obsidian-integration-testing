@@ -10,12 +10,9 @@
 
 import type { PluginManifest } from 'obsidian';
 
-import { spawn } from 'node:child_process';
 import {
   existsSync,
-  rmSync,
-  unlinkSync,
-  writeFileSync
+  rmSync
 } from 'node:fs';
 import {
   cp,
@@ -24,7 +21,6 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
 
@@ -54,9 +50,6 @@ const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
 const activeSetups = new Set<CoreSetupResult>();
 const disposedResults = new WeakSet<CoreSetupResult>();
 let isCleanupHandlerRegistered = false;
-
-const TEARDOWN_TIMEOUT_IN_MILLISECONDS = 15000;
-const FORCE_EXIT_TIMEOUT_IN_MILLISECONDS = 20000;
 
 /**
  * Parameters for {@link coreSetup}.
@@ -203,31 +196,13 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   }
   disposedResults.add(result);
 
-  log(`[integration-teardown:${result.transportLabel}] Tearing down (timeout: ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms)...`);
-
-  // Watchdog: spawn a detached process that kills us after the timeout.
-  // Vite patches all timer APIs and may intercept child_process inside
-  // Its module runner, so we use execFileSync-adjacent approach with
-  // The real node binary resolved from the filesystem.
-  const watchdogScript = join(tmpdir(), `watchdog-${String(process.pid)}.mjs`);
-  writeFileSync(watchdogScript, `setTimeout(()=>{process.kill(${String(process.pid)});},${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)});`);
-  const watchdog = spawn(process.execPath, [watchdogScript], {
-    detached: true,
-    stdio: 'ignore'
-  });
-  watchdog.unref();
+  log(`[integration-teardown:${result.transportLabel}] Tearing down...`);
 
   try {
     await teardownAsync(result);
   } catch (error: unknown) {
     log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${String(error)}`);
   } finally {
-    watchdog.kill();
-    try {
-      unlinkSync(watchdogScript);
-    } catch {
-      // Best-effort cleanup.
-    }
     activeSetups.delete(result);
   }
 }
@@ -285,13 +260,6 @@ function registerProcessCleanupHandler(): void {
     }
 
     log(`[integration-teardown] Process exiting with ${String(activeSetups.size)} setup(s) not torn down. Cleaning up...`);
-
-    const watchdog = spawn(
-      process.execPath,
-      ['-e', `setTimeout(()=>{process.kill(${String(process.pid)},'SIGTERM')},${String(FORCE_EXIT_TIMEOUT_IN_MILLISECONDS)})`],
-      { detached: true, stdio: 'ignore' }
-    );
-    watchdog.unref();
 
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
