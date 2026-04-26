@@ -21,6 +21,7 @@ import {
   isCliEnabled,
   isVaultRegistered
 } from './obsidian-config.ts';
+import { serializeError } from './serialize-error.ts';
 
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
@@ -153,6 +154,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
+    log(`[cli-transport] Unregistering vault: closing window for ${vaultPath}...`);
     const destroyExpr = buildSimpleExpression(`
       setTimeout(() => {
         if (window.electron && window.electron.remote) {
@@ -162,20 +164,23 @@ export class DesktopCliTransport implements ObsidianTransport {
     `);
     try {
       await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
-    } catch {
-      // The window may have closed before the response was sent — that's OK.
+      log('[cli-transport] Window destroy command sent.');
+    } catch (error: unknown) {
+      log(`[cli-transport] Window destroy failed (non-fatal): ${serializeError(error)}`);
     }
 
+    log('[cli-transport] Waiting for window to close...');
     await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
 
+    log('[cli-transport] Removing vault from registry...');
     const removeExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
     );
     try {
       await this.evaluate(removeExpr, { cwd: process.cwd(), timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
-    } catch {
-      // If no vault window is available for the IPC, the eval times out — that's OK.
-      // The vault entry will remain in obsidian.json but is harmless.
+      log('[cli-transport] Vault removed from registry.');
+    } catch (error: unknown) {
+      log(`[cli-transport] Vault registry removal failed (non-fatal): ${serializeError(error)}`);
     }
   }
 

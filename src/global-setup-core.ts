@@ -30,6 +30,7 @@ import type { ObsidianTransport } from './transport.ts';
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
+import { serializeError } from './serialize-error.ts';
 import { TempVault } from './temp-vault.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 
@@ -156,12 +157,12 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
         await tempVault.dispose(transport);
       }
     } catch (cleanupError: unknown) {
-      log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${String(cleanupError)}`);
+      log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${serializeError(cleanupError)}`);
     }
     try {
       await transport.dispose?.();
     } catch (cleanupError: unknown) {
-      log(`[integration-setup:${label}] Transport cleanup error (non-fatal): ${String(cleanupError)}`);
+      log(`[integration-setup:${label}] Transport cleanup error (non-fatal): ${serializeError(cleanupError)}`);
     }
 
     // Tear down any previously successful setups. The test runner will abort
@@ -201,7 +202,7 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   try {
     await teardownAsync(result);
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${String(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${serializeError(error)}`);
   } finally {
     activeSetups.delete(result);
   }
@@ -263,7 +264,7 @@ function registerProcessCleanupHandler(): void {
 
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
-        log(`[integration-teardown:${result.transportLabel}] Process cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Process cleanup error (non-fatal): ${serializeError(error)}`);
       });
     }
   });
@@ -276,7 +277,7 @@ function registerProcessCleanupHandler(): void {
     log(`[integration-teardown] Unhandled rejection detected. Tearing down ${String(activeSetups.size)} active setup(s)...`);
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
-        log(`[integration-teardown:${result.transportLabel}] Rejection cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Rejection cleanup error (non-fatal): ${serializeError(error)}`);
       });
     }
   });
@@ -291,12 +292,12 @@ function registerProcessCleanupHandler(): void {
       try {
         result.transport.disposeSync?.();
       } catch (error: unknown) {
-        log(`[integration-teardown:${result.transportLabel}] Sync transport cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Sync transport cleanup error (non-fatal): ${serializeError(error)}`);
       }
       try {
         rmSync(result.tempVault.path, { force: true, recursive: true });
       } catch (error: unknown) {
-        log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${String(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${serializeError(error)}`);
       }
     }
     activeSetups.clear();
@@ -344,12 +345,12 @@ async function teardownAsync(result: CoreSetupResult): Promise<void> {
   try {
     await result.tempVault.dispose(result.transport);
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${String(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${serializeError(error)}`);
   }
 
   try {
     await result.transport.dispose?.();
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${String(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${serializeError(error)}`);
   }
 }
