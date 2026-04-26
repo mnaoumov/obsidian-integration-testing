@@ -19,7 +19,7 @@ import {
   writeFile
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadEnvFile } from 'node:process';
+import process, { loadEnvFile } from 'node:process';
 
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
@@ -36,6 +36,15 @@ const MAIN_JS = 'main.js';
 const OBSIDIAN_CONFIG_DIR = '.obsidian';
 const PLUGINS_DIR = 'plugins';
 const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
+
+/**
+ * Tracks setups that completed successfully but haven't been torn down yet.
+ * Used by the `beforeExit` handler to clean up when a test runner exits
+ * without calling teardown (e.g., when one project's setup fails and the
+ * runner aborts before tearing down already-initialized projects).
+ */
+const activeSetups = new Set<CoreSetupResult>();
+let isCleanupHandlerRegistered = false;
 
 /**
  * Parameters for {@link coreSetup}.
@@ -148,7 +157,10 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     throw error;
   }
 
-  return { tempVault, transport, transportOptions };
+  const result: CoreSetupResult = { tempVault, transport, transportOptions };
+  activeSetups.add(result);
+  registerProcessCleanupHandler();
+  return result;
 }
 
 /**
@@ -162,6 +174,8 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   if (!result) {
     return;
   }
+
+  activeSetups.delete(result);
 
   try {
     await result.tempVault.dispose(result.transport);
@@ -195,6 +209,36 @@ function findProjectRoot(): string {
     }
     dir = parent;
   }
+}
+
+/**
+ * Registers a `beforeExit` handler that tears down any setups that were never
+ * explicitly torn down. This handles the case where one test project's setup
+ * fails and the runner exits without calling teardown for already-initialized
+ * projects.
+ *
+ * Uses `beforeExit` because teardown is async. Unlike `exit`, `beforeExit`
+ * allows async work — the event loop stays alive until the cleanup completes.
+ * Note: `beforeExit` does not fire when `process.exit()` is called directly.
+ */
+function registerProcessCleanupHandler(): void {
+  if (isCleanupHandlerRegistered) {
+    return;
+  }
+  isCleanupHandlerRegistered = true;
+
+  process.on('beforeExit', () => {
+    if (activeSetups.size === 0) {
+      return;
+    }
+
+    log(`[integration-teardown] Process exiting with ${String(activeSetups.size)} setup(s) not torn down. Cleaning up...`);
+    for (const result of [...activeSetups]) {
+      coreTeardown(result).catch((error: unknown) => {
+        log(`[integration-teardown] Process cleanup error (non-fatal): ${String(error)}`);
+      });
+    }
+  });
 }
 
 /**
