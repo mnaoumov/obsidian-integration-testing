@@ -21,6 +21,8 @@ import {
   coreSetup,
   coreTeardown
 } from '../global-setup-core.ts';
+import { log } from '../log.ts';
+import { serializeError } from '../serialize-error.ts';
 import { TempVault } from '../temp-vault.ts';
 
 setTransportOptionsResolver(() => inject('obsidianTransport'));
@@ -34,6 +36,10 @@ let setupResult: CoreSetupResult | undefined;
  */
 export function getTempVault(): TempVault {
   const tempVaultPath = inject('tempVaultPath');
+  const setupErrorMessage = inject('setupError');
+  if (setupErrorMessage) {
+    throw new Error(`Integration setup failed — cannot get temp vault: ${setupErrorMessage}`);
+  }
   return new TempVault(tempVaultPath);
 }
 
@@ -48,8 +54,18 @@ export function getTempVault(): TempVault {
 export async function setup(project: TestProject): Promise<void> {
   const environmentOptions = project.config.environmentOptions as Record<string, unknown> | undefined;
   const transportOptions = environmentOptions?.['obsidianTransport'] as ObsidianTransportOptions | undefined;
+  const label = transportOptions?.type ?? 'obsidian-cli';
 
-  setupResult = await coreSetup({ transportOptions });
+  try {
+    setupResult = await coreSetup({ transportOptions });
+  } catch (error: unknown) {
+    // Catch setup errors so that other projects' tests can still run.
+    // Individual tests in this project will fail with the stored error
+    // When they try to inject the temp vault path.
+    log(`[integration-setup:${label}] Setup failed (tests for this project will be skipped): ${serializeError(error)}`);
+    project.provide('setupError', serializeError(error));
+    return;
+  }
 
   project.provide('obsidianTransport', setupResult.transportOptions);
   project.provide('tempVaultPath', setupResult.tempVault.path);

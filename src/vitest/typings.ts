@@ -19,6 +19,13 @@ declare module 'vitest' {
     obsidianTransport?: ObsidianTransportOptions;
 
     /**
+     * Serialized error message from global setup failure.
+     * Present only when setup failed — tests should check this
+     * before attempting to use the temp vault or transport.
+     */
+    setupError?: string;
+
+    /**
      * Path to the temporary vault created by the global setup.
      */
     tempVaultPath: string;
