@@ -23,6 +23,7 @@ import {
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
+import { setTimeout as nativeSetTimeout } from 'node:timers';
 
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
@@ -199,11 +200,11 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   }
   disposedResults.add(result);
 
-  log(`[integration-teardown:${result.transportLabel}] Tearing down...`);
+  log(`[integration-teardown:${result.transportLabel}] Tearing down (timeout: ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms)...`);
 
-  // Hard failsafe — Vite's module runner may patch timers, preventing
-  // Promise.race timeouts from firing.
-  const forceExitTimer = setTimeout(() => {
+  // Native setTimeout from node:timers bypasses Vite's module runner,
+  // Which patches the global setTimeout and prevents it from firing.
+  const forceExitTimer = nativeSetTimeout(() => {
     log(`[integration-teardown:${result.transportLabel}] Teardown timed out after ${String(TEARDOWN_TIMEOUT_IN_MILLISECONDS)}ms, forcing exit...`);
     process.exit(1);
   }, TEARDOWN_TIMEOUT_IN_MILLISECONDS);
@@ -272,7 +273,7 @@ function registerProcessCleanupHandler(): void {
 
     log(`[integration-teardown] Process exiting with ${String(activeSetups.size)} setup(s) not torn down. Cleaning up...`);
 
-    const forceExitTimer = setTimeout(() => {
+    const forceExitTimer = nativeSetTimeout(() => {
       log('[integration-teardown] Async cleanup timed out, forcing exit...');
       process.exit(1);
     }, FORCE_EXIT_TIMEOUT_IN_MILLISECONDS);
