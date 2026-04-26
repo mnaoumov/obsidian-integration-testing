@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.2.1
+
+- fix: log note about misleading "No test files found"
+- fix: clean up orphaned setups when process exits without teardown
+- fix: inline CAUSE_INDENT_SIZE in serializeError for toString()
+
 ## 2.2.0
 
 - fix: detect plugins that are enabled but fail to load
