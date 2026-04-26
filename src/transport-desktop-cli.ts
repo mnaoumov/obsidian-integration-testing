@@ -28,6 +28,7 @@ const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
+const VAULT_EVAL_TIMEOUT_IN_MILLISECONDS = 10000;
 
 /**
  * Transport that communicates with Desktop Obsidian via the `obsidian eval` CLI command
@@ -52,7 +53,11 @@ export class DesktopCliTransport implements ObsidianTransport {
 
     let resultStr: string;
     try {
-      resultStr = await exec(command, { cwd: options.cwd, isQuiet: true });
+      resultStr = await exec(command, {
+        cwd: options.cwd,
+        isQuiet: true,
+        ...(options.timeoutInMilliseconds !== undefined && { timeoutInMilliseconds: options.timeoutInMilliseconds })
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
@@ -156,7 +161,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       }, 0);
     `);
     try {
-      await this.evaluate(destroyExpr, { cwd: vaultPath });
+      await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
     } catch {
       // The window may have closed before the response was sent — that's OK.
     }
@@ -166,7 +171,12 @@ export class DesktopCliTransport implements ObsidianTransport {
     const removeExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
     );
-    await this.evaluate(removeExpr, { cwd: process.cwd() });
+    try {
+      await this.evaluate(removeExpr, { cwd: process.cwd(), timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+    } catch {
+      // If no vault window is available for the IPC, the eval times out — that's OK.
+      // The vault entry will remain in obsidian.json but is harmless.
+    }
   }
 
   /**

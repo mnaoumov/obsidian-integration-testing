@@ -64,6 +64,11 @@ export interface ExecOption {
    * An input to be passed to the command.
    */
   readonly stdin?: string;
+
+  /**
+   * Timeout in milliseconds. The child process is killed if it exceeds this.
+   */
+  readonly timeoutInMilliseconds?: number;
 }
 
 /**
@@ -176,11 +181,20 @@ function execString(command: string, options: ExecOption = {}, rawArgs?: string[
     isQuiet: quiet = false,
     shouldIgnoreExitCode: ignoreExitCode = false,
     shouldIncludeDetails = false,
-    stdin = ''
+    stdin = '',
+    timeoutInMilliseconds
   } = options;
 
   return new Promise((resolve, reject) => {
     const child = spawnViaShell(command, cwd, rawArgs);
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+
+    if (timeoutInMilliseconds !== undefined) {
+      timeoutTimer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`Command timed out after ${String(timeoutInMilliseconds)}ms`));
+      }, timeoutInMilliseconds);
+    }
 
     let stdout = '';
     let stderr = '';
@@ -211,6 +225,9 @@ function execString(command: string, options: ExecOption = {}, rawArgs?: string[
     });
 
     child.on('close', (exitCode, exitSignal) => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
       if (exitCode !== 0 && !ignoreExitCode) {
         reject(new Error(`Command failed with exit code ${exitCode ? String(exitCode) : '(null)'}\n${stderr}`));
         return;
