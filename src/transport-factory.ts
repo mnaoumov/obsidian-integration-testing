@@ -187,7 +187,7 @@ async function checkDeviceConnected(deviceId: string): Promise<boolean> {
  * @param options - Android Appium transport options.
  * @returns A configured Appium transport.
  */
-async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOptions): Promise<AppiumTransport> {
+async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOptions): Promise<ObsidianTransport> {
   const url = new URL(options.appiumUrl);
 
   const port = Number(url.port);
@@ -239,30 +239,39 @@ async function createAppiumTransport(options: ObsidianAndroidAppiumTransportOpti
     });
 
     log('[transport-factory] Appium session established.');
-    const transport = new AppiumTransport({
+    const appiumTransport = new AppiumTransport({
       appId,
       browser,
       platform: 'android',
       ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath })
     });
 
-    const originalDispose = transport.dispose.bind(transport);
+    const originalDispose = appiumTransport.dispose.bind(appiumTransport);
+    const transport: ObsidianTransport = appiumTransport;
     transport.dispose = async (): Promise<void> => {
       try {
         await originalDispose();
       } finally {
-        if (appiumProcess) {
-          appiumProcess.kill();
-          log('[transport-factory] Auto-started Appium server stopped.');
-        }
-        if (emulatorProcess) {
-          emulatorProcess.kill();
-          log('[transport-factory] Auto-started emulator stopped.');
-        }
+        killAutoStartedProcesses();
       }
     };
 
+    transport.disposeSync = (): void => {
+      killAutoStartedProcesses();
+    };
+
     return transport;
+
+    function killAutoStartedProcesses(): void {
+      if (appiumProcess) {
+        appiumProcess.kill();
+        log('[transport-factory] Auto-started Appium server stopped.');
+      }
+      if (emulatorProcess) {
+        emulatorProcess.kill();
+        log('[transport-factory] Auto-started emulator stopped.');
+      }
+    }
   } catch (error: unknown) {
     if (appiumProcess) {
       appiumProcess.kill();

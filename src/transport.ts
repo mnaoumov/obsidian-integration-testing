@@ -20,6 +20,15 @@ export interface ObsidianTransport {
   dispose?(): Promise<void>;
 
   /**
+   * Synchronous disposal for use in `process.on('exit')` handlers where
+   * async work is not possible.
+   *
+   * Implementations should perform only synchronous cleanup here (e.g. killing
+   * child processes). Async operations like unregistering vaults are skipped.
+   */
+  disposeSync?(): void;
+
+  /**
    * Evaluates a JavaScript expression string inside Obsidian and returns the
    * raw string result.
    *
