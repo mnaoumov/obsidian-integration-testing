@@ -10,18 +10,20 @@
 
 /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process. Covered by integration tests. */
 
-const CAUSE_INDENT_SIZE = 2;
-
 /**
  * Serializes an error into a string with its full stack trace and recursive
- * cause chain. Nested causes are indented by {@link CAUSE_INDENT_SIZE} spaces
- * per level.
+ * cause chain. Nested causes are indented by 2 spaces per level.
+ *
+ * **Important:** This function is serialized via `toString()` and injected into
+ * a remote IIFE by {@link evalInObsidian}. All referenced values must be
+ * inlined — module-level constants are NOT captured by `toString()`.
  *
  * @param error - The error to serialize.
  * @param depth - The current nesting depth (used for indentation).
  * @returns A formatted error string.
  */
 export function serializeError(error: unknown, depth = 0): string {
+  const CAUSE_INDENT_SIZE = 2;
   const indent = ' '.repeat(depth * CAUSE_INDENT_SIZE);
 
   if (!(error instanceof Error)) {
