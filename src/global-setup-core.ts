@@ -154,6 +154,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     } catch (cleanupError: unknown) {
       log(`[integration-setup] Transport cleanup error (non-fatal): ${String(cleanupError)}`);
     }
+    log('[integration-setup] NOTE: If the test runner reports "No test files found", ignore it — it is a side effect of the setup failure above.');
     throw error;
   }
 
