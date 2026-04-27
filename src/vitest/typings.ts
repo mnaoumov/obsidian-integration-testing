@@ -3,12 +3,20 @@
  *
  * Vitest module augmentation for `obsidian-integration-testing`.
  *
- * Automatically included when importing from `obsidian-integration-testing`.
- * Provides intellisense for `environmentOptions.obsidianTransport`
+ * Automatically included via a side-effect import in the main entry
+ * point, so consumers get these augmentations when importing from
+ * `obsidian-integration-testing`.
+ *
+ * Provides IntelliSense for `environmentOptions.obsidianTransport`
  * and `inject('obsidianTransport')` / `inject('tempVaultPath')`.
  */
 
 import type { ObsidianTransportOptions } from '../transport-options.ts';
+
+// eslint-disable-next-line import-x/no-unassigned-import -- Forces module resolution so declare module augmentations merge correctly.
+import 'vitest';
+// eslint-disable-next-line import-x/no-unassigned-import -- Forces module resolution so declare module augmentations merge correctly.
+import 'vitest/node';
 
 declare module 'vitest' {
   interface ProvidedContext {
