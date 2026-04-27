@@ -136,7 +136,6 @@
     "type-fest": "latest",
     "typescript": "latest",
     "typescript-eslint": "latest",
-    "urlpattern-polyfill": "10.1.0",
     "vitest": "latest"
   },
   "peerDependencies": {
@@ -147,7 +146,8 @@
     "@antfu/utils": "9.2.0",
     "@sinonjs/fake-timers": "13.0.5",
     "eslint-plugin-import": "npm:eslint-plugin-import-x@latest",
-    "type-fest": "latest"
+    "type-fest": "latest",
+    "urlpattern-polyfill": "npm:dry-uninstall"
   },
   "dependencies": {
     "puppeteer-core": "latest",
