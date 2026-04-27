@@ -4,6 +4,9 @@
  * Contains the entry point for the integration testing module.
  */
 
+// eslint-disable-next-line import-x/no-unassigned-import -- Side-effect import to include vitest module augmentations.
+import './vitest/typings.ts';
+
 export { ContextId } from './context-id.ts';
 export type { TransportOptionsResolver } from './context-provider.ts';
 export { setTransportOptionsResolver } from './context-provider.ts';
