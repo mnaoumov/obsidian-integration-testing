@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.3.3
+
+- chore: better patch
+- chore: patch webdriverio
+- chore: remove conflicting package
+
 ## 2.3.2
 
 - fix: patch vite types to resolve ts(2320) MinimalPluginContext conflict
