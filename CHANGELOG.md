@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.3.2
+
+- fix: patch vite types to resolve ts(2320) MinimalPluginContext conflict
+
 ## 2.3.1
 
 - fix: rewrite .ts extensions in side-effect imports
