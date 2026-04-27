@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.3.1
+
+- fix: rewrite .ts extensions in side-effect imports
+
 ## 2.3.0
 
 - fix: typings
