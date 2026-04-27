@@ -1,0 +1,15 @@
+diff --git a/node_modules/vite/dist/node/index.d.ts b/node_modules/vite/dist/node/index.d.ts
+index f5c0ce2..81382de 100644
+--- a/node_modules/vite/dist/node/index.d.ts
++++ b/node_modules/vite/dist/node/index.d.ts
+@@ -2766,7 +2766,9 @@ interface ConfigPluginContext extends Omit<MinimalPluginContext, "meta" | "envir
+ }
+ interface MinimalPluginContextWithoutEnvironment extends Omit<MinimalPluginContext, "environment"> {}
+ declare module "rolldown" {
+-  interface MinimalPluginContext extends PluginContextExtension {}
++  interface MinimalPluginContext {
++    environment: Environment;
++  }
+   interface PluginContextMeta extends PluginContextMetaExtension {}
+ }
+ /**
