@@ -151,6 +151,6 @@
   },
   "dependencies": {
     "puppeteer-core": "latest",
-    "webdriverio": "latest"
+    "webdriverio": "9.27.0"
   }
 }

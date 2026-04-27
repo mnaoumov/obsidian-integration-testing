@@ -1,0 +1,12 @@
+diff --git a/node_modules/webdriverio/build/utils/interception/index.d.ts b/node_modules/webdriverio/build/utils/interception/index.d.ts
+index b757b23..78c79dd 100644
+--- a/node_modules/webdriverio/build/utils/interception/index.d.ts
++++ b/node_modules/webdriverio/build/utils/interception/index.d.ts
+@@ -1,6 +1,6 @@
+ import type { JsonCompatible } from '@wdio/types';
+ import { type local, type remote } from 'webdriver';
+-import { URLPattern } from 'urlpattern-polyfill';
++import { URLPattern } from 'node:url';
+ import type { MockFilterOptions, RequestWithOptions, RespondWithOptions } from './types.js';
+ import type { WaitForOptions } from '../../types.js';
+ type RespondBody = string | JsonCompatible | Buffer;
