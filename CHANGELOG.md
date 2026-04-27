@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.3.0
+
+- fix: typings
+
 ## 2.2.3
 
 - fix: make desktop / android tests running independently
