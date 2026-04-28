@@ -31,7 +31,21 @@ export default defineConfig({
 });
 ```
 
-Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('tempVaultPath')`) are included automatically when you import from `obsidian-integration-testing` — no extra `tsconfig.json` configuration needed.
+To get Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('tempVaultPath')`), add a side-effect import in your test setup or config:
+
+```ts
+import 'obsidian-integration-testing/vitest/typings';
+```
+
+Or add it to `compilerOptions.types` in your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "types": ["obsidian-integration-testing/vitest/typings"]
+  }
+}
+```
 
 ### Jest
 
