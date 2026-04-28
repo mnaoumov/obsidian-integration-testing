@@ -52,6 +52,14 @@
         "types": "./dist/lib/cjs/vitest/global-setup.d.cts",
         "default": "./dist/lib/cjs/vitest/global-setup.cjs"
       }
+    },
+    "./vitest/typings": {
+      "import": {
+        "types": "./dist/lib/esm/vitest/typings.d.mts"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/vitest/typings.d.cts"
+      }
     }
   },
   "files": [
