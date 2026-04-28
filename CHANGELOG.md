@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2.3.4
+
+- docs: mention endpoint
+- fix: optional vitest typings
+
 ## 2.3.3
 
 - chore: better patch
