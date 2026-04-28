@@ -1,4 +1,5 @@
 import {
+  copyFileSync,
   mkdirSync,
   readdirSync,
   statSync,
@@ -10,11 +11,13 @@ import {
 } from 'node:fs/promises';
 import {
   dirname,
-  join
+  join,
+  relative
 } from 'node:path';
 
 import { execFromRoot } from './helpers/root.ts';
 
+const SRC_DIR = 'src';
 const ESM_DIR = 'dist/lib/esm';
 const CJS_DIR = 'dist/lib/cjs';
 
@@ -31,8 +34,19 @@ function collectFiles(dir: string, ext: string): string[] {
   return result;
 }
 
+function copySourceDeclarationFiles(): void {
+  const dtsSourceFiles = collectFiles(SRC_DIR, '.d.ts');
+  for (const srcFile of dtsSourceFiles) {
+    const rel = relative(SRC_DIR, srcFile);
+    const destPath = join(ESM_DIR, rel);
+    mkdirSync(dirname(destPath), { recursive: true });
+    copyFileSync(srcFile, destPath);
+  }
+}
+
 async function main(): Promise<void> {
   await execFromRoot('tsc --project tsconfig.build.json');
+  copySourceDeclarationFiles();
 
   const dtsFiles = collectFiles(ESM_DIR, '.d.ts');
 
