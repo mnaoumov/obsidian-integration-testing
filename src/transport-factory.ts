@@ -145,6 +145,7 @@ class AppiumTransportFactory {
       const appiumTransport = new AppiumTransport({
         appId,
         browser,
+        deviceId: options.deviceId,
         platform: 'android',
         ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath })
       });
