@@ -42,11 +42,17 @@
 
 import type { Browser } from 'webdriverio';
 
+import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import type {
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
 
+import { exec } from './exec.ts';
 import { log } from './log.ts';
 
 /**
@@ -64,6 +70,12 @@ export interface AppiumTransportConfig {
    * Created by the consumer via e.g. WebDriverIO's `remote()`.
    */
   browser: Browser;
+
+  /**
+   * The device UDID (e.g. `'emulator-5554'`).
+   * Used for `adb` commands when pushing files to the device.
+   */
+  deviceId: string;
 
   /**
    * Target platform. Determines WebView context naming and device file paths.
@@ -107,6 +119,7 @@ export class AppiumTransport implements ObsidianTransport {
   public readonly isMobile = true;
   private readonly appId: string;
   private readonly browser: Browser;
+  private readonly deviceId: string;
   private readonly platform: 'android' | 'ios';
   private readonly vaultBasePath: string;
 
@@ -117,6 +130,7 @@ export class AppiumTransport implements ObsidianTransport {
    */
   public constructor(config: AppiumTransportConfig) {
     this.browser = config.browser;
+    this.deviceId = config.deviceId;
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
@@ -173,18 +187,37 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
-   * Pushes vault files to the device.
+   * Pushes vault files to the device via compressed `adb push`.
+   *
+   * Creates a tar.gz archive of the local vault directory, pushes it to the
+   * device as a single file, and extracts it in-place. This avoids the
+   * webdriver `RangeError` on large base64 payloads and is significantly
+   * faster than per-file `browser.pushFile()` calls.
    *
    * @param vaultPath - The vault path (used as the vault directory name on device).
-   * @param files - Map of relative file paths to content strings.
+   * @param _files - Map of relative file paths to content strings (unused — adb pushes the directory directly).
    */
-  public async pushFiles(vaultPath: string, files: Record<string, string>): Promise<void> {
+  public async pushFiles(vaultPath: string, _files: Record<string, string>): Promise<void> {
     const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
+    const archiveName = `vault-${randomUUID()}.tar.gz`;
+    const localArchive = join(tmpdir(), archiveName);
+    const remoteArchive = `/data/local/tmp/${archiveName}`;
 
-    for (const [filePath, content] of Object.entries(files)) {
-      const deviceFilePath = `${deviceVaultPath}/${filePath.replace(/\\/g, '/')}`;
-      const base64Content = Buffer.from(content, 'utf-8').toString('base64');
-      await this.browser.pushFile(deviceFilePath, base64Content);
+    try {
+      log(`[appium-transport] Creating archive: ${localArchive}`);
+      await exec(['tar', 'czf', localArchive, '-C', vaultPath, '.'], { isQuiet: true });
+
+      log(`[appium-transport] Pushing archive to device ${this.deviceId}...`);
+      await exec(['adb', '-s', this.deviceId, 'push', localArchive, remoteArchive], { isQuiet: true });
+
+      log(`[appium-transport] Extracting archive on device at ${deviceVaultPath}...`);
+      await exec(['adb', '-s', this.deviceId, 'shell', 'mkdir', '-p', deviceVaultPath], { isQuiet: true });
+      await exec(['adb', '-s', this.deviceId, 'shell', 'tar', 'xzf', remoteArchive, '-C', deviceVaultPath], { isQuiet: true });
+
+      log('[appium-transport] Cleaning up remote archive...');
+      await exec(['adb', '-s', this.deviceId, 'shell', 'rm', remoteArchive], { isQuiet: true });
+    } finally {
+      await rm(localArchive, { force: true });
     }
   }
 
