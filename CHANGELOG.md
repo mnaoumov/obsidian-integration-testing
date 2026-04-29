@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.3.5
+
+- fix(appium): replace browser.pushFile with compressed adb push
+
 ## 2.3.4
 
 - docs: mention endpoint
