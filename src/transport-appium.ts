@@ -195,9 +195,9 @@ export class AppiumTransport implements ObsidianTransport {
    * faster than per-file `browser.pushFile()` calls.
    *
    * @param vaultPath - The vault path (used as the vault directory name on device).
-   * @param _files - Map of relative file paths to content strings (unused — adb pushes the directory directly).
+   * @param _files - Map of relative file paths to content buffers (unused — adb pushes the directory directly).
    */
-  public async pushFiles(vaultPath: string, _files: Record<string, string>): Promise<void> {
+  public async pushFiles(vaultPath: string, _files: Record<string, Uint8Array>): Promise<void> {
     const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
     const archiveName = `vault-${randomUUID()}.tar.gz`;
     const localArchive = join(tmpdir(), archiveName);

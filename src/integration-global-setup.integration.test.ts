@@ -16,6 +16,7 @@ import {
 } from 'vitest';
 
 import type { EnablePluginResult } from './enable-plugin.ts';
+import type { PopulateFilesParams } from './temp-vault.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
@@ -200,7 +201,7 @@ describe('plugin load detection', () => {
   const vault = new TempVault();
 
   beforeAll(async () => {
-    const files: Record<string, string> = {
+    const files: PopulateFilesParams = {
       '.obsidian/community-plugins.json': JSON.stringify([])
     };
 

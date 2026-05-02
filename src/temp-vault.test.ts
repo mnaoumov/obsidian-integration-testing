@@ -84,7 +84,7 @@ describe('populate', () => {
 
   it('should create empty folders for paths ending with /', () => {
     const vault = new TempVault('/vault');
-    vault.populate({ 'empty-dir/': '' });
+    vault.populate({ 'empty-dir/': undefined });
     expect(mockMkdirSync).toHaveBeenCalledWith(
       expect.stringMatching(/empty-dir/),
       { recursive: true }
@@ -92,11 +92,28 @@ describe('populate', () => {
     expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
-  it('should throw when folder path has non-empty content', () => {
+  it('should throw when folder path has defined content', () => {
     const vault = new TempVault('/vault');
     expect(() => {
       vault.populate({ 'bad-dir/': 'not empty' });
-    }).toThrow('Folder path "bad-dir/" must have empty content');
+    }).toThrow('Folder path "bad-dir/" must have undefined content');
+  });
+
+  it('should write binary files from Uint8Array', () => {
+    const vault = new TempVault('/vault');
+    const binaryContent = new Uint8Array([0x89, 0x50, 0x4E, 0x47]);
+    vault.populate({ 'image.png': binaryContent });
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      expect.stringMatching(/image\.png$/),
+      binaryContent
+    );
+  });
+
+  it('should throw when file path has undefined content', () => {
+    const vault = new TempVault('/vault');
+    expect(() => {
+      vault.populate({ 'note.md': undefined });
+    }).toThrow('File path "note.md" must have defined content; use a trailing "/" for folders');
   });
 
   it('should write multiple files', () => {

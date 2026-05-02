@@ -30,6 +30,25 @@ import {
   unregisterVault
 } from './vault-registry.ts';
 
+/**
+ * Content value for a single entry in a {@link PopulateFiles} map.
+ *
+ * - `string` — text file (written as UTF-8).
+ * - `Uint8Array` — binary file (written as raw bytes; `Buffer` is accepted
+ *   because `Buffer extends Uint8Array`).
+ * - `undefined` — empty folder (the key **must** end with `/`).
+ */
+export type PopulateFileContent = string | Uint8Array | undefined;
+
+/**
+ * A map of vault-relative paths to their content, used by
+ * {@link TempVault.populate}.
+ *
+ * Paths ending with `/` denote folders and **must** have an `undefined` value.
+ * All other paths are written as files.
+ */
+export type PopulateFilesParams = Record<string, PopulateFileContent>;
+
 const RM_RETRY_DELAY_IN_MILLISECONDS = 500;
 const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
 
@@ -71,19 +90,25 @@ export class TempVault {
   /**
    * Writes files and folders into the vault directory.
    * Parent directories are created automatically.
-   * Paths ending with `/` are treated as empty folders (content must be empty string).
+   *
+   * - `string` values are written as UTF-8 text files.
+   * - `Uint8Array` values (including `Buffer`) are written as binary files.
+   * - Paths ending with `/` are treated as empty folders (value must be `undefined`).
    *
    * @param files - Map of file/folder paths to content.
    */
-  public populate(files: Record<string, string>): void {
+  public populate(files: PopulateFilesParams): void {
     for (const [filePath, content] of Object.entries(files)) {
       const fullPath = join(this.path, filePath);
       if (filePath.endsWith('/')) {
-        if (content !== '') {
-          throw new Error(`Folder path "${filePath}" must have empty content`);
+        if (content !== undefined) {
+          throw new Error(`Folder path "${filePath}" must have undefined content`);
         }
         mkdirSync(fullPath, { recursive: true });
       } else {
+        if (content === undefined) {
+          throw new Error(`File path "${filePath}" must have defined content; use a trailing "/" for folders`);
+        }
         mkdirSync(dirname(fullPath), { recursive: true });
         writeFileSync(fullPath, content);
       }
@@ -138,10 +163,10 @@ export class TempVault {
    * Recursively reads all files from a directory into a flat map.
    *
    * @param dir - The directory to read.
-   * @returns A map of relative file paths to content strings.
+   * @returns A map of relative file paths to content buffers.
    */
-  private async collectFiles(dir: string): Promise<Record<string, string>> {
-    const result: Record<string, string> = {};
+  private async collectFiles(dir: string): Promise<Record<string, Uint8Array>> {
+    const result: Record<string, Uint8Array> = {};
     const entries = await readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
@@ -151,7 +176,7 @@ export class TempVault {
       if (entry.isDirectory()) {
         Object.assign(result, await this.collectFiles(fullPath));
       } else {
-        result[relativePath] = await readFile(fullPath, 'utf-8');
+        result[relativePath] = await readFile(fullPath);
       }
     }
 

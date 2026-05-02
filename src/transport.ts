@@ -67,9 +67,9 @@ export interface ObsidianTransport {
    * On mobile this uses the device's file transfer mechanism (e.g. Appium `pushFile`).
    *
    * @param vaultPath - The absolute path to the vault folder.
-   * @param files - Map of relative file paths to content strings.
+   * @param files - Map of relative file paths to content buffers.
    */
-  pushFiles?(vaultPath: string, files: Record<string, string>): Promise<void>;
+  pushFiles?(vaultPath: string, files: Record<string, Uint8Array>): Promise<void>;
 
   /**
    * Registers a vault path so Obsidian can target it.

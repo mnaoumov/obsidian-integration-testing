@@ -9,6 +9,10 @@ export type { TransportOptionsResolver } from './context-provider.ts';
 export { setTransportOptionsResolver } from './context-provider.ts';
 export type { EvalInObsidianParams } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
+export type {
+  PopulateFileContent,
+  PopulateFilesParams
+} from './temp-vault.ts';
 export { TempVault } from './temp-vault.ts';
 export type { AppiumTransportConfig } from './transport-appium.ts';
 export { AppiumTransport } from './transport-appium.ts';
