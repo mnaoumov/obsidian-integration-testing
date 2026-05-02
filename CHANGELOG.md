@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.3.6
+
+- docs: add current task investigation notes for cross-eval bug
+- fix: use unique result marker to prevent cross-eval stdout pollution
+- chore: update dependency lockfile
+
 ## 2.3.5
 
 - fix(appium): replace browser.pushFile with compressed adb push
