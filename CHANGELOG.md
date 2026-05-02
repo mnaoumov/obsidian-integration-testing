@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.4.0
+
+- feat: support binary files and typed folders in TempVault.populate()
+
 ## 2.3.6
 
 - docs: add current task investigation notes for cross-eval bug
