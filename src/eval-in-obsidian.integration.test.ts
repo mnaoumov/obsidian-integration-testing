@@ -11,6 +11,7 @@ import {
 
 import { ContextId } from './context-id.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { exec } from './exec.ts';
 import { TempVault } from './temp-vault.ts';
 
 interface AbArgs {
@@ -232,6 +233,26 @@ ${name}`;
       vaultPath
     });
     expect(result).toBe(10);
+  });
+
+  describe('--allow-focus-steal flag', () => {
+    const SLEEP_EXPRESSION = 'code=(async () => { await sleep(200); return "slept"; })()';
+    const EVAL_TIMEOUT_IN_MILLISECONDS = 3000;
+
+    it('should hang without --allow-focus-steal when using sleep()', async () => {
+      await expect(exec(
+        ['obsidian', 'eval', SLEEP_EXPRESSION],
+        { cwd: vaultPath, isQuiet: true, timeoutInMilliseconds: EVAL_TIMEOUT_IN_MILLISECONDS }
+      )).rejects.toThrow(/timed out/i);
+    });
+
+    it('should succeed with --allow-focus-steal when using sleep()', async () => {
+      const result = await exec(
+        ['obsidian', 'eval', '--allow-focus-steal', SLEEP_EXPRESSION],
+        { cwd: vaultPath, isQuiet: true, timeoutInMilliseconds: EVAL_TIMEOUT_IN_MILLISECONDS }
+      );
+      expect(result).toContain('slept');
+    });
   });
 
   describe('vault targeting', () => {

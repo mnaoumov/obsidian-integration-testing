@@ -164,6 +164,54 @@ describe('evalInObsidian', () => {
     })).rejects.toThrow('evalInObsidian: Obsidian returned non-JSON output');
   });
 
+  it('should pass resultMarker in transport options', async () => {
+    mockTransportEvaluate.mockResolvedValue('1');
+    await evalInObsidian({
+      fn(): number {
+        return 1;
+      }
+    });
+    expect(mockTransportEvaluate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ resultMarker: expect.stringContaining('__obsidianEvalResult_') as string })
+    );
+  });
+
+  it('should strip result marker prefix from transport output', async () => {
+    mockTransportEvaluate.mockImplementation((_expression, options) => {
+      return Promise.resolve(`${options.resultMarker}{"key":"value"}`);
+    });
+    const result = await evalInObsidian({
+      fn(): Record<string, string> {
+        return { key: 'value' };
+      }
+    });
+    expect(result).toEqual({ key: 'value' });
+  });
+
+  it('should return undefined when transport returns marker alone', async () => {
+    mockTransportEvaluate.mockImplementation((_expression, options) => {
+      return Promise.resolve(options.resultMarker);
+    });
+    const result = await evalInObsidian({
+      fn(): string {
+        return '';
+      }
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it('should include result marker in generated expression', async () => {
+    mockTransportEvaluate.mockResolvedValue('1');
+    await evalInObsidian({
+      fn(): number {
+        return 1;
+      }
+    });
+    const expression = getLastExpression();
+    expect(expression).toContain('__obsidianEvalResult_');
+  });
+
   it('should rethrow transport errors', async () => {
     mockTransportEvaluate.mockRejectedValue(new Error('Something unexpected'));
     await expect(evalInObsidian({

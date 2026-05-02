@@ -23,6 +23,7 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
+const INTERNAL_RESULT_MARKER = '__cliTransportInternal__';
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
@@ -50,7 +51,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @returns The normalized result string (transport-specific prefixes stripped).
    */
   public async evaluate(expression: string, options: TransportEvalOptions): Promise<string> {
-    const command = ['obsidian', 'eval', `code=${expression}`];
+    const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${expression}`];
 
     let resultStr: string;
     try {
@@ -72,12 +73,21 @@ export class DesktopCliTransport implements ObsidianTransport {
       throw new Error(`Unexpected empty response from Obsidian for path: ${options.cwd}`);
     }
 
-    // The CLI may prepend error/warning lines before the result.
-    // Find the last `=> ` line which contains the actual result.
+    // CLI stdout may contain stale output from other concurrent CLI processes
+    // (Obsidian CLI IPC broadcast bug). Search for the result marker directly in
+    // The raw output — no need to rely on the `=> ` prefix.
+    const markerIndex = resultStr.indexOf(options.resultMarker);
+    if (markerIndex !== -1) {
+      return resultStr.slice(markerIndex);
+    }
+
+    // Fallback for internal expressions (vault registration, polling) that do not
+    // Prepend the marker: extract the last `=> ` line.
     const lines = resultStr.split('\n');
-    const resultLine = lines.findLast((line) => line.startsWith('=> '));
+    const ARROW_PREFIX = '=> ';
+    const resultLine = lines.findLast((line) => line.startsWith(ARROW_PREFIX));
     if (resultLine) {
-      return resultLine.slice('=> '.length);
+      return resultLine.slice(ARROW_PREFIX.length);
     }
 
     return resultStr;
@@ -120,7 +130,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const registerExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-open', ${JSON.stringify(vaultPath)}, false);`
     );
-    await this.evaluate(registerExpr, { cwd: process.cwd() });
+    await this.evaluate(registerExpr, { cwd: process.cwd(), resultMarker: INTERNAL_RESULT_MARKER });
 
     await this.enablePluginsInLocalStorage(vaultPath);
 
@@ -132,7 +142,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
-        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
+        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath, resultMarker: INTERNAL_RESULT_MARKER });
         if (JSON.parse(basePath) === vaultPath) {
           log('[cli-transport] Vault is ready.');
           return;
@@ -163,7 +173,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       }, 0);
     `);
     try {
-      await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+      await this.evaluate(destroyExpr, { cwd: vaultPath, resultMarker: INTERNAL_RESULT_MARKER, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       log('[cli-transport] Window destroy command sent.');
     } catch (error: unknown) {
       log(`[cli-transport] Window destroy failed (non-fatal): ${serializeError(error)}`);
@@ -177,7 +187,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
     );
     try {
-      await this.evaluate(removeExpr, { cwd: process.cwd(), timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+      await this.evaluate(removeExpr, { cwd: process.cwd(), resultMarker: INTERNAL_RESULT_MARKER, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       log('[cli-transport] Vault removed from registry.');
     } catch (error: unknown) {
       log(`[cli-transport] Vault registry removal failed (non-fatal): ${serializeError(error)}`);
@@ -216,7 +226,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const enableExpr = buildSimpleExpression(
       `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`
     );
-    await this.evaluate(enableExpr, { cwd: process.cwd() });
+    await this.evaluate(enableExpr, { cwd: process.cwd(), resultMarker: INTERNAL_RESULT_MARKER });
     log(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
 

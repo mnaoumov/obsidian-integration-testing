@@ -102,6 +102,15 @@ export interface TransportEvalOptions {
   readonly cwd: string;
 
   /**
+   * A unique marker string prepended to the expression result.
+   * Used by transports (e.g. CLI) to disambiguate the intended result
+   * from stale output produced by other concurrent CLI processes.
+   *
+   * @see https://forum.obsidian.md/t/cli-concurrent-obsidian-eval-calls-leak-stdout-between-processes/
+   */
+  readonly resultMarker: string;
+
+  /**
    * Timeout in milliseconds for the evaluation command.
    */
   readonly timeoutInMilliseconds?: number;
