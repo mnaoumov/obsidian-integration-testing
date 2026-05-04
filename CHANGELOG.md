@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.5.4
+
+- fix(appium): use relative archive path instead of --force-local for tar compatibility
+
 ## 2.5.3
 
 - fix(appium): add --force-local to tar to fix Windows drive-letter paths
