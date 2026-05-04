@@ -205,7 +205,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     try {
       log(`[appium-transport] Creating archive: ${localArchive}`);
-      await exec(['tar', 'czf', localArchive, '-C', vaultPath, '.'], { isQuiet: true });
+      await exec(['tar', 'czf', localArchive, '--force-local', '-C', vaultPath, '.'], { isQuiet: true });
 
       log(`[appium-transport] Pushing archive to device ${this.deviceId}...`);
       await exec(['adb', '-s', this.deviceId, 'push', localArchive, remoteArchive], { isQuiet: true });
