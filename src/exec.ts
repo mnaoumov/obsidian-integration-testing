@@ -453,9 +453,10 @@ function isExecArg(part: CommandPart): part is ExecArg {
 /**
  * Spawns a child process via the appropriate shell.
  *
- * On Windows, if the command contains newlines (which `cmd.exe` cannot handle)
- * and the raw args array is available, spawns the process directly without
- * any shell — passing args via `CreateProcess`, which avoids all quoting issues.
+ * On Windows, when the raw args array is available, spawns the process
+ * directly without any shell — passing args via `CreateProcess`, which
+ * avoids all `cmd.exe` quoting/escaping issues (nested quotes, metacharacters,
+ * newlines in args, etc.).
  *
  * On Windows (cmd.exe path), applies `^`-escaping for cmd metacharacters.
  *
@@ -465,10 +466,7 @@ function isExecArg(part: CommandPart): part is ExecArg {
  * @returns The spawned child process.
  */
 function spawnViaShell(command: string, cwd: string, rawArgs?: string[]): ChildProcessWithoutNullStreams {
-  if (process.platform === 'win32' && command.includes('\n')) {
-    if (!rawArgs) {
-      throw new Error('Commands containing newlines cannot be executed through cmd.exe on Windows. Pass an argument array instead of a string.');
-    }
+  if (process.platform === 'win32' && rawArgs) {
     const [program, ...args] = rawArgs;
     /* v8 ignore start -- Always truthy; rawArgs comes from the array path which has at least one element. */
     if (!program) {
@@ -480,6 +478,10 @@ function spawnViaShell(command: string, cwd: string, rawArgs?: string[]): ChildP
       env: CHILD_ENV,
       stdio: 'pipe'
     });
+  }
+
+  if (process.platform === 'win32' && command.includes('\n')) {
+    throw new Error('Commands containing newlines cannot be executed through cmd.exe on Windows. Pass an argument array instead of a string.');
   }
 
   const shellCommand = process.platform === 'win32' ? cmdEscapeCommandLine(command) : command;
