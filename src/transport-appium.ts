@@ -214,6 +214,9 @@ export class AppiumTransport implements ObsidianTransport {
       await exec(['adb', '-s', this.deviceId, 'shell', 'mkdir', '-p', deviceVaultPath], { isQuiet: true });
       await exec(['adb', '-s', this.deviceId, 'shell', 'tar', 'xzf', remoteArchive, '-C', deviceVaultPath], { isQuiet: true });
 
+      log('[appium-transport] Flushing filesystem buffers...');
+      await exec(['adb', '-s', this.deviceId, 'shell', 'sync'], { isQuiet: true });
+
       log('[appium-transport] Cleaning up remote archive...');
       await exec(['adb', '-s', this.deviceId, 'shell', 'rm', remoteArchive], { isQuiet: true });
     } finally {
