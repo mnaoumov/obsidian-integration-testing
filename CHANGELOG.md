@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.5.1
+
+- fix(cli): wrap require() in async IIFE and use unique invoke names
+
 ## 2.5.0
 
 - refactor(cli): use temp script files instead of inline expressions Write eval expressions to temp .cjs files
