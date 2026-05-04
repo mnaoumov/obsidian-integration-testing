@@ -2,7 +2,7 @@
 
 ## 2.5.6
 
-- fix(cli-transport): use existing registered vault for IPC eval instead of process.cwd() registerVault and unregisterVault used process.cwd() as the cwd for vault-open/vault-remove IPC evals, but obsidian eval targets the vault window matching cwd. Since the project directory isn't a registered vault, the eval would fail with "Script did not execute". Now uses getAnyRegisteredVaultPath() to target an existing vault window for IPC commands. Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+- fix(cli-transport): use existing registered vault for IPC eval instead of process.
 
 ## 2.5.5
 
