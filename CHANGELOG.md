@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.6.1
+
+- fix(appium): remove --force-local tar flag for bsdtar compatibility
+
 ## 2.6.0
 
 - fix(emulator): add DNS server flag to ensure network access
