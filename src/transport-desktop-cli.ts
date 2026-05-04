@@ -263,7 +263,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const enableExpr = buildSimpleExpression(
       `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`
     );
-    await this.evaluate(enableExpr, { cwd: process.cwd() });
+    await this.evaluate(enableExpr, { cwd: vaultPath });
     log(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
 
