@@ -1,5 +1,6 @@
 import type { MockInstance } from 'vitest';
 
+import process from 'node:process';
 import vm from 'node:vm';
 import {
   beforeEach,
@@ -9,15 +10,20 @@ import {
   vi
 } from 'vitest';
 
+import { getVaultId } from './obsidian-config.ts';
 import { DesktopCliTransport } from './transport-desktop-cli.ts';
 import { ensureNonNullable } from './type-guards.ts';
+
+interface ExecOptions extends Record<string, unknown> {
+  cwd: string;
+}
 
 interface ScriptErrorEnvelope {
   type: string;
   value: string;
 }
 
-const mockExec = vi.hoisted(() => vi.fn<() => Promise<string>>().mockResolvedValue(''));
+const mockExec = vi.hoisted(() => vi.fn<(command: string | string[], options?: Record<string, unknown>) => Promise<string>>().mockResolvedValue(''));
 
 vi.mock('./exec.ts', () => ({
   exec: mockExec
@@ -186,6 +192,73 @@ describe('generated script execution', () => {
     const envelope = await runGeneratedScript('(() => { throw new Error("boom") })()') as ScriptErrorEnvelope;
     expect(envelope.type).toBe('error');
     expect(envelope.value).toContain('Error: boom');
+  });
+});
+
+describe('DesktopCliTransport.registerVault', () => {
+  it('should pass vaultPath as cwd to enablePluginsInLocalStorage eval', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    // RegisterVault calls evaluate 3 times:
+    //   1. vault-open IPC (cwd: process.cwd())
+    //   2. enablePluginsInLocalStorage (cwd: vaultPath)
+    //   3. poll loop (cwd: vaultPath)
+    const secondCall = ensureNonNullable(mockExec.mock.calls[1]);
+    const options = secondCall[1] as ExecOptions;
+    expect(options.cwd).toBe(vaultPath);
+  });
+
+  it('should write enable-plugin localStorage script when getVaultId returns a value', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    // The 2nd writeFile call is the enablePluginsInLocalStorage script.
+    const secondWrite = ensureNonNullable(mockWriteFile.mock.calls[1]);
+    const scriptContent = secondWrite[1];
+    expect(scriptContent).toContain('enable-plugin-abc123');
+  });
+
+  it('should skip enablePluginsInLocalStorage when getVaultId returns undefined', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue(undefined);
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    // With getVaultId returning undefined, only 2 exec calls (IPC + poll), not 3.
+    expect(mockExec).toHaveBeenCalledTimes(2);
+  });
+
+  it('should use process.cwd() for the initial vault-open IPC eval', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    const firstCall = ensureNonNullable(mockExec.mock.calls[0]);
+    const options = firstCall[1] as ExecOptions;
+    expect(options.cwd).toBe(process.cwd());
+  });
+
+  it('should use vaultPath as cwd for the poll loop eval', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    // The poll loop call is the 3rd exec invocation.
+    const thirdCall = ensureNonNullable(mockExec.mock.calls[2]);
+    const options = thirdCall[1] as ExecOptions;
+    expect(options.cwd).toBe(vaultPath);
   });
 });
 
