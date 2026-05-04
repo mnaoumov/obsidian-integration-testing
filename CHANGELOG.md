@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.5.0
+
+- refactor(cli): use temp script files instead of inline expressions Write eval expressions to temp .cjs files
+
 ## 2.4.0
 
 - feat: support binary files and typed folders in TempVault.populate()
