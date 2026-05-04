@@ -24,6 +24,7 @@ import type {
 } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { buildEmulatorArgs } from './emulator-args.ts';
 import { log } from './log.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
@@ -337,8 +338,9 @@ class AppiumTransportFactory {
 
   private startEmulator(avdName: string): ChildProcess {
     const emulatorBinary = this.resolveEmulatorBinary();
-    this.log(`Running: ${emulatorBinary} -avd ${avdName} -no-snapshot-save`);
-    const child = spawn(emulatorBinary, ['-avd', avdName, '-no-snapshot-save'], {
+    const args = buildEmulatorArgs(avdName);
+    this.log(`Running: ${emulatorBinary} ${args.join(' ')}`);
+    const child = spawn(emulatorBinary, args, {
       detached: true,
       stdio: ['ignore', 'ignore', 'ignore']
     });
