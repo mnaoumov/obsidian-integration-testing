@@ -141,7 +141,7 @@ describe('exec', () => {
     }
   });
 
-  it('should spawn directly without shell when command has newlines and raw args on Windows', async () => {
+  it('should spawn directly without shell when command is an array on Windows', async () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
