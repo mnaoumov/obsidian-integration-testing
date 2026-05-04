@@ -89,13 +89,13 @@ describe('AppiumTransport.pushFiles', () => {
     expect(archiveArg).toMatch(/^vault-.*\.tar\.gz$/);
   });
 
-  it('should include --force-local flag for Windows tar compatibility', async () => {
+  it('should not include --force-local flag for cross-platform tar compatibility', async () => {
     await transport.pushFiles('/tmp/vault', {});
 
     const tarCall = ensureNonNullable(mockExec.mock.calls[0]);
     const command = tarCall[0] as string[];
 
-    expect(command).toContain('--force-local');
+    expect(command).not.toContain('--force-local');
   });
 
   it('should use -C with vaultPath to archive vault contents', async () => {
