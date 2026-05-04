@@ -189,5 +189,9 @@ describe('generated script execution', () => {
 });
 
 function getWrittenScript(mock: MockInstance<(path: string, content: string) => Promise<void>>): string {
-  return mock.mock.calls[0][1];
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error('Expected mock to have been called at least once');
+  }
+  return call[1];
 }
