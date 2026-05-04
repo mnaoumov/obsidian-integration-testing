@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2.5.5
+
+- fix(appium): flush filesystem buffers after tar extraction
+- fix(cli-transport): use vaultPath instead of process.cwd() in enablePluginsInLocalStorage
+- fix(appium): add --force-local to tar
+
 ## 2.5.4
 
 - fix(appium): use relative archive path instead of --force-local for tar compatibility
