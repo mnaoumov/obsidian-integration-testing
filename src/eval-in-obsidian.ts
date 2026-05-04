@@ -177,8 +177,13 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   }
 
   if (parsed !== null && typeof parsed === 'object' && EVAL_ERROR_MARKER in parsed) {
-    const errorDetail = (parsed as Record<string, unknown>)[EVAL_ERROR_MARKER];
-    throw new Error(`evalInObsidian: Error inside Obsidian:\n${String(errorDetail)}`);
+    const errorDetail = String((parsed as Record<string, unknown>)[EVAL_ERROR_MARKER]);
+    // Rewrite bare-origin localhost stack frames like "(http://localhost/:915:32)"
+    // So Vitest's source-map resolver won't extract "/" as the file path and crash
+    // With EISDIR when it tries to readFileSync on the root directory.
+    const sanitizedDetail = errorDetail
+      .replace(/\(https?:\/\/localhost\/:(?<line>\d)/g, '(obsidian-webview:$<line>');
+    throw new Error(`evalInObsidian: Error inside Obsidian:\n${sanitizedDetail}`);
   }
 
   return parsed as Result;
