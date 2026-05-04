@@ -178,7 +178,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     );
     await this.evaluate(registerExpr, { cwd: existingVaultPath });
 
-    await this.enablePluginsInLocalStorage(vaultPath);
+    await this.enablePluginsInLocalStorage(vaultPath, existingVaultPath);
 
     const pollExpr = buildSimpleExpression(
       'return JSON.stringify(app.vault.adapter.getBasePath());'
@@ -266,8 +266,11 @@ export class DesktopCliTransport implements ObsidianTransport {
    * `obsidian.json`) and before the new vault window finishes loading.
    *
    * @param vaultPath - The absolute path to the vault folder.
+   * @param evalTargetVaultPath - The vault path to use as eval target (an existing, loaded vault).
+   *   localStorage is shared across all Obsidian windows (same Electron origin), so the
+   *   `localStorage.setItem` call can run in any loaded vault window.
    */
-  private async enablePluginsInLocalStorage(vaultPath: string): Promise<void> {
+  private async enablePluginsInLocalStorage(vaultPath: string, evalTargetVaultPath: string): Promise<void> {
     const vaultId = getVaultId(vaultPath);
     if (!vaultId) {
       log('[cli-transport] Could not find vault ID — skipping localStorage trust flag.');
@@ -277,7 +280,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const enableExpr = buildSimpleExpression(
       `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`
     );
-    await this.evaluate(enableExpr, { cwd: vaultPath });
+    await this.evaluate(enableExpr, { cwd: evalTargetVaultPath });
     log(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
 
