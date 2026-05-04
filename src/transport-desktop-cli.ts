@@ -7,6 +7,14 @@
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
+import {
+  mkdir,
+  readFile,
+  unlink,
+  writeFile
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 import type {
@@ -16,6 +24,7 @@ import type {
 
 import { exec } from './exec.ts';
 import { log } from './log.ts';
+import { noop } from './noop.ts';
 import {
   getVaultId,
   isCliEnabled,
@@ -23,7 +32,6 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
-const INTERNAL_RESULT_MARKER = '__cliTransportInternal__';
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
@@ -43,6 +51,11 @@ export class DesktopCliTransport implements ObsidianTransport {
   /**
    * Evaluates a JavaScript expression inside Obsidian via `obsidian eval`.
    *
+   * Writes the expression to a temporary `.cjs` file and executes a tiny
+   * `require().invoke()` call via the CLI. The result is written to a
+   * `.result.json` file by the script, avoiding CLI stdout size limits
+   * and IPC buffer issues.
+   *
    * Handles auto-start: if Obsidian is not running, launches it via URI protocol
    * and retries until it becomes available.
    *
@@ -51,46 +64,52 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @returns The normalized result string (transport-specific prefixes stripped).
    */
   public async evaluate(expression: string, options: TransportEvalOptions): Promise<string> {
-    const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${expression}`];
+    const SLICE_START = 2;
+    const scriptId = String(Math.random()).slice(SLICE_START);
+    const scriptDir = join(tmpdir(), 'obsidian-integration-testing');
+    const scriptPath = join(scriptDir, `${scriptId}.cjs`);
+    const resultPath = join(scriptDir, `${scriptId}.result.json`);
 
-    let resultStr: string;
+    await mkdir(scriptDir, { recursive: true });
+
+    const scriptContent = buildScriptFile(expression, resultPath);
+    await writeFile(scriptPath, scriptContent);
+
     try {
-      resultStr = await exec(command, {
-        cwd: options.cwd,
-        isQuiet: true,
-        ...(options.timeoutInMilliseconds !== undefined && { timeoutInMilliseconds: options.timeoutInMilliseconds })
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
-        resultStr = await this.ensureObsidianRunningAndRetry(command, options.cwd);
-      } else {
-        throw error;
+      const requireExpr = `await require(${JSON.stringify(scriptPath.replace(/\\/g, '/'))}).invoke()`;
+      const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${requireExpr}`];
+
+      try {
+        await exec(command, {
+          cwd: options.cwd,
+          isQuiet: true,
+          ...(options.timeoutInMilliseconds !== undefined && { timeoutInMilliseconds: options.timeoutInMilliseconds })
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
+          await this.ensureObsidianRunningAndRetry(command, options.cwd);
+        } else {
+          throw error;
+        }
       }
-    }
 
-    if (resultStr === '' || resultStr === 'Vault not found.') {
-      throw new Error(`Unexpected empty response from Obsidian for path: ${options.cwd}`);
-    }
+      let resultStr: string;
+      try {
+        resultStr = await readFile(resultPath, 'utf-8');
+      } catch {
+        throw new Error(`Obsidian did not write a result file for path: ${options.cwd}`);
+      }
 
-    // CLI stdout may contain stale output from other concurrent CLI processes
-    // (Obsidian CLI IPC broadcast bug). Search for the result marker directly in
-    // The raw output — no need to rely on the `=> ` prefix.
-    const markerIndex = resultStr.indexOf(options.resultMarker);
-    if (markerIndex !== -1) {
-      return resultStr.slice(markerIndex);
-    }
+      if (resultStr === '' || resultStr === 'Vault not found.') {
+        throw new Error(`Unexpected empty response from Obsidian for path: ${options.cwd}`);
+      }
 
-    // Fallback for internal expressions (vault registration, polling) that do not
-    // Prepend the marker: extract the last `=> ` line.
-    const lines = resultStr.split('\n');
-    const ARROW_PREFIX = '=> ';
-    const resultLine = lines.findLast((line) => line.startsWith(ARROW_PREFIX));
-    if (resultLine) {
-      return resultLine.slice(ARROW_PREFIX.length);
+      return resultStr;
+    } finally {
+      await unlink(scriptPath).catch(noop);
+      await unlink(resultPath).catch(noop);
     }
-
-    return resultStr;
   }
 
   /**
@@ -130,7 +149,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const registerExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-open', ${JSON.stringify(vaultPath)}, false);`
     );
-    await this.evaluate(registerExpr, { cwd: process.cwd(), resultMarker: INTERNAL_RESULT_MARKER });
+    await this.evaluate(registerExpr, { cwd: process.cwd() });
 
     await this.enablePluginsInLocalStorage(vaultPath);
 
@@ -142,7 +161,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
-        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath, resultMarker: INTERNAL_RESULT_MARKER });
+        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
         if (JSON.parse(basePath) === vaultPath) {
           log('[cli-transport] Vault is ready.');
           return;
@@ -173,7 +192,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       }, 0);
     `);
     try {
-      await this.evaluate(destroyExpr, { cwd: vaultPath, resultMarker: INTERNAL_RESULT_MARKER, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+      await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       log('[cli-transport] Window destroy command sent.');
     } catch (error: unknown) {
       log(`[cli-transport] Window destroy failed (non-fatal): ${serializeError(error)}`);
@@ -187,7 +206,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
     );
     try {
-      await this.evaluate(removeExpr, { cwd: process.cwd(), resultMarker: INTERNAL_RESULT_MARKER, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+      await this.evaluate(removeExpr, { cwd: process.cwd(), timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       log('[cli-transport] Vault removed from registry.');
     } catch (error: unknown) {
       log(`[cli-transport] Vault registry removal failed (non-fatal): ${serializeError(error)}`);
@@ -226,7 +245,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     const enableExpr = buildSimpleExpression(
       `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`
     );
-    await this.evaluate(enableExpr, { cwd: process.cwd(), resultMarker: INTERNAL_RESULT_MARKER });
+    await this.evaluate(enableExpr, { cwd: process.cwd() });
     log(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
 
@@ -235,9 +254,8 @@ export class DesktopCliTransport implements ObsidianTransport {
    *
    * @param command - The CLI command array to retry.
    * @param cwd - The working directory.
-   * @returns The result string from the successful eval.
    */
-  private async ensureObsidianRunningAndRetry(command: string[], cwd: string): Promise<string> {
+  private async ensureObsidianRunningAndRetry(command: string[], cwd: string): Promise<void> {
     log('[cli-transport] Obsidian is not running. Starting Obsidian...');
 
     try {
@@ -251,9 +269,9 @@ export class DesktopCliTransport implements ObsidianTransport {
     while (Date.now() < deadline) {
       await delay(AUTO_START_POLL_INTERVAL_IN_MILLISECONDS);
       try {
-        const result = await exec(command, { cwd, isQuiet: true });
+        await exec(command, { cwd, isQuiet: true });
         log('[cli-transport] Obsidian CLI responded.');
-        return result;
+        return;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (!message.includes(UNABLE_TO_FIND_OBSIDIAN)) {
@@ -276,6 +294,35 @@ export class DesktopCliTransport implements ObsidianTransport {
  */
 function buildIpcExpression(ipcStatement: string): string {
   return buildSimpleExpression(ipcStatement);
+}
+
+/**
+ * Builds the content of a temporary `.cjs` script file.
+ *
+ * The script defines an async `invoke()` function that evaluates the
+ * expression, writes the result (or error) to `resultPath`, and is
+ * exported for the CLI to `require()` and call.
+ *
+ * @param expression - The JavaScript expression to evaluate.
+ * @param resultPath - The absolute path to the result file.
+ * @returns The script file content.
+ */
+function buildScriptFile(expression: string, resultPath: string): string {
+  const resultPathJson = JSON.stringify(resultPath.replace(/\\/g, '/'));
+  return `"use strict";
+const fs = require("fs");
+
+async function invoke() {
+  try {
+    const result = await (${expression});
+    fs.writeFileSync(${resultPathJson}, result == null ? "" : String(result));
+  } catch (err) {
+    fs.writeFileSync(${resultPathJson}, "SCRIPT_ERROR:" + String(err));
+  }
+}
+
+exports.invoke = invoke;
+`;
 }
 
 /**

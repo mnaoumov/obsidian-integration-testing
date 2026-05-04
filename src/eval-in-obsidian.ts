@@ -25,7 +25,6 @@ import { serializeError } from './serialize-error.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
 const EVAL_ERROR_MARKER = '__obsidianEvalError__';
-const RESULT_MARKER_PREFIX = '__obsidianEvalResult_';
 
 interface ExportsWithDefault {
   default: unknown;
@@ -132,7 +131,6 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
 
   const SLICE_START = 2;
   const randomSuffix = String(Math.random()).slice(SLICE_START);
-  const resultMarker = `${RESULT_MARKER_PREFIX}${randomSuffix}__`;
   const contextExpr = contextId
     ? `((window.__obsidianContexts__ ??= {})["${String(contextId)}"] ??= {})`
     : '{}';
@@ -157,23 +155,17 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   try {
     const result${randomSuffix} = await fn${randomSuffix}(fullArgs${randomSuffix});
     if (result${randomSuffix} === undefined) {
-      return "${resultMarker}";
+      return "";
     }
-    return "${resultMarker}" + JSON.stringify(result${randomSuffix});
+    return JSON.stringify(result${randomSuffix});
   } catch (evalError${randomSuffix}) {
-    return "${resultMarker}" + JSON.stringify({ ${EVAL_ERROR_MARKER}: serializeError(evalError${randomSuffix}) });
+    return JSON.stringify({ ${EVAL_ERROR_MARKER}: serializeError(evalError${randomSuffix}) });
   }
 })()`;
 
-  const rawResult = await transport.evaluate(expression, { cwd, resultMarker });
+  const resultStr = await transport.evaluate(expression, { cwd });
 
-  if (rawResult === NO_OUTPUT) {
-    return undefined as Result;
-  }
-
-  const resultStr = rawResult.startsWith(resultMarker) ? rawResult.slice(resultMarker.length) : rawResult;
-
-  if (resultStr === '') {
+  if (resultStr === '' || resultStr === NO_OUTPUT) {
     return undefined as Result;
   }
 
@@ -181,7 +173,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   try {
     parsed = JSON.parse(resultStr);
   } catch {
-    throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${rawResult}`);
+    throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${resultStr}`);
   }
 
   if (parsed !== null && typeof parsed === 'object' && EVAL_ERROR_MARKER in parsed) {
