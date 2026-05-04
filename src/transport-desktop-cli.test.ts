@@ -199,20 +199,21 @@ describe('generated script execution', () => {
 });
 
 describe('DesktopCliTransport.registerVault', () => {
-  it('should pass vaultPath as cwd to enablePluginsInLocalStorage eval', async () => {
+  it('should use existing vault as cwd for enablePluginsInLocalStorage eval', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');
+    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue('/existing-vault');
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);
 
     // RegisterVault calls evaluate 3 times:
     //   1. vault-open IPC (cwd: existing registered vault)
-    //   2. enablePluginsInLocalStorage (cwd: vaultPath)
+    //   2. enablePluginsInLocalStorage (cwd: existing registered vault — localStorage is shared)
     //   3. poll loop (cwd: vaultPath)
     const secondCall = ensureNonNullable(mockExec.mock.calls[1]);
     const options = secondCall[1] as ExecOptions;
-    expect(options.cwd).toBe(vaultPath);
+    expect(options.cwd).toBe('/existing-vault');
   });
 
   it('should write enable-plugin localStorage script when getVaultId returns a value', async () => {
