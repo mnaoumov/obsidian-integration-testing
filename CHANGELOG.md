@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.5.2
+
+- refactor(cli): use JSON envelope for script result communication
+
 ## 2.5.1
 
 - fix(cli): wrap require() in async IIFE and use unique invoke names
