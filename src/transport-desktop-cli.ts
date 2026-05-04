@@ -7,6 +7,7 @@
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
+import { existsSync } from 'node:fs';
 import {
   mkdir,
   readFile,
@@ -23,6 +24,7 @@ import type {
 } from './transport.ts';
 
 import { exec } from './exec.ts';
+import { getFunctionExpressionString } from './function-expression.ts';
 import { log } from './log.ts';
 import { noop } from './noop.ts';
 import {
@@ -31,6 +33,18 @@ import {
   isVaultRegistered
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
+
+/**
+ * Discriminated envelope written by the temporary script file.
+ *
+ * - `{ value: string, type: 'error' }` — the expression threw; `value` is the error message.
+ * - `{ value: '', type: 'null' }` — the expression returned `null`.
+ * - `{ value: '', type: 'undefined' }` — the expression returned `undefined`.
+ * - `{ value: string }` — the expression returned a string value (no `type` field).
+ */
+type ScriptResultEnvelope =
+  | { type: 'error' | 'null' | 'undefined'; value: string }
+  | { value: string };
 
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
@@ -95,18 +109,21 @@ export class DesktopCliTransport implements ObsidianTransport {
         }
       }
 
-      let resultStr: string;
-      try {
-        resultStr = await readFile(resultPath, 'utf-8');
-      } catch {
-        throw new Error(`Obsidian did not write a result file for path: ${options.cwd}`);
+      if (!existsSync(resultPath)) {
+        throw new Error(`Script did not execute for path: ${options.cwd} — the vault may not be found or Obsidian did not run the eval.`);
       }
 
-      if (resultStr === '' || resultStr === 'Vault not found.') {
-        throw new Error(`Unexpected empty response from Obsidian for path: ${options.cwd}`);
+      const resultStr = await readFile(resultPath, 'utf-8');
+      const envelope = JSON.parse(resultStr) as ScriptResultEnvelope;
+
+      if ('type' in envelope) {
+        if (envelope.type === 'error') {
+          throw new Error(`Script error in Obsidian for path: ${options.cwd}: ${envelope.value}`);
+        }
+        return '';
       }
 
-      return resultStr;
+      return envelope.value;
     } finally {
       await unlink(scriptPath).catch(noop);
       await unlink(resultPath).catch(noop);
@@ -313,13 +330,20 @@ function buildScriptFile(expression: string, resultPath: string, invokeName: str
   const resultPathJson = JSON.stringify(resultPath.replace(/\\/g, '/'));
   return `"use strict";
 const fs = require("fs");
+const serializeError = ${getFunctionExpressionString(serializeError)};
 
 async function ${invokeName}() {
   try {
     const result = await (${expression});
-    fs.writeFileSync(${resultPathJson}, result == null ? "" : String(result));
+    if (result === undefined) {
+      fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: "", type: "undefined" }));
+    } else if (result === null) {
+      fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: "", type: "null" }));
+    } else {
+      fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: String(result) }));
+    }
   } catch (err) {
-    fs.writeFileSync(${resultPathJson}, "SCRIPT_ERROR:" + String(err));
+    fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: serializeError(err), type: "error" }));
   }
 }
 
