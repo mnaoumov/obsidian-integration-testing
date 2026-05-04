@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 
 import { DesktopCliTransport } from './transport-desktop-cli.ts';
+import { ensureNonNullable } from './type-guards.ts';
 
 interface ScriptErrorEnvelope {
   type: string;
@@ -189,9 +190,5 @@ describe('generated script execution', () => {
 });
 
 function getWrittenScript(mock: MockInstance<(path: string, content: string) => Promise<void>>): string {
-  const call = mock.mock.calls[0];
-  if (!call) {
-    throw new Error('Expected mock to have been called at least once');
-  }
-  return call[1];
+  return ensureNonNullable(mock.mock.calls[0])[1];
 }
