@@ -72,11 +72,12 @@ export class DesktopCliTransport implements ObsidianTransport {
 
     await mkdir(scriptDir, { recursive: true });
 
-    const scriptContent = buildScriptFile(expression, resultPath);
+    const invokeName = `invoke_${scriptId}`;
+    const scriptContent = buildScriptFile(expression, resultPath, invokeName);
     await writeFile(scriptPath, scriptContent);
 
     try {
-      const requireExpr = `await require(${JSON.stringify(scriptPath.replace(/\\/g, '/'))}).invoke()`;
+      const requireExpr = `(async () => { await require(${JSON.stringify(scriptPath.replace(/\\/g, '/'))}).${invokeName}() })()`;
       const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${requireExpr}`];
 
       try {
@@ -305,14 +306,15 @@ function buildIpcExpression(ipcStatement: string): string {
  *
  * @param expression - The JavaScript expression to evaluate.
  * @param resultPath - The absolute path to the result file.
+ * @param invokeName - The unique function name to export (avoids collisions).
  * @returns The script file content.
  */
-function buildScriptFile(expression: string, resultPath: string): string {
+function buildScriptFile(expression: string, resultPath: string, invokeName: string): string {
   const resultPathJson = JSON.stringify(resultPath.replace(/\\/g, '/'));
   return `"use strict";
 const fs = require("fs");
 
-async function invoke() {
+async function ${invokeName}() {
   try {
     const result = await (${expression});
     fs.writeFileSync(${resultPathJson}, result == null ? "" : String(result));
@@ -321,7 +323,7 @@ async function invoke() {
   }
 }
 
-exports.invoke = invoke;
+exports.${invokeName} = ${invokeName};
 `;
 }
 
