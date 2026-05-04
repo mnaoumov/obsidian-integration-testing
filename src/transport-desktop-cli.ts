@@ -92,7 +92,10 @@ export class DesktopCliTransport implements ObsidianTransport {
     await writeFile(scriptPath, scriptContent);
 
     try {
-      const requireExpr = `(async () => { await require(${JSON.stringify(scriptPath.replace(/\\/g, '/'))}).${invokeName}() })()`;
+      // Use module.constructor._load to bypass any monkey-patched require()
+      // (e.g., obsidian-codescript-toolkit patches require in the renderer process).
+      const safeRequire = `module.constructor._load(${JSON.stringify(scriptPath.replace(/\\/g, '/'))})`;
+      const requireExpr = `(async () => { await ${safeRequire}.${invokeName}() })()`;
       const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${requireExpr}`];
 
       try {
