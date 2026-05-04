@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.5.3
+
+- fix(appium): add --force-local to tar to fix Windows drive-letter paths
+
 ## 2.5.2
 
 - refactor(cli): use JSON envelope for script result communication
