@@ -48,6 +48,24 @@ interface ObsidianVaultEntry {
 }
 
 /**
+ * Returns the path of any vault that is currently registered in Obsidian's registry.
+ *
+ * This is useful when an `obsidian eval` call must run inside an existing vault
+ * window (e.g., to issue IPC commands that register or remove other vaults).
+ *
+ * @returns The absolute path to a registered vault, or `undefined` if no vaults are registered.
+ */
+export function getAnyRegisteredVaultPath(): string | undefined {
+  const config = readObsidianJson();
+  if (!config) {
+    return undefined;
+  }
+
+  const firstEntry = Object.values(config.vaults)[0];
+  return firstEntry?.path;
+}
+
+/**
  * Returns the hex vault ID for a given vault path from Obsidian's registry.
  *
  * @param vaultPath - The absolute path to the vault folder.

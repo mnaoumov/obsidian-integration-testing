@@ -6,6 +6,7 @@ import {
 } from 'vitest';
 
 import {
+  getAnyRegisteredVaultPath,
   getVaultId,
   isCliEnabled,
   isVaultRegistered
@@ -174,5 +175,24 @@ describe('isCliEnabled', () => {
       throw new Error('ENOENT');
     });
     expect(isCliEnabled()).toBe(false);
+  });
+});
+
+describe('getAnyRegisteredVaultPath', () => {
+  it('should return the first vault path when vaults exist', () => {
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    expect(getAnyRegisteredVaultPath()).toBe('F:\\Obsidian');
+  });
+
+  it('should return undefined when no vaults are registered', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ vaults: {} }));
+    expect(getAnyRegisteredVaultPath()).toBeUndefined();
+  });
+
+  it('should return undefined when obsidian.json cannot be read', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    expect(getAnyRegisteredVaultPath()).toBeUndefined();
   });
 });

@@ -1,6 +1,5 @@
 import type { MockInstance } from 'vitest';
 
-import process from 'node:process';
 import vm from 'node:vm';
 import {
   beforeEach,
@@ -10,7 +9,10 @@ import {
   vi
 } from 'vitest';
 
-import { getVaultId } from './obsidian-config.ts';
+import {
+  getAnyRegisteredVaultPath,
+  getVaultId
+} from './obsidian-config.ts';
 import { DesktopCliTransport } from './transport-desktop-cli.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
@@ -56,6 +58,7 @@ vi.mock('./log.ts', () => ({
 }));
 
 vi.mock('./obsidian-config.ts', () => ({
+  getAnyRegisteredVaultPath: vi.fn().mockReturnValue('/existing-vault'),
   getVaultId: vi.fn(),
   isCliEnabled: vi.fn().mockReturnValue(true),
   isVaultRegistered: vi.fn().mockReturnValue(true)
@@ -204,7 +207,7 @@ describe('DesktopCliTransport.registerVault', () => {
     await transport.registerVault(vaultPath);
 
     // RegisterVault calls evaluate 3 times:
-    //   1. vault-open IPC (cwd: process.cwd())
+    //   1. vault-open IPC (cwd: existing registered vault)
     //   2. enablePluginsInLocalStorage (cwd: vaultPath)
     //   3. poll loop (cwd: vaultPath)
     const secondCall = ensureNonNullable(mockExec.mock.calls[1]);
@@ -236,21 +239,31 @@ describe('DesktopCliTransport.registerVault', () => {
     expect(mockExec).toHaveBeenCalledTimes(2);
   });
 
-  it('should use process.cwd() for the initial vault-open IPC eval', async () => {
+  it('should use an existing registered vault path for the initial vault-open IPC eval', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');
+    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue('/existing-vault');
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);
 
     const firstCall = ensureNonNullable(mockExec.mock.calls[0]);
     const options = firstCall[1] as ExecOptions;
-    expect(options.cwd).toBe(process.cwd());
+    expect(options.cwd).toBe('/existing-vault');
+  });
+
+  it('should throw when no existing vault is registered', async () => {
+    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue(undefined);
+
+    await expect(transport.registerVault('/tmp/test-vault')).rejects.toThrow(
+      'Cannot register a vault: no existing vault is registered'
+    );
   });
 
   it('should use vaultPath as cwd for the poll loop eval', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');
+    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue('/existing-vault');
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);

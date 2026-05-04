@@ -28,6 +28,7 @@ import { getFunctionExpressionString } from './function-expression.ts';
 import { log } from './log.ts';
 import { noop } from './noop.ts';
 import {
+  getAnyRegisteredVaultPath,
   getVaultId,
   isCliEnabled,
   isVaultRegistered
@@ -164,10 +165,15 @@ export class DesktopCliTransport implements ObsidianTransport {
    */
   public async registerVault(vaultPath: string): Promise<void> {
     log(`[cli-transport] Registering vault: ${vaultPath}`);
+    const existingVaultPath = getAnyRegisteredVaultPath();
+    if (!existingVaultPath) {
+      throw new Error('Cannot register a vault: no existing vault is registered in Obsidian. Open Obsidian and create or open at least one vault first.');
+    }
+
     const registerExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-open', ${JSON.stringify(vaultPath)}, false);`
     );
-    await this.evaluate(registerExpr, { cwd: process.cwd() });
+    await this.evaluate(registerExpr, { cwd: existingVaultPath });
 
     await this.enablePluginsInLocalStorage(vaultPath);
 
@@ -223,8 +229,13 @@ export class DesktopCliTransport implements ObsidianTransport {
     const removeExpr = buildIpcExpression(
       `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
     );
+    const existingVaultForRemoval = getAnyRegisteredVaultPath();
     try {
-      await this.evaluate(removeExpr, { cwd: process.cwd(), timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+      if (existingVaultForRemoval) {
+        await this.evaluate(removeExpr, { cwd: existingVaultForRemoval, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+      } else {
+        log('[cli-transport] No existing vault to target for removal IPC — skipping.');
+      }
       log('[cli-transport] Vault removed from registry.');
     } catch (error: unknown) {
       log(`[cli-transport] Vault registry removal failed (non-fatal): ${serializeError(error)}`);
