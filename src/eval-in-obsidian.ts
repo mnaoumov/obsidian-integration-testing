@@ -19,12 +19,21 @@ import type {
 import type { ObsidianTransport } from './transport.ts';
 
 import { getTransportOptions } from './context-provider.ts';
-import { getFunctionExpressionString } from './function-expression.ts';
-import { jsonWithFunctions } from './json-with-functions.ts';
+import { generateFunctionCall } from './generate-function-call.ts';
 import { serializeError } from './serialize-error.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
-const EVAL_ERROR_MARKER = '__obsidianEvalError__';
+/**
+ * Discriminated envelope returned by {@link evalWrapper} from inside the Obsidian process.
+ *
+ * - `{ type: 'error', value: string }` — `fn` threw; `value` is the serialized error.
+ * - `{ type: 'undefined' }` — `fn` returned `undefined`.
+ * - `{ value: unknown }` — `fn` returned a JSON-serializable value.
+ */
+type EvalResultEnvelope =
+  | { type: 'error'; value: string }
+  | { type: 'undefined' }
+  | { value: unknown };
 
 interface ExportsWithDefault {
   default: unknown;
@@ -96,6 +105,14 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
  */
 export type GenericObject = Record<string, unknown>;
 
+interface EvalWrapperParams {
+  args: Record<string, unknown>;
+  contextId: string | undefined;
+  fn: (args: Record<string, unknown>) => unknown;
+  resolveObsidianModule: () => Promise<typeof obsidian>;
+  stringifyError: (error: unknown, depth?: number) => string;
+}
+
 /**
  * Evaluates a function inside the running Obsidian instance
  * via the active transport and returns the parsed result.
@@ -129,39 +146,13 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     await transport.preflightCheck(cwd);
   }
 
-  const SLICE_START = 2;
-  const randomSuffix = String(Math.random()).slice(SLICE_START);
-  const contextExpr = contextId
-    ? `((window.__obsidianContexts__ ??= {})["${String(contextId)}"] ??= {})`
-    : '{}';
-  const expression = `
-(async () => {
-  const fn${randomSuffix} = ${getFunctionExpressionString(fn)};
-  const obsidianModule${randomSuffix} = await (async () => {
-    if (!app.workspace.app.workspace.layoutReady) {
-      await new Promise((resolve) => app.workspace.onLayoutReady(resolve));
-    }
-    if (!app.plugins.isEnabled()) {
-      await app.plugins.setEnable(true);
-    }
-    ${getFunctionExpressionString(getObsidianModulePluginFn)}
-    ${getFunctionExpressionString(getObsidianModule)}
-    return await getObsidianModule();
-  })();
-  ${getFunctionExpressionString(serializeError)}
-  const args${randomSuffix} = ${jsonWithFunctions(args)};
-  const context${randomSuffix} = ${contextExpr};
-  const fullArgs${randomSuffix} = Object.assign(args${randomSuffix}, { app, obsidianModule: obsidianModule${randomSuffix}, context: context${randomSuffix} });
-  try {
-    const result${randomSuffix} = await fn${randomSuffix}(fullArgs${randomSuffix});
-    if (result${randomSuffix} === undefined) {
-      return "";
-    }
-    return JSON.stringify(result${randomSuffix});
-  } catch (evalError${randomSuffix}) {
-    return JSON.stringify({ ${EVAL_ERROR_MARKER}: serializeError(evalError${randomSuffix}) });
-  }
-})()`;
+  const expression = generateFunctionCall(evalWrapper, {
+    args,
+    contextId: contextId ? String(contextId) : undefined,
+    fn,
+    resolveObsidianModule: getObsidianModule,
+    stringifyError: serializeError
+  });
 
   const resultStr = await transport.evaluate(expression, { cwd });
 
@@ -169,27 +160,82 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     return undefined as Result;
   }
 
-  let parsed: unknown;
+  let envelope: EvalResultEnvelope;
   try {
-    parsed = JSON.parse(resultStr);
+    envelope = JSON.parse(resultStr) as EvalResultEnvelope;
   } catch {
     throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${resultStr}`);
   }
 
-  if (parsed !== null && typeof parsed === 'object' && EVAL_ERROR_MARKER in parsed) {
-    const errorDetail = String((parsed as Record<string, unknown>)[EVAL_ERROR_MARKER]);
-    // Rewrite bare-origin localhost stack frames like "(http://localhost/:915:32)"
-    // So Vitest's source-map resolver won't extract "/" as the file path and crash
-    // With EISDIR when it tries to readFileSync on the root directory.
-    const sanitizedDetail = errorDetail
-      .replace(/\(https?:\/\/localhost\/:(?<line>\d)/g, '(obsidian-webview:$<line>');
-    throw new Error(`evalInObsidian: Error inside Obsidian:\n${sanitizedDetail}`);
+  if ('type' in envelope) {
+    if (envelope.type === 'error') {
+      // Rewrite bare-origin localhost stack frames like "(http://localhost/:915:32)"
+      // So Vitest's source-map resolver won't extract "/" as the file path and crash
+      // With EISDIR when it tries to readFileSync on the root directory.
+      const sanitizedDetail = envelope.value
+        .replace(/\(https?:\/\/localhost\/:(?<line>\d)/g, '(obsidian-webview:$<line>');
+      throw new Error(`evalInObsidian: Error inside Obsidian:\n${sanitizedDetail}`);
+    }
+
+    return undefined as Result;
   }
 
-  return parsed as Result;
+  return envelope.value as Result;
 }
 
 /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */
+
+/**
+ * The top-level wrapper that is serialized and invoked inside the Obsidian
+ * process via {@link generateFunctionCall}. It wires up the obsidian module,
+ * context, and error handling, then delegates to the caller-supplied `fn`.
+ *
+ * Must NOT reference any outer scope — it is serialized via `toString()`.
+ *
+ * @param params - The parameters for the wrapper.
+ * @param params.args - The user-supplied arguments to pass to `fn`.
+ * @param params.contextId - The context identifier for persistent storage.
+ * @param params.fn - The user function to evaluate.
+ * @param params.resolveObsidianModule - Resolves the `obsidian` module at runtime.
+ * @param params.stringifyError - Serializes an error into a human-readable string.
+ * @returns A JSON-stringified {@link EvalResultEnvelope}.
+ */
+async function evalWrapper({
+  args,
+  contextId,
+  fn,
+  resolveObsidianModule,
+  stringifyError
+}: EvalWrapperParams): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
+  const app = window.app;
+  if (!app.workspace.layoutReady) {
+    await new Promise<void>((resolve) => {
+      app.workspace.onLayoutReady(resolve);
+    });
+  }
+  if (!app.plugins.isEnabled()) {
+    await app.plugins.setEnable(true);
+  }
+  const obsidianModule = await resolveObsidianModule();
+  interface ContextHolder {
+    __obsidianContexts__: Record<string, Record<string, unknown>>;
+  }
+  const contextHolder = window as Partial<ContextHolder>;
+  const context = contextId
+    ? ((contextHolder.__obsidianContexts__ ??= {})[contextId] ??= {})
+    : {};
+  const fullArgs = Object.assign(args, { app, context, obsidianModule });
+  try {
+    const result = await fn(fullArgs);
+    if (result === undefined) {
+      return JSON.stringify({ type: 'undefined' });
+    }
+    return JSON.stringify({ value: result });
+  } catch (evalError) {
+    return JSON.stringify({ type: 'error', value: stringifyError(evalError) });
+  }
+}
 
 /**
  * Injected into the Obsidian process to resolve the `obsidian` module.
@@ -235,27 +281,29 @@ async function getObsidianModule(): Promise<typeof obsidian> {
     return obsidianModuleHolder.obsidianModule;
   }
   throw new Error('Failed to load obsidian module');
-}
 
-/**
- * The body of the temporary plugin that extracts the `obsidian` module.
- * Serialized via `toString()` and written to `main.js` by {@link getObsidianModule}.
- * Must NOT reference any outer scope.
- */
-function getObsidianModulePluginFn(): void {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
-  interface ObsidianModuleHolder {
-    obsidianModule: typeof obsidian;
+  /**
+   * The body of the temporary plugin that extracts the `obsidian` module.
+   * Serialized via `toString()` and written to `main.js` by {@link getObsidianModule}.
+   * Must NOT reference any outer scope.
+   */
+  function getObsidianModulePluginFn(): void {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated, no-shadow -- We need global `app` variable. Intentional redeclaration — self-contained serialized function.
+    const app = window.app;
+    // eslint-disable-next-line no-shadow -- Intentional redeclaration — self-contained serialized function.
+    interface ObsidianModuleHolder {
+      obsidianModule: typeof obsidian;
+    }
+    // eslint-disable-next-line no-shadow -- Intentional redeclaration — self-contained serialized function.
+    const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
+
+    const pluginRequire = require;
+    const pluginExports = exports as ExportsWithDefault;
+
+    const obsidianModule = pluginRequire('obsidian') as typeof obsidian;
+    obsidianModuleHolder.obsidianModule = obsidianModule;
+    pluginExports.default = obsidianModule.Plugin;
   }
-  const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
-
-  const pluginRequire = require;
-  const pluginExports = exports as ExportsWithDefault;
-
-  const obsidianModule = pluginRequire('obsidian') as typeof obsidian;
-  obsidianModuleHolder.obsidianModule = obsidianModule;
-  pluginExports.default = obsidianModule.Plugin;
 }
 
 /* v8 ignore stop */
