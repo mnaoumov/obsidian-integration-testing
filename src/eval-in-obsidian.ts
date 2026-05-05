@@ -113,6 +113,12 @@ interface EvalWrapperParams {
   stringifyError: (error: unknown, depth?: number) => string;
 }
 
+interface ObsidianModuleHolder {
+  obsidianModule: typeof obsidian;
+}
+
+/* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */
+
 /**
  * Evaluates a function inside the running Obsidian instance
  * via the active transport and returns the parsed result.
@@ -183,8 +189,6 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   return envelope.value as Result;
 }
 
-/* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */
-
 /**
  * The top-level wrapper that is serialized and invoked inside the Obsidian
  * process via {@link generateFunctionCall}. It wires up the obsidian module,
@@ -251,9 +255,7 @@ async function evalWrapper({
 async function getObsidianModule(): Promise<typeof obsidian> {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
   const app = window.app;
-  interface ObsidianModuleHolder {
-    obsidianModule: typeof obsidian;
-  }
+
   const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
   if (obsidianModuleHolder.obsidianModule) {
     return obsidianModuleHolder.obsidianModule;
@@ -290,18 +292,14 @@ async function getObsidianModule(): Promise<typeof obsidian> {
   function getObsidianModulePluginFn(): void {
     // eslint-disable-next-line @typescript-eslint/no-deprecated, no-shadow -- We need global `app` variable. Intentional redeclaration — self-contained serialized function.
     const app = window.app;
-    // eslint-disable-next-line no-shadow -- Intentional redeclaration — self-contained serialized function.
-    interface ObsidianModuleHolder {
-      obsidianModule: typeof obsidian;
-    }
-    // eslint-disable-next-line no-shadow -- Intentional redeclaration — self-contained serialized function.
-    const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
+
+    const obsidianModuleHolder2 = app as Partial<ObsidianModuleHolder>;
 
     const pluginRequire = require;
     const pluginExports = exports as ExportsWithDefault;
 
     const obsidianModule = pluginRequire('obsidian') as typeof obsidian;
-    obsidianModuleHolder.obsidianModule = obsidianModule;
+    obsidianModuleHolder2.obsidianModule = obsidianModule;
     pluginExports.default = obsidianModule.Plugin;
   }
 }
