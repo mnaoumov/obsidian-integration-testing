@@ -38,6 +38,7 @@ import {
 import { log } from './log.ts';
 import { noop } from './noop.ts';
 import {
+  enableCliInConfig,
   getAnyRegisteredVaultPath,
   getVaultId,
   isCliEnabled,
@@ -183,7 +184,9 @@ export class DesktopCliTransport implements ObsidianTransport {
     }
 
     if (!isCliEnabled()) {
-      throw new Error('Obsidian CLI is disabled. Enable it in Obsidian Settings \u2192 General \u2192 CLI.');
+      log('[cli-transport] CLI is disabled in obsidian.json. Enabling and restarting Obsidian...');
+      enableCliInConfig();
+      await this.restartObsidian(vaultPath);
     }
 
     await this.assertCliAvailable();
@@ -340,6 +343,27 @@ export class DesktopCliTransport implements ObsidianTransport {
 
     throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms.`);
   }
+
+  /**
+   * Restarts Obsidian by killing the running process and relaunching it.
+   *
+   * Used when a config change (like enabling CLI) requires a restart to take effect.
+   *
+   * @param vaultPath - The vault path to use for polling after restart.
+   */
+  private async restartObsidian(vaultPath: string): Promise<void> {
+    log('[cli-transport] Killing Obsidian process...');
+    try {
+      await exec(getKillObsidianCommand(), { isQuiet: true });
+    } catch {
+      // Process may not be running — that's fine.
+    }
+
+    await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
+
+    const command = ['obsidian', 'eval', '--vault', vaultPath, '--expression', '"1"'];
+    await this.ensureObsidianRunningAndRetry(command, vaultPath);
+  }
 }
 
 /**
@@ -420,6 +444,19 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * Returns the platform-specific command to kill the Obsidian process.
+ *
+ * @returns The shell command string.
+ */
+function getKillObsidianCommand(): string {
+  if (process.platform === 'win32') {
+    return 'taskkill /IM Obsidian.exe /F';
+  }
+
+  return 'pkill -f Obsidian';
 }
 
 /**

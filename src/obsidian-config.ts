@@ -52,6 +52,18 @@ interface ObsidianVaultEntry {
 }
 
 /**
+ * Enables the CLI in Obsidian's `obsidian.json` config file.
+ *
+ * Sets `cli: true` so that Obsidian starts its CLI server on next launch.
+ * If the config file doesn't exist, creates it with an empty vaults object.
+ */
+export function enableCliInConfig(): void {
+  const config = readObsidianJson() ?? { vaults: {} };
+  config.cli = true;
+  writeObsidianJson(config);
+}
+
+/**
  * Returns the path of any vault that is currently registered in Obsidian's registry.
  *
  * This is useful when an `obsidian eval` call must run inside an existing vault

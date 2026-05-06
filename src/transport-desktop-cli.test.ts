@@ -60,7 +60,10 @@ vi.mock('./log.ts', () => ({
 const mockRegisterVaultInConfig = vi.hoisted(() => vi.fn());
 const mockRemoveVaultFromConfig = vi.hoisted(() => vi.fn().mockReturnValue(true));
 
+const mockEnableCliInConfig = vi.hoisted(() => vi.fn());
+
 vi.mock('./obsidian-config.ts', () => ({
+  enableCliInConfig: mockEnableCliInConfig,
   getAnyRegisteredVaultPath: vi.fn().mockReturnValue('/existing-vault'),
   getVaultId: vi.fn(),
   isCliEnabled: vi.fn().mockReturnValue(true),
