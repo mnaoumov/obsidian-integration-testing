@@ -7,6 +7,7 @@ import {
 } from 'vitest';
 
 import {
+  enableCliInConfig,
   getAnyRegisteredVaultPath,
   getVaultId,
   isCliEnabled,
@@ -212,6 +213,30 @@ describe('getAnyRegisteredVaultPath', () => {
       throw new Error('ENOENT');
     });
     expect(getAnyRegisteredVaultPath()).toBeUndefined();
+  });
+});
+
+describe('enableCliInConfig', () => {
+  it('should set cli to true in existing config', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ cli: false, vaults: {} }));
+
+    enableCliInConfig();
+
+    const writtenContent = getLastWrittenContent();
+    const config = JSON.parse(writtenContent) as Record<string, unknown>;
+    expect(config['cli']).toBe(true);
+  });
+
+  it('should create config with cli enabled when obsidian.json does not exist', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    enableCliInConfig();
+
+    const writtenContent = getLastWrittenContent();
+    const config = JSON.parse(writtenContent) as Record<string, unknown>;
+    expect(config['cli']).toBe(true);
   });
 });
 
