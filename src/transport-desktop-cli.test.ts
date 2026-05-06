@@ -57,11 +57,16 @@ vi.mock('./log.ts', () => ({
   log: vi.fn()
 }));
 
+const mockRegisterVaultInConfig = vi.hoisted(() => vi.fn());
+const mockRemoveVaultFromConfig = vi.hoisted(() => vi.fn().mockReturnValue(true));
+
 vi.mock('./obsidian-config.ts', () => ({
   getAnyRegisteredVaultPath: vi.fn().mockReturnValue('/existing-vault'),
   getVaultId: vi.fn(),
   isCliEnabled: vi.fn().mockReturnValue(true),
-  isVaultRegistered: vi.fn().mockReturnValue(true)
+  isVaultRegistered: vi.fn().mockReturnValue(true),
+  registerVaultInConfig: mockRegisterVaultInConfig,
+  removeVaultFromConfig: mockRemoveVaultFromConfig
 }));
 
 let transport: DesktopCliTransport;
@@ -253,12 +258,14 @@ describe('DesktopCliTransport.registerVault', () => {
     expect(options.cwd).toBe('/existing-vault');
   });
 
-  it('should throw when no existing vault is registered', async () => {
+  it('should register vault directly in config when no existing vault is registered', async () => {
+    const vaultPath = '/tmp/test-vault';
     vi.mocked(getAnyRegisteredVaultPath).mockReturnValue(undefined);
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
-    await expect(transport.registerVault('/tmp/test-vault')).rejects.toThrow(
-      'Cannot register a vault: no existing vault is registered'
-    );
+    await transport.registerVault(vaultPath);
+
+    expect(mockRegisterVaultInConfig).toHaveBeenCalledWith(vaultPath);
   });
 
   it('should use vaultPath as cwd for the poll loop eval', async () => {
