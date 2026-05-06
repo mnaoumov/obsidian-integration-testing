@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.7.1
+
+- fix: cover case workspace is not loaded
+
 ## 2.7.0
 
 - fix(transport): auto-enable CLI and restart Obsidian when cli is disabled
