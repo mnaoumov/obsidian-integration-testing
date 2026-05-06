@@ -47,14 +47,12 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import type {
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
 
 import { exec } from './exec.ts';
-import { generateFunctionCall } from './generate-function-call.ts';
 import { log } from './log.ts';
 
 /**
@@ -360,7 +358,11 @@ export class AppiumTransport implements ObsidianTransport {
 
     while (Date.now() < deadline) {
       try {
-        const isReady = await this.browser.execute<boolean, []>(generateFunctionCall(isLayoutReady, {}));
+        const isReady = await this.browser.execute((): boolean => {
+          // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
+          const app = window.app as LoadingApp | undefined;
+          return !!app?.workspace?.layoutReady;
+        });
         if (isReady) {
           log('[appium-transport] Layout is ready.');
           return;
@@ -398,11 +400,6 @@ function extractVaultName(vaultPath: string): string {
   const normalized = vaultPath.replace(/[\\/]+$/, '');
   const lastSep = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
   return normalized.slice(lastSep + 1);
-}
-
-function isLayoutReady(params: GenerateFunctionCallParams): boolean {
-  const app = params.app as LoadingApp | undefined;
-  return !!app?.workspace?.layoutReady;
 }
 
 /* v8 ignore stop */
