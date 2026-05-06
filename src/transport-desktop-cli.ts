@@ -209,7 +209,8 @@ export class DesktopCliTransport implements ObsidianTransport {
     } else {
       log('[cli-transport] No existing vault registered. Writing vault entry directly to obsidian.json...');
       registerVaultInConfig(vaultPath);
-      log('[cli-transport] Vault entry written. Obsidian will open it on launch.');
+      log('[cli-transport] Vault entry written. Opening vault via URI protocol...');
+      await openVaultViaUri(vaultPath);
     }
 
     const pollExpr = generateFunctionCall(pollVaultBasePath, { ensureLayoutReady });
@@ -437,6 +438,45 @@ function getObsidianLaunchCommand(): string {
   }
 
   return 'obsidian &';
+}
+
+/**
+ * Returns the platform-specific command to open a URI.
+ *
+ * @param uri - The URI to open.
+ * @returns The shell command string.
+ */
+function getOpenUriCommand(uri: string): string {
+  if (process.platform === 'win32') {
+    return `start "" "${uri}"`;
+  }
+
+  if (process.platform === 'darwin') {
+    return `open "${uri}"`;
+  }
+
+  return `xdg-open "${uri}"`;
+}
+
+/**
+ * Opens a vault in Obsidian using the `obsidian://open` URI protocol.
+ *
+ * This works whether Obsidian is already running (signals it to open the vault)
+ * or not (launches Obsidian with the vault). The URI protocol is handled by the
+ * OS, which routes it to the registered Obsidian handler.
+ *
+ * @param vaultPath - The absolute path to the vault folder.
+ */
+async function openVaultViaUri(vaultPath: string): Promise<void> {
+  const encodedPath = encodeURIComponent(vaultPath);
+  const uri = `obsidian://open?path=${encodedPath}`;
+  const command = getOpenUriCommand(uri);
+  log(`[cli-transport] Opening vault via URI: ${uri}`);
+  try {
+    await exec(command, { isQuiet: true });
+  } catch (error: unknown) {
+    log(`[cli-transport] URI open failed (non-fatal): ${serializeError(error)}`);
+  }
 }
 
 /**
