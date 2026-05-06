@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 2.7.2
+
+- fix: layoutReady waiter
+
 ## 2.7.1
 
 - fix: cover case workspace is not loaded
