@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2.7.0
+
+- fix(transport): auto-enable CLI and restart Obsidian when cli is disabled
+- fix(config): enable CLI when writing vault entry to obsidian.json
+- feat(transport): register vault directly in obsidian.json when no existing vault is available
+- refactor(eval): replace string-template IIFE with generateFunctionCall helper
+
 ## 2.6.1
 
 - fix(appium): remove --force-local tar flag for bsdtar compatibility
