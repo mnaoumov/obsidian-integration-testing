@@ -28,11 +28,19 @@ import type {
 } from './transport.ts';
 
 import { exec } from './exec.ts';
+import {
+  ensureLayoutReady,
+  generateFunctionCall
+} from './generate-function-call.ts';
 import { log } from './log.ts';
 import {
   getVaultId,
   isVaultRegistered
 } from './obsidian-config.ts';
+import {
+  destroyCurrentWindow,
+  ipcSendSync
+} from './transport-desktop-cli.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
 /**
@@ -104,7 +112,9 @@ const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
  * commands, and routes expressions to the correct vault target.
  */
 export class DesktopCdpTransport implements ObsidianTransport {
-  /** */
+  /**
+   * Indicates whether this transport is for a mobile platform. Always `false` for this transport.
+   */
   public readonly isMobile = false;
   private activeVaultPath: null | string = null;
   private readonly cdpPort: number;
@@ -208,9 +218,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     const ipcWs = await this.connectToTarget(ensureNonNullable(targets[0]));
     try {
-      const ipcExpr = buildLayoutReadyExpression(
-        `window.electron.ipcRenderer.sendSync('vault-open', ${JSON.stringify(vaultPath)}, false);`
-      );
+      const ipcExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath, false], channel: 'vault-open', ensureLayoutReady });
       await this.sendCommand(ipcWs, 'Runtime.evaluate', {
         awaitPromise: true,
         expression: ipcExpr,
@@ -247,13 +255,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       const target = await this.findTargetForVault(vaultPath);
       const ws = await this.connectToTarget(target);
       try {
-        const destroyExpr = buildLayoutReadyExpression(`
-          setTimeout(() => {
-            if (window.electron && window.electron.remote) {
-              window.electron.remote.getCurrentWindow().destroy();
-            }
-          }, 0);
-        `);
+        const destroyExpr = generateFunctionCall(destroyCurrentWindow, { ensureLayoutReady });
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
           expression: destroyExpr,
@@ -276,9 +278,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     if (targets.length > 0) {
       const ws = await this.connectToTarget(ensureNonNullable(targets[0]));
       try {
-        const removeExpr = buildLayoutReadyExpression(
-          `window.electron.ipcRenderer.sendSync('vault-remove', ${JSON.stringify(vaultPath)});`
-        );
+        const removeExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath], channel: 'vault-remove', ensureLayoutReady });
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
           expression: removeExpr,
@@ -494,21 +494,6 @@ export class DesktopCdpTransport implements ObsidianTransport {
       ws.send(JSON.stringify({ id, method, params }));
     });
   }
-}
-
-/**
- * Builds an async IIFE that waits for layout ready and executes a body.
- *
- * @param body - The JavaScript statements to execute.
- * @returns The IIFE expression string.
- */
-function buildLayoutReadyExpression(body: string): string {
-  return `(async () => {
-  if (!app.workspace.layoutReady) {
-    await new Promise((resolve) => app.workspace.onLayoutReady(resolve));
-  }
-  ${body}
-})()`;
 }
 
 /**

@@ -40,6 +40,7 @@
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
+import type { App } from 'obsidian';
 import type { Browser } from 'webdriverio';
 
 import { randomUUID } from 'node:crypto';
@@ -47,12 +48,14 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import type {
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
 
 import { exec } from './exec.ts';
+import { generateFunctionCall } from './generate-function-call.ts';
 import { log } from './log.ts';
 
 /**
@@ -115,7 +118,9 @@ const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
  * (which Obsidian uses as its vault registry on mobile) and pushing files to the device.
  */
 export class AppiumTransport implements ObsidianTransport {
-  /** */
+  /**
+   * Indicates whether this transport is for a mobile platform. Always `true` for this transport.
+   */
   public readonly isMobile = true;
   private readonly appId: string;
   private readonly browser: Browser;
@@ -348,9 +353,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     while (Date.now() < deadline) {
       try {
-        const isReady = await this.browser.execute<boolean, []>(
-          'return typeof app !== "undefined" && app.workspace && app.workspace.layoutReady === true'
-        );
+        const isReady = await this.browser.execute<boolean, []>(generateFunctionCall(isLayoutReady, {}));
         if (isReady) {
           log('[appium-transport] Layout is ready.');
           return;
@@ -388,6 +391,11 @@ function extractVaultName(vaultPath: string): string {
   const normalized = vaultPath.replace(/[\\/]+$/, '');
   const lastSep = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
   return normalized.slice(lastSep + 1);
+}
+
+function isLayoutReady(params: GenerateFunctionCallParams): boolean {
+  const app = params.app as App | undefined;
+  return !!app?.workspace.layoutReady;
 }
 
 /* v8 ignore stop */

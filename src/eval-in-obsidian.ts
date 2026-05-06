@@ -14,12 +14,20 @@ import process from 'node:process';
 
 import type {
   ContextArgs,
-  ContextId
+  ContextId,
+  ContextOf
 } from './context-id.ts';
+import type {
+  EnsureLayoutReadyParams,
+  GenerateFunctionCallParams
+} from './generate-function-call.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { getTransportOptions } from './context-provider.ts';
-import { generateFunctionCall } from './generate-function-call.ts';
+import {
+  ensureLayoutReady,
+  generateFunctionCall
+} from './generate-function-call.ts';
 import { serializeError } from './serialize-error.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
@@ -105,12 +113,12 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
  */
 export type GenericObject = Record<string, unknown>;
 
-interface EvalWrapperParams {
-  args: Record<string, unknown>;
-  contextId: string | undefined;
-  fn: (args: Record<string, unknown>) => unknown;
-  resolveObsidianModule: () => Promise<typeof obsidian>;
-  stringifyError: (error: unknown, depth?: number) => string;
+interface EvalWrapperParams<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined> extends EnsureLayoutReadyParams {
+  args: Args;
+  contextId: TContextId;
+  fn(args: Args & CommonArgs & ContextArgs<TContextId>): Promisable<Result>;
+  getObsidianModule(params: GenerateFunctionCallParams): Promise<typeof obsidian>;
+  serializeError(error: unknown): string;
 }
 
 interface ObsidianModuleHolder {
@@ -154,10 +162,11 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
 
   const expression = generateFunctionCall(evalWrapper, {
     args,
-    contextId: contextId ? String(contextId) : undefined,
+    contextId,
+    ensureLayoutReady,
     fn,
-    resolveObsidianModule: getObsidianModule,
-    stringifyError: serializeError
+    getObsidianModule,
+    serializeError
   });
 
   const resultStr = await transport.evaluate(expression, { cwd });
@@ -204,40 +213,31 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
  * @param params.stringifyError - Serializes an error into a human-readable string.
  * @returns A JSON-stringified {@link EvalResultEnvelope}.
  */
-async function evalWrapper({
-  args,
-  contextId,
-  fn,
-  resolveObsidianModule,
-  stringifyError
-}: EvalWrapperParams): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
-  if (!app.workspace.layoutReady) {
-    await new Promise<void>((resolve) => {
-      app.workspace.onLayoutReady(resolve);
-    });
-  }
+async function evalWrapper<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+  params: GenerateFunctionCallParams<EvalWrapperParams<Args, Result, TContextId>>
+): Promise<string> {
+  const app = params.app;
   if (!app.plugins.isEnabled()) {
     await app.plugins.setEnable(true);
   }
-  const obsidianModule = await resolveObsidianModule();
+  const obsidianModule = await params.getObsidianModule(params);
   interface ContextHolder {
     __obsidianContexts__: Record<string, Record<string, unknown>>;
   }
   const contextHolder = window as Partial<ContextHolder>;
-  const context = contextId
-    ? ((contextHolder.__obsidianContexts__ ??= {})[contextId] ??= {})
+  const contextRaw = params.contextId
+    ? ((contextHolder.__obsidianContexts__ ??= {})[String(params.contextId)] ??= {})
     : {};
-  const fullArgs = Object.assign(args, { app, context, obsidianModule });
+  const context = contextRaw as ContextOf<TContextId>;
+  const fullArgs = ({ ...params.args, app, context, obsidianModule }) as Args & CommonArgs & ContextArgs<TContextId>;
   try {
-    const result = await fn(fullArgs);
+    const result = await params.fn(fullArgs) as Result | undefined;
     if (result === undefined) {
       return JSON.stringify({ type: 'undefined' });
     }
     return JSON.stringify({ value: result });
   } catch (evalError) {
-    return JSON.stringify({ type: 'error', value: stringifyError(evalError) });
+    return JSON.stringify({ type: 'error', value: params.serializeError(evalError) });
   }
 }
 
@@ -250,11 +250,11 @@ async function evalWrapper({
  * `getObsidianModulePluginFn` must be defined in the same scope
  * (the generated IIFE handles this).
  *
+ * @param params - The parameters, including the `app` instance.
  * @returns The `obsidian` module.
  */
-async function getObsidianModule(): Promise<typeof obsidian> {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
+async function getObsidianModule(params: GenerateFunctionCallParams): Promise<typeof obsidian> {
+  const app = params.app;
 
   const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
   if (obsidianModuleHolder.obsidianModule) {

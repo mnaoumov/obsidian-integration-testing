@@ -21,13 +21,20 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type {
+  EnsureLayoutReadyParams,
+  GenerateFunctionCallParams
+} from './generate-function-call.ts';
+import type {
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
 
 import { exec } from './exec.ts';
 import { getFunctionExpressionString } from './function-expression.ts';
-import { generateFunctionCall } from './generate-function-call.ts';
+import {
+  ensureLayoutReady,
+  generateFunctionCall
+} from './generate-function-call.ts';
 import { log } from './log.ts';
 import { noop } from './noop.ts';
 import {
@@ -38,7 +45,7 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
-interface IpcSendSyncParams {
+interface IpcSendSyncParams extends EnsureLayoutReadyParams {
   args: unknown[];
   channel: string;
 }
@@ -55,7 +62,7 @@ type ScriptResultEnvelope =
   | { type: 'error' | 'null' | 'undefined'; value: string }
   | { value: string };
 
-interface SetLocalStorageItemParams {
+interface SetLocalStorageItemParams extends EnsureLayoutReadyParams {
   key: string;
   value: string;
 }
@@ -68,12 +75,22 @@ const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const VAULT_EVAL_TIMEOUT_IN_MILLISECONDS = 10000;
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- For consistency and future extensibility.
+interface DestroyCurrentWindowParams extends EnsureLayoutReadyParams {
+}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- For consistency and future extensibility.
+interface PollVaultBasePathParams extends EnsureLayoutReadyParams {
+}
+
 /**
  * Transport that communicates with Desktop Obsidian via the `obsidian eval` CLI command
  * and manages vaults via Electron IPC.
  */
 export class DesktopCliTransport implements ObsidianTransport {
-  /** */
+  /**
+   * Indicates whether this transport is for a mobile platform. Always `false` for this transport.
+   */
   public readonly isMobile = false;
 
   /**
@@ -186,12 +203,12 @@ export class DesktopCliTransport implements ObsidianTransport {
       throw new Error('Cannot register a vault: no existing vault is registered in Obsidian. Open Obsidian and create or open at least one vault first.');
     }
 
-    const registerExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath, false], channel: 'vault-open' });
+    const registerExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath, false], channel: 'vault-open', ensureLayoutReady });
     await this.evaluate(registerExpr, { cwd: existingVaultPath });
 
     await this.enablePluginsInLocalStorage(vaultPath, existingVaultPath);
 
-    const pollExpr = generateFunctionCall(pollVaultBasePath);
+    const pollExpr = generateFunctionCall(pollVaultBasePath, { ensureLayoutReady });
 
     log(`[cli-transport] Polling for vault readiness (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
@@ -220,7 +237,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
     log(`[cli-transport] Unregistering vault: closing window for ${vaultPath}...`);
-    const destroyExpr = generateFunctionCall(destroyCurrentWindow);
+    const destroyExpr = generateFunctionCall(destroyCurrentWindow, { ensureLayoutReady });
     try {
       await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       log('[cli-transport] Window destroy command sent.');
@@ -232,7 +249,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
 
     log('[cli-transport] Removing vault from registry...');
-    const removeExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath], channel: 'vault-remove' });
+    const removeExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath], channel: 'vault-remove', ensureLayoutReady });
     const existingVaultForRemoval = getAnyRegisteredVaultPath();
     try {
       if (existingVaultForRemoval) {
@@ -278,7 +295,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       return;
     }
 
-    const enableExpr = generateFunctionCall(setLocalStorageItem, { key: `enable-plugin-${vaultId}`, value: 'true' });
+    const enableExpr = generateFunctionCall(setLocalStorageItem, { ensureLayoutReady, key: `enable-plugin-${vaultId}`, value: 'true' });
     await this.evaluate(enableExpr, { cwd: evalTargetVaultPath });
     log(`[cli-transport] Set enable-plugin-${vaultId} in localStorage.`);
   }
@@ -317,6 +334,37 @@ export class DesktopCliTransport implements ObsidianTransport {
 
     throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms.`);
   }
+}
+
+/**
+ * Waits for Obsidian's workspace layout to be ready, then destroys the
+ * current Electron window via `remote.getCurrentWindow().destroy()`.
+ *
+ * Serialized via `toString()` and executed inside the Obsidian process.
+ * Must NOT reference any outer scope.
+ *
+ * @param params - Params.
+ */
+export async function destroyCurrentWindow(params: GenerateFunctionCallParams<DestroyCurrentWindowParams>): Promise<void> {
+  await params.ensureLayoutReady(params);
+  await sleep(0);
+  window.electronWindow.destroy();
+}
+
+/**
+ * Waits for Obsidian's workspace layout to be ready, then sends an IPC
+ * message synchronously via Electron's `ipcRenderer`.
+ *
+ * Serialized via `toString()` and executed inside the Obsidian process.
+ * Must NOT reference any outer scope.
+ *
+ * @param params - The IPC channel and arguments.
+ * @param params.channel - The IPC channel name.
+ * @param params.args - The arguments to send.
+ */
+export async function ipcSendSync(params: GenerateFunctionCallParams<IpcSendSyncParams>): Promise<void> {
+  await params.ensureLayoutReady(params);
+  window.electron.ipcRenderer.sendSync(params.channel, ...params.args);
 }
 
 /**
@@ -369,26 +417,6 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Waits for Obsidian's workspace layout to be ready, then destroys the
- * current Electron window via `remote.getCurrentWindow().destroy()`.
- *
- * Serialized via `toString()` and executed inside the Obsidian process.
- * Must NOT reference any outer scope.
- */
-async function destroyCurrentWindow(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
-  if (!app.workspace.layoutReady) {
-    await new Promise<void>((resolve) => {
-      app.workspace.onLayoutReady(resolve);
-    });
-  }
-  setTimeout(() => {
-    window.electronWindow.destroy();
-  }, 0);
-}
-
-/**
  * Returns the platform-specific command to launch the Obsidian binary.
  *
  * @returns The shell command string.
@@ -407,45 +435,18 @@ function getObsidianLaunchCommand(): string {
 }
 
 /**
- * Waits for Obsidian's workspace layout to be ready, then sends an IPC
- * message synchronously via Electron's `ipcRenderer`.
- *
- * Serialized via `toString()` and executed inside the Obsidian process.
- * Must NOT reference any outer scope.
- *
- * @param params - The IPC channel and arguments.
- * @param params.channel - The IPC channel name.
- * @param params.args - The arguments to send.
- */
-async function ipcSendSync({ args, channel }: IpcSendSyncParams): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
-  if (!app.workspace.layoutReady) {
-    await new Promise<void>((resolve) => {
-      app.workspace.onLayoutReady(resolve);
-    });
-  }
-  window.electron.ipcRenderer.sendSync(channel, ...args);
-}
-
-/**
  * Waits for Obsidian's workspace layout to be ready, then returns the
  * vault's base path as a JSON-encoded string.
  *
  * Serialized via `toString()` and executed inside the Obsidian process.
  * Must NOT reference any outer scope.
  *
+ * @param params - Params.
  * @returns The JSON-encoded base path string.
  */
-async function pollVaultBasePath(): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
-  if (!app.workspace.layoutReady) {
-    await new Promise<void>((resolve) => {
-      app.workspace.onLayoutReady(resolve);
-    });
-  }
-  return JSON.stringify((app.vault.adapter as FileSystemAdapter).getBasePath());
+async function pollVaultBasePath(params: GenerateFunctionCallParams<PollVaultBasePathParams>): Promise<string> {
+  await params.ensureLayoutReady(params);
+  return JSON.stringify((params.app.vault.adapter as FileSystemAdapter).getBasePath());
 }
 
 /**
@@ -455,19 +456,11 @@ async function pollVaultBasePath(): Promise<string> {
  * Serialized via `toString()` and executed inside the Obsidian process.
  * Must NOT reference any outer scope.
  *
- * @param params - The localStorage key and value.
- * @param params.key - The localStorage key.
- * @param params.value - The value to set.
+ * @param params - Params.
  */
-async function setLocalStorageItem({ key, value }: SetLocalStorageItemParams): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-  const app = window.app;
-  if (!app.workspace.layoutReady) {
-    await new Promise<void>((resolve) => {
-      app.workspace.onLayoutReady(resolve);
-    });
-  }
-  localStorage.setItem(key, value);
+async function setLocalStorageItem(params: GenerateFunctionCallParams<SetLocalStorageItemParams>): Promise<void> {
+  await params.ensureLayoutReady(params);
+  localStorage.setItem(params.key, params.value);
 }
 
 /* v8 ignore stop */
