@@ -253,6 +253,16 @@ describe('registerVaultInConfig', () => {
     expect(keys[0]).toMatch(/^[\da-f]{16}$/);
   });
 
+  it('should enable cli in the config', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ vaults: {} }));
+
+    registerVaultInConfig('F:\\new-vault');
+
+    const writtenContent = getLastWrittenContent();
+    const config = JSON.parse(writtenContent) as Record<string, unknown>;
+    expect(config['cli']).toBe(true);
+  });
+
   it('should include a timestamp in the vault entry', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ vaults: {} }));
 

@@ -126,6 +126,7 @@ export function registerVaultInConfig(vaultPath: string): void {
   const VAULT_ID_BYTE_LENGTH = 8;
   const id = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
   config.vaults[id] = { path: vaultPath, ts: Date.now() };
+  config.cli = true;
   writeObsidianJson(config);
 }
 
