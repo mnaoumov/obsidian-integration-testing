@@ -40,7 +40,6 @@
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
-import type { App } from 'obsidian';
 import type { Browser } from 'webdriverio';
 
 import { randomUUID } from 'node:crypto';
@@ -109,6 +108,14 @@ const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
   android: '/sdcard/Documents/',
   ios: '@md.obsidian:documents/'
 };
+
+interface LoadingApp {
+  workspace?: LoadingWorkspace;
+}
+
+interface LoadingWorkspace {
+  layoutReady?: boolean;
+}
 
 /**
  * Transport that communicates with Obsidian Mobile via Appium WebView JS injection.
@@ -394,8 +401,8 @@ function extractVaultName(vaultPath: string): string {
 }
 
 function isLayoutReady(params: GenerateFunctionCallParams): boolean {
-  const app = params.app as App | undefined;
-  return !!app?.workspace.layoutReady;
+  const app = params.app as LoadingApp | undefined;
+  return !!app?.workspace?.layoutReady;
 }
 
 /* v8 ignore stop */
