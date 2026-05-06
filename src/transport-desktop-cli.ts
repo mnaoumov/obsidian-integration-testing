@@ -41,7 +41,9 @@ import {
   getAnyRegisteredVaultPath,
   getVaultId,
   isCliEnabled,
-  isVaultRegistered
+  isVaultRegistered,
+  registerVaultInConfig,
+  removeVaultFromConfig
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
@@ -199,14 +201,16 @@ export class DesktopCliTransport implements ObsidianTransport {
   public async registerVault(vaultPath: string): Promise<void> {
     log(`[cli-transport] Registering vault: ${vaultPath}`);
     const existingVaultPath = getAnyRegisteredVaultPath();
-    if (!existingVaultPath) {
-      throw new Error('Cannot register a vault: no existing vault is registered in Obsidian. Open Obsidian and create or open at least one vault first.');
+
+    if (existingVaultPath) {
+      const registerExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath, false], channel: 'vault-open', ensureLayoutReady });
+      await this.evaluate(registerExpr, { cwd: existingVaultPath });
+      await this.enablePluginsInLocalStorage(vaultPath, existingVaultPath);
+    } else {
+      log('[cli-transport] No existing vault registered. Writing vault entry directly to obsidian.json...');
+      registerVaultInConfig(vaultPath);
+      log('[cli-transport] Vault entry written. Obsidian will open it on launch.');
     }
-
-    const registerExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath, false], channel: 'vault-open', ensureLayoutReady });
-    await this.evaluate(registerExpr, { cwd: existingVaultPath });
-
-    await this.enablePluginsInLocalStorage(vaultPath, existingVaultPath);
 
     const pollExpr = generateFunctionCall(pollVaultBasePath, { ensureLayoutReady });
 
@@ -255,7 +259,8 @@ export class DesktopCliTransport implements ObsidianTransport {
       if (existingVaultForRemoval) {
         await this.evaluate(removeExpr, { cwd: existingVaultForRemoval, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       } else {
-        log('[cli-transport] No existing vault to target for removal IPC — skipping.');
+        log('[cli-transport] No existing vault to target for removal IPC — removing directly from obsidian.json.');
+        removeVaultFromConfig(vaultPath);
       }
       log('[cli-transport] Vault removed from registry.');
     } catch (error: unknown) {

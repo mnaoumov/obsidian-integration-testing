@@ -4,7 +4,11 @@
  * Reads and queries Obsidian's local configuration (`obsidian.json`).
  */
 
-import { readFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import {
+  readFileSync,
+  writeFileSync
+} from 'node:fs';
 import { homedir } from 'node:os';
 import {
   join,
@@ -109,6 +113,54 @@ export function isVaultRegistered(vaultPath: string): boolean {
 }
 
 /**
+ * Registers a vault directly in Obsidian's `obsidian.json` config file.
+ *
+ * This writes a new vault entry with a random hex ID. Used when no existing
+ * vault is available to send IPC commands through — the vault is registered
+ * "offline" so Obsidian will open it on next launch.
+ *
+ * @param vaultPath - The absolute path to the vault folder.
+ */
+export function registerVaultInConfig(vaultPath: string): void {
+  const config = readObsidianJson() ?? { vaults: {} };
+  const VAULT_ID_BYTE_LENGTH = 8;
+  const id = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
+  config.vaults[id] = { path: vaultPath, ts: Date.now() };
+  writeObsidianJson(config);
+}
+
+/**
+ * Removes a vault entry from Obsidian's `obsidian.json` config file.
+ *
+ * @param vaultPath - The absolute path to the vault folder.
+ * @returns `true` if the vault was found and removed, `false` otherwise.
+ */
+export function removeVaultFromConfig(vaultPath: string): boolean {
+  const config = readObsidianJson();
+  if (!config) {
+    return false;
+  }
+
+  const normalizedTarget = normalizePath(vaultPath);
+  let wasFound = false;
+
+  for (const [id, entry] of Object.entries(config.vaults)) {
+    if (normalizePath(entry.path) === normalizedTarget) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Removing a vault entry by its dynamic key.
+      delete config.vaults[id];
+      wasFound = true;
+      break;
+    }
+  }
+
+  if (wasFound) {
+    writeObsidianJson(config);
+  }
+
+  return wasFound;
+}
+
+/**
  * Returns the platform-specific path to Obsidian's config directory.
  *
  * @returns The absolute path to the `obsidian/` config directory.
@@ -153,4 +205,14 @@ function readObsidianJson(): ObsidianJson | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Writes the given config object to Obsidian's `obsidian.json` file.
+ *
+ * @param config - The config to write.
+ */
+function writeObsidianJson(config: ObsidianJson): void {
+  const configPath = join(getObsidianConfigDir(), 'obsidian.json');
+  writeFileSync(configPath, JSON.stringify(config));
 }

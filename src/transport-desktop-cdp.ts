@@ -35,7 +35,8 @@ import {
 import { log } from './log.ts';
 import {
   getVaultId,
-  isVaultRegistered
+  isVaultRegistered,
+  removeVaultFromConfig
 } from './obsidian-config.ts';
 import {
   destroyCurrentWindow,
@@ -287,6 +288,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
       } finally {
         ws.close();
       }
+    } else {
+      log('[cdp-transport] No CDP targets for removal IPC — removing directly from obsidian.json.');
+      removeVaultFromConfig(vaultPath);
     }
   }
 
