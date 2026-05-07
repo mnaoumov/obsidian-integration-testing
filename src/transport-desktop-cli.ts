@@ -84,6 +84,7 @@ interface BuildDiagnosticsParams {
   cwd: string;
   execResult: ExecResult | undefined;
   resultPath: string;
+  scriptContent: string;
   scriptPath: string;
 }
 
@@ -163,6 +164,7 @@ export class DesktopCliTransport implements ObsidianTransport {
           cwd: options.cwd,
           execResult,
           resultPath,
+          scriptContent,
           scriptPath
         });
         throw new Error(`Script did not execute for path: ${options.cwd}\n${diagnostics}`);
@@ -450,6 +452,7 @@ function buildDiagnostics(params: BuildDiagnosticsParams): string {
     lines.push('  exec result: (not available — Obsidian was auto-started and retried)');
   }
 
+  lines.push(`  Script content:\n${params.scriptContent}`);
   lines.push('Possible causes:');
   lines.push('  - The vault may not be found or Obsidian did not run the eval');
   lines.push('  - Obsidian is open on a different vault');
