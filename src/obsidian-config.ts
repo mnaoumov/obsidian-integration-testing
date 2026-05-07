@@ -17,6 +17,26 @@ import {
 import process from 'node:process';
 
 /**
+ * A registered vault entry returned by {@link getRegisteredVaults}.
+ */
+export interface RegisteredVault {
+  /**
+   * The hex vault ID from `obsidian.json`.
+   */
+  id: string;
+
+  /**
+   * Whether the vault is currently marked as open.
+   */
+  open: boolean;
+
+  /**
+   * The absolute path to the vault folder.
+   */
+  path: string;
+}
+
+/**
  * The top-level structure of Obsidian's `obsidian.json` config file.
  */
 interface ObsidianJson {
@@ -79,6 +99,24 @@ export function getAnyRegisteredVaultPath(): string | undefined {
 
   const firstEntry = Object.values(config.vaults)[0];
   return firstEntry?.path;
+}
+
+/**
+ * Returns all registered vaults from Obsidian's `obsidian.json` registry.
+ *
+ * @returns An array of registered vault entries.
+ */
+export function getRegisteredVaults(): RegisteredVault[] {
+  const config = readObsidianJson();
+  if (!config) {
+    return [];
+  }
+
+  return Object.entries(config.vaults).map(([id, entry]) => ({
+    id,
+    open: entry.open === true,
+    path: entry.path
+  }));
 }
 
 /**

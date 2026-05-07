@@ -41,6 +41,7 @@ import { noop } from './noop.ts';
 import {
   enableCliInConfig,
   getAnyRegisteredVaultPath,
+  getRegisteredVaults,
   getVaultId,
   isCliEnabled,
   isVaultRegistered,
@@ -159,7 +160,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       }
 
       if (!existsSync(resultPath)) {
-        const diagnostics = buildDiagnostics({
+        const diagnostics = await buildDiagnostics({
           command,
           cwd: options.cwd,
           execResult,
@@ -420,13 +421,13 @@ export async function ipcSendSync(params: GenerateFunctionCallParams<IpcSendSync
 /**
  * Builds a detailed diagnostic string for the "Script did not execute" error.
  *
- * Includes the command that was run, exit code, stdout/stderr from the CLI,
- * and the expected result file path.
+ * Performs live environment checks (process list, vault registry, CLI config)
+ * and includes the command, exec output, and script content.
  *
  * @param params - The diagnostic parameters.
  * @returns A formatted diagnostic string.
  */
-function buildDiagnostics(params: BuildDiagnosticsParams): string {
+async function buildDiagnostics(params: BuildDiagnosticsParams): Promise<string> {
   const lines: string[] = [];
 
   lines.push(`  Command: ${params.command.join(' ')}`);
@@ -452,12 +453,24 @@ function buildDiagnostics(params: BuildDiagnosticsParams): string {
     lines.push('  exec result: (not available — Obsidian was auto-started and retried)');
   }
 
+  lines.push('Environment checks:');
+  lines.push(`  Obsidian running: ${await isObsidianRunning() ? 'yes' : 'NO'}`);
+  lines.push(`  CLI enabled in obsidian.json: ${isCliEnabled() ? 'yes' : 'NO'}`);
+  lines.push(`  Vault registered: ${isVaultRegistered(params.cwd) ? 'yes' : 'NO'}`);
+  lines.push(`  Script file exists: ${existsSync(params.scriptPath) ? 'yes' : 'no (already cleaned up)'}`);
+  lines.push(`  Result file exists: ${existsSync(params.resultPath) ? 'yes' : 'no'}`);
+
+  const registeredVaults = getRegisteredVaults();
+  if (registeredVaults.length === 0) {
+    lines.push('  Registered vaults: (none)');
+  } else {
+    lines.push('  Registered vaults:');
+    for (const vault of registeredVaults) {
+      lines.push(`    - ${vault.path} (open: ${String(vault.open)})`);
+    }
+  }
+
   lines.push(`  Script content:\n${params.scriptContent}`);
-  lines.push('Possible causes:');
-  lines.push('  - The vault may not be found or Obsidian did not run the eval');
-  lines.push('  - Obsidian is open on a different vault');
-  lines.push('  - The eval protocol handler is not active (Obsidian still loading)');
-  lines.push('  - The script threw before writing the result file');
 
   return lines.join('\n');
 }
@@ -558,6 +571,26 @@ function getOpenUriCommand(uri: string): string {
   }
 
   return `xdg-open "${uri}"`;
+}
+
+/**
+ * Checks whether the Obsidian process is currently running.
+ *
+ * @returns `true` if the Obsidian process is found, `false` otherwise.
+ */
+async function isObsidianRunning(): Promise<boolean> {
+  const command = process.platform === 'win32'
+    ? 'tasklist /FI "IMAGENAME eq Obsidian.exe" /NH'
+    : 'pgrep -f Obsidian';
+  try {
+    const output = await exec(command, { isQuiet: true });
+    if (process.platform === 'win32') {
+      return output.includes('Obsidian.exe');
+    }
+    return output.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**

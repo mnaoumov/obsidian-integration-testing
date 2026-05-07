@@ -25,7 +25,14 @@ interface ScriptErrorEnvelope {
   value: string;
 }
 
-const mockExec = vi.hoisted(() => vi.fn<(command: string | string[], options?: Record<string, unknown>) => Promise<string>>().mockResolvedValue(''));
+const mockExec = vi.hoisted(() =>
+  vi.fn<(command: string | string[], options?: Record<string, unknown>) => Promise<unknown>>().mockResolvedValue({
+    exitCode: 0,
+    exitSignal: null,
+    stderr: '',
+    stdout: ''
+  })
+);
 
 vi.mock('./exec.ts', () => ({
   exec: mockExec
@@ -65,6 +72,7 @@ const mockEnableCliInConfig = vi.hoisted(() => vi.fn());
 vi.mock('./obsidian-config.ts', () => ({
   enableCliInConfig: mockEnableCliInConfig,
   getAnyRegisteredVaultPath: vi.fn().mockReturnValue('/existing-vault'),
+  getRegisteredVaults: vi.fn().mockReturnValue([]),
   getVaultId: vi.fn(),
   isCliEnabled: vi.fn().mockReturnValue(true),
   isVaultRegistered: vi.fn().mockReturnValue(true),
@@ -76,7 +84,7 @@ let transport: DesktopCliTransport;
 
 beforeEach(() => {
   transport = new DesktopCliTransport();
-  mockExec.mockReset().mockResolvedValue('');
+  mockExec.mockReset().mockResolvedValue({ exitCode: 0, exitSignal: null, stderr: '', stdout: '' });
   mockExistsSync.mockReset().mockReturnValue(true);
   mockMkdir.mockReset().mockResolvedValue(undefined);
   mockReadFile.mockReset();
