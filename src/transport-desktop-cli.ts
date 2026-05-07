@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { ExecResult } from './exec.ts';
 import type {
   EnsureLayoutReadyParams,
   GenerateFunctionCallParams
@@ -78,6 +79,14 @@ const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const VAULT_EVAL_TIMEOUT_IN_MILLISECONDS = 10000;
 
+interface BuildDiagnosticsParams {
+  command: string[];
+  cwd: string;
+  execResult: ExecResult | undefined;
+  resultPath: string;
+  scriptPath: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- For consistency and future extensibility.
 interface DestroyCurrentWindowParams extends EnsureLayoutReadyParams {
 }
@@ -131,10 +140,12 @@ export class DesktopCliTransport implements ObsidianTransport {
       const requireExpr = `(async () => { await ${safeRequire}.${invokeName}() })()`;
       const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${requireExpr}`];
 
+      let execResult: ExecResult | undefined;
       try {
-        await exec(command, {
+        execResult = await exec(command, {
           cwd: options.cwd,
           isQuiet: true,
+          shouldIncludeDetails: true,
           ...(options.timeoutInMilliseconds !== undefined && { timeoutInMilliseconds: options.timeoutInMilliseconds })
         });
       } catch (error) {
@@ -147,7 +158,14 @@ export class DesktopCliTransport implements ObsidianTransport {
       }
 
       if (!existsSync(resultPath)) {
-        throw new Error(`Script did not execute for path: ${options.cwd} — the vault may not be found or Obsidian did not run the eval.`);
+        const diagnostics = buildDiagnostics({
+          command,
+          cwd: options.cwd,
+          execResult,
+          resultPath,
+          scriptPath
+        });
+        throw new Error(`Script did not execute for path: ${options.cwd}\n${diagnostics}`);
       }
 
       const resultStr = await readFile(resultPath, 'utf-8');
@@ -395,6 +413,50 @@ export async function destroyCurrentWindow(params: GenerateFunctionCallParams<De
 export async function ipcSendSync(params: GenerateFunctionCallParams<IpcSendSyncParams>): Promise<void> {
   await params.ensureLayoutReady(params);
   window.electron.ipcRenderer.sendSync(params.channel, ...params.args);
+}
+
+/**
+ * Builds a detailed diagnostic string for the "Script did not execute" error.
+ *
+ * Includes the command that was run, exit code, stdout/stderr from the CLI,
+ * and the expected result file path.
+ *
+ * @param params - The diagnostic parameters.
+ * @returns A formatted diagnostic string.
+ */
+function buildDiagnostics(params: BuildDiagnosticsParams): string {
+  const lines: string[] = [];
+
+  lines.push(`  Command: ${params.command.join(' ')}`);
+  lines.push(`  Working directory: ${params.cwd}`);
+  lines.push(`  Script path: ${params.scriptPath}`);
+  lines.push(`  Expected result file: ${params.resultPath}`);
+
+  if (params.execResult) {
+    lines.push(`  Exit code: ${params.execResult.exitCode === null ? '(null — process did not exit normally)' : String(params.execResult.exitCode)}`);
+    if (params.execResult.exitSignal) {
+      lines.push(`  Exit signal: ${params.execResult.exitSignal}`);
+    }
+    if (params.execResult.stdout.trim()) {
+      lines.push(`  stdout: ${params.execResult.stdout.trim()}`);
+    }
+    if (params.execResult.stderr.trim()) {
+      lines.push(`  stderr: ${params.execResult.stderr.trim()}`);
+    }
+    if (!params.execResult.stdout.trim() && !params.execResult.stderr.trim()) {
+      lines.push('  stdout/stderr: (empty)');
+    }
+  } else {
+    lines.push('  exec result: (not available — Obsidian was auto-started and retried)');
+  }
+
+  lines.push('Possible causes:');
+  lines.push('  - The vault may not be found or Obsidian did not run the eval');
+  lines.push('  - Obsidian is open on a different vault');
+  lines.push('  - The eval protocol handler is not active (Obsidian still loading)');
+  lines.push('  - The script threw before writing the result file');
+
+  return lines.join('\n');
 }
 
 /**
