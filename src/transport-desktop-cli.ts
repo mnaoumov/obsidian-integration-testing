@@ -621,8 +621,11 @@ async function isObsidianRunning(): Promise<boolean> {
  * @param vaultPath - The absolute path to the vault folder.
  */
 async function openVaultViaUri(vaultPath: string): Promise<void> {
-  const encodedPath = encodeURIComponent(vaultPath);
-  const uri = `obsidian://open?path=${encodedPath}`;
+  const vaultId = getVaultId(vaultPath);
+  if (!vaultId) {
+    throw new Error(`Cannot open vault via URI: vault is not registered in obsidian.json: ${vaultPath}`);
+  }
+  const uri = `obsidian://open?vault=${encodeURIComponent(vaultId)}`;
   const command = getOpenUriCommand(uri);
   log(`[cli-transport] Opening vault via URI: ${uri}`);
   try {
