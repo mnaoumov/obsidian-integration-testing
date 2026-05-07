@@ -35,7 +35,7 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None.
+Improve troubleshooting in `evaluate()` — when the script result file is missing, surface exec stdout/stderr and the command that was run.
 
 ## L5. Transport configuration
 
