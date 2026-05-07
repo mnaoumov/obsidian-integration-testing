@@ -153,6 +153,32 @@ export function isCliEnabled(): boolean {
 }
 
 /**
+ * Checks whether a vault is marked as open in Obsidian's vault registry.
+ *
+ * Note: This checks the `open` flag in `obsidian.json`, which is updated
+ * asynchronously by Obsidian. It may not reflect the current runtime state.
+ *
+ * @param vaultPath - The absolute path to the vault folder.
+ * @returns `true` if the vault is registered and marked as open, `false` otherwise.
+ */
+export function isVaultOpen(vaultPath: string): boolean {
+  const config = readObsidianJson();
+  if (!config) {
+    return false;
+  }
+
+  const normalizedTarget = normalizePath(vaultPath);
+
+  for (const entry of Object.values(config.vaults)) {
+    if (normalizePath(entry.path) === normalizedTarget) {
+      return entry.open === true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Checks whether a vault path is registered in Obsidian's vault registry.
  *
  * @param vaultPath - The absolute path to the vault folder.

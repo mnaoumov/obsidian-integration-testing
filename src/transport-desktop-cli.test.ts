@@ -75,6 +75,7 @@ vi.mock('./obsidian-config.ts', () => ({
   getRegisteredVaults: vi.fn().mockReturnValue([]),
   getVaultId: vi.fn(),
   isCliEnabled: vi.fn().mockReturnValue(true),
+  isVaultOpen: vi.fn().mockReturnValue(true),
   isVaultRegistered: vi.fn().mockReturnValue(true),
   registerVaultInConfig: mockRegisterVaultInConfig,
   removeVaultFromConfig: mockRemoveVaultFromConfig

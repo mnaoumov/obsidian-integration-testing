@@ -44,6 +44,7 @@ import {
   getRegisteredVaults,
   getVaultId,
   isCliEnabled,
+  isVaultOpen,
   isVaultRegistered,
   registerVaultInConfig,
   removeVaultFromConfig
@@ -192,7 +193,8 @@ export class DesktopCliTransport implements ObsidianTransport {
    * Runs CLI-specific preflight checks.
    *
    * Verifies that the vault is registered, CLI is enabled in Obsidian settings,
-   * and the `obsidian` CLI binary is available in PATH.
+   * and the `obsidian` CLI binary is available in PATH. If the vault is registered
+   * but not open, opens it via URI protocol and polls until it is ready.
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
@@ -211,6 +213,13 @@ export class DesktopCliTransport implements ObsidianTransport {
     }
 
     await this.assertCliAvailable();
+
+    if (!isVaultOpen(vaultPath)) {
+      log(`[cli-transport] Vault is registered but not open: ${vaultPath}. Opening via URI...`);
+      await openVaultViaUri(vaultPath);
+      await this.pollVaultReady(vaultPath);
+    }
+
     log('[cli-transport] Preflight check passed.');
   }
 
@@ -237,23 +246,7 @@ export class DesktopCliTransport implements ObsidianTransport {
       await openVaultViaUri(vaultPath);
     }
 
-    const pollExpr = generateFunctionCall(pollVaultBasePath, { ensureLayoutReady });
-
-    log(`[cli-transport] Polling for vault readiness (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
-    while (Date.now() < deadline) {
-      try {
-        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
-        if (JSON.parse(basePath) === vaultPath) {
-          log('[cli-transport] Vault is ready.');
-          return;
-        }
-      } catch {
-        // Vault not ready yet.
-      }
-      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
-    }
-    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+    await this.pollVaultReady(vaultPath);
   }
 
   /**
@@ -363,6 +356,31 @@ export class DesktopCliTransport implements ObsidianTransport {
     }
 
     throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms.`);
+  }
+
+  /**
+   * Polls until the vault is ready and responding to eval calls.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async pollVaultReady(vaultPath: string): Promise<void> {
+    const pollExpr = generateFunctionCall(pollVaultBasePath, { ensureLayoutReady });
+
+    log(`[cli-transport] Polling for vault readiness (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      try {
+        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
+        if (JSON.parse(basePath) === vaultPath) {
+          log('[cli-transport] Vault is ready.');
+          return;
+        }
+      } catch {
+        // Vault not ready yet.
+      }
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
   }
 
   /**
