@@ -52,6 +52,7 @@ import {
 import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
   getAnyRegisteredVaultPath,
+  getVaultId,
   isVaultOpen,
   isVaultRegistered,
   registerVaultInConfig,
@@ -279,12 +280,25 @@ async function startObsidianAndWaitForCli(): Promise<void> {
     await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
   }
 
-  // Wait for CLI to become responsive
+  // Open a vault via URI so the CLI has a window to eval in
   const existingPath = getAnyRegisteredVaultPath();
   if (!existingPath) {
     return;
   }
 
+  const vaultId = getVaultId(existingPath);
+  if (vaultId) {
+    const uri = `obsidian://open?vault=${encodeURIComponent(vaultId)}`;
+    if (process.platform === 'win32') {
+      await exec(`start "" "${uri}"`, { isQuiet: true });
+    } else if (process.platform === 'darwin') {
+      await exec(`open "${uri}"`, { isQuiet: true });
+    } else {
+      await exec(`xdg-open "${uri}"`, { isQuiet: true });
+    }
+  }
+
+  // Wait for CLI to become responsive
   while (Date.now() < deadline) {
     try {
       await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
@@ -491,11 +505,12 @@ describe('D: Obsidian with vault chooser UI', () => {
     // Restore original config (preserves original vault IDs)
     restoreObsidianJson(configBackupBeforeD);
 
-    // Kill and restart Obsidian so it re-reads the restored config
+    // Restart Obsidian so it re-reads the restored config
+    // (also clears any lingering vault chooser state)
     await killObsidian();
     await startObsidianAndWaitForCli();
 
-    // Clean up test vault
+    // Clean up test vault entry (may have been restored by restoreObsidianJson)
     removeVaultFromConfig(targetDir);
     await removeTempDir(targetDir);
   }, RELOAD_OBSIDIAN_INSTANCE_TIMEOUT_IN_MILLISECONDS);
