@@ -41,24 +41,23 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ### Integration test findings (2026-05-07)
 
-**8/12 pass**: B1/B2/B3, C2/C3, A1/A2/A3.
+**9/12 pass**: B1/B2/B3, C1/C2/C3, A1/A2/A3.
 
-Remaining failures:
+Remaining: D suite (D1/D2/D3) fails in `beforeAll`/`afterAll`
+hooks due to vault chooser state management complexity.
+All D test assertions pass when setup succeeds — the issue
+is infrastructure (closing all windows, then restarting
+Obsidian for cleanup takes too long or the CLI becomes
+unresponsive). D tests passed on attempt 9 and 10 but
+`afterAll` cleanup timed out.
 
-- **C1** (target registered, preflightCheck auto-open): fails
-  with `Command "eval" not found` after B's afterAll destroys
-  a temp vault window. Obsidian may temporarily lose CLI eval
-  capability for other vaults after a window destroy. Transient
-  CLI issue — library code is correct.
-- **D suite** (vault chooser): times out because D's
-  `registerVault` also hits the "eval not found" error.
+Known fixes applied:
 
-Next steps:
-
-- Add delay/retry between B cleanup and C1 start
-- Or skip C1/D1 if it's an Obsidian CLI bug
-- The `exec` helper has no default timeout — this caused
-  infinite hangs when destroying windows (now fixed)
+- `waitForCliReady` polls before IPC calls after vault destroy
+- `closeVaultWindow` uses explicit 10s timeout (no default)
+- `setVaultOpenFlag` patches obsidian.json after window destroy
+- `startObsidianAndWaitForCli` opens vault via URI for CLI
+- Named timeout constants for readability
 
 ## Pending Questions
 
