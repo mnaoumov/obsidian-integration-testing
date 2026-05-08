@@ -12,7 +12,11 @@ import {
   getAnyRegisteredVaultPath,
   getVaultId
 } from './obsidian-config.ts';
-import { DesktopCliTransport } from './transport-desktop-cli.ts';
+import { serializeError } from './serialize-error.ts';
+import {
+  DesktopCliTransport,
+  invokeAndWriteResult
+} from './transport-desktop-cli.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
 interface ExecOptions extends Record<string, unknown> {
@@ -164,87 +168,90 @@ describe('DesktopCliTransport.evaluate', () => {
     const codeArg = ensureNonNullable(command.find((arg) => arg.startsWith('code=')));
     expect(codeArg).not.toContain('module.constructor._load');
     expect(codeArg).toContain('new Function');
-    expect(codeArg).toContain('fn()()');
+    expect(codeArg).not.toContain('fn()()');
     expect(codeArg).toContain('console.debug');
     expect(codeArg).toContain('readFile');
   });
 });
 
 describe('buildScriptFile (via evaluate)', () => {
-  it('should write a script file that wraps the expression in a JSON envelope', async () => {
+  it('should write a script file as an IIFE with serialized invokeAndWriteResult', async () => {
     mockReadFile.mockResolvedValue(JSON.stringify({ value: 'test' }));
     await transport.evaluate('1 + 1', { cwd: '/vault' });
 
     const scriptContent = getWrittenScript(mockWriteFile);
-    expect(scriptContent).toContain('JSON.stringify({ value:');
+    expect(scriptContent).toContain('invokeAndWriteResult');
+    expect(scriptContent).toContain('evaluate:');
+    expect(scriptContent).toContain('resultPath:');
+    expect(scriptContent).toContain('serializeError:');
   });
 
-  it('should write a script that distinguishes undefined, null, and string results', async () => {
+  it('should embed the expression inside an evaluate arrow function', async () => {
     mockReadFile.mockResolvedValue(JSON.stringify({ value: '' }));
-    await transport.evaluate('null', { cwd: '/vault' });
+    await transport.evaluate('myExpression()', { cwd: '/vault' });
 
     const scriptContent = getWrittenScript(mockWriteFile);
-    expect(scriptContent).toContain('result === undefined');
-    expect(scriptContent).toContain('result === null');
-    expect(scriptContent).toContain('type: "undefined"');
-    expect(scriptContent).toContain('type: "null"');
-    expect(scriptContent).toContain('type: "error"');
+    expect(scriptContent).toContain('async () => (myExpression())');
   });
 });
 
-describe('generated script execution', () => {
-  async function runGeneratedScript(expression: string): Promise<unknown> {
-    mockReadFile.mockResolvedValue(JSON.stringify({ result: null }));
-    await transport.evaluate(expression, { cwd: '/vault' });
-
-    const scriptContent = getWrittenScript(mockWriteFile);
-
-    let writtenJson = '';
-    const fakeFsPromises = {
-      writeFile(_path: string, data: string): void {
-        writtenJson = data;
-      }
-    };
-    const originalRequire = globalThis.require;
-    globalThis.require = ((mod: string): unknown => {
-      if (mod === 'node:fs/promises') {
-        return fakeFsPromises;
-      }
-      throw new Error(`Unexpected require: ${mod}`);
-    }) as NodeJS.Require;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- Testing the generated script via new Function, matching production behavior.
-      const fn = new Function(`return ${scriptContent}`) as () => () => Promise<void>;
-      await fn()();
-    } finally {
-      // eslint-disable-next-line require-atomic-updates -- Restoring the original value; no actual race condition in a single-threaded test.
-      globalThis.require = originalRequire;
-    }
-    return JSON.parse(writtenJson);
-  }
-
-  it('should write { type: "undefined" } when expression returns undefined', async () => {
-    const envelope = await runGeneratedScript('undefined');
-    expect(envelope).toEqual({ type: 'undefined', value: '' });
+describe('invokeAndWriteResult', () => {
+  it('should write { type: "undefined" } when evaluate returns undefined', async () => {
+    await invokeAndWriteResult({
+      evaluate: () => Promise.resolve(undefined),
+      resultPath: '/tmp/result.json',
+      serializeError
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/tmp/result.json',
+      JSON.stringify({ type: 'undefined', value: '' })
+    );
   });
 
-  it('should write { type: "null" } when expression returns null', async () => {
-    const envelope = await runGeneratedScript('null');
-    expect(envelope).toEqual({ type: 'null', value: '' });
+  it('should write { type: "null" } when evaluate returns null', async () => {
+    await invokeAndWriteResult({
+      evaluate: () => Promise.resolve(null),
+      resultPath: '/tmp/result.json',
+      serializeError
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/tmp/result.json',
+      JSON.stringify({ type: 'null', value: '' })
+    );
   });
 
-  it('should write { value: "hello" } when expression returns a string', async () => {
-    const envelope = await runGeneratedScript('"hello"');
-    expect(envelope).toEqual({ value: 'hello' });
+  it('should write { value: "hello" } when evaluate returns a string', async () => {
+    await invokeAndWriteResult({
+      evaluate: () => Promise.resolve('hello'),
+      resultPath: '/tmp/result.json',
+      serializeError
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/tmp/result.json',
+      JSON.stringify({ value: 'hello' })
+    );
   });
 
-  it('should write { value: "" } when expression returns empty string', async () => {
-    const envelope = await runGeneratedScript('""');
-    expect(envelope).toEqual({ value: '' });
+  it('should write { value: "" } when evaluate returns empty string', async () => {
+    await invokeAndWriteResult({
+      evaluate: () => Promise.resolve(''),
+      resultPath: '/tmp/result.json',
+      serializeError
+    });
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/tmp/result.json',
+      JSON.stringify({ value: '' })
+    );
   });
 
-  it('should write { type: "error" } with serialized error when expression throws', async () => {
-    const envelope = await runGeneratedScript('(() => { throw new Error("boom") })()') as ScriptErrorEnvelope;
+  it('should write { type: "error" } with serialized error when evaluate throws', async () => {
+    await invokeAndWriteResult({
+      evaluate: () => Promise.reject(new Error('boom')),
+      resultPath: '/tmp/result.json',
+      serializeError
+    });
+    const writtenData = ensureNonNullable(mockWriteFile.mock.calls[0])[1];
+    const envelope = JSON.parse(writtenData) as ScriptErrorEnvelope;
     expect(envelope.type).toBe('error');
     expect(envelope.value).toContain('Error: boom');
   });

@@ -51,6 +51,12 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
+interface InvokeAndWriteResultParams {
+  evaluate(): Promise<unknown>;
+  resultPath: string;
+  serializeError(error: unknown): string;
+}
+
 interface IpcSendSyncParams extends EnsureLayoutReadyParams {
   args: unknown[];
   channel: string;
@@ -132,12 +138,12 @@ export class DesktopCliTransport implements ObsidianTransport {
 
     await mkdir(scriptDir, { recursive: true });
 
-    const scriptContent = buildScriptFile(expression, resultPath, scriptId);
+    const scriptContent = buildScriptFile(expression, resultPath);
     await writeFile(scriptPath, scriptContent);
 
     try {
       const safeScriptPath = scriptPath.replace(/\\/g, '/');
-      const cliExpr = `(${String(executeScriptFile)})(${JSON.stringify(safeScriptPath)})`;
+      const cliExpr = `(${getFunctionExpressionString(executeScriptFile)})(${JSON.stringify(safeScriptPath)})`;
       const vaultId = getVaultId(options.cwd);
       const command = ['obsidian', ...(vaultId ? [`vault=${vaultId}`] : []), 'eval', '--allow-focus-steal', `code=${cliExpr}`];
 
@@ -430,6 +436,43 @@ export async function destroyCurrentWindow(params: GenerateFunctionCallParams<De
  * @param params.channel - The IPC channel name.
  * @param params.args - The arguments to send.
  */
+/**
+ * Evaluates an expression, writes the result to a JSON file.
+ *
+ * Serialized via `toString()` and executed inside the Obsidian process.
+ * Must NOT reference any outer scope.
+ *
+ * @param params - The invocation parameters.
+ */
+export async function invokeAndWriteResult(params: InvokeAndWriteResultParams): Promise<void> {
+  // eslint-disable-next-line no-restricted-syntax -- Dynamic import required: this function is serialized via toString() and runs inside Obsidian where static imports are unavailable.
+  const { writeFile: writeResultFile } = await import('node:fs/promises');
+  try {
+    const result = await params.evaluate();
+    if (result === undefined) {
+      await writeResultFile(params.resultPath, JSON.stringify({ type: 'undefined', value: '' }));
+    } else if (result === null) {
+      await writeResultFile(params.resultPath, JSON.stringify({ type: 'null', value: '' }));
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- Intentional: result is an arbitrary value from the evaluated expression.
+      await writeResultFile(params.resultPath, JSON.stringify({ value: String(result) }));
+    }
+  } catch (err) {
+    await writeResultFile(params.resultPath, JSON.stringify({ type: 'error', value: params.serializeError(err) }));
+  }
+}
+
+/**
+ * Waits for Obsidian's workspace layout to be ready, then sends an IPC
+ * message synchronously via Electron's `ipcRenderer`.
+ *
+ * Serialized via `toString()` and executed inside the Obsidian process.
+ * Must NOT reference any outer scope.
+ *
+ * @param params - The IPC channel and arguments.
+ * @param params.channel - The IPC channel name.
+ * @param params.args - The arguments to send.
+ */
 export async function ipcSendSync(params: GenerateFunctionCallParams<IpcSendSyncParams>): Promise<void> {
   await params.ensureLayoutReady(params);
   window.electron.ipcRenderer.sendSync(params.channel, ...params.args);
@@ -493,35 +536,20 @@ async function buildDiagnostics(params: BuildDiagnosticsParams): Promise<string>
 }
 
 /**
- * Builds the content of a temporary `.cjs` script file.
+ * Builds the content of a temporary script file.
  *
- * The script defines an async `invoke()` function that evaluates the
- * expression, writes the result (or error) to `resultPath`, and is
- * exported for the CLI to `require()` and call.
+ * Serializes {@link invokeAndWriteResult} into a self-contained IIFE that
+ * evaluates the expression, writes the result (or error) to `resultPath`.
  *
  * @param expression - The JavaScript expression to evaluate.
  * @param resultPath - The absolute path to the result file.
- * @param scriptId - A unique identifier for the invoke function name.
  * @returns The script file content.
  */
-function buildScriptFile(expression: string, resultPath: string, scriptId: string): string {
+function buildScriptFile(expression: string, resultPath: string): string {
+  const fnStr = getFunctionExpressionString(invokeAndWriteResult);
+  const serializeErrorStr = getFunctionExpressionString(serializeError);
   const resultPathJson = JSON.stringify(resultPath.replace(/\\/g, '/'));
-  return `async function invoke_${scriptId}() {
-  const { writeFile } = require("node:fs/promises");
-  const serializeError = ${getFunctionExpressionString(serializeError)};
-  try {
-    const result = await (${expression});
-    if (result === undefined) {
-      await writeFile(${resultPathJson}, JSON.stringify({ value: "", type: "undefined" }));
-    } else if (result === null) {
-      await writeFile(${resultPathJson}, JSON.stringify({ value: "", type: "null" }));
-    } else {
-      await writeFile(${resultPathJson}, JSON.stringify({ value: String(result) }));
-    }
-  } catch (err) {
-    await writeFile(${resultPathJson}, JSON.stringify({ value: serializeError(err), type: "error" }));
-  }
-}`;
+  return `(${fnStr})({ evaluate: async () => (${expression}), resultPath: ${resultPathJson}, serializeError: ${serializeErrorStr} })`;
 }
 
 /**
@@ -558,16 +586,16 @@ async function executeScriptFile(scriptPath: string): Promise<void> {
   // eslint-disable-next-line no-console -- Diagnostic logging inside Obsidian process; no logger available.
   console.debug(`Executing ${scriptPath}:\n${script}`);
 
-  let fn: () => () => Promise<void>;
+  let fn: () => Promise<void>;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- The script is a trusted, self-generated async function definition.
-    fn = new Function(`return ${script}`) as () => () => Promise<void>;
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- The script is a trusted, self-generated IIFE expression.
+    fn = new Function(`return ${script}`) as () => Promise<void>;
   } catch (cause) {
     throw new Error(`Error parsing ${scriptPath}`, { cause });
   }
 
   try {
-    await fn()();
+    await fn();
   } catch (cause) {
     throw new Error(`Error executing ${scriptPath}`, { cause });
   }

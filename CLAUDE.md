@@ -35,7 +35,8 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None.
+1. Refactor `buildScriptFile` and other places using constructed strings to use `String(function)` / `getFunctionExpressionString()`.
+2. Write integration tests for `obsidian eval` covering 12 scenarios (Obsidian state x vault registration state).
 
 ## Pending Questions
 
