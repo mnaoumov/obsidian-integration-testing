@@ -23,10 +23,15 @@ import type { FileSystemAdapter } from 'obsidian';
 
 import {
   mkdirSync,
-  mkdtempSync
+  mkdtempSync,
+  readFileSync,
+  writeFileSync
 } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import {
+  homedir,
+  tmpdir
+} from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import {
@@ -42,7 +47,6 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { exec } from './exec.ts';
 import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
-  getRegisteredVaults,
   isVaultOpen,
   isVaultRegistered,
   registerVaultInConfig,
@@ -50,6 +54,15 @@ import {
 } from './obsidian-config.ts';
 import { TempVault } from './temp-vault.ts';
 import { DesktopCliTransport } from './transport-desktop-cli.ts';
+
+interface ObsidianJsonConfig {
+  vaults: Record<string, ObsidianVaultEntry>;
+}
+
+interface ObsidianVaultEntry {
+  open?: boolean;
+  path: string;
+}
 
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
 const OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS = 60000;
@@ -60,7 +73,18 @@ const transport = new DesktopCliTransport();
 const dialogMonitor = new NativeDialogMonitor();
 
 /**
+ * Backs up obsidian.json and returns the backup content.
+ *
+ * @returns The raw JSON string of obsidian.json.
+ */
+function backupObsidianJson(): string {
+  return readFileSync(getObsidianJsonPath(), 'utf-8');
+}
+
+/**
  * Checks if Obsidian is currently running.
+ *
+ * @returns `true` if Obsidian is running, `false` otherwise.
  */
 async function checkObsidianRunning(): Promise<boolean> {
   const command = process.platform === 'win32'
@@ -78,19 +102,21 @@ async function checkObsidianRunning(): Promise<boolean> {
 }
 
 /**
- * Closes all open vault windows.
+ * Closes all open vault windows by iterating registered vaults.
  */
-async function closeAllVaultWindows(): Promise<void> {
-  const vaults = getRegisteredVaults();
-  for (const vault of vaults) {
-    if (vault.open) {
-      await closeVaultWindow(vault.path);
+async function closeAllOpenVaults(): Promise<void> {
+  const config = JSON.parse(readFileSync(getObsidianJsonPath(), 'utf-8')) as ObsidianJsonConfig;
+  for (const entry of Object.values(config.vaults)) {
+    if (entry.open) {
+      await closeVaultWindow(entry.path);
     }
   }
 }
 
 /**
  * Closes a vault window by destroying it via eval.
+ *
+ * @param vaultPath - The vault path whose window to close.
  */
 async function closeVaultWindow(vaultPath: string): Promise<void> {
   try {
@@ -109,18 +135,41 @@ async function closeVaultWindow(vaultPath: string): Promise<void> {
 
 /**
  * Creates a fresh temp directory to use as a vault path.
+ *
+ * @returns The absolute path to the new temp directory.
  */
 function createTempVaultDir(): string {
-  return mkdtempSync(join(tmpdir(), 'cli-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'cli-test-'));
+  mkdirSync(join(dir, '.obsidian'), { recursive: true });
+  return dir;
 }
 
 /**
  * Waits for a given number of milliseconds.
+ *
+ * @param ms - The delay in milliseconds.
  */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * Returns the platform-specific path to obsidian.json.
+ *
+ * @returns The absolute path to obsidian.json.
+ */
+function getObsidianJsonPath(): string {
+  if (process.platform === 'win32') {
+    return join(process.env['APPDATA'] ?? '', 'obsidian', 'obsidian.json');
+  }
+
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support', 'obsidian', 'obsidian.json');
+  }
+
+  return join(process.env['XDG_CONFIG_HOME'] ?? join(homedir(), '.config'), 'obsidian', 'obsidian.json');
 }
 
 /**
@@ -139,26 +188,9 @@ async function killObsidian(): Promise<void> {
 }
 
 /**
- * Opens a vault via URI protocol.
- */
-async function openVaultViaUri(vaultPath: string): Promise<void> {
-  const vaults = getRegisteredVaults();
-  const entry = vaults.find((v) => v.path.toLowerCase() === vaultPath.toLowerCase());
-  if (!entry) {
-    throw new Error(`Cannot open: vault not registered: ${vaultPath}`);
-  }
-  const uri = `obsidian://open?vault=${encodeURIComponent(entry.id)}`;
-  if (process.platform === 'win32') {
-    await exec(`start "" "${uri}"`, { isQuiet: true });
-  } else if (process.platform === 'darwin') {
-    await exec(`open "${uri}"`, { isQuiet: true });
-  } else {
-    await exec(`xdg-open "${uri}"`, { isQuiet: true });
-  }
-}
-
-/**
  * Removes temp directory with retry.
+ *
+ * @param dirPath - The directory to remove.
  */
 async function removeTempDir(dirPath: string): Promise<void> {
   try {
@@ -166,6 +198,15 @@ async function removeTempDir(dirPath: string): Promise<void> {
   } catch {
     // May fail on Windows due to file locks.
   }
+}
+
+/**
+ * Restores obsidian.json from a backup string.
+ *
+ * @param backup - The raw JSON string to restore.
+ */
+function restoreObsidianJson(backup: string): void {
+  writeFileSync(getObsidianJsonPath(), backup);
 }
 
 /**
@@ -191,6 +232,8 @@ async function startObsidian(): Promise<void> {
   }
   throw new Error('Obsidian did not start within timeout');
 }
+
+// ─── Global dialog monitor ──────────────────────────────────────
 
 beforeAll(() => {
   dialogMonitor.start();
@@ -233,35 +276,27 @@ describe('B: Obsidian running + target vault open', () => {
   });
 
   it('B2: not registered (inconsistent) — preflightCheck should fail', async () => {
-    // Temporarily remove vault from config while it's still open
-    const wasRemoved = removeVaultFromConfig(tempVault.path);
-    expect(wasRemoved).toBe(true);
+    const configBackup = backupObsidianJson();
+    removeVaultFromConfig(tempVault.path);
 
     try {
       await expect(transport.preflightCheck(tempVault.path))
         .rejects.toThrow(/not registered/i);
     } finally {
-      // Re-register so cleanup works
-      registerVaultInConfig(tempVault.path);
+      restoreObsidianJson(configBackup);
     }
   });
 
   it('B3: no vaults registered (inconsistent) — preflightCheck should fail', async () => {
-    // Save and clear all vaults
-    const savedVaults = getRegisteredVaults();
-    for (const vault of savedVaults) {
-      removeVaultFromConfig(vault.path);
-    }
+    const configBackup = backupObsidianJson();
+    writeFileSync(getObsidianJsonPath(), JSON.stringify({ cli: true, vaults: {} }));
 
     try {
-      expect(getRegisteredVaults()).toHaveLength(0);
+      expect(isVaultRegistered(tempVault.path)).toBe(false);
       await expect(transport.preflightCheck(tempVault.path))
         .rejects.toThrow(/not registered/i);
     } finally {
-      // Restore vaults
-      for (const vault of savedVaults) {
-        registerVaultInConfig(vault.path);
-      }
+      restoreObsidianJson(configBackup);
     }
   });
 });
@@ -274,10 +309,8 @@ describe('C: Obsidian running + other vault open', () => {
   let targetDir: string;
 
   beforeAll(async () => {
-    // Register and open the anchor vault (the "other" vault)
     await anchorVault.register();
     targetDir = createTempVaultDir();
-    mkdirSync(join(targetDir, '.obsidian'), { recursive: true });
   }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
   afterAll(async () => {
@@ -287,20 +320,19 @@ describe('C: Obsidian running + other vault open', () => {
   });
 
   it('C1: target registered — preflightCheck should auto-open vault', async () => {
-    // Register the target vault in config but don't open it
-    registerVaultInConfig(targetDir);
+    // Register via IPC so Obsidian's in-memory registry has the vault
+    await transport.registerVault(targetDir);
+    // Close the window so vault is registered but not open
+    await closeVaultWindow(targetDir);
 
-    try {
-      // PreflightCheck should detect vault is not open and open it
-      await transport.preflightCheck(targetDir);
-      expect(isVaultOpen(targetDir)).toBe(true);
-    } finally {
-      await closeVaultWindow(targetDir);
-    }
+    // Now preflightCheck should auto-open it via URI (using known vault ID)
+    await transport.preflightCheck(targetDir);
+    expect(isVaultOpen(targetDir)).toBe(true);
+
+    await closeVaultWindow(targetDir);
   });
 
   it('C2: target not registered — preflightCheck should fail', async () => {
-    // Ensure target is not registered
     removeVaultFromConfig(targetDir);
     expect(isVaultRegistered(targetDir)).toBe(false);
 
@@ -309,19 +341,15 @@ describe('C: Obsidian running + other vault open', () => {
   });
 
   it('C3: no vaults registered (inconsistent) — preflightCheck should fail', async () => {
-    const savedVaults = getRegisteredVaults();
-    for (const vault of savedVaults) {
-      removeVaultFromConfig(vault.path);
-    }
+    const configBackup = backupObsidianJson();
+    writeFileSync(getObsidianJsonPath(), JSON.stringify({ cli: true, vaults: {} }));
 
     try {
-      expect(getRegisteredVaults()).toHaveLength(0);
+      expect(isVaultRegistered(targetDir)).toBe(false);
       await expect(transport.preflightCheck(targetDir))
         .rejects.toThrow(/not registered/i);
     } finally {
-      for (const vault of savedVaults) {
-        registerVaultInConfig(vault.path);
-      }
+      restoreObsidianJson(configBackup);
     }
   });
 });
@@ -331,66 +359,69 @@ describe('C: Obsidian running + other vault open', () => {
 // ─────────────────────────────────────────────────────────────────
 describe('D: Obsidian with vault chooser UI', () => {
   let targetDir: string;
-  let savedOpenVaults: string[];
+  let configBackupBeforeD: string;
 
   beforeAll(async () => {
     targetDir = createTempVaultDir();
-    mkdirSync(join(targetDir, '.obsidian'), { recursive: true });
 
-    // Close all vault windows to get the vault chooser
-    savedOpenVaults = getRegisteredVaults()
-      .filter((v) => v.open)
-      .map((v) => v.path);
-    await closeAllVaultWindows();
+    // Register target vault via IPC while a vault is still open
+    await transport.registerVault(targetDir);
+    // Close its window so it's registered but not open
+    await closeVaultWindow(targetDir);
+
+    // Save config before closing other vaults (for restoration later)
+    configBackupBeforeD = backupObsidianJson();
+
+    // Close all remaining vault windows to trigger vault chooser
+    await closeAllOpenVaults();
     await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
   }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
   afterAll(async () => {
-    // Re-open previously open vaults
-    for (const vaultPath of savedOpenVaults) {
-      if (isVaultRegistered(vaultPath)) {
-        await openVaultViaUri(vaultPath);
-        await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
-      }
-    }
+    // Restore config with original vault IDs
+    restoreObsidianJson(configBackupBeforeD);
+
+    // Restart Obsidian to pick up the restored config
+    await killObsidian();
+    await startObsidian();
+
     removeVaultFromConfig(targetDir);
     await removeTempDir(targetDir);
-  });
+  }, OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS);
 
   it('D1: target registered — preflightCheck should open vault', async () => {
-    registerVaultInConfig(targetDir);
+    expect(isVaultRegistered(targetDir)).toBe(true);
+    expect(isVaultOpen(targetDir)).toBe(false);
 
-    try {
-      await transport.preflightCheck(targetDir);
-      expect(isVaultOpen(targetDir)).toBe(true);
-    } finally {
-      await closeVaultWindow(targetDir);
-      removeVaultFromConfig(targetDir);
-    }
+    await transport.preflightCheck(targetDir);
+    expect(isVaultOpen(targetDir)).toBe(true);
+
+    await closeVaultWindow(targetDir);
   });
 
   it('D2: target not registered — preflightCheck should fail', async () => {
+    const configBackup = backupObsidianJson();
     removeVaultFromConfig(targetDir);
-    expect(isVaultRegistered(targetDir)).toBe(false);
-
-    await expect(transport.preflightCheck(targetDir))
-      .rejects.toThrow(/not registered/i);
-  });
-
-  it('D3: no vaults registered — preflightCheck should fail', async () => {
-    const savedVaults = getRegisteredVaults();
-    for (const vault of savedVaults) {
-      removeVaultFromConfig(vault.path);
-    }
 
     try {
-      expect(getRegisteredVaults()).toHaveLength(0);
+      expect(isVaultRegistered(targetDir)).toBe(false);
       await expect(transport.preflightCheck(targetDir))
         .rejects.toThrow(/not registered/i);
     } finally {
-      for (const vault of savedVaults) {
-        registerVaultInConfig(vault.path);
-      }
+      restoreObsidianJson(configBackup);
+    }
+  });
+
+  it('D3: no vaults registered — preflightCheck should fail', async () => {
+    const configBackup = backupObsidianJson();
+    writeFileSync(getObsidianJsonPath(), JSON.stringify({ cli: true, vaults: {} }));
+
+    try {
+      expect(isVaultRegistered(targetDir)).toBe(false);
+      await expect(transport.preflightCheck(targetDir))
+        .rejects.toThrow(/not registered/i);
+    } finally {
+      restoreObsidianJson(configBackup);
     }
   });
 });
@@ -404,7 +435,6 @@ describe('A: No Obsidian running', () => {
 
   beforeAll(async () => {
     targetDir = createTempVaultDir();
-    mkdirSync(join(targetDir, '.obsidian'), { recursive: true });
     wasObsidianRunning = await checkObsidianRunning();
     await killObsidian();
   }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
@@ -413,22 +443,20 @@ describe('A: No Obsidian running', () => {
     removeVaultFromConfig(targetDir);
     await removeTempDir(targetDir);
 
-    // Restore Obsidian if it was running before
     if (wasObsidianRunning) {
       await startObsidian();
     }
   }, OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS);
 
   it('A1: target registered — should auto-start Obsidian', async () => {
+    // RegisterVaultInConfig is fine here — Obsidian reads it on startup
     registerVaultInConfig(targetDir);
     expect(await checkObsidianRunning()).toBe(false);
 
-    try {
-      await transport.preflightCheck(targetDir);
-      expect(await checkObsidianRunning()).toBe(true);
-    } finally {
-      await closeVaultWindow(targetDir);
-    }
+    await transport.preflightCheck(targetDir);
+    expect(await checkObsidianRunning()).toBe(true);
+
+    await closeVaultWindow(targetDir);
   }, OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS);
 
   it('A2: target not registered — preflightCheck should fail', async () => {
@@ -440,19 +468,15 @@ describe('A: No Obsidian running', () => {
   });
 
   it('A3: no vaults registered — preflightCheck should fail', async () => {
-    const savedVaults = getRegisteredVaults();
-    for (const vault of savedVaults) {
-      removeVaultFromConfig(vault.path);
-    }
+    const configBackup = backupObsidianJson();
+    writeFileSync(getObsidianJsonPath(), JSON.stringify({ cli: true, vaults: {} }));
 
     try {
-      expect(getRegisteredVaults()).toHaveLength(0);
+      expect(isVaultRegistered(targetDir)).toBe(false);
       await expect(transport.preflightCheck(targetDir))
         .rejects.toThrow(/not registered/i);
     } finally {
-      for (const vault of savedVaults) {
-        registerVaultInConfig(vault.path);
-      }
+      restoreObsidianJson(configBackup);
     }
   });
 });
