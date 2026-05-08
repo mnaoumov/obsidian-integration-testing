@@ -229,9 +229,9 @@ function restoreObsidianJson(backup: string): void {
 }
 
 /**
- * Launches Obsidian and waits until it's running.
+ * Launches Obsidian and waits until its CLI is responsive.
  */
-async function startObsidian(): Promise<void> {
+async function startObsidianAndWaitForCli(): Promise<void> {
   if (process.platform === 'win32') {
     const localAppData = process.env['LOCALAPPDATA'] ?? '';
     await exec(`start "" "${localAppData}\\Programs\\Obsidian\\Obsidian.exe"`, { isQuiet: true });
@@ -241,23 +241,49 @@ async function startObsidian(): Promise<void> {
     await exec('obsidian &', { isQuiet: true });
   }
 
+  // Wait for process to appear
   const deadline = Date.now() + LONG_TIMEOUT_IN_MILLISECONDS;
   while (Date.now() < deadline) {
     if (await checkObsidianRunning()) {
-      await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
-      return;
+      break;
     }
     await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
   }
-  throw new Error('Obsidian did not start within timeout');
+
+  // Wait for CLI to become responsive
+  const existingPath = getAnyRegisteredVaultPath();
+  if (!existingPath) {
+    return;
+  }
+
+  while (Date.now() < deadline) {
+    try {
+      await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
+      return;
+    } catch {
+      await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+  throw new Error('Obsidian CLI did not become responsive within timeout');
 }
 
 // ─── Global setup ───────────────────────────────────────────────
 
-beforeAll(() => {
+beforeAll(async () => {
   cleanStaleTempVaults();
   dialogMonitor.start();
-});
+
+  // Ensure Obsidian is running with CLI responsive
+  if (await checkObsidianRunning()) {
+    try {
+      await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
+    } catch {
+      // CLI not working — restart Obsidian
+      await killObsidian();
+      await startObsidianAndWaitForCli();
+    }
+  }
+}, LONG_TIMEOUT_IN_MILLISECONDS);
 
 afterAll(() => {
   dialogMonitor.stop();
@@ -413,7 +439,7 @@ describe('D: Obsidian with vault chooser UI', () => {
 
     // Kill and restart Obsidian so it re-reads the restored config
     await killObsidian();
-    await startObsidian();
+    await startObsidianAndWaitForCli();
 
     // Clean up test vault
     removeVaultFromConfig(targetDir);
@@ -475,7 +501,7 @@ describe('A: No Obsidian running', () => {
     await removeTempDir(targetDir);
 
     if (wasObsidianRunning) {
-      await startObsidian();
+      await startObsidianAndWaitForCli();
     }
   }, LONG_TIMEOUT_IN_MILLISECONDS);
 
