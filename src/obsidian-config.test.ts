@@ -9,8 +9,10 @@ import {
 import {
   enableCliInConfig,
   getAnyRegisteredVaultPath,
+  getRegisteredVaults,
   getVaultId,
   isCliEnabled,
+  isVaultOpen,
   isVaultRegistered,
   registerVaultInConfig,
   removeVaultFromConfig
@@ -213,6 +215,54 @@ describe('getAnyRegisteredVaultPath', () => {
       throw new Error('ENOENT');
     });
     expect(getAnyRegisteredVaultPath()).toBeUndefined();
+  });
+});
+
+describe('getRegisteredVaults', () => {
+  it('should return all registered vaults with their IDs and open status', () => {
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    const vaults = getRegisteredVaults();
+    expect(vaults).toEqual([
+      { id: '5e01ed323ddcc367', open: false, path: 'F:\\Obsidian' },
+      { id: 'abc123', open: true, path: 'F:\\dev\\test-vault' }
+    ]);
+  });
+
+  it('should return empty array when obsidian.json does not exist', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    expect(getRegisteredVaults()).toEqual([]);
+  });
+});
+
+describe('isVaultOpen', () => {
+  it('should return true when vault is marked as open', () => {
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    expect(isVaultOpen('F:\\dev\\test-vault')).toBe(true);
+  });
+
+  it('should return false when vault is not marked as open', () => {
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    expect(isVaultOpen('F:\\Obsidian')).toBe(false);
+  });
+
+  it('should return false when vault is not registered', () => {
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    expect(isVaultOpen('F:\\nonexistent')).toBe(false);
+  });
+
+  it('should return false when obsidian.json does not exist', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    expect(isVaultOpen('F:\\Obsidian')).toBe(false);
+  });
+
+  it('should match case-insensitively on Windows', () => {
+    mockPlatform.value = 'win32';
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    expect(isVaultOpen('f:\\dev\\test-vault')).toBe(true);
   });
 });
 
