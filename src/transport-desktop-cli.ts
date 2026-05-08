@@ -127,21 +127,19 @@ export class DesktopCliTransport implements ObsidianTransport {
     const SLICE_START = 2;
     const scriptId = String(Math.random()).slice(SLICE_START);
     const scriptDir = join(tmpdir(), 'obsidian-integration-testing');
-    const scriptPath = join(scriptDir, `${scriptId}.cjs`);
+    const scriptPath = join(scriptDir, `${scriptId}.js`);
     const resultPath = join(scriptDir, `${scriptId}.result.json`);
 
     await mkdir(scriptDir, { recursive: true });
 
-    const invokeName = `invoke_${scriptId}`;
-    const scriptContent = buildScriptFile(expression, resultPath, invokeName);
+    const scriptContent = buildScriptFile(expression, resultPath, scriptId);
     await writeFile(scriptPath, scriptContent);
 
     try {
-      // Use module.constructor._load to bypass any monkey-patched require()
-      // (e.g., obsidian-codescript-toolkit patches require in the renderer process).
-      const safeRequire = `module.constructor._load(${JSON.stringify(scriptPath.replace(/\\/g, '/'))})`;
-      const requireExpr = `(async () => { await ${safeRequire}.${invokeName}() })()`;
-      const command = ['obsidian', 'eval', '--allow-focus-steal', `code=${requireExpr}`];
+      const safeScriptPath = scriptPath.replace(/\\/g, '/');
+      const cliExpr = `(${String(executeScriptFile)})(${JSON.stringify(safeScriptPath)})`;
+      const vaultId = getVaultId(options.cwd);
+      const command = ['obsidian', ...(vaultId ? [`vault=${vaultId}`] : []), 'eval', '--allow-focus-steal', `code=${cliExpr}`];
 
       let execResult: ExecResult | undefined;
       try {
@@ -400,7 +398,8 @@ export class DesktopCliTransport implements ObsidianTransport {
 
     await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
 
-    const command = ['obsidian', 'eval', '--vault', vaultPath, '--expression', '"1"'];
+    const restartVaultId = getVaultId(vaultPath);
+    const command = ['obsidian', ...(restartVaultId ? [`vault=${restartVaultId}`] : []), 'eval', 'code="1"'];
     await this.ensureObsidianRunningAndRetry(command, vaultPath);
   }
 }
@@ -502,32 +501,27 @@ async function buildDiagnostics(params: BuildDiagnosticsParams): Promise<string>
  *
  * @param expression - The JavaScript expression to evaluate.
  * @param resultPath - The absolute path to the result file.
- * @param invokeName - The unique function name to export (avoids collisions).
+ * @param scriptId - A unique identifier for the invoke function name.
  * @returns The script file content.
  */
-function buildScriptFile(expression: string, resultPath: string, invokeName: string): string {
+function buildScriptFile(expression: string, resultPath: string, scriptId: string): string {
   const resultPathJson = JSON.stringify(resultPath.replace(/\\/g, '/'));
-  return `"use strict";
-const fs = require("fs");
-const serializeError = ${getFunctionExpressionString(serializeError)};
-
-async function ${invokeName}() {
+  return `async function invoke_${scriptId}() {
+  const { writeFile } = require("node:fs/promises");
+  const serializeError = ${getFunctionExpressionString(serializeError)};
   try {
     const result = await (${expression});
     if (result === undefined) {
-      fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: "", type: "undefined" }));
+      await writeFile(${resultPathJson}, JSON.stringify({ value: "", type: "undefined" }));
     } else if (result === null) {
-      fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: "", type: "null" }));
+      await writeFile(${resultPathJson}, JSON.stringify({ value: "", type: "null" }));
     } else {
-      fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: String(result) }));
+      await writeFile(${resultPathJson}, JSON.stringify({ value: String(result) }));
     }
   } catch (err) {
-    fs.writeFileSync(${resultPathJson}, JSON.stringify({ value: serializeError(err), type: "error" }));
+    await writeFile(${resultPathJson}, JSON.stringify({ value: serializeError(err), type: "error" }));
   }
-}
-
-exports.${invokeName} = ${invokeName};
-`;
+}`;
 }
 
 /**
@@ -540,6 +534,43 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * Reads a script file from disk, logs its content, and executes it via `new Function`.
+ *
+ * Serialized via `toString()` and executed inside the Obsidian process.
+ * Must NOT reference any outer scope.
+ *
+ * @param scriptPath - The absolute path to the script file.
+ */
+async function executeScriptFile(scriptPath: string): Promise<void> {
+  // eslint-disable-next-line no-restricted-syntax -- Dynamic import required: this function is serialized via toString() and runs inside Obsidian where static imports are unavailable.
+  const fsPromises = await import('node:fs/promises');
+
+  try {
+    await fsPromises.access(scriptPath);
+  } catch (cause) {
+    throw new Error(`Script file not found: ${scriptPath}`, { cause });
+  }
+
+  const script = await fsPromises.readFile(scriptPath, 'utf-8');
+  // eslint-disable-next-line no-console -- Diagnostic logging inside Obsidian process; no logger available.
+  console.debug(`Executing ${scriptPath}:\n${script}`);
+
+  let fn: () => () => Promise<void>;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- The script is a trusted, self-generated async function definition.
+    fn = new Function(`return ${script}`) as () => () => Promise<void>;
+  } catch (cause) {
+    throw new Error(`Error parsing ${scriptPath}`, { cause });
+  }
+
+  try {
+    await fn()();
+  } catch (cause) {
+    throw new Error(`Error executing ${scriptPath}`, { cause });
+  }
 }
 
 /**
