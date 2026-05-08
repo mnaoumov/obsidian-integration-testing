@@ -350,9 +350,40 @@ afterAll(() => {
   cleanStaleTempVaults();
 });
 
-afterEach(() => {
+afterEach(async () => {
   dialogMonitor.assertNoDialogs();
   dialogMonitor.reset();
+
+  // Check for web-based trust dialog in any open vault
+  const config = JSON.parse(readFileSync(getObsidianJsonPath(), 'utf-8')) as ObsidianJsonConfig;
+  for (const entry of Object.values(config.vaults)) {
+    if (entry.open) {
+      try {
+        const hasTrustDialog = await evalInObsidian({
+          fn(): boolean {
+            const modals = document.querySelectorAll('.modal-container');
+            for (const modal of modals) {
+              if (modal.textContent.includes('Do you trust the author')) {
+                return true;
+              }
+            }
+            return false;
+          },
+          shouldSkipPreflightChecks: true,
+          vaultPath: entry.path
+        });
+        if (hasTrustDialog) {
+          throw new Error(`"Do you trust the author" dialog detected in vault: ${entry.path}`);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Do you trust the author')) {
+          throw error;
+        }
+        // Eval failed (vault window may be closing) — skip check
+      }
+      break;
+    }
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────
