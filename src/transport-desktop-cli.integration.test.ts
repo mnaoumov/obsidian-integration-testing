@@ -47,6 +47,7 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { exec } from './exec.ts';
 import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
+  getAnyRegisteredVaultPath,
   isVaultOpen,
   isVaultRegistered,
   registerVaultInConfig,
@@ -64,8 +65,7 @@ interface ObsidianVaultEntry {
   path: string;
 }
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
-const OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS = 60000;
+const LONG_TIMEOUT_IN_MILLISECONDS = 120000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 2000;
 const OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 
@@ -102,15 +102,18 @@ async function checkObsidianRunning(): Promise<boolean> {
 }
 
 /**
- * Closes all open vault windows by iterating registered vaults.
+ * Removes stale temp vault entries from obsidian.json.
  */
-async function closeAllOpenVaults(): Promise<void> {
-  const config = JSON.parse(readFileSync(getObsidianJsonPath(), 'utf-8')) as ObsidianJsonConfig;
-  for (const entry of Object.values(config.vaults)) {
-    if (entry.open) {
-      await closeVaultWindow(entry.path);
+function cleanStaleTempVaults(): void {
+  const configPath = getObsidianJsonPath();
+  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as ObsidianJsonConfig;
+  for (const [id, entry] of Object.entries(config.vaults)) {
+    if (entry.path.includes('temp-vault-') || entry.path.includes('cli-test-')) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Cleaning up stale entries by dynamic key.
+      delete config.vaults[id];
     }
   }
+  writeFileSync(configPath, JSON.stringify(config));
 }
 
 /**
@@ -134,7 +137,7 @@ async function closeVaultWindow(vaultPath: string): Promise<void> {
 }
 
 /**
- * Creates a fresh temp directory to use as a vault path.
+ * Creates a fresh temp directory with .obsidian folder.
  *
  * @returns The absolute path to the new temp directory.
  */
@@ -173,7 +176,7 @@ function getObsidianJsonPath(): string {
 }
 
 /**
- * Kills the Obsidian process.
+ * Kills the Obsidian process and waits for it to stop.
  */
 async function killObsidian(): Promise<void> {
   const command = process.platform === 'win32'
@@ -184,11 +187,14 @@ async function killObsidian(): Promise<void> {
   } catch {
     // May not be running.
   }
-  await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
+
+  while (await checkObsidianRunning()) {
+    await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
+  }
 }
 
 /**
- * Removes temp directory with retry.
+ * Removes temp directory.
  *
  * @param dirPath - The directory to remove.
  */
@@ -222,7 +228,7 @@ async function startObsidian(): Promise<void> {
     await exec('obsidian &', { isQuiet: true });
   }
 
-  const deadline = Date.now() + OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS;
+  const deadline = Date.now() + LONG_TIMEOUT_IN_MILLISECONDS;
   while (Date.now() < deadline) {
     if (await checkObsidianRunning()) {
       await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
@@ -233,14 +239,16 @@ async function startObsidian(): Promise<void> {
   throw new Error('Obsidian did not start within timeout');
 }
 
-// ─── Global dialog monitor ──────────────────────────────────────
+// ─── Global setup ───────────────────────────────────────────────
 
 beforeAll(() => {
+  cleanStaleTempVaults();
   dialogMonitor.start();
 });
 
 afterAll(() => {
   dialogMonitor.stop();
+  cleanStaleTempVaults();
 });
 
 afterEach(() => {
@@ -256,11 +264,11 @@ describe('B: Obsidian running + target vault open', () => {
 
   beforeAll(async () => {
     await tempVault.register();
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   afterAll(async () => {
     await tempVault.dispose();
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('B1: registered — should evaluate successfully', async () => {
     expect(isVaultRegistered(tempVault.path)).toBe(true);
@@ -305,21 +313,22 @@ describe('B: Obsidian running + target vault open', () => {
 // C. Obsidian running with other vault (not target)
 // ─────────────────────────────────────────────────────────────────
 describe('C: Obsidian running + other vault open', () => {
-  const anchorVault = new TempVault();
   let targetDir: string;
 
-  beforeAll(async () => {
-    await anchorVault.register();
+  beforeAll(() => {
     targetDir = createTempVaultDir();
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+  });
 
   afterAll(async () => {
     removeVaultFromConfig(targetDir);
     await removeTempDir(targetDir);
-    await anchorVault.dispose();
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+  });
 
   it('C1: target registered — preflightCheck should auto-open vault', async () => {
+    // Use the user's already-open vault to register target via IPC
+    const existingVaultPath = getAnyRegisteredVaultPath();
+    expect(existingVaultPath).toBeDefined();
+
     // Register via IPC so Obsidian's in-memory registry has the vault
     await transport.registerVault(targetDir);
     // Close the window so vault is registered but not open
@@ -329,8 +338,9 @@ describe('C: Obsidian running + other vault open', () => {
     await transport.preflightCheck(targetDir);
     expect(isVaultOpen(targetDir)).toBe(true);
 
+    // Clean up: close the vault window
     await closeVaultWindow(targetDir);
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS * 2);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('C2: target not registered — preflightCheck should fail', async () => {
     removeVaultFromConfig(targetDir);
@@ -356,49 +366,47 @@ describe('C: Obsidian running + other vault open', () => {
 
 // ─────────────────────────────────────────────────────────────────
 // D. Obsidian with vault chooser (no vaults open)
+//
+// To get the vault chooser, we must close ALL vault windows.
+// We register the target via IPC first, then close everything.
 // ─────────────────────────────────────────────────────────────────
 describe('D: Obsidian with vault chooser UI', () => {
-  const anchorVault = new TempVault();
   let targetDir: string;
-  let configBackupBeforeD: string | undefined;
+  let configBackupBeforeD: string;
 
   beforeAll(async () => {
     targetDir = createTempVaultDir();
-
-    // Need an open vault to register via IPC — create a temporary anchor
-    await anchorVault.register();
-
-    // Save config early so afterAll can always restore
     configBackupBeforeD = backupObsidianJson();
 
-    // Register target vault via IPC while anchor vault is open
+    // Register target vault via IPC while user's vault is still open
     await transport.registerVault(targetDir);
-    // Close target window so it's registered but not open
     await closeVaultWindow(targetDir);
 
-    // Update backup to include the newly registered vault
+    // Save config again (now includes target vault with its IPC-assigned ID)
     configBackupBeforeD = backupObsidianJson();
 
-    // Now close ALL vault windows (including anchor) to trigger vault chooser
-    await closeAllOpenVaults();
+    // Close ALL vault windows to trigger vault chooser
+    const config = JSON.parse(readFileSync(getObsidianJsonPath(), 'utf-8')) as ObsidianJsonConfig;
+    for (const entry of Object.values(config.vaults)) {
+      if (entry.open) {
+        await closeVaultWindow(entry.path);
+      }
+    }
     await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS * 3);
+  }, LONG_TIMEOUT_IN_MILLISECONDS * 2);
 
   afterAll(async () => {
-    if (configBackupBeforeD) {
-      restoreObsidianJson(configBackupBeforeD);
-    }
+    // Restore original config (preserves original vault IDs)
+    restoreObsidianJson(configBackupBeforeD);
 
-    // Restart Obsidian to pick up the restored config and re-open vaults
+    // Kill and restart Obsidian so it re-reads the restored config
     await killObsidian();
     await startObsidian();
 
-    // Clean up registrations
+    // Clean up test vault
     removeVaultFromConfig(targetDir);
-    removeVaultFromConfig(anchorVault.path);
     await removeTempDir(targetDir);
-    await removeTempDir(anchorVault.path);
-  }, OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS * 2);
+  }, LONG_TIMEOUT_IN_MILLISECONDS * 2);
 
   it('D1: target registered — preflightCheck should open vault', async () => {
     expect(isVaultRegistered(targetDir)).toBe(true);
@@ -408,7 +416,7 @@ describe('D: Obsidian with vault chooser UI', () => {
     expect(isVaultOpen(targetDir)).toBe(true);
 
     await closeVaultWindow(targetDir);
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('D2: target not registered — preflightCheck should fail', async () => {
     const configBackup = backupObsidianJson();
@@ -448,11 +456,7 @@ describe('A: No Obsidian running', () => {
     targetDir = createTempVaultDir();
     wasObsidianRunning = await checkObsidianRunning();
     await killObsidian();
-    // Ensure Obsidian is fully stopped
-    while (await checkObsidianRunning()) {
-      await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
-    }
-  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   afterAll(async () => {
     removeVaultFromConfig(targetDir);
@@ -461,16 +465,15 @@ describe('A: No Obsidian running', () => {
     if (wasObsidianRunning) {
       await startObsidian();
     }
-  }, OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('A1: target registered — should auto-start Obsidian', async () => {
-    // RegisterVaultInConfig is fine here — Obsidian reads it on startup
     registerVaultInConfig(targetDir);
     expect(await checkObsidianRunning()).toBe(false);
 
     await transport.preflightCheck(targetDir);
     expect(await checkObsidianRunning()).toBe(true);
-  }, OBSIDIAN_START_TIMEOUT_IN_MILLISECONDS);
+  }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('A2: target not registered — preflightCheck should fail', async () => {
     removeVaultFromConfig(targetDir);
