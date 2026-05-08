@@ -51,8 +51,6 @@ import {
 } from './generate-function-call.ts';
 import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
-  getAnyRegisteredVaultPath,
-  getVaultId,
   isVaultOpen,
   isVaultRegistered,
   registerVaultInConfig,
@@ -75,7 +73,6 @@ interface ObsidianVaultEntry {
 
 const CLI_READINESS_TIMEOUT_IN_MILLISECONDS = 120000;
 const OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS = 2000;
-const RELOAD_OBSIDIAN_INSTANCE_TIMEOUT_IN_MILLISECONDS = 360000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 2000;
 const VAULT_LIFECYCLE_TIMEOUT_IN_MILLISECONDS = 120000;
 const VAULT_CHOOSER_SETUP_TIMEOUT_IN_MILLISECONDS = 240000;
@@ -196,24 +193,6 @@ function getObsidianJsonPath(): string {
 }
 
 /**
- * Kills the Obsidian process and waits for it to stop.
- */
-async function killObsidian(): Promise<void> {
-  const command = process.platform === 'win32'
-    ? 'taskkill /IM Obsidian.exe /F'
-    : 'pkill -f Obsidian';
-  try {
-    await exec(command, { isQuiet: true });
-  } catch {
-    // May not be running.
-  }
-
-  while (await checkObsidianRunning()) {
-    await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
-  }
-}
-
-/**
  * Removes temp directory.
  *
  * @param dirPath - The directory to remove.
@@ -259,58 +238,6 @@ function setVaultOpenFlag(vaultPath: string, isOpen: boolean): void {
 }
 
 /**
- * Launches Obsidian and waits until its CLI is responsive.
- */
-async function startObsidianAndWaitForCli(): Promise<void> {
-  if (process.platform === 'win32') {
-    const localAppData = process.env['LOCALAPPDATA'] ?? '';
-    await exec(`start "" "${localAppData}\\Programs\\Obsidian\\Obsidian.exe"`, { isQuiet: true });
-  } else if (process.platform === 'darwin') {
-    await exec('/Applications/Obsidian.app/Contents/MacOS/Obsidian &', { isQuiet: true });
-  } else {
-    await exec('obsidian &', { isQuiet: true });
-  }
-
-  // Wait for process to appear
-  const deadline = Date.now() + CLI_READINESS_TIMEOUT_IN_MILLISECONDS;
-  while (Date.now() < deadline) {
-    if (await checkObsidianRunning()) {
-      break;
-    }
-    await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
-  }
-
-  // Open a vault via URI so the CLI has a window to eval in
-  const existingPath = getAnyRegisteredVaultPath();
-  if (!existingPath) {
-    return;
-  }
-
-  const vaultId = getVaultId(existingPath);
-  if (vaultId) {
-    const uri = `obsidian://open?vault=${encodeURIComponent(vaultId)}`;
-    if (process.platform === 'win32') {
-      await exec(`start "" "${uri}"`, { isQuiet: true });
-    } else if (process.platform === 'darwin') {
-      await exec(`open "${uri}"`, { isQuiet: true });
-    } else {
-      await exec(`xdg-open "${uri}"`, { isQuiet: true });
-    }
-  }
-
-  // Wait for CLI to become responsive
-  while (Date.now() < deadline) {
-    try {
-      await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
-      return;
-    } catch {
-      await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
-    }
-  }
-  throw new Error('Obsidian CLI did not become responsive within timeout');
-}
-
-/**
  * Waits until the Obsidian CLI eval command is responsive.
  * Useful after vault window destruction which can temporarily disable the CLI.
  */
@@ -333,15 +260,21 @@ beforeAll(async () => {
   cleanStaleTempVaults();
   dialogMonitor.start();
 
-  // Ensure Obsidian is running with CLI responsive
-  if (await checkObsidianRunning()) {
-    try {
-      await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
-    } catch {
-      // CLI not working — restart Obsidian
-      await killObsidian();
-      await startObsidianAndWaitForCli();
-    }
+  // Fail early if Obsidian is not running or CLI is not responsive.
+  // We never kill the user's Obsidian instance — require it to be running and healthy.
+  if (!await checkObsidianRunning()) {
+    throw new Error(
+      'Obsidian is not running. Start Obsidian and open a vault before running integration tests.'
+    );
+  }
+
+  try {
+    await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
+  } catch {
+    throw new Error(
+      'Obsidian is running but CLI eval is not responding. '
+        + 'Ensure at least one vault is open and CLI is enabled in Obsidian settings.'
+    );
   }
 }, CLI_READINESS_TIMEOUT_IN_MILLISECONDS);
 
@@ -508,6 +441,7 @@ describe('C: Obsidian running + other vault open', () => {
 describe('D: Obsidian with vault chooser UI', () => {
   let targetDir: string;
   let configBackupBeforeD: string;
+  let previouslyOpenVaultIds: string[] = [];
 
   beforeAll(async () => {
     targetDir = createTempVaultDir();
@@ -523,8 +457,13 @@ describe('D: Obsidian with vault chooser UI', () => {
     // Save config again (now includes target vault with its IPC-assigned ID)
     configBackupBeforeD = backupObsidianJson();
 
-    // Close ALL vault windows to trigger vault chooser
+    // Remember which vaults are currently open so we can restore them
     const config = JSON.parse(readFileSync(getObsidianJsonPath(), 'utf-8')) as ObsidianJsonConfig;
+    previouslyOpenVaultIds = Object.entries(config.vaults)
+      .filter(([_id, entry]) => entry.open === true)
+      .map(([id]) => id);
+
+    // Close ALL vault windows to trigger vault chooser
     for (const entry of Object.values(config.vaults)) {
       if (entry.open) {
         await closeVaultAndClearFlag(entry.path);
@@ -536,15 +475,26 @@ describe('D: Obsidian with vault chooser UI', () => {
     // Restore original config (preserves original vault IDs)
     restoreObsidianJson(configBackupBeforeD);
 
-    // Restart Obsidian so it re-reads the restored config
-    // (also clears any lingering vault chooser state)
-    await killObsidian();
-    await startObsidianAndWaitForCli();
+    // Reopen the vaults that were open before D closed them
+    for (const vaultId of previouslyOpenVaultIds) {
+      const uri = `obsidian://open?vault=${encodeURIComponent(vaultId)}`;
+      if (process.platform === 'win32') {
+        await exec(`start "" "${uri}"`, { isQuiet: true });
+      } else if (process.platform === 'darwin') {
+        await exec(`open "${uri}"`, { isQuiet: true });
+      } else {
+        await exec(`xdg-open "${uri}"`, { isQuiet: true });
+      }
+      await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
+    }
 
-    // Clean up test vault entry (may have been restored by restoreObsidianJson)
+    // Wait for CLI to recover
+    await waitForCliReady();
+
+    // Clean up test vault
     removeVaultFromConfig(targetDir);
     await removeTempDir(targetDir);
-  }, RELOAD_OBSIDIAN_INSTANCE_TIMEOUT_IN_MILLISECONDS);
+  }, VAULT_CHOOSER_SETUP_TIMEOUT_IN_MILLISECONDS);
 
   it('D1: target registered — preflightCheck should open vault', async () => {
     expect(isVaultRegistered(targetDir)).toBe(true);
@@ -584,36 +534,43 @@ describe('D: Obsidian with vault chooser UI', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// A. No Obsidian running (most destructive — runs last)
+// A. No Obsidian running
+//
+// Skipped when Obsidian is already running — we never kill
+// The user's instance. To run these: close Obsidian first.
+// When Obsidian is not running, A1 will auto-start it via
+// PreflightCheck using the test vault (not the user's vaults).
 // ─────────────────────────────────────────────────────────────────
 describe('A: No Obsidian running', () => {
   let targetDir: string;
-  let wasObsidianRunning: boolean;
+  let obsidianWasRunningBeforeA: boolean;
 
   beforeAll(async () => {
+    obsidianWasRunningBeforeA = await checkObsidianRunning();
     targetDir = createTempVaultDir();
-    wasObsidianRunning = await checkObsidianRunning();
-    await killObsidian();
-  }, CLI_READINESS_TIMEOUT_IN_MILLISECONDS);
+  });
 
   afterAll(async () => {
     removeVaultFromConfig(targetDir);
     await removeTempDir(targetDir);
+  });
 
-    if (wasObsidianRunning) {
-      await startObsidianAndWaitForCli();
+  it('A1: target registered — should auto-start Obsidian', async ({ skip }) => {
+    if (obsidianWasRunningBeforeA) {
+      skip();
+      return;
     }
-  }, RELOAD_OBSIDIAN_INSTANCE_TIMEOUT_IN_MILLISECONDS);
-
-  it('A1: target registered — should auto-start Obsidian', async () => {
     registerVaultInConfig(targetDir);
-    expect(await checkObsidianRunning()).toBe(false);
 
     await transport.preflightCheck(targetDir);
     expect(await checkObsidianRunning()).toBe(true);
   }, VAULT_LIFECYCLE_TIMEOUT_IN_MILLISECONDS);
 
-  it('A2: target not registered — preflightCheck should fail', async () => {
+  it('A2: target not registered — preflightCheck should fail', async ({ skip }) => {
+    if (obsidianWasRunningBeforeA) {
+      skip();
+      return;
+    }
     removeVaultFromConfig(targetDir);
     expect(isVaultRegistered(targetDir)).toBe(false);
 
@@ -621,7 +578,11 @@ describe('A: No Obsidian running', () => {
       .rejects.toThrow(/not registered/i);
   });
 
-  it('A3: no vaults registered — preflightCheck should fail', async () => {
+  it('A3: no vaults registered — preflightCheck should fail', async ({ skip }) => {
+    if (obsidianWasRunningBeforeA) {
+      skip();
+      return;
+    }
     const configBackup = backupObsidianJson();
     writeFileSync(getObsidianJsonPath(), JSON.stringify({ cli: true, vaults: {} }));
 
