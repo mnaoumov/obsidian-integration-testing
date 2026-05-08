@@ -51,15 +51,6 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
-interface FsPromisesForInvoke {
-  writeFile(this: void, path: string, data: string): Promise<void>;
-}
-
-interface FsPromisesForScript {
-  access(path: string): Promise<void>;
-  readFile(path: string, encoding: string): Promise<string>;
-}
-
 interface InvokeAndWriteResultParams {
   evaluate(): Promise<unknown>;
   resultPath: string;
@@ -454,7 +445,7 @@ export async function destroyCurrentWindow(params: GenerateFunctionCallParams<De
  * @param params - The invocation parameters.
  */
 export async function invokeAndWriteResult(params: InvokeAndWriteResultParams): Promise<void> {
-  const { writeFile: writeResultFile } = window.require('node:fs/promises') as FsPromisesForInvoke;
+  const { writeFile: writeResultFile } = window.require('node:fs/promises') as typeof import('node:fs/promises');
   try {
     const result = await params.evaluate();
     if (result === undefined) {
@@ -581,7 +572,7 @@ function delay(ms: number): Promise<void> {
  * @param scriptPath - The absolute path to the script file.
  */
 async function executeScriptFile(scriptPath: string): Promise<void> {
-  const fsPromises = window.require('node:fs/promises') as FsPromisesForScript;
+  const fsPromises = window.require('node:fs/promises') as typeof import('node:fs/promises');
 
   try {
     await fsPromises.access(scriptPath);
