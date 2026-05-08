@@ -35,29 +35,7 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-1. ~~Refactor `buildScriptFile` to use serialized functions~~ — done
-2. ~~NativeDialogMonitor~~ — done, committed
-3. Integration tests for 12 CLI transport scenarios — in progress
-
-### Integration test findings (2026-05-07)
-
-**9/12 pass**: B1/B2/B3, C1/C2/C3, A1/A2/A3.
-
-Remaining: D suite (D1/D2/D3) fails in `beforeAll`/`afterAll`
-hooks due to vault chooser state management complexity.
-All D test assertions pass when setup succeeds — the issue
-is infrastructure (closing all windows, then restarting
-Obsidian for cleanup takes too long or the CLI becomes
-unresponsive). D tests passed on attempt 9 and 10 but
-`afterAll` cleanup timed out.
-
-Known fixes applied:
-
-- `waitForCliReady` polls before IPC calls after vault destroy
-- `closeVaultWindow` uses explicit 10s timeout (no default)
-- `setVaultOpenFlag` patches obsidian.json after window destroy
-- `startObsidianAndWaitForCli` opens vault via URI for CLI
-- Named timeout constants for readability
+None.
 
 ## Pending Questions
 
