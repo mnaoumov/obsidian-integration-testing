@@ -24,6 +24,7 @@
     "EISDIR",
     "evals",
     "getprop",
+    "getwindowname",
     "IMAGENAME",
     "Jsdocs",
     "keyevent",
@@ -40,6 +41,7 @@
     "Naumov",
     "obsidianmd",
     "offref",
+    "osascript",
     "pgrep",
     "pkill",
     "Popout",
@@ -60,7 +62,9 @@
     "urlpattern",
     "WAKEUP",
     "wdio",
-    "wikilinks"
+    "wikilinks",
+    "windowactivate",
+    "xdotool"
   ],
   "ignoreWords": [],
   "import": [],
