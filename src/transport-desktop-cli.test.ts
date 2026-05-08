@@ -86,6 +86,22 @@ vi.mock('./obsidian-config.ts', () => ({
 
 let transport: DesktopCliTransport;
 
+// Mock window.require for serialized functions that use it instead of import()
+// (Vitest transforms import() into __vite_ssr_dynamic_import__ in toString() output).
+const windowRequireMock = vi.fn((mod: string): unknown => {
+  if (mod === 'node:fs/promises') {
+    return {
+      mkdir: mockMkdir,
+      readFile: mockReadFile,
+      unlink: mockUnlink,
+      writeFile: mockWriteFile
+    };
+  }
+  throw new Error(`Unexpected window.require: ${mod}`);
+});
+
+vi.stubGlobal('window', { require: windowRequireMock });
+
 beforeEach(() => {
   transport = new DesktopCliTransport();
   mockExec.mockReset().mockResolvedValue({ exitCode: 0, exitSignal: null, stderr: '', stdout: '' });
@@ -94,6 +110,7 @@ beforeEach(() => {
   mockReadFile.mockReset();
   mockUnlink.mockReset().mockResolvedValue(undefined);
   mockWriteFile.mockReset().mockResolvedValue(undefined);
+  windowRequireMock.mockClear();
 });
 
 describe('DesktopCliTransport.evaluate', () => {

@@ -51,6 +51,15 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
+interface FsPromisesForInvoke {
+  writeFile(this: void, path: string, data: string): Promise<void>;
+}
+
+interface FsPromisesForScript {
+  access(path: string): Promise<void>;
+  readFile(path: string, encoding: string): Promise<string>;
+}
+
 interface InvokeAndWriteResultParams {
   evaluate(): Promise<unknown>;
   resultPath: string;
@@ -445,8 +454,7 @@ export async function destroyCurrentWindow(params: GenerateFunctionCallParams<De
  * @param params - The invocation parameters.
  */
 export async function invokeAndWriteResult(params: InvokeAndWriteResultParams): Promise<void> {
-  // eslint-disable-next-line no-restricted-syntax -- Dynamic import required: this function is serialized via toString() and runs inside Obsidian where static imports are unavailable.
-  const { writeFile: writeResultFile } = await import('node:fs/promises');
+  const { writeFile: writeResultFile } = window.require('node:fs/promises') as FsPromisesForInvoke;
   try {
     const result = await params.evaluate();
     if (result === undefined) {
@@ -573,8 +581,7 @@ function delay(ms: number): Promise<void> {
  * @param scriptPath - The absolute path to the script file.
  */
 async function executeScriptFile(scriptPath: string): Promise<void> {
-  // eslint-disable-next-line no-restricted-syntax -- Dynamic import required: this function is serialized via toString() and runs inside Obsidian where static imports are unavailable.
-  const fsPromises = await import('node:fs/promises');
+  const fsPromises = window.require('node:fs/promises') as FsPromisesForScript;
 
   try {
     await fsPromises.access(scriptPath);
