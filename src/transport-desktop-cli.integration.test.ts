@@ -117,16 +117,16 @@ function cleanStaleTempVaults(): void {
 }
 
 /**
- * Closes a vault window and waits for Obsidian to update its open flag.
+ * Closes a vault window and manually clears the open flag.
+ *
+ * Obsidian may not update `open: false` promptly after a forced
+ * `window.electronWindow.destroy()`, so we patch obsidian.json directly.
  *
  * @param vaultPath - The vault path whose window to close.
  */
-async function closeVaultAndWaitForFlag(vaultPath: string): Promise<void> {
+async function closeVaultAndClearFlag(vaultPath: string): Promise<void> {
   await closeVaultWindow(vaultPath);
-  const deadline = Date.now() + LONG_TIMEOUT_IN_MILLISECONDS;
-  while (isVaultOpen(vaultPath) && Date.now() < deadline) {
-    await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
-  }
+  setVaultOpenFlag(vaultPath, false);
 }
 
 /**
@@ -226,6 +226,29 @@ async function removeTempDir(dirPath: string): Promise<void> {
  */
 function restoreObsidianJson(backup: string): void {
   writeFileSync(getObsidianJsonPath(), backup);
+}
+
+/**
+ * Sets the `open` flag for a vault in obsidian.json.
+ *
+ * @param vaultPath - The vault path to update.
+ * @param isOpen - Whether to mark the vault as open.
+ */
+function setVaultOpenFlag(vaultPath: string, isOpen: boolean): void {
+  const configPath = getObsidianJsonPath();
+  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as ObsidianJsonConfig;
+  const normalizedTarget = vaultPath.toLowerCase();
+  for (const entry of Object.values(config.vaults)) {
+    if (entry.path.toLowerCase() === normalizedTarget) {
+      if (isOpen) {
+        entry.open = true;
+      } else {
+        delete entry.open;
+      }
+      break;
+    }
+  }
+  writeFileSync(configPath, JSON.stringify(config));
 }
 
 /**
@@ -364,21 +387,23 @@ describe('C: Obsidian running + other vault open', () => {
   });
 
   it('C1: target registered — preflightCheck should auto-open vault', async () => {
-    // Use the user's already-open vault to register target via IPC
-    const existingVaultPath = getAnyRegisteredVaultPath();
-    expect(existingVaultPath).toBeDefined();
-
     // Register via IPC so Obsidian's in-memory registry has the vault
     await transport.registerVault(targetDir);
-    // Close the window and wait for Obsidian to mark it as not open
-    await closeVaultAndWaitForFlag(targetDir);
+    // Destroy the window
+    await closeVaultWindow(targetDir);
+    // Manually set open=false in obsidian.json since Obsidian may not
+    // Update it promptly after a forced window.destroy()
+    setVaultOpenFlag(targetDir, false);
+
+    expect(isVaultRegistered(targetDir)).toBe(true);
+    expect(isVaultOpen(targetDir)).toBe(false);
 
     // Now preflightCheck should auto-open it via URI (using known vault ID)
     await transport.preflightCheck(targetDir);
     expect(isVaultOpen(targetDir)).toBe(true);
 
-    // Clean up: close the vault window
-    await closeVaultAndWaitForFlag(targetDir);
+    // Clean up
+    await closeVaultWindow(targetDir);
   }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('C2: target not registered — preflightCheck should fail', async () => {
@@ -419,7 +444,7 @@ describe('D: Obsidian with vault chooser UI', () => {
 
     // Register target vault via IPC while user's vault is still open
     await transport.registerVault(targetDir);
-    await closeVaultAndWaitForFlag(targetDir);
+    await closeVaultAndClearFlag(targetDir);
 
     // Save config again (now includes target vault with its IPC-assigned ID)
     configBackupBeforeD = backupObsidianJson();
@@ -428,7 +453,7 @@ describe('D: Obsidian with vault chooser UI', () => {
     const config = JSON.parse(readFileSync(getObsidianJsonPath(), 'utf-8')) as ObsidianJsonConfig;
     for (const entry of Object.values(config.vaults)) {
       if (entry.open) {
-        await closeVaultAndWaitForFlag(entry.path);
+        await closeVaultAndClearFlag(entry.path);
       }
     }
   }, LONG_TIMEOUT_IN_MILLISECONDS * 2);
@@ -453,7 +478,7 @@ describe('D: Obsidian with vault chooser UI', () => {
     await transport.preflightCheck(targetDir);
     expect(isVaultOpen(targetDir)).toBe(true);
 
-    await closeVaultAndWaitForFlag(targetDir);
+    await closeVaultAndClearFlag(targetDir);
   }, LONG_TIMEOUT_IN_MILLISECONDS);
 
   it('D2: target not registered — preflightCheck should fail', async () => {
