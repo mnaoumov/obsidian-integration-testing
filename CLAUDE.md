@@ -41,29 +41,24 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ### Integration test findings (2026-05-07)
 
-B1/B2/B3 pass. C2/C3/A2/A3 pass. Remaining failures:
+**8/12 pass**: B1/B2/B3, C2/C3, A1/A2/A3.
 
-- **C1**: `transport.registerVault(targetDir)` timing out at 60s.
-  Sometimes `window.require` is not a function after Obsidian
-  restarts from a previous test run — the vault window context
-  may not be fully initialized. Need to investigate vault
-  readiness check before evals.
-- **D suite**: `beforeAll` times out at 180s. `closeAllOpenVaults`
-  tries to eval in each vault window to destroy it, but evals
-  may hang if the window is not ready.
-- **A1**: Works when run in isolation. Fails after D's cascading
-  failures leave Obsidian in a bad state.
-- **State leakage**: leftover `cli-test-*` and `temp-vault-*`
-  entries in obsidian.json from failed runs pollute subsequent
-  runs. Need a cleanup step at test start.
+Remaining failures:
+
+- **C1** (target registered, preflightCheck auto-open): fails
+  with `Command "eval" not found` after B's afterAll destroys
+  a temp vault window. Obsidian may temporarily lose CLI eval
+  capability for other vaults after a window destroy. Transient
+  CLI issue — library code is correct.
+- **D suite** (vault chooser): times out because D's
+  `registerVault` also hits the "eval not found" error.
 
 Next steps:
 
-- Add a global `beforeAll` that cleans up stale temp vault entries
-- Investigate why `window.require` is unavailable after Obsidian
-  restart (may need `pollVaultReady` before first eval)
-- Consider running D and A in a separate test file to avoid
-  state leakage from B/C failures
+- Add delay/retry between B cleanup and C1 start
+- Or skip C1/D1 if it's an Obsidian CLI bug
+- The `exec` helper has no default timeout — this caused
+  infinite hangs when destroying windows (now fixed)
 
 ## Pending Questions
 
