@@ -383,9 +383,16 @@ describe('C: Obsidian running + other vault open', () => {
   });
 
   afterAll(async () => {
-    removeVaultFromConfig(targetDir);
+    // Unregister via IPC (removes from Obsidian's in-memory registry)
+    // Then also clean the config file and temp dir
+    try {
+      await transport.unregisterVault(targetDir);
+    } catch {
+      // May already be unregistered from C2/C3 config manipulation
+      removeVaultFromConfig(targetDir);
+    }
     await removeTempDir(targetDir);
-  });
+  }, VAULT_LIFECYCLE_TIMEOUT_IN_MILLISECONDS);
 
   it('C1: target registered — preflightCheck should auto-open vault', async () => {
     // Wait for CLI to be ready (may be temporarily unavailable after B's vault window destroy)
@@ -491,8 +498,12 @@ describe('D: Obsidian with vault chooser UI', () => {
     // Wait for CLI to recover
     await waitForCliReady();
 
-    // Clean up test vault
-    removeVaultFromConfig(targetDir);
+    // Unregister test vault via IPC (clears in-memory registry too)
+    try {
+      await transport.unregisterVault(targetDir);
+    } catch {
+      removeVaultFromConfig(targetDir);
+    }
     await removeTempDir(targetDir);
   }, VAULT_CHOOSER_SETUP_TIMEOUT_IN_MILLISECONDS);
 
