@@ -293,6 +293,23 @@ async function startObsidianAndWaitForCli(): Promise<void> {
   throw new Error('Obsidian CLI did not become responsive within timeout');
 }
 
+/**
+ * Waits until the Obsidian CLI eval command is responsive.
+ * Useful after vault window destruction which can temporarily disable the CLI.
+ */
+async function waitForCliReady(): Promise<void> {
+  const deadline = Date.now() + LONG_TIMEOUT_IN_MILLISECONDS;
+  while (Date.now() < deadline) {
+    try {
+      await exec('obsidian eval --allow-focus-steal "code=1"', { isQuiet: true });
+      return;
+    } catch {
+      await delay(OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+  throw new Error('Obsidian CLI did not become responsive');
+}
+
 // ─── Global setup ───────────────────────────────────────────────
 
 beforeAll(async () => {
@@ -390,6 +407,9 @@ describe('C: Obsidian running + other vault open', () => {
   });
 
   it('C1: target registered — preflightCheck should auto-open vault', async () => {
+    // Wait for CLI to be ready (may be temporarily unavailable after B's vault window destroy)
+    await waitForCliReady();
+
     // Register via IPC so Obsidian's in-memory registry has the vault
     await transport.registerVault(targetDir);
     // Destroy the window
@@ -444,6 +464,9 @@ describe('D: Obsidian with vault chooser UI', () => {
   beforeAll(async () => {
     targetDir = createTempVaultDir();
     configBackupBeforeD = backupObsidianJson();
+
+    // Wait for CLI to be ready (may be recovering from C's vault operations)
+    await waitForCliReady();
 
     // Register target vault via IPC while user's vault is still open
     await transport.registerVault(targetDir);
