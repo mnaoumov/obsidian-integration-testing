@@ -45,6 +45,10 @@ import {
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { exec } from './exec.ts';
+import {
+  ensureLayoutReady,
+  generateFunctionCall
+} from './generate-function-call.ts';
 import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
   getAnyRegisteredVaultPath,
@@ -54,7 +58,10 @@ import {
   removeVaultFromConfig
 } from './obsidian-config.ts';
 import { TempVault } from './temp-vault.ts';
-import { DesktopCliTransport } from './transport-desktop-cli.ts';
+import {
+  DesktopCliTransport,
+  destroyCurrentWindow
+} from './transport-desktop-cli.ts';
 
 interface ObsidianJsonConfig {
   vaults: Record<string, ObsidianVaultEntry>;
@@ -135,16 +142,12 @@ async function closeVaultAndClearFlag(vaultPath: string): Promise<void> {
  * @param vaultPath - The vault path whose window to close.
  */
 async function closeVaultWindow(vaultPath: string): Promise<void> {
+  const CLOSE_TIMEOUT_IN_MILLISECONDS = 10000;
   try {
-    await evalInObsidian({
-      fn(): void {
-        window.electronWindow.destroy();
-      },
-      shouldSkipPreflightChecks: true,
-      vaultPath
-    });
+    const destroyExpr = generateFunctionCall(destroyCurrentWindow, { ensureLayoutReady });
+    await transport.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: CLOSE_TIMEOUT_IN_MILLISECONDS });
   } catch {
-    // Window may already be closed.
+    // Window may already be closed or eval timed out (expected when destroying own window).
   }
   await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
 }
