@@ -1,6 +1,5 @@
 import type { MockInstance } from 'vitest';
 
-import vm from 'node:vm';
 import {
   beforeEach,
   describe,
@@ -135,6 +134,40 @@ describe('DesktopCliTransport.evaluate', () => {
     await expect(transport.evaluate('someExpr', { cwd: '/vault' })).rejects.toThrow();
     expect(mockUnlink).toHaveBeenCalledTimes(2);
   });
+
+  it('should include vault=<id> before eval in CLI command when vault is registered', async () => {
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: 'test' }));
+    await transport.evaluate('someExpr', { cwd: '/vault' });
+
+    const command = ensureNonNullable(mockExec.mock.calls[0])[0] as string[];
+    expect(command[0]).toBe('obsidian');
+    expect(command[1]).toBe('vault=abc123');
+    expect(command[2]).toBe('eval');
+  });
+
+  it('should omit vault= from CLI command when vault ID is not found', async () => {
+    vi.mocked(getVaultId).mockReturnValue(undefined);
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: 'test' }));
+    await transport.evaluate('someExpr', { cwd: '/vault' });
+
+    const command = ensureNonNullable(mockExec.mock.calls[0])[0] as string[];
+    expect(command[0]).toBe('obsidian');
+    expect(command[1]).toBe('eval');
+  });
+
+  it('should use new Function to execute script instead of module.constructor._load', async () => {
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: 'test' }));
+    await transport.evaluate('someExpr', { cwd: '/vault' });
+
+    const command = ensureNonNullable(mockExec.mock.calls[0])[0] as string[];
+    const codeArg = ensureNonNullable(command.find((arg) => arg.startsWith('code=')));
+    expect(codeArg).not.toContain('module.constructor._load');
+    expect(codeArg).toContain('new Function');
+    expect(codeArg).toContain('fn()()');
+    expect(codeArg).toContain('console.debug');
+    expect(codeArg).toContain('readFile');
+  });
 });
 
 describe('buildScriptFile (via evaluate)', () => {
@@ -167,24 +200,26 @@ describe('generated script execution', () => {
     const scriptContent = getWrittenScript(mockWriteFile);
 
     let writtenJson = '';
-    const fakeFs = {
-      writeFileSync(_path: string, data: string): void {
+    const fakeFsPromises = {
+      writeFile(_path: string, data: string): void {
         writtenJson = data;
       }
     };
-    const fakeExports: Record<string, () => Promise<void>> = {};
-    const context = vm.createContext({
-      exports: fakeExports,
-      require(mod: string): unknown {
-        if (mod === 'fs') {
-          return fakeFs;
-        }
-        throw new Error(`Unexpected require: ${mod}`);
+    const originalRequire = globalThis.require;
+    globalThis.require = ((mod: string): unknown => {
+      if (mod === 'node:fs/promises') {
+        return fakeFsPromises;
       }
-    });
-    vm.runInContext(scriptContent, context);
-    const invokeFn = Object.values(fakeExports)[0] as () => Promise<void>;
-    await invokeFn();
+      throw new Error(`Unexpected require: ${mod}`);
+    }) as NodeJS.Require;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- Testing the generated script via new Function, matching production behavior.
+      const fn = new Function(`return ${scriptContent}`) as () => () => Promise<void>;
+      await fn()();
+    } finally {
+      // eslint-disable-next-line require-atomic-updates -- Restoring the original value; no actual race condition in a single-threaded test.
+      globalThis.require = originalRequire;
+    }
     return JSON.parse(writtenJson);
   }
 
