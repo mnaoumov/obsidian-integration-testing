@@ -35,7 +35,32 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-Improve troubleshooting in `evaluate()` — when the script result file is missing, surface exec stdout/stderr and the command that was run.
+None.
+
+## Pending Questions
+
+### Q1: `obsidian eval` returns `Cannot read properties of undefined (reading 'includes')` even when vault is open
+
+**Context**: When running `obsidian eval --allow-focus-steal code=...` with `cwd=f:/dev/ObsidianVaults/Investigate`, the CLI returns exit code 0 with stdout containing `Error: Cannot read properties of undefined (reading 'includes')`. The result file is never written, meaning the script never executes.
+
+**What we verified**:
+
+- Obsidian IS running (process check: yes)
+- CLI IS enabled in obsidian.json (yes)
+- Vault IS registered (yes)
+- Vault IS marked as open: true in obsidian.json
+- The Investigate vault window was opened via `obsidian://open` URI
+
+**Root cause**: The error comes from **inside Obsidian's own CLI eval handler**, not from our script. Something in Obsidian's internal code calls `.includes()` on an undefined value when processing the eval command for this vault. Our script's try/catch never executes because the error happens before `module.constructor._load()` runs.
+
+**Options**:
+
+- A: This is an Obsidian CLI bug — report to Obsidian team and work around it
+- B: The `--allow-focus-steal` flag may be triggering a code path that has this bug
+- C: The vault window may not be fully initialized despite `open: true` in config
+- D: There may be a timing issue — the vault window is open but Obsidian's CLI handler hasn't registered it yet
+
+**Auto-selected**: A — this appears to be an Obsidian CLI bug. The library improvements (diagnostics, auto-open) are still valuable.
 
 ## L5. Transport configuration
 
