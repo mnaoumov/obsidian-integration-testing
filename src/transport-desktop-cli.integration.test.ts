@@ -31,6 +31,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import {
   afterAll,
+  afterEach,
   beforeAll,
   describe,
   expect,
@@ -39,6 +40,7 @@ import {
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { exec } from './exec.ts';
+import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
   getRegisteredVaults,
   isVaultOpen,
@@ -55,6 +57,7 @@ const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 2000;
 const OBSIDIAN_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 
 const transport = new DesktopCliTransport();
+const dialogMonitor = new NativeDialogMonitor();
 
 /**
  * Checks if Obsidian is currently running.
@@ -188,6 +191,19 @@ async function startObsidian(): Promise<void> {
   }
   throw new Error('Obsidian did not start within timeout');
 }
+
+beforeAll(() => {
+  dialogMonitor.start();
+});
+
+afterAll(() => {
+  dialogMonitor.stop();
+});
+
+afterEach(() => {
+  dialogMonitor.assertNoDialogs();
+  dialogMonitor.reset();
+});
 
 // ─────────────────────────────────────────────────────────────────
 // B. Obsidian running with target vault open
