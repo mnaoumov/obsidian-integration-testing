@@ -222,6 +222,10 @@ export class DesktopCliTransport implements ObsidianTransport {
       registerVaultInConfig(vaultPath);
       log('[cli-transport] Vault entry written. Opening vault via URI protocol...');
       await openVaultViaUri(vaultPath);
+      await this.pollVaultReady(vaultPath);
+      await this.enablePluginsInLocalStorage(vaultPath, vaultPath);
+      await this.dismissTrustDialog(vaultPath);
+      return;
     }
 
     await this.pollVaultReady(vaultPath);
@@ -275,6 +279,34 @@ export class DesktopCliTransport implements ObsidianTransport {
       await exec(command, { isQuiet: true });
     } catch {
       throw new Error('Obsidian CLI is not available. Ensure Obsidian is installed and its CLI is in your PATH.');
+    }
+  }
+
+  /**
+   * Dismisses the "Do you trust the author of this vault?" dialog if present.
+   *
+   * Clicks the "Trust author and enable plugins" button (`.mod-cta`) inside any
+   * modal whose text includes "Do you trust the author". This is needed when a
+   * vault with community plugins is opened without a prior `enable-plugin-<id>`
+   * entry in localStorage (e.g., the very first vault registered via config file).
+   *
+   * @param vaultPath - The vault path to evaluate in.
+   */
+  private async dismissTrustDialog(vaultPath: string): Promise<void> {
+    await ensureNamespaceBootstrapped(this, vaultPath);
+    const dismissExpr = `(function() {
+      var modals = document.querySelectorAll('.modal-container');
+      for (var i = 0; i < modals.length; i++) {
+        if (modals[i].textContent.includes('Do you trust the author')) {
+          var btn = modals[i].querySelector('.mod-cta');
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    })()`;
+    const result = await this.evaluate(dismissExpr, { cwd: vaultPath });
+    if (result === 'true') {
+      log('[cli-transport] Dismissed "Do you trust the author" dialog.');
     }
   }
 
