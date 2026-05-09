@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 3.0.0
+
+- refactor: consolidate window state under __obsidianIntegrationTesting namespace
+- refactor: never kill user's Obsidian instance in tests
+- feat: add trust dialog web modal check
+- fix: use named timeout constants instead of multipliers
+- fix: add timeout to closeVaultWindow to prevent infinite hang
+- fix: manually clear vault open flag after window destroy
+- fix: ensure CLI is responsive before and after Obsidian restarts
+- fix: wait for vault open flag after closing windows
+- fix: rewrite integration tests with proper state management
+- fix: restructure integration tests to avoid native dialogs
+- feat: add NativeDialogMonitor for integration tests
+- refactor: use new Function instead of module.constructor._load
+- fix: use vault ID in obsidian://open URI instead of path
+- feat: auto-open vault in preflightCheck when registered but not open
+
 ## 2.7.2
 
 - fix: layoutReady waiter
