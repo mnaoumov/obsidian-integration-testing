@@ -3,10 +3,17 @@ import type { Plugin } from 'esbuild';
 import { build } from 'esbuild';
 import {
   readdirSync,
+  readFileSync,
   statSync
 } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
+interface PackageJson {
+  version: string;
+}
+
+const packageVersion = (JSON.parse(readFileSync('package.json', 'utf-8')) as PackageJson).version;
 
 function getEntryPoints(dir: string): string[] {
   const entries: string[] = [];
@@ -26,6 +33,9 @@ async function main(): Promise<void> {
 
   const commonOptions = {
     bundle: false,
+    define: {
+      OBSIDIAN_INTEGRATION_TESTING_VERSION: JSON.stringify(packageVersion)
+    },
     entryPoints,
     platform: 'node' as const,
     sourcemap: 'inline' as const,

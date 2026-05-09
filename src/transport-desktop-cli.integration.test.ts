@@ -45,10 +45,7 @@ import {
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { exec } from './exec.ts';
-import {
-  ensureLayoutReady,
-  generateFunctionCall
-} from './generate-function-call.ts';
+import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import { NativeDialogMonitor } from './native-dialog-monitor.ts';
 import {
   isVaultOpen,
@@ -57,10 +54,7 @@ import {
   removeVaultFromConfig
 } from './obsidian-config.ts';
 import { TempVault } from './temp-vault.ts';
-import {
-  DesktopCliTransport,
-  destroyCurrentWindow
-} from './transport-desktop-cli.ts';
+import { DesktopCliTransport } from './transport-desktop-cli.ts';
 
 interface ObsidianJsonConfig {
   vaults: Record<string, ObsidianVaultEntry>;
@@ -145,7 +139,8 @@ async function closeVaultAndClearFlag(vaultPath: string): Promise<void> {
 async function closeVaultWindow(vaultPath: string): Promise<void> {
   const CLOSE_TIMEOUT_IN_MILLISECONDS = 10000;
   try {
-    const destroyExpr = generateFunctionCall(destroyCurrentWindow, { ensureLayoutReady });
+    await ensureNamespaceBootstrapped(transport, vaultPath);
+    const destroyExpr = 'window.__obsidianIntegrationTesting.destroyCurrentWindow()';
     await transport.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: CLOSE_TIMEOUT_IN_MILLISECONDS });
   } catch {
     // Window may already be closed or eval timed out (expected when destroying own window).

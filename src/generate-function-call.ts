@@ -30,21 +30,20 @@ export interface EnsureLayoutReadyParams {
  */
 export type GenerateFunctionCallParams<Params = unknown> = AppParams & Params;
 
-interface AppParams {
-  app: App;
+/**
+ * Parameters for {@link generateNamespaceCall}.
+ */
+export interface GenerateNamespaceCallParams {
+  /** User-supplied arguments to pass to the function. */
+  args?: Record<string, unknown>;
+  /** Optional context ID for persistent storage. */
+  contextId?: string;
+  /** The user function to evaluate inside Obsidian. */
+  fn: (...args: never[]) => unknown;
 }
 
-/* v8 ignore start -- Serialized via toString() and executed inside Obsidian, not callable in unit tests. */
-/**
- * Waits for the Obsidian workspace layout to be ready.
- *
- * @param params - The parameters, including the `app` instance.
- * @returns A promise that resolves when the layout is ready.
- */
-export async function ensureLayoutReady(params: GenerateFunctionCallParams): Promise<void> {
-  await new Promise<void>((resolve) => {
-    params.app.workspace.onLayoutReady(resolve);
-  });
+interface AppParams {
+  app: App;
 }
 /* v8 ignore stop */
 
@@ -61,6 +60,19 @@ export async function ensureLayoutReady(params: GenerateFunctionCallParams): Pro
  * @returns A JavaScript expression string.
  */
 
+/* v8 ignore start -- Serialized via toString() and executed inside Obsidian, not callable in unit tests. */
+/**
+ * Waits for the Obsidian workspace layout to be ready.
+ *
+ * @param params - The parameters, including the `app` instance.
+ * @returns A promise that resolves when the layout is ready.
+ */
+export async function ensureLayoutReady(params: GenerateFunctionCallParams): Promise<void> {
+  await new Promise<void>((resolve) => {
+    params.app.workspace.onLayoutReady(resolve);
+  });
+}
+
 /**
  * Generates a JavaScript expression string that immediately invokes the given
  * function with the given arguments.
@@ -73,4 +85,24 @@ export function generateFunctionCall<Params>(fn: (params: GenerateFunctionCallPa
   const fnExpr = getFunctionExpressionString(fn);
   const serializedParams = jsonWithFunctions(params);
   return `(${fnExpr})(Object.assign(${serializedParams}, { app: window.app }))`;
+}
+
+/**
+ * Generates a lightweight JavaScript expression that calls the pre-registered
+ * `evalWrapper` on the `window.__obsidianIntegrationTesting` namespace.
+ *
+ * Unlike {@link generateFunctionCall}, this does not serialize infrastructure
+ * functions — only the user's `fn`, `args`, and `contextId`. The infrastructure
+ * must already be bootstrapped via {@link ensureNamespaceBootstrapped}.
+ *
+ * @param params - The user function, arguments, and optional context ID.
+ * @returns A JavaScript expression string.
+ */
+export function generateNamespaceCall(params: GenerateNamespaceCallParams): string {
+  const serializedParams = jsonWithFunctions({
+    args: params.args ?? {},
+    ...(params.contextId !== undefined && { contextId: params.contextId }),
+    fn: params.fn
+  });
+  return `window.__obsidianIntegrationTesting.evalWrapper(${serializedParams})`;
 }

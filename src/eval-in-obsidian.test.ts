@@ -25,6 +25,10 @@ const mockTransport: ObsidianTransport = {
   unregisterVault: mockTransportUnregisterVault
 };
 
+vi.mock('./namespace-bootstrap.ts', () => ({
+  ensureNamespaceBootstrapped: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock('./transport-factory.ts', () => ({
   getOrCreateTransport: (): Promise<ObsidianTransport> => Promise.resolve(mockTransport)
 }));
