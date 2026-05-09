@@ -14,25 +14,18 @@ import process from 'node:process';
 
 import type {
   ContextArgs,
-  ContextId,
-  ContextOf
+  ContextId
 } from './context-id.ts';
-import type {
-  EnsureLayoutReadyParams,
-  GenerateFunctionCallParams
-} from './generate-function-call.ts';
+import type { GenerateNamespaceCallParams } from './generate-function-call.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { getTransportOptions } from './context-provider.ts';
-import {
-  ensureLayoutReady,
-  generateFunctionCall
-} from './generate-function-call.ts';
-import { serializeError } from './serialize-error.ts';
+import { generateNamespaceCall } from './generate-function-call.ts';
+import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
 /**
- * Discriminated envelope returned by {@link evalWrapper} from inside the Obsidian process.
+ * Discriminated envelope returned by the registered `evalWrapper` from inside the Obsidian process.
  *
  * - `{ type: 'error', value: string }` — `fn` threw; `value` is the serialized error.
  * - `{ type: 'undefined' }` — `fn` returned `undefined`.
@@ -42,10 +35,6 @@ type EvalResultEnvelope =
   | { type: 'error'; value: string }
   | { type: 'undefined' }
   | { value: unknown };
-
-interface ExportsWithDefault {
-  default: unknown;
-}
 
 const NO_OUTPUT = '(no output)';
 
@@ -113,20 +102,6 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
  */
 export type GenericObject = Record<string, unknown>;
 
-interface EvalWrapperParams<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined> extends EnsureLayoutReadyParams {
-  args: Args;
-  contextId: TContextId;
-  fn(args: Args & CommonArgs & ContextArgs<TContextId>): Promisable<Result>;
-  getObsidianModule(params: GenerateFunctionCallParams): Promise<typeof obsidian>;
-  serializeError(error: unknown): string;
-}
-
-interface ObsidianModuleHolder {
-  obsidianModule: typeof obsidian;
-}
-
-/* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */
-
 /**
  * Evaluates a function inside the running Obsidian instance
  * via the active transport and returns the parsed result.
@@ -160,14 +135,18 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
     await transport.preflightCheck(cwd);
   }
 
-  const expression = generateFunctionCall(evalWrapper, {
+  await ensureNamespaceBootstrapped(transport, cwd);
+
+  const namespaceCallParams: GenerateNamespaceCallParams = {
     args,
-    contextId,
-    ensureLayoutReady,
-    fn,
-    getObsidianModule,
-    serializeError
-  });
+    fn
+  };
+
+  if (contextId !== undefined) {
+    namespaceCallParams.contextId = String(contextId);
+  }
+
+  const expression = generateNamespaceCall(namespaceCallParams);
 
   const resultStr = await transport.evaluate(expression, { cwd });
 
@@ -197,111 +176,3 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
 
   return envelope.value as Result;
 }
-
-/**
- * The top-level wrapper that is serialized and invoked inside the Obsidian
- * process via {@link generateFunctionCall}. It wires up the obsidian module,
- * context, and error handling, then delegates to the caller-supplied `fn`.
- *
- * Must NOT reference any outer scope — it is serialized via `toString()`.
- *
- * @param params - The parameters for the wrapper.
- * @param params.args - The user-supplied arguments to pass to `fn`.
- * @param params.contextId - The context identifier for persistent storage.
- * @param params.fn - The user function to evaluate.
- * @param params.resolveObsidianModule - Resolves the `obsidian` module at runtime.
- * @param params.stringifyError - Serializes an error into a human-readable string.
- * @returns A JSON-stringified {@link EvalResultEnvelope}.
- */
-async function evalWrapper<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
-  params: GenerateFunctionCallParams<EvalWrapperParams<Args, Result, TContextId>>
-): Promise<string> {
-  const app = params.app;
-  if (!app.plugins.isEnabled()) {
-    await app.plugins.setEnable(true);
-  }
-  const obsidianModule = await params.getObsidianModule(params);
-  interface ContextHolder {
-    __obsidianContexts__: Record<string, Record<string, unknown>>;
-  }
-  const contextHolder = window as Partial<ContextHolder>;
-  const contextRaw = params.contextId
-    ? ((contextHolder.__obsidianContexts__ ??= {})[String(params.contextId)] ??= {})
-    : {};
-  const context = contextRaw as ContextOf<TContextId>;
-  const fullArgs = ({ ...params.args, app, context, obsidianModule }) as Args & CommonArgs & ContextArgs<TContextId>;
-  try {
-    const result = await params.fn(fullArgs) as Result | undefined;
-    if (result === undefined) {
-      return JSON.stringify({ type: 'undefined' });
-    }
-    return JSON.stringify({ value: result });
-  } catch (evalError) {
-    return JSON.stringify({ type: 'error', value: params.serializeError(evalError) });
-  }
-}
-
-/**
- * Injected into the Obsidian process to resolve the `obsidian` module.
- * Uses a cached value on `app` if available, otherwise installs a temporary
- * plugin that calls `require('obsidian')` and caches the result.
- *
- * Must NOT reference any outer scope — it is serialized via `toString()`.
- * `getObsidianModulePluginFn` must be defined in the same scope
- * (the generated IIFE handles this).
- *
- * @param params - The parameters, including the `app` instance.
- * @returns The `obsidian` module.
- */
-async function getObsidianModule(params: GenerateFunctionCallParams): Promise<typeof obsidian> {
-  const app = params.app;
-
-  const obsidianModuleHolder = app as Partial<ObsidianModuleHolder>;
-  if (obsidianModuleHolder.obsidianModule) {
-    return obsidianModuleHolder.obsidianModule;
-  }
-  const SLICE_START = 2;
-  const randomSuffix = String(Math.random()).slice(SLICE_START);
-  const tempModuleName = `get-obsidian-module-${randomSuffix}`;
-  const dir = `${app.vault.configDir}/plugins/${tempModuleName}`;
-  app.plugins.manifests[tempModuleName] = {
-    author: '',
-    description: '',
-    dir,
-    id: tempModuleName,
-    isDesktopOnly: false,
-    minAppVersion: '',
-    name: tempModuleName,
-    version: ''
-  };
-  await app.vault.adapter.mkdir(dir);
-  await app.vault.adapter.write(`${dir}/main.js`, `(${String(getObsidianModulePluginFn)})();`);
-  await app.plugins.loadPlugin(tempModuleName);
-  await app.plugins.uninstallPlugin(tempModuleName);
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- It will be initialized within `loadPlugin`.
-  if (obsidianModuleHolder.obsidianModule) {
-    return obsidianModuleHolder.obsidianModule;
-  }
-  throw new Error('Failed to load obsidian module');
-
-  /**
-   * The body of the temporary plugin that extracts the `obsidian` module.
-   * Serialized via `toString()` and written to `main.js` by {@link getObsidianModule}.
-   * Must NOT reference any outer scope.
-   */
-  function getObsidianModulePluginFn(): void {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated, no-shadow -- We need global `app` variable. Intentional redeclaration — self-contained serialized function.
-    const app = window.app;
-
-    const obsidianModuleHolder2 = app as Partial<ObsidianModuleHolder>;
-
-    const pluginRequire = require;
-    const pluginExports = exports as ExportsWithDefault;
-
-    const obsidianModule = pluginRequire('obsidian') as typeof obsidian;
-    obsidianModuleHolder2.obsidianModule = obsidianModule;
-    pluginExports.default = obsidianModule.Plugin;
-  }
-}
-
-/* v8 ignore stop */

@@ -63,6 +63,10 @@ vi.mock('node:fs/promises', () => ({
   writeFile: mockWriteFile
 }));
 
+vi.mock('./namespace-bootstrap.ts', () => ({
+  ensureNamespaceBootstrapped: vi.fn().mockResolvedValue(undefined)
+}));
+
 vi.mock('./log.ts', () => ({
   log: vi.fn()
 }));

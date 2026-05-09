@@ -43,14 +43,13 @@ export interface EnablePluginResult {
   isLoaded: boolean;
 }
 
-/**
- * Injected into the IIFE scope by {@link evalInObsidian} at runtime.
- * Not importable — exists only inside the generated expression.
- *
- * @param error - The error to serialize.
- * @returns A formatted error string with stack trace and cause chain.
- */
-declare function serializeError(error: unknown): string;
+interface IntegrationTestingHolder {
+  __obsidianIntegrationTesting: IntegrationTestingSerializeError;
+}
+
+interface IntegrationTestingSerializeError {
+  serializeError(error: unknown): string;
+}
 
 /**
  * Enables a plugin inside Obsidian and captures any load error.
@@ -80,7 +79,9 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
       errorMessage = undefined;
       return result;
     } catch (error) {
-      errorMessage = serializeError(error);
+      // eslint-disable-next-line no-restricted-syntax -- Serialized function runs in Obsidian where Jest's global type doesn't apply.
+      const holder = window as unknown as Partial<IntegrationTestingHolder>;
+      errorMessage = holder.__obsidianIntegrationTesting?.serializeError(error) ?? String(error);
       throw error;
     }
   };

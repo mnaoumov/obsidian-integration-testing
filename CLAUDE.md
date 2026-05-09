@@ -35,7 +35,7 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-Rework integration tests: never kill user's Obsidian instance. Fail early with clear message if CLI is not responsive.
+None.
 
 ## Pending Questions
 

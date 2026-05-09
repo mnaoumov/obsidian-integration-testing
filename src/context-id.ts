@@ -50,13 +50,18 @@ export class ContextId<_Context> implements AsyncDisposable {
       args: { id: this.id },
       /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process. Covered by integration tests. */
       fn({ id }): void {
-        interface ContextHolder {
-          __obsidianContexts__: Record<string, unknown>;
+        interface IntegrationTestingContexts {
+          contexts: Record<string, unknown>;
         }
-        const holder = window as Partial<ContextHolder>;
-        if (holder.__obsidianContexts__) {
+        interface IntegrationTestingHolder {
+          __obsidianIntegrationTesting: IntegrationTestingContexts;
+        }
+
+        // eslint-disable-next-line no-restricted-syntax -- Serialized function runs in Obsidian where Jest's global type doesn't apply.
+        const holder = window as unknown as Partial<IntegrationTestingHolder>;
+        if (holder.__obsidianIntegrationTesting?.contexts) {
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- No other way.
-          delete holder.__obsidianContexts__[id];
+          delete holder.__obsidianIntegrationTesting.contexts[id];
         }
       },
       /* v8 ignore stop */

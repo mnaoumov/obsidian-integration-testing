@@ -28,20 +28,13 @@ import type {
 } from './transport.ts';
 
 import { exec } from './exec.ts';
-import {
-  ensureLayoutReady,
-  generateFunctionCall
-} from './generate-function-call.ts';
 import { log } from './log.ts';
+import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import {
   getVaultId,
   isVaultRegistered,
   removeVaultFromConfig
 } from './obsidian-config.ts';
-import {
-  destroyCurrentWindow,
-  ipcSendSync
-} from './transport-desktop-cli.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
 /**
@@ -219,7 +212,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     const ipcWs = await this.connectToTarget(ensureNonNullable(targets[0]));
     try {
-      const ipcExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath, false], channel: 'vault-open', ensureLayoutReady });
+      await ensureNamespaceBootstrapped(this, vaultPath);
+      const ipcExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath, false], channel: 'vault-open' })})`;
       await this.sendCommand(ipcWs, 'Runtime.evaluate', {
         awaitPromise: true,
         expression: ipcExpr,
@@ -253,10 +247,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
     try {
+      await ensureNamespaceBootstrapped(this, vaultPath);
       const target = await this.findTargetForVault(vaultPath);
       const ws = await this.connectToTarget(target);
       try {
-        const destroyExpr = generateFunctionCall(destroyCurrentWindow, { ensureLayoutReady });
+        const destroyExpr = 'window.__obsidianIntegrationTesting.destroyCurrentWindow()';
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
           expression: destroyExpr,
@@ -279,7 +274,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
     if (targets.length > 0) {
       const ws = await this.connectToTarget(ensureNonNullable(targets[0]));
       try {
-        const removeExpr = generateFunctionCall(ipcSendSync, { args: [vaultPath], channel: 'vault-remove', ensureLayoutReady });
+        await ensureNamespaceBootstrapped(this, vaultPath);
+        const removeExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath], channel: 'vault-remove' })})`;
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
           expression: removeExpr,
