@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 3.0.1
+
+- fix: dismiss trust dialog when registering first vault via CLI transport
+
 ## 3.0.0
 
 - refactor: consolidate window state under __obsidianIntegrationTesting namespace
