@@ -45,7 +45,8 @@ const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
-const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 30000;
+const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 60000;
+const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 60000;
 
 /**
  * Parameters for {@link AppiumTransportFactory.startAppiumAndEmulator}.
@@ -129,8 +130,8 @@ class AppiumTransportFactory {
           'appium:settings': {
             'appium:chromedriverAutodownload': true
           },
-          'appium:skipServerInstallation': true,
           'appium:udid': options.deviceId,
+          'appium:uiautomator2ServerInstallTimeout': SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS,
           'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
           'platformName': 'Android'
         },
