@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 3.0.3
+
+- fix: increase WebView poll timeout and reset context on switchContext
+
 ## 3.0.2
 
 - fix: use vault adapter fsPromises instead of window.require in CLI transport
