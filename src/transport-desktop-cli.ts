@@ -42,6 +42,15 @@ import {
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
 
+interface ExecuteScriptFileFsPromises {
+  access(path: string): Promise<void>;
+  readFile(path: string, encoding: string): Promise<string>;
+}
+
+interface InvokeAndWriteResultFsPromises {
+  writeFile(path: string, data: string): Promise<void>;
+}
+
 interface InvokeAndWriteResultParams {
   evaluate(): Promise<unknown>;
   resultPath: string;
@@ -434,19 +443,20 @@ export class DesktopCliTransport implements ObsidianTransport {
  * @param params - The invocation parameters.
  */
 export async function invokeAndWriteResult(params: InvokeAndWriteResultParams): Promise<void> {
-  const { writeFile: writeResultFile } = window.require('node:fs/promises') as typeof import('node:fs/promises');
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- window.app is set by Obsidian at runtime.
+  const fsPromises = Reflect.get(window.app.vault.adapter, 'fsPromises') as InvokeAndWriteResultFsPromises;
   try {
     const result = await params.evaluate();
     if (result === undefined) {
-      await writeResultFile(params.resultPath, JSON.stringify({ type: 'undefined', value: '' }));
+      await fsPromises.writeFile(params.resultPath, JSON.stringify({ type: 'undefined', value: '' }));
     } else if (result === null) {
-      await writeResultFile(params.resultPath, JSON.stringify({ type: 'null', value: '' }));
+      await fsPromises.writeFile(params.resultPath, JSON.stringify({ type: 'null', value: '' }));
     } else {
       // eslint-disable-next-line @typescript-eslint/no-base-to-string -- Intentional: result is an arbitrary value from the evaluated expression.
-      await writeResultFile(params.resultPath, JSON.stringify({ value: String(result) }));
+      await fsPromises.writeFile(params.resultPath, JSON.stringify({ value: String(result) }));
     }
   } catch (err) {
-    await writeResultFile(params.resultPath, JSON.stringify({ type: 'error', value: params.serializeError(err) }));
+    await fsPromises.writeFile(params.resultPath, JSON.stringify({ type: 'error', value: params.serializeError(err) }));
   }
 }
 
@@ -545,7 +555,8 @@ function delay(ms: number): Promise<void> {
  * @param scriptPath - The absolute path to the script file.
  */
 async function executeScriptFile(scriptPath: string): Promise<void> {
-  const fsPromises = window.require('node:fs/promises') as typeof import('node:fs/promises');
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- window.app is set by Obsidian at runtime.
+  const fsPromises = Reflect.get(window.app.vault.adapter, 'fsPromises') as ExecuteScriptFileFsPromises;
 
   try {
     await fsPromises.access(scriptPath);

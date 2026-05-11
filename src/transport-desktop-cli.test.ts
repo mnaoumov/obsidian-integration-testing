@@ -90,31 +90,33 @@ vi.mock('./obsidian-config.ts', () => ({
 
 let transport: DesktopCliTransport;
 
-// Mock window.require for serialized functions that use it instead of import()
-// (Vitest transforms import() into __vite_ssr_dynamic_import__ in toString() output).
-const windowRequireMock = vi.fn((mod: string): unknown => {
-  if (mod === 'node:fs/promises') {
-    return {
-      mkdir: mockMkdir,
-      readFile: mockReadFile,
-      unlink: mockUnlink,
-      writeFile: mockWriteFile
-    };
-  }
-  throw new Error(`Unexpected window.require: ${mod}`);
-});
+// Mocks window.app.vault.adapter.fsPromises — serialized functions access fs through the
+// Vault adapter instead of window.require, bypassing the emulate-mobile require handler.
+const mockFsPromisesAccess = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
 
-vi.stubGlobal('window', { require: windowRequireMock });
+vi.stubGlobal('window', {
+  app: {
+    vault: {
+      adapter: {
+        fsPromises: {
+          access: mockFsPromisesAccess,
+          readFile: mockReadFile,
+          writeFile: mockWriteFile
+        }
+      }
+    }
+  }
+});
 
 beforeEach(() => {
   transport = new DesktopCliTransport();
   mockExec.mockReset().mockResolvedValue({ exitCode: 0, exitSignal: null, stderr: '', stdout: '' });
   mockExistsSync.mockReset().mockReturnValue(true);
+  mockFsPromisesAccess.mockReset().mockResolvedValue(undefined);
   mockMkdir.mockReset().mockResolvedValue(undefined);
   mockReadFile.mockReset();
   mockUnlink.mockReset().mockResolvedValue(undefined);
   mockWriteFile.mockReset().mockResolvedValue(undefined);
-  windowRequireMock.mockClear();
 });
 
 describe('DesktopCliTransport.evaluate', () => {
