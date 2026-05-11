@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 3.0.2
+
+- fix: use vault adapter fsPromises instead of window.require in CLI transport
+
 ## 3.0.1
 
 - fix: dismiss trust dialog when registering first vault via CLI transport
