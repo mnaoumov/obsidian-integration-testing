@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 3.0.5
+
+- fix: increase server install/launch timeouts for fresh emulators
+- fix: increase Appium connection retry timeout and count for fresh emulators
+
 ## 3.0.4
 
 - fix: increase Appium server timeouts and allow server installation on fresh emulators
