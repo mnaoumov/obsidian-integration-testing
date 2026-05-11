@@ -90,13 +90,20 @@ export interface AppiumTransportConfig {
    * - iOS: `@md.obsidian:documents/`
    */
   vaultBasePath?: string;
+
+  /**
+   * Timeout in milliseconds for waiting for the WebView context to become available.
+   *
+   * @default `60000`
+   */
+  webviewTimeoutInMilliseconds?: number;
 }
 
 const NO_OUTPUT = '(no output)';
 const APP_STATE_FOREGROUND = 4;
 const WEBVIEW_CONTEXT_PREFIX = 'WEBVIEW_md.obsidian';
 const WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 60000;
 const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
@@ -132,6 +139,7 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly deviceId: string;
   private readonly platform: 'android' | 'ios';
   private readonly vaultBasePath: string;
+  private readonly webviewTimeoutInMilliseconds: number;
 
   /**
    * Creates a new Appium transport.
@@ -144,6 +152,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
+    this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
   }
 
   /**
@@ -315,8 +324,8 @@ export class AppiumTransport implements ObsidianTransport {
    * to Chrome or other WebViews on the device.
    */
   private async ensureWebViewContext(): Promise<void> {
-    const deadline = Date.now() + WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
-    log(`[appium-transport] Waiting for ${WEBVIEW_CONTEXT_PREFIX} context (timeout=${String(WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    const deadline = Date.now() + this.webviewTimeoutInMilliseconds;
+    log(`[appium-transport] Waiting for ${WEBVIEW_CONTEXT_PREFIX} context (timeout=${String(this.webviewTimeoutInMilliseconds)}ms)...`);
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
@@ -328,7 +337,12 @@ export class AppiumTransport implements ObsidianTransport {
           await this.browser.switchContext(obsidianContext);
           return;
         } catch (error: unknown) {
-          log(`[appium-transport] switchContext failed: ${String(error)}. Retrying...`);
+          log(`[appium-transport] switchContext failed: ${String(error)}. Resetting to NATIVE_APP before retrying...`);
+          try {
+            await this.browser.switchContext('NATIVE_APP');
+          } catch (resetError: unknown) {
+            log(`[appium-transport] NATIVE_APP reset also failed: ${String(resetError)}`);
+          }
         }
       }
 
@@ -336,7 +350,7 @@ export class AppiumTransport implements ObsidianTransport {
       await delay(WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS)}ms. Is the Obsidian app fully loaded?`);
+    throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(this.webviewTimeoutInMilliseconds)}ms. Is the Obsidian app fully loaded?`);
   }
 
   /**

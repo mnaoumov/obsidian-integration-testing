@@ -62,6 +62,17 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * - iOS: `@md.obsidian:documents/`
    */
   vaultBasePath?: string;
+
+  /**
+   * Timeout in milliseconds for waiting for the WebView context to become available.
+   *
+   * On slow emulators, the ChromeDriver proxy that handles WebView commands
+   * may not be ready immediately after the Appium session starts. This timeout
+   * controls how long to poll before giving up.
+   *
+   * @default `60000`
+   */
+  webviewTimeoutInMilliseconds?: number;
 }
 
 /**
