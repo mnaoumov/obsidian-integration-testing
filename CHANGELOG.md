@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 3.0.4
+
+- fix: increase Appium server timeouts and allow server installation on fresh emulators
+
 ## 3.0.3
 
 - fix: increase WebView poll timeout and reset context on switchContext
