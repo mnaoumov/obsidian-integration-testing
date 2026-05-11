@@ -148,7 +148,8 @@ class AppiumTransportFactory {
         browser,
         deviceId: options.deviceId,
         platform: 'android',
-        ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath })
+        ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
+        ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
       });
 
       const originalDispose = appiumTransport.dispose.bind(appiumTransport);
