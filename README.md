@@ -502,7 +502,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
          obsidianTransport: {
            type: 'obsidian-android-appium',
            appiumUrl: 'http://localhost:4723',
-           deviceId: 'emulator-5554',
+           avdName: 'obsidian_test',
          },
        },
      },
@@ -559,7 +559,7 @@ export default defineConfig({
             obsidianTransport: {
               type: 'obsidian-android-appium',
               appiumUrl: 'http://localhost:4723',
-              deviceId: 'emulator-5554',
+              avdName: 'obsidian_test',
             },
           },
         },
