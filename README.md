@@ -443,26 +443,20 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 1. Install [Android Studio](https://developer.android.com/studio), which includes the Android SDK and `adb` command-line tools
 
-2. Set up a device — either an emulator or a real device:
-
-   **Emulator:**
+2. Create an Android Virtual Device (AVD):
 
    - Open Android Studio → Device Manager → Create Virtual Device
    - Select a phone profile (e.g. Pixel 7) and a system image (e.g. API 34)
-   - Start the emulator
+   - Give the AVD a name (e.g. `obsidian_test`) — this is the value you pass as `avdName`
+   - You do **not** need to start the emulator manually — the test framework auto-starts it
 
-   **Real device:**
+   To list existing AVD names:
 
-   - Enable Developer Options: Settings → About phone → tap "Build number" 7 times
-   - Enable USB Debugging: Settings → Developer options → USB debugging
-   - Connect via USB and accept the debugging prompt on the device
-   - Verify the device is detected:
+   ```bash
+   emulator -list-avds
+   ```
 
-     ```bash
-     adb devices
-     ```
-
-3. Install [Obsidian](https://obsidian.md/download) on the device (via Play Store or APK sideload) and grant storage permission — either via the app's permission prompt or via `adb`:
+3. Install [Obsidian](https://obsidian.md/download) on the emulator (via Play Store or APK sideload) and grant storage permission — either via the app's permission prompt or via `adb`:
 
    ```bash
    adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
@@ -475,22 +469,11 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    appium driver install uiautomator2
    ```
 
-5. Start the Appium server:
+   > [!NOTE]
+   >
+   > You do not need to start the Appium server manually — the test framework auto-starts it if it is not already running.
 
-   ```bash
-   appium
-   ```
-
-6. Find the device ID (use the value from the `adb devices` output):
-
-   ```bash
-   adb devices
-   # Example output:
-   # emulator-5554   device
-   # R5CR1234567     device   ← real device
-   ```
-
-7. Configure vitest:
+5. Configure vitest:
 
    ```ts
    // vitest.config.ts
