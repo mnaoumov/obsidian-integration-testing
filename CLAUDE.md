@@ -35,7 +35,7 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None.
+Fix two Android emulator issues: (1) waitForDevice looks for wrong device ID when emulator auto-starts on a different port, (2) auto-started processes not killed when setup fails inside startAppiumAndEmulator.
 
 ## Pending Questions
 
