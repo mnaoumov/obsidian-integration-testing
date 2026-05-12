@@ -40,7 +40,6 @@ const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
 const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
-const DEFAULT_DEVICE_ID = 'emulator-5554';
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
@@ -67,11 +66,8 @@ interface StartAppiumAndEmulatorParams {
   /** The Appium server URL. */
   appiumUrl: URL;
 
-  /** AVD name to auto-start if the device is not connected. */
-  avdName?: string | undefined;
-
-  /** Device UDID. */
-  deviceId: string;
+  /** AVD name to start. */
+  avdName: string;
 
   /** The Appium server port. */
   port: number;
@@ -117,8 +113,7 @@ class AppiumTransportFactory {
    * @returns A configured Appium transport.
    */
   public async create(options: ObsidianAndroidAppiumTransportOptions): Promise<ObsidianTransport> {
-    const deviceId = options.deviceId ?? DEFAULT_DEVICE_ID;
-    this.log(`Creating AppiumTransport (url=${options.appiumUrl}, device=${deviceId})`);
+    this.log(`Creating AppiumTransport (url=${options.appiumUrl}, avd=${options.avdName})`);
 
     const url = new URL(options.appiumUrl);
 
@@ -136,7 +131,6 @@ class AppiumTransportFactory {
       const result = await this.startAppiumAndEmulator({
         appiumUrl: url,
         avdName: options.avdName,
-        deviceId,
         port,
         shouldAutoStartAppium: options.shouldAutoStartAppium
       });
@@ -249,30 +243,11 @@ class AppiumTransportFactory {
     });
   }
 
-  private async checkDeviceConnected(deviceId: string): Promise<boolean> {
-    const connectedIds = await this.getConnectedDeviceIds();
-    return connectedIds.includes(deviceId);
-  }
-
-  private async ensureDeviceConnected(avdName: string | undefined, deviceId: string): Promise<EnsureDeviceConnectedResult> {
-    this.log(`Checking device ${deviceId} is connected via ADB...`);
-
-    if (await this.checkDeviceConnected(deviceId)) {
-      this.log(`Device ${deviceId} is connected.`);
-      return { actualDeviceId: deviceId };
-    }
-
-    if (!avdName) {
-      throw new Error(
-        `Device "${deviceId}" is not connected. Start the emulator before running integration tests,`
-          + ' or set avdName in transport options to auto-start it.'
-      );
-    }
-
+  private async ensureDeviceConnected(avdName: string): Promise<EnsureDeviceConnectedResult> {
     const deviceIdsBefore = await this.getConnectedDeviceIds();
-    this.log(`Device ${deviceId} not found, starting emulator AVD "${avdName}"... (existing devices: [${deviceIdsBefore.join(', ')}])`);
+    this.log(`Starting emulator AVD "${avdName}"... (existing devices: [${deviceIdsBefore.join(', ')}])`);
     const emulatorProcess = this.startEmulator(avdName);
-    const actualDeviceId = await this.waitForNewDevice(deviceId, deviceIdsBefore);
+    const actualDeviceId = await this.waitForNewDevice(deviceIdsBefore);
     this.log(`Emulator "${avdName}" started, device ${actualDeviceId} is connected.`);
     return { actualDeviceId, emulatorProcess };
   }
@@ -331,7 +306,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumUrl, avdName, deviceId, port, shouldAutoStartAppium } = params;
+    const { appiumUrl, avdName, port, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
 
@@ -360,7 +335,7 @@ class AppiumTransportFactory {
             this.log('Auto-started Appium server is ready.');
           })
           : Promise.resolve(),
-        this.ensureDeviceConnected(avdName, deviceId)
+        this.ensureDeviceConnected(avdName)
       ]);
 
       return {
@@ -460,9 +435,9 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForNewDevice(preferredDeviceId: string, deviceIdsBefore: string[]): Promise<string> {
+  private async waitForNewDevice(deviceIdsBefore: string[]): Promise<string> {
     this.log(
-      `Waiting for a new device to appear in ADB (preferred: ${preferredDeviceId}, timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${
+      `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${
         String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)
       }ms)...`
     );
@@ -473,12 +448,7 @@ class AppiumTransportFactory {
       const newIds = currentIds.filter((id) => !deviceIdsBefore.includes(id));
 
       if (newIds.length > 0) {
-        const actualDeviceId = newIds.includes(preferredDeviceId) ? preferredDeviceId : newIds[0] ?? preferredDeviceId;
-
-        if (actualDeviceId !== preferredDeviceId) {
-          this.log(`Emulator landed on ${actualDeviceId} instead of ${preferredDeviceId} (port already in use).`);
-        }
-
+        const actualDeviceId = newIds[0] ?? '';
         this.log(`Device ${actualDeviceId} appeared in ADB, waiting for boot to complete...`);
         await this.waitForBoot(actualDeviceId, deadline);
         await this.wakeScreen(actualDeviceId);
@@ -491,7 +461,7 @@ class AppiumTransportFactory {
     }
 
     throw new Error(
-      `No new emulator device appeared within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms (was looking for ${preferredDeviceId}).`
+      `No new emulator device appeared within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`
     );
   }
 
