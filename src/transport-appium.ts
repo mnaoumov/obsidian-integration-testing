@@ -12,7 +12,7 @@
  *   obsidianTransport: {
  *     type: 'obsidian-android-appium',
  *     appiumUrl: 'http://localhost:4723',
- *     deviceId: 'emulator-5554',
+ *     avdName: 'obsidian_test',
  *   },
  * }
  * ```
