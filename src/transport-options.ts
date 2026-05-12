@@ -35,8 +35,13 @@ export interface ObsidianAndroidAppiumTransportOptions {
 
   /**
    * The device UDID (e.g. `'emulator-5554'`).
+   *
+   * When omitted with {@link avdName} set, the factory auto-starts the AVD
+   * and detects whichever device ID the emulator is assigned.
+   *
+   * When omitted without {@link avdName}, defaults to `'emulator-5554'`.
    */
-  deviceId: string;
+  deviceId?: string;
 
   /**
    * Whether to automatically start the Appium server if it is not reachable.

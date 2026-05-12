@@ -40,6 +40,7 @@ const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
 const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
+const DEFAULT_DEVICE_ID = 'emulator-5554';
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
@@ -116,7 +117,8 @@ class AppiumTransportFactory {
    * @returns A configured Appium transport.
    */
   public async create(options: ObsidianAndroidAppiumTransportOptions): Promise<ObsidianTransport> {
-    this.log(`Creating AppiumTransport (url=${options.appiumUrl}, device=${options.deviceId})`);
+    const deviceId = options.deviceId ?? DEFAULT_DEVICE_ID;
+    this.log(`Creating AppiumTransport (url=${options.appiumUrl}, device=${deviceId})`);
 
     const url = new URL(options.appiumUrl);
 
@@ -134,7 +136,7 @@ class AppiumTransportFactory {
       const result = await this.startAppiumAndEmulator({
         appiumUrl: url,
         avdName: options.avdName,
-        deviceId: options.deviceId,
+        deviceId,
         port,
         shouldAutoStartAppium: options.shouldAutoStartAppium
       });
