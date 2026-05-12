@@ -21,27 +21,15 @@ export interface ObsidianAndroidAppiumTransportOptions {
   appiumUrl: string;
 
   /**
-   * The Android AVD (Android Virtual Device) name to auto-start if
-   * the device specified by {@link deviceId} is not connected.
+   * The Android AVD (Android Virtual Device) name.
    *
-   * When provided and the device is not found via `adb devices`, the
-   * transport factory launches `emulator -avd <avdName>` as a background
+   * The transport factory launches `emulator -avd <avdName>` as a background
    * process and polls until the device appears. The emulator is killed
    * on transport disposal.
    *
    * Run `emulator -list-avds` to see available AVD names.
    */
-  avdName?: string;
-
-  /**
-   * The device UDID (e.g. `'emulator-5554'`).
-   *
-   * When omitted with {@link avdName} set, the factory auto-starts the AVD
-   * and detects whichever device ID the emulator is assigned.
-   *
-   * When omitted without {@link avdName}, defaults to `'emulator-5554'`.
-   */
-  deviceId?: string;
+  avdName: string;
 
   /**
    * Whether to automatically start the Appium server if it is not reachable.
