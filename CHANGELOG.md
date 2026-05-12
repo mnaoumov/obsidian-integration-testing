@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 4.0.0
+
+- feat!: remove deviceId from Android transport options, require avdName
+
 ## 3.0.5
 
 - fix: increase server install/launch timeouts for fresh emulators
