@@ -245,11 +245,41 @@ class AppiumTransportFactory {
 
   private async ensureDeviceConnected(avdName: string): Promise<EnsureDeviceConnectedResult> {
     const deviceIdsBefore = await this.getConnectedDeviceIds();
-    this.log(`Starting emulator AVD "${avdName}"... (existing devices: [${deviceIdsBefore.join(', ')}])`);
+    this.log(`Checking existing devices for AVD "${avdName}"... (connected: [${deviceIdsBefore.join(', ')}])`);
+
+    const existingDeviceId = await this.findDeviceByAvdName(avdName, deviceIdsBefore);
+
+    if (existingDeviceId) {
+      this.log(`AVD "${avdName}" is already running on device ${existingDeviceId}, reusing.`);
+      return { actualDeviceId: existingDeviceId };
+    }
+
+    this.log(`AVD "${avdName}" not found on any existing device, starting a new emulator...`);
     const emulatorProcess = this.startEmulator(avdName);
     const actualDeviceId = await this.waitForNewDevice(deviceIdsBefore);
     this.log(`Emulator "${avdName}" started, device ${actualDeviceId} is connected.`);
     return { actualDeviceId, emulatorProcess };
+  }
+
+  private async findDeviceByAvdName(avdName: string, deviceIds: string[]): Promise<string | undefined> {
+    for (const deviceId of deviceIds) {
+      const runningAvd = await new Promise<string>((resolve) => {
+        execFile(
+          'adb',
+          ['-s', deviceId, 'emu', 'avd', 'name'],
+          { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+          (_error, stdout) => {
+            resolve(stdout.split('\n')[0]?.trim() ?? '');
+          }
+        );
+      });
+
+      if (runningAvd === avdName) {
+        return deviceId;
+      }
+    }
+
+    return undefined;
   }
 
   private async getConnectedDeviceIds(): Promise<string[]> {
