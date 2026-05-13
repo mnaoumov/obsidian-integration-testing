@@ -160,9 +160,22 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly appId: string;
   private readonly browser: Browser;
   private readonly deviceId: string;
+  /**
+   * Tracks whether the driver is currently switched to the WebView context.
+   *
+   * Set to `true` after a successful `switchContext(WEBVIEW_md.obsidian)`.
+   * Reset to `false` when the context is known to be invalidated
+   * (e.g. after `location.reload()` in {@link registerVault}).
+   *
+   * When `true`, {@link ensureWebViewContext} skips the expensive
+   * `getContexts()` call (which runs `adb shell cat /proc/net/unix` and
+   * can time out on slow emulators).
+   */
+  private isInWebViewContext = false;
   private readonly isSessionOwner: boolean;
   private readonly platform: 'android' | 'ios';
   private readonly vaultBasePath: string;
+
   private readonly webviewTimeoutInMilliseconds: number;
 
   /**
@@ -206,15 +219,21 @@ export class AppiumTransport implements ObsidianTransport {
   public async evaluate(expression: string, _options: TransportEvalOptions): Promise<string> {
     await this.ensureWebViewContext();
 
-    const result = await this.browser.execute<null | string | undefined, []>(
-      `return (${expression})`
-    );
+    try {
+      const result = await this.browser.execute<null | string | undefined, []>(
+        `return (${expression})`
+      );
 
-    if (result === undefined || result === null) {
-      return NO_OUTPUT;
+      if (result === undefined || result === null) {
+        return NO_OUTPUT;
+      }
+
+      return result;
+    } catch (error: unknown) {
+      // Context may have been lost mid-execution (e.g. page reload).
+      this.isInWebViewContext = false;
+      throw error;
     }
-
-    return result;
   }
 
   /**
@@ -241,6 +260,7 @@ export class AppiumTransport implements ObsidianTransport {
     log(`[appium-transport] App state: ${String(state)} (need ${String(APP_STATE_FOREGROUND)}=foreground)`);
     if (state !== APP_STATE_FOREGROUND) {
       log(`[appium-transport] Activating app ${this.appId}...`);
+      this.isInWebViewContext = false;
       await this.browser.activateApp(this.appId);
       await delay(APP_RESTART_DELAY_IN_MILLISECONDS);
     }
@@ -314,6 +334,10 @@ export class AppiumTransport implements ObsidianTransport {
     // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
 
+    // Invalidate before reload — the page will navigate and the WebView
+    // Context may be temporarily unavailable during reload.
+    this.isInWebViewContext = false;
+
     await this.browser.execute((path: string) => {
       const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
       if (!existing.includes(path)) {
@@ -363,11 +387,19 @@ export class AppiumTransport implements ObsidianTransport {
   /**
    * Switches the driver to the `WEBVIEW_md.obsidian` context.
    *
+   * If the context was already verified (cached via {@link isInWebViewContext}),
+   * returns immediately without calling `getContexts()` — which runs
+   * `adb shell cat /proc/net/unix` and can time out on slow emulators.
+   *
    * Polls until the context becomes available (the app may still be loading).
    * Uses the `WEBVIEW_md.obsidian` context specifically to avoid connecting
    * to Chrome or other WebViews on the device.
    */
   private async ensureWebViewContext(): Promise<void> {
+    if (this.isInWebViewContext) {
+      return;
+    }
+
     const deadline = Date.now() + this.webviewTimeoutInMilliseconds;
     log(`[appium-transport] Waiting for ${WEBVIEW_CONTEXT_PREFIX} context (timeout=${String(this.webviewTimeoutInMilliseconds)}ms)...`);
 
@@ -379,6 +411,7 @@ export class AppiumTransport implements ObsidianTransport {
         log(`[appium-transport] Found WebView context: ${obsidianContext}`);
         try {
           await this.browser.switchContext(obsidianContext);
+          this.isInWebViewContext = true;
           return;
         } catch (error: unknown) {
           log(`[appium-transport] switchContext failed: ${String(error)}. Resetting to NATIVE_APP before retrying...`);
@@ -423,6 +456,7 @@ export class AppiumTransport implements ObsidianTransport {
         });
         if (isReady) {
           log('[appium-transport] Layout is ready.');
+          this.isInWebViewContext = true;
           return;
         }
       } catch {
