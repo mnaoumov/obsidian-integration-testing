@@ -32,6 +32,7 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
 import { serializeError } from './serialize-error.ts';
 import { TempVault } from './temp-vault.ts';
+import { AppiumTransport } from './transport-appium.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
@@ -169,7 +170,8 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     throw error;
   }
 
-  const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions };
+  const augmentedOptions = augmentTransportOptions(transportOptions, transport);
+  const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
   activeSetups.add(result);
   registerProcessCleanupHandler();
   return result;
@@ -197,6 +199,35 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   } finally {
     activeSetups.delete(result);
   }
+}
+
+/**
+ * Augments transport options with session reuse info when the transport
+ * supports it (currently Appium only).
+ *
+ * The augmented options are provided to test workers so they can reattach
+ * to the existing session instead of creating a new one.
+ *
+ * @param options - The original transport options.
+ * @param transport - The transport instance created during setup.
+ * @returns The augmented options, or the original options if not applicable.
+ */
+function augmentTransportOptions(
+  options: ObsidianTransportOptions | undefined,
+  transport: ObsidianTransport
+): ObsidianTransportOptions | undefined {
+  if (options?.type !== 'obsidian-android-appium' || !(transport instanceof AppiumTransport)) {
+    return options;
+  }
+
+  const sessionInfo = transport.getSessionInfo();
+  log(`[integration-setup:${options.type}] Session reuse info: sessionId=${sessionInfo.sessionId}, deviceId=${sessionInfo.deviceId}`);
+
+  return {
+    ...options,
+    deviceId: sessionInfo.deviceId,
+    sessionId: sessionInfo.sessionId
+  };
 }
 
 /**

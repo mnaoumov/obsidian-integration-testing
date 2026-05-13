@@ -16,7 +16,10 @@ import {
 import http from 'node:http';
 import { join } from 'node:path';
 import process from 'node:process';
-import { remote } from 'webdriverio';
+import {
+  attach,
+  remote
+} from 'webdriverio';
 
 import type {
   ObsidianAndroidAppiumTransportOptions,
@@ -109,10 +112,82 @@ class AppiumTransportFactory {
   /**
    * Creates an Appium transport by establishing a WebDriverIO session.
    *
+   * If `options.sessionId` is present, reattaches to the existing session
+   * instead of creating a new one. This avoids duplicate Appium/ADB connections
+   * when test workers reuse the global setup's session.
+   *
    * @param options - Android Appium transport options.
    * @returns A configured Appium transport.
    */
   public async create(options: ObsidianAndroidAppiumTransportOptions): Promise<ObsidianTransport> {
+    if (options.sessionId !== undefined && options.deviceId !== undefined) {
+      return this.attachToExistingSession(options.sessionId, options.deviceId, options);
+    }
+
+    return this.createNewSession(options);
+  }
+
+  private async attachToExistingSession(
+    sessionId: string,
+    deviceId: string,
+    options: ObsidianAndroidAppiumTransportOptions
+  ): Promise<ObsidianTransport> {
+    const url = new URL(options.appiumUrl);
+    const port = Number(url.port);
+    const appId = options.appId ?? APP_PACKAGE;
+
+    this.log(`Reattaching to existing Appium session ${sessionId} (device=${deviceId})`);
+
+    const browser = await attach({
+      capabilities: {
+        platformName: 'Android'
+      },
+      hostname: url.hostname,
+      logLevel: 'warn',
+      path: url.pathname,
+      port,
+      sessionId
+    });
+
+    this.log('Reattached to Appium session.');
+
+    return new AppiumTransport({
+      appId,
+      browser,
+      deviceId,
+      isSessionOwner: false,
+      platform: 'android',
+      ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
+      ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
+    });
+  }
+
+  private checkAppiumReachable(url: URL): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const statusUrl = new URL('/status', url);
+      const req = http.get(statusUrl, { timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('timeout', () => {
+        req.destroy();
+        reject(
+          new Error(
+            `Appium server at ${url.origin} did not respond within ${String(APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS)}ms. Is the Appium server running?`
+          )
+        );
+      });
+      req.on('error', (err) => {
+        reject(
+          new Error(
+            `Cannot reach Appium server at ${url.origin}: ${err.message}. Is the Appium server running?`
+          )
+        );
+      });
+    });
+  }
+
+  private async createNewSession(options: ObsidianAndroidAppiumTransportOptions): Promise<ObsidianTransport> {
     this.log(`Creating AppiumTransport (url=${options.appiumUrl}, avd=${options.avdName})`);
 
     const url = new URL(options.appiumUrl);
@@ -216,31 +291,6 @@ class AppiumTransportFactory {
       }
       throw error;
     }
-  }
-
-  private checkAppiumReachable(url: URL): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const statusUrl = new URL('/status', url);
-      const req = http.get(statusUrl, { timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (res) => {
-        res.resume();
-        resolve();
-      });
-      req.on('timeout', () => {
-        req.destroy();
-        reject(
-          new Error(
-            `Appium server at ${url.origin} did not respond within ${String(APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS)}ms. Is the Appium server running?`
-          )
-        );
-      });
-      req.on('error', (err) => {
-        reject(
-          new Error(
-            `Cannot reach Appium server at ${url.origin}: ${err.message}. Is the Appium server running?`
-          )
-        );
-      });
-    });
   }
 
   private async ensureDeviceConnected(avdName: string): Promise<EnsureDeviceConnectedResult> {
