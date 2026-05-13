@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 4.0.1
+
+- fix: reuse already-running emulator in ensureDeviceConnected
+- docs: update TSDoc example to use avdName instead of deviceId
+- docs: simplify Android setup instructions
+- docs: update README examples
+
 ## 4.0.0
 
 - feat!: remove deviceId from Android transport options, require avdName
