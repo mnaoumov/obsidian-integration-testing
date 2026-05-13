@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 4.1.0
+
+- fix: cache WebView context to avoid redundant getContexts()
+- fix: reuse Appium session in test workers instead of creating a second one
+
 ## 4.0.1
 
 - fix: reuse already-running emulator in ensureDeviceConnected
