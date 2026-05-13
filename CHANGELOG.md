@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 4.1.1
+
+- chore: fix versions
+
 ## 4.1.0
 
 - fix: cache WebView context to avoid redundant getContexts()
