@@ -56,6 +56,18 @@ import { exec } from './exec.ts';
 import { log } from './log.ts';
 
 /**
+ * Session connection info returned by {@link AppiumTransport.getSessionInfo},
+ * used to reattach from another process.
+ */
+export interface AppiumSessionInfo {
+  /** The device UDID (e.g. `'emulator-5554'`). */
+  deviceId: string;
+
+  /** The Appium/WebDriver session ID. */
+  sessionId: string;
+}
+
+/**
  * Configuration for the Appium transport.
  */
 export interface AppiumTransportConfig {
@@ -76,6 +88,17 @@ export interface AppiumTransportConfig {
    * Used for `adb` commands when pushing files to the device.
    */
   deviceId: string;
+
+  /**
+   * Whether this transport owns the Appium session and should delete it on
+   * {@link AppiumTransport.dispose}.
+   *
+   * `true` for sessions created via `remote()` (global setup).
+   * `false` for sessions reattached via `attach()` (test workers).
+   *
+   * @default `true`
+   */
+  isSessionOwner?: boolean;
 
   /**
    * Target platform. Determines WebView context naming and device file paths.
@@ -137,6 +160,7 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly appId: string;
   private readonly browser: Browser;
   private readonly deviceId: string;
+  private readonly isSessionOwner: boolean;
   private readonly platform: 'android' | 'ios';
   private readonly vaultBasePath: string;
   private readonly webviewTimeoutInMilliseconds: number;
@@ -149,6 +173,7 @@ export class AppiumTransport implements ObsidianTransport {
   public constructor(config: AppiumTransportConfig) {
     this.browser = config.browser;
     this.deviceId = config.deviceId;
+    this.isSessionOwner = config.isSessionOwner ?? true;
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
@@ -157,9 +182,15 @@ export class AppiumTransport implements ObsidianTransport {
 
   /**
    * Ends the Appium session.
+   *
+   * Only deletes the session if this transport owns it. Transports created
+   * via `attach()` (test workers reusing the global setup's session) skip
+   * deletion so the session remains available for the owning process.
    */
   public async dispose(): Promise<void> {
-    await this.browser.deleteSession();
+    if (this.isSessionOwner) {
+      await this.browser.deleteSession();
+    }
   }
 
   /**
@@ -184,6 +215,19 @@ export class AppiumTransport implements ObsidianTransport {
     }
 
     return result;
+  }
+
+  /**
+   * Returns the session connection info needed to reattach to this session
+   * from another process (e.g. a test worker).
+   *
+   * @returns The session ID and device ID.
+   */
+  public getSessionInfo(): AppiumSessionInfo {
+    return {
+      deviceId: this.deviceId,
+      sessionId: this.browser.sessionId
+    };
   }
 
   /**

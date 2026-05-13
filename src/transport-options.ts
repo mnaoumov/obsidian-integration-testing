@@ -32,6 +32,25 @@ export interface ObsidianAndroidAppiumTransportOptions {
   avdName: string;
 
   /**
+   * The device UDID to reuse (e.g. `'emulator-5554'`).
+   *
+   * Populated automatically by the global setup after the Appium session is
+   * established. When present alongside {@link sessionId}, the transport
+   * factory skips emulator startup and attaches to the existing session.
+   */
+  deviceId?: string;
+
+  /**
+   * An existing Appium session ID to reattach to.
+   *
+   * Populated automatically by the global setup and provided to test workers
+   * via the framework's context mechanism (e.g. Vitest `provide`/`inject`).
+   * When present, the transport factory uses WebDriverIO's `attach()` instead
+   * of creating a new session, avoiding duplicate Appium/ADB connections.
+   */
+  sessionId?: string;
+
+  /**
    * Whether to automatically start the Appium server if it is not reachable.
    *
    * When `true` (the default), the transport factory spawns `npx appium`

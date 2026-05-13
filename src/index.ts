@@ -14,7 +14,10 @@ export type {
   PopulateFilesParams
 } from './temp-vault.ts';
 export { TempVault } from './temp-vault.ts';
-export type { AppiumTransportConfig } from './transport-appium.ts';
+export type {
+  AppiumSessionInfo,
+  AppiumTransportConfig
+} from './transport-appium.ts';
 export { AppiumTransport } from './transport-appium.ts';
 export type { DesktopCdpTransportConfig } from './transport-desktop-cdp.ts';
 export { DesktopCdpTransport } from './transport-desktop-cdp.ts';
