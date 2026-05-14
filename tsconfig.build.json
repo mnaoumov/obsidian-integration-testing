@@ -6,7 +6,8 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "outDir": "./dist/lib/esm",
-    "declarationDir": "./dist/lib/esm"
+    "declarationDir": "./dist/lib/esm",
+    "rootDir": "./src"
   },
   "include": [
     "./src/**/*.ts"
