@@ -10,6 +10,7 @@
     "inlineSources": true,
     "lib": [
       "DOM",
+      "DOM.Iterable",
       "ES2024"
     ],
     "libReplacement": true,
@@ -19,10 +20,10 @@
     "skipLibCheck": false,
     "target": "ES2024",
     "types": [
+      "@obsidian-typings/obsidian-public-latest",
       "@total-typescript/ts-reset",
       "@types/jest",
-      "node",
-      "obsidian-typings"
+      "node"
     ],
     "verbatimModuleSyntax": true
   },
