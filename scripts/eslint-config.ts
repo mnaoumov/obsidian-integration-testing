@@ -12,8 +12,10 @@
 import type { Linter } from 'eslint';
 
 import commentsConfigs from '@eslint-community/eslint-plugin-eslint-comments/configs';
-import { includeIgnoreFile } from '@eslint/compat';
-import { defineConfig } from '@eslint/config-helpers';
+import {
+  defineConfig,
+  includeIgnoreFile
+} from '@eslint/config-helpers';
 import eslint from '@eslint/js';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `plugin` is too confusing.
 import stylistic from '@stylistic/eslint-plugin';
