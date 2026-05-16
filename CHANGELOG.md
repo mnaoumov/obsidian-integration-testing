@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 4.1.2
+
+- chore: update libs
+- chore: add attestation
+- docs: contributing
+
 ## 4.1.1
 
 - chore: fix versions
