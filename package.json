@@ -119,7 +119,7 @@
     "@eslint/compat": "^2.1.0",
     "@eslint/config-helpers": "^0.6.0",
     "@eslint/js": "^10.0.1",
-    "@obsidian-typings/obsidian-public-latest": "^6.3.0",
+    "@obsidian-typings/obsidian-public-latest": "^6.4.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@tsconfig/strictest": "^2.0.8",
