@@ -20,16 +20,16 @@ export const config = defineConfig({
     globals: false,
     projects: [
       {
-        server: {
-          deps: {
-            inline: ['@obsidian-typings', 'obsidian-dev-utils']
-          }
-        },
         test: {
           environment: 'node',
           exclude: [...SHARED_EXCLUDE, INTEGRATION_TEST_FILES, JEST_TEST_FILES],
           include: ['src/**/*.test.ts'],
-          name: 'unit-tests'
+          name: 'unit-tests',
+          server: {
+            deps: {
+              inline: ['@obsidian-typings', 'obsidian-dev-utils']
+            }
+          }
         }
       },
       {
