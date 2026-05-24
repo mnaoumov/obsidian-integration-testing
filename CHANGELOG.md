@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 4.1.5
+
+- chore: update config
+- chore: update libs
+- refactor: migrate to @obsidian-typings/obsidian-public-latest
+
 ## 4.1.4
 
 - chore: release
