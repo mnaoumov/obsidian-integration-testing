@@ -5,8 +5,14 @@
  */
 
 export { ContextId } from './context-id.ts';
-export type { TransportOptionsResolver } from './context-provider.ts';
-export { setTransportOptionsResolver } from './context-provider.ts';
+export type {
+  TransportOptionsResolver,
+  VaultPathResolver
+} from './context-provider.ts';
+export {
+  setTransportOptionsResolver,
+  setVaultPathResolver
+} from './context-provider.ts';
 export type { EvalInObsidianParams } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
 export type {

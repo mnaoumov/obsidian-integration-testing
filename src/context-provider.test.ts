@@ -8,7 +8,9 @@ import type { ObsidianTransportOptions } from './transport-options.ts';
 
 import {
   getTransportOptions,
-  setTransportOptionsResolver
+  getVaultPath,
+  setTransportOptionsResolver,
+  setVaultPathResolver
 } from './context-provider.ts';
 
 describe('context-provider', () => {
@@ -22,6 +24,19 @@ describe('context-provider', () => {
       const options: ObsidianTransportOptions = { type: 'obsidian-cli' };
       setTransportOptionsResolver(() => options);
       expect(getTransportOptions()).toBe(options);
+    });
+  });
+
+  describe('getVaultPath', () => {
+    it('should return undefined when no resolver is registered', () => {
+      setVaultPathResolver(() => undefined);
+      expect(getVaultPath()).toBeUndefined();
+    });
+
+    it('should return the value from the registered resolver', () => {
+      const vaultPath = '/tmp/test-vault';
+      setVaultPathResolver(() => vaultPath);
+      expect(getVaultPath()).toBe(vaultPath);
     });
   });
 });

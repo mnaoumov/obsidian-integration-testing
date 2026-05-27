@@ -12,7 +12,10 @@
 import type { CoreSetupResult } from '../global-setup-core.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
-import { setTransportOptionsResolver } from '../context-provider.ts';
+import {
+  setTransportOptionsResolver,
+  setVaultPathResolver
+} from '../context-provider.ts';
 import {
   coreSetup,
   coreTeardown
@@ -44,6 +47,7 @@ declare global {
 /* eslint-enable vars-on-top -- End of `declare global` block. */
 
 setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions);
+setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.tempVaultPath);
 
 let setupResult: CoreSetupResult | undefined;
 
