@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 4.1.6
+
+- feat: auto-resolve vault path via framework adapters
+- chore: update libs
+
 ## 4.1.5
 
 - chore: update config
