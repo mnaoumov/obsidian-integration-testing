@@ -19,7 +19,10 @@ import type {
 import type { GenerateNamespaceCallParams } from './generate-function-call.ts';
 import type { ObsidianTransport } from './transport.ts';
 
-import { getTransportOptions } from './context-provider.ts';
+import {
+  getTransportOptions,
+  getVaultPath
+} from './context-provider.ts';
 import { generateNamespaceCall } from './generate-function-call.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
@@ -122,7 +125,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
 ): Promise<Result> {
   // eslint-disable-next-line @typescript-eslint/unbound-method -- `fn` can be unbound.
   const { args = {}, contextId, fn, shouldSkipPreflightChecks = false, transport: transportOverride, vaultPath } = params;
-  const cwd = vaultPath ?? process.cwd();
+  const cwd = vaultPath ?? getVaultPath() ?? process.cwd();
 
   // Check: Vault path exists on disk.
   if (vaultPath !== undefined && !existsSync(vaultPath)) {
