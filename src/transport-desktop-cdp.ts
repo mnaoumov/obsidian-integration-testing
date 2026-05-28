@@ -35,6 +35,7 @@ import {
   isVaultRegistered,
   removeVaultFromConfig
 } from './obsidian-config.ts';
+import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
 /**
@@ -373,8 +374,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async ensureObsidianRunning(): Promise<void> {
     log('[cdp-transport] Obsidian CDP not reachable. Starting Obsidian with remote debugging...');
 
+    const launchCommand = await getObsidianLaunchCommand(this.cdpPort);
     try {
-      await exec(getObsidianLaunchCommand(this.cdpPort), { isQuiet: true });
+      await exec(launchCommand, { isQuiet: true });
     } catch {
       // The launch command may fail on some systems — we'll still try polling.
     }
@@ -511,22 +513,23 @@ function delay(ms: number): Promise<void> {
 /**
  * Returns the platform-specific command to launch Obsidian with remote debugging enabled.
  *
+ * Resolves the actual installed Obsidian executable (covering installer-based
+ * and `PATH`-based installs such as `scoop`) and verifies it exists before
+ * returning a command. Throws if Obsidian is not installed.
+ *
  * @param port - The CDP port to use.
  * @returns The shell command string.
+ * @throws Error if Obsidian cannot be located.
  */
-function getObsidianLaunchCommand(port: number): string {
+async function getObsidianLaunchCommand(port: number): Promise<string> {
+  const exePath = await resolveObsidianExecutable();
   const flag = `--remote-debugging-port=${String(port)}`;
 
   if (process.platform === 'win32') {
-    const localAppData = process.env['LOCALAPPDATA'] ?? '';
-    return `start "" "${localAppData}\\Programs\\Obsidian\\Obsidian.exe" ${flag}`;
+    return `start "" "${exePath}" ${flag}`;
   }
 
-  if (process.platform === 'darwin') {
-    return `/Applications/Obsidian.app/Contents/MacOS/Obsidian ${flag} &`;
-  }
-
-  return `obsidian ${flag} &`;
+  return `"${exePath}" ${flag} &`;
 }
 
 /* v8 ignore stop */

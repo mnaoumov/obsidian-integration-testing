@@ -40,6 +40,7 @@ import {
   registerVaultInConfig,
   removeVaultFromConfig
 } from './obsidian-config.ts';
+import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { serializeError } from './serialize-error.ts';
 
 interface ExecuteScriptFileFsPromises {
@@ -354,8 +355,9 @@ export class DesktopCliTransport implements ObsidianTransport {
   private async ensureObsidianRunningAndRetry(command: string[], cwd: string): Promise<void> {
     log('[cli-transport] Obsidian is not running. Starting Obsidian...');
 
+    const launchCommand = await getObsidianLaunchCommand();
     try {
-      await exec(getObsidianLaunchCommand(), { isQuiet: true });
+      await exec(launchCommand, { isQuiet: true });
     } catch {
       // The launch command may fail on some systems — we'll still try polling.
     }
@@ -599,19 +601,21 @@ function getKillObsidianCommand(): string {
 /**
  * Returns the platform-specific command to launch the Obsidian binary.
  *
+ * Resolves the actual installed Obsidian executable (covering installer-based
+ * and `PATH`-based installs such as `scoop`) and verifies it exists before
+ * returning a command. Throws if Obsidian is not installed.
+ *
  * @returns The shell command string.
+ * @throws Error if Obsidian cannot be located.
  */
-function getObsidianLaunchCommand(): string {
+async function getObsidianLaunchCommand(): Promise<string> {
+  const exePath = await resolveObsidianExecutable();
+
   if (process.platform === 'win32') {
-    const localAppData = process.env['LOCALAPPDATA'] ?? '';
-    return `start "" "${localAppData}\\Programs\\Obsidian\\Obsidian.exe"`;
+    return `start "" "${exePath}"`;
   }
 
-  if (process.platform === 'darwin') {
-    return '/Applications/Obsidian.app/Contents/MacOS/Obsidian &';
-  }
-
-  return 'obsidian &';
+  return `"${exePath}" &`;
 }
 
 /**
