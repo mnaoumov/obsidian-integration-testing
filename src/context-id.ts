@@ -57,7 +57,7 @@ export class ContextId<_Context> implements AsyncDisposable {
           __obsidianIntegrationTesting: IntegrationTestingContexts;
         }
 
-        // eslint-disable-next-line no-restricted-syntax -- Serialized function runs in Obsidian where Jest's global type doesn't apply.
+        // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
         const holder = window as unknown as Partial<IntegrationTestingHolder>;
         if (holder.__obsidianIntegrationTesting?.contexts) {
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- No other way.
