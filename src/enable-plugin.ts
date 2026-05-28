@@ -79,7 +79,7 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
       errorMessage = undefined;
       return result;
     } catch (error) {
-      // eslint-disable-next-line no-restricted-syntax -- Serialized function runs in Obsidian where Jest's global type doesn't apply.
+      // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
       const holder = window as unknown as Partial<IntegrationTestingHolder>;
       errorMessage = holder.__obsidianIntegrationTesting?.serializeError(error) ?? String(error);
       throw error;
