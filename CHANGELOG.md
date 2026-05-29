@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 4.2.0
+
+- chore: lint
+- fix: verify Obsidian executable path before auto-launch
+
 ## 4.1.6
 
 - feat: auto-resolve vault path via framework adapters
