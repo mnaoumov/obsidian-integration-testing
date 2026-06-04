@@ -101,6 +101,14 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     value: string;
   }
 
+  /**
+   * Delay (in ms) before invoking `electronWindow.destroy()` so the eval that
+   * triggered the call has time to return its result to the caller. Without
+   * it the renderer dies before the IPC reply ships, the caller waits for the
+   * full eval timeout, and stale `BrowserWindow` entries pile up.
+   */
+  const DESTROY_DELAY_IN_MILLISECONDS = 50;
+
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
   const holder = window as unknown as Partial<IntegrationTestingHolder>;
   const existingContexts = holder.__obsidianIntegrationTesting?.contexts ?? {};
@@ -117,7 +125,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     async destroyCurrentWindow(this: IntegrationTestingNamespace): Promise<void> {
       await this.ensureLayoutReady();
       await sleep(0);
-      window.electronWindow.destroy();
+      const electronWindow = window.electronWindow;
+      window.setTimeout(() => {
+        electronWindow.destroy();
+      }, DESTROY_DELAY_IN_MILLISECONDS);
     },
 
     async ensureLayoutReady(this: IntegrationTestingNamespace): Promise<void> {

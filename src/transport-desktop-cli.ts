@@ -24,6 +24,7 @@ import type {
   TransportEvalOptions
 } from './transport.ts';
 
+import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { exec } from './exec.ts';
 import { getFunctionExpressionString } from './function-expression.ts';
 import { log } from './log.ts';
@@ -234,11 +235,10 @@ export class DesktopCliTransport implements ObsidianTransport {
       await openVaultViaUri(vaultPath);
       await this.pollVaultReady(vaultPath);
       await this.enablePluginsInLocalStorage(vaultPath, vaultPath);
-      await this.dismissTrustDialog(vaultPath);
-      return;
     }
 
     await this.pollVaultReady(vaultPath);
+    await this.dismissTrustDialog(vaultPath);
   }
 
   /**
@@ -296,25 +296,20 @@ export class DesktopCliTransport implements ObsidianTransport {
    * Dismisses the "Do you trust the author of this vault?" dialog if present.
    *
    * Clicks the "Trust author and enable plugins" button (`.mod-cta`) inside any
-   * modal whose text includes "Do you trust the author". This is needed when a
-   * vault with community plugins is opened without a prior `enable-plugin-<id>`
-   * entry in localStorage (e.g., the very first vault registered via config file).
+   * modal whose text includes "Do you trust the author". Acts as a safety net
+   * for both registration paths:
+   *
+   * - First vault registered via config file (no prior `enable-plugin-<id>` entry).
+   * - Subsequent vault registered while another vault is already open. The
+   *   `enable-plugin-<newVaultId>` write happens in the existing vault's renderer,
+   *   but the new vault's renderer may read `localStorage` before that cross-renderer
+   *   write becomes visible (race observed in Obsidian 1.13.0).
    *
    * @param vaultPath - The vault path to evaluate in.
    */
   private async dismissTrustDialog(vaultPath: string): Promise<void> {
     await ensureNamespaceBootstrapped(this, vaultPath);
-    const dismissExpr = `(function() {
-      var modals = document.querySelectorAll('.modal-container');
-      for (var i = 0; i < modals.length; i++) {
-        if (modals[i].textContent.includes('Do you trust the author')) {
-          var btn = modals[i].querySelector('.mod-cta');
-          if (btn) { btn.click(); return true; }
-        }
-      }
-      return false;
-    })()`;
-    const result = await this.evaluate(dismissExpr, { cwd: vaultPath });
+    const result = await this.evaluate(DISMISS_TRUST_DIALOG_EXPR, { cwd: vaultPath });
     if (result === 'true') {
       log('[cli-transport] Dismissed "Do you trust the author" dialog.');
     }

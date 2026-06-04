@@ -318,8 +318,8 @@ describe('DesktopCliTransport.registerVault', () => {
 
     await transport.registerVault(vaultPath);
 
-    // With getVaultId returning undefined, only 2 exec calls (IPC + poll), not 3.
-    expect(mockExec).toHaveBeenCalledTimes(2);
+    // With getVaultId returning undefined, only 3 exec calls (IPC + poll + dismissTrustDialog), not 4 — the localStorage write is skipped.
+    expect(mockExec).toHaveBeenCalledTimes(3);
   });
 
   it('should use an existing registered vault path for the initial vault-open IPC eval', async () => {

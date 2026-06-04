@@ -27,6 +27,7 @@ import type {
   TransportEvalOptions
 } from './transport.ts';
 
+import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { exec } from './exec.ts';
 import { log } from './log.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
@@ -232,6 +233,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
       try {
         await this.findTargetForVault(vaultPath);
         log('[cdp-transport] Vault target found.');
+        await this.waitForLayoutReady(vaultPath);
+        await this.dismissTrustDialog(vaultPath);
         return;
       } catch {
         // Vault target not ready yet.
@@ -319,6 +322,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
     this.ws = null;
     this.activeVaultPath = null;
+  }
+
+  /**
+   * Dismisses the "Do you trust the author of this vault?" dialog if present.
+   *
+   * Acts as a safety net when `enable-plugin-<id>` is written in one renderer
+   * but not yet visible to the newly-opened vault's renderer (race observed
+   * in Obsidian 1.13.0).
+   *
+   * @param vaultPath - The vault path to evaluate in.
+   */
+  private async dismissTrustDialog(vaultPath: string): Promise<void> {
+    const result = await this.evaluate(DISMISS_TRUST_DIALOG_EXPR, { cwd: vaultPath });
+    if (result === 'true') {
+      log('[cdp-transport] Dismissed "Do you trust the author" dialog.');
+    }
   }
 
   /**
@@ -495,6 +514,23 @@ export class DesktopCdpTransport implements ObsidianTransport {
       ws.addEventListener('message', handler);
       ws.send(JSON.stringify({ id, method, params }));
     });
+  }
+
+  /**
+   * Waits for the vault's `app.workspace` to reach layout-ready state.
+   *
+   * `findTargetForVault` returns as soon as `app.vault.adapter.getBasePath()`
+   * matches — which is true shortly after the `App` constructor runs, before
+   * `plugins.initialize()` (and any trust dialog) has executed. Bootstrapping
+   * the namespace and calling `pollVaultBasePath()` awaits `layoutReady`, so
+   * by the time this returns the dialog has either rendered or is not going
+   * to render.
+   *
+   * @param vaultPath - The vault path to evaluate in.
+   */
+  private async waitForLayoutReady(vaultPath: string): Promise<void> {
+    await ensureNamespaceBootstrapped(this, vaultPath);
+    await this.evaluate('window.__obsidianIntegrationTesting.pollVaultBasePath()', { cwd: vaultPath });
   }
 }
 
