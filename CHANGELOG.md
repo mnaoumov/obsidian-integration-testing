@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 4.2.1
+
+- fix: prevent orphan windows when (un)registering a vault that isn't open `obsidian eval`'s CLI handler
+- fix: dismiss trust dialog reliably across Obsidian 1.12.x and 1.13.0
+
 ## 4.2.0
 
 - chore: lint
