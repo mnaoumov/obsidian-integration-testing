@@ -9,7 +9,7 @@ import {
 } from 'vitest';
 
 import {
-  getAnyRegisteredVaultPath,
+  getAnyOpenVaultPath,
   getVaultId
 } from './obsidian-config.ts';
 import { serializeError } from './serialize-error.ts';
@@ -78,7 +78,7 @@ const mockEnableCliInConfig = vi.hoisted(() => vi.fn());
 
 vi.mock('./obsidian-config.ts', () => ({
   enableCliInConfig: mockEnableCliInConfig,
-  getAnyRegisteredVaultPath: vi.fn().mockReturnValue('/existing-vault'),
+  getAnyOpenVaultPath: vi.fn().mockReturnValue('/existing-vault'),
   getRegisteredVaults: vi.fn().mockReturnValue([]),
   getVaultId: vi.fn(),
   isCliEnabled: vi.fn().mockReturnValue(true),
@@ -284,7 +284,7 @@ describe('DesktopCliTransport.registerVault', () => {
   it('should use existing vault as cwd for enablePluginsInLocalStorage eval', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');
-    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue('/existing-vault');
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue('/existing-vault');
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);
@@ -325,7 +325,7 @@ describe('DesktopCliTransport.registerVault', () => {
   it('should use an existing registered vault path for the initial vault-open IPC eval', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');
-    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue('/existing-vault');
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue('/existing-vault');
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);
@@ -337,7 +337,7 @@ describe('DesktopCliTransport.registerVault', () => {
 
   it('should register vault directly in config when no existing vault is registered', async () => {
     const vaultPath = '/tmp/test-vault';
-    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue(undefined);
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue(undefined);
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);
@@ -348,7 +348,7 @@ describe('DesktopCliTransport.registerVault', () => {
   it('should use vaultPath as cwd for the poll loop eval', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');
-    vi.mocked(getAnyRegisteredVaultPath).mockReturnValue('/existing-vault');
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue('/existing-vault');
     mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
 
     await transport.registerVault(vaultPath);

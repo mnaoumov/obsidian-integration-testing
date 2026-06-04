@@ -8,6 +8,7 @@ import {
 
 import {
   enableCliInConfig,
+  getAnyOpenVaultPath,
   getAnyRegisteredVaultPath,
   getRegisteredVaults,
   getVaultId,
@@ -215,6 +216,30 @@ describe('getAnyRegisteredVaultPath', () => {
       throw new Error('ENOENT');
     });
     expect(getAnyRegisteredVaultPath()).toBeUndefined();
+  });
+});
+
+describe('getAnyOpenVaultPath', () => {
+  it('should return the first vault path whose open flag is true', () => {
+    mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
+    expect(getAnyOpenVaultPath()).toBe('F:\\dev\\test-vault');
+  });
+
+  it('should return undefined when no vault is open', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({
+      vaults: {
+        a: { path: 'F:\\a' },
+        b: { open: false, path: 'F:\\b' }
+      }
+    }));
+    expect(getAnyOpenVaultPath()).toBeUndefined();
+  });
+
+  it('should return undefined when obsidian.json cannot be read', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+    expect(getAnyOpenVaultPath()).toBeUndefined();
   });
 });
 

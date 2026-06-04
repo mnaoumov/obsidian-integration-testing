@@ -84,6 +84,30 @@ export function enableCliInConfig(): void {
 }
 
 /**
+ * Returns the absolute path of any currently-open vault.
+ *
+ * Prefer this over {@link getAnyRegisteredVaultPath} when the path is going
+ * to be used as the target of an `obsidian eval` call: targeting a registered
+ * but **closed** vault causes Obsidian's CLI handler to spawn a fresh window
+ * for it (`pe(o, false)` in `main.js`), leaving a stray window behind.
+ *
+ * @returns The absolute path to an open vault, or `undefined` if none are open.
+ */
+export function getAnyOpenVaultPath(): string | undefined {
+  const config = readObsidianJson();
+  if (!config) {
+    return undefined;
+  }
+
+  for (const entry of Object.values(config.vaults)) {
+    if (entry.open === true) {
+      return entry.path;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Returns the path of any vault that is currently registered in Obsidian's registry.
  *
  * This is useful when an `obsidian eval` call must run inside an existing vault

@@ -32,7 +32,7 @@ import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import { noop } from './noop.ts';
 import {
   enableCliInConfig,
-  getAnyRegisteredVaultPath,
+  getAnyOpenVaultPath,
   getRegisteredVaults,
   getVaultId,
   isCliEnabled,
@@ -221,15 +221,15 @@ export class DesktopCliTransport implements ObsidianTransport {
    */
   public async registerVault(vaultPath: string): Promise<void> {
     log(`[cli-transport] Registering vault: ${vaultPath}`);
-    const existingVaultPath = getAnyRegisteredVaultPath();
+    const openVaultPath = getAnyOpenVaultPath();
 
-    if (existingVaultPath) {
-      await ensureNamespaceBootstrapped(this, existingVaultPath);
+    if (openVaultPath) {
+      await ensureNamespaceBootstrapped(this, openVaultPath);
       const registerExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath, false], channel: 'vault-open' })})`;
-      await this.evaluate(registerExpr, { cwd: existingVaultPath });
-      await this.enablePluginsInLocalStorage(vaultPath, existingVaultPath);
+      await this.evaluate(registerExpr, { cwd: openVaultPath });
+      await this.enablePluginsInLocalStorage(vaultPath, openVaultPath);
     } else {
-      log('[cli-transport] No existing vault registered. Writing vault entry directly to obsidian.json...');
+      log('[cli-transport] No open vault to target. Writing vault entry directly to obsidian.json...');
       registerVaultInConfig(vaultPath);
       log('[cli-transport] Vault entry written. Opening vault via URI protocol...');
       await openVaultViaUri(vaultPath);
@@ -251,27 +251,31 @@ export class DesktopCliTransport implements ObsidianTransport {
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
     log(`[cli-transport] Unregistering vault: closing window for ${vaultPath}...`);
-    try {
-      await ensureNamespaceBootstrapped(this, vaultPath);
-      const destroyExpr = 'window.__obsidianIntegrationTesting.destroyCurrentWindow()';
-      await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
-      log('[cli-transport] Window destroy command sent.');
-    } catch (error: unknown) {
-      log(`[cli-transport] Window destroy failed (non-fatal): ${serializeError(error)}`);
+    if (isVaultOpen(vaultPath)) {
+      try {
+        await ensureNamespaceBootstrapped(this, vaultPath);
+        const destroyExpr = 'window.__obsidianIntegrationTesting.destroyCurrentWindow()';
+        await this.evaluate(destroyExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+        log('[cli-transport] Window destroy command sent.');
+      } catch (error: unknown) {
+        log(`[cli-transport] Window destroy failed (non-fatal): ${serializeError(error)}`);
+      }
+
+      log('[cli-transport] Waiting for window to close...');
+      await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
+    } else {
+      log('[cli-transport] Vault is not open — skipping destroy (would otherwise spawn a stray window via the CLI eval).');
     }
 
-    log('[cli-transport] Waiting for window to close...');
-    await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
-
     log('[cli-transport] Removing vault from registry...');
-    const existingVaultForRemoval = getAnyRegisteredVaultPath();
+    const evalTargetForRemoval = getAnyOpenVaultPath();
     try {
-      if (existingVaultForRemoval) {
-        await ensureNamespaceBootstrapped(this, existingVaultForRemoval);
+      if (evalTargetForRemoval) {
+        await ensureNamespaceBootstrapped(this, evalTargetForRemoval);
         const removeExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath], channel: 'vault-remove' })})`;
-        await this.evaluate(removeExpr, { cwd: existingVaultForRemoval, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
+        await this.evaluate(removeExpr, { cwd: evalTargetForRemoval, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
       } else {
-        log('[cli-transport] No existing vault to target for removal IPC — removing directly from obsidian.json.');
+        log('[cli-transport] No open vault to target for removal IPC — removing directly from obsidian.json.');
         removeVaultFromConfig(vaultPath);
       }
       log('[cli-transport] Vault removed from registry.');
