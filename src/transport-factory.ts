@@ -240,7 +240,8 @@ class AppiumTransportFactory {
         hostname: url.hostname,
         logLevel: 'warn',
         path: url.pathname,
-        port
+        port,
+        transformRequest: stripForbiddenFetchHeaders
       });
 
       this.log('Appium session established.');
@@ -630,6 +631,28 @@ function killProcessTree(child: ChildProcess): void {
   } else {
     child.kill('SIGKILL');
   }
+}
+
+/**
+ * Removes `Connection` and `Content-Length` from a WebDriver request's headers.
+ *
+ * The bundled `webdriver` package sets both headers explicitly. They are
+ * forbidden request headers per the Fetch spec: Node up to 25 accepted them
+ * silently, but Node 26 rejects them with `UND_ERR_INVALID_ARG`, breaking the
+ * Appium `/session` request. The transport layer manages connection reuse and
+ * the Fetch API computes `Content-Length` from the body, so dropping both is
+ * safe on every Node version. See {@link https://github.com/webdriverio/webdriverio/issues/15265}.
+ *
+ * @param requestOptions - The request options about to be sent by WebDriverIO.
+ * @returns The same request options with the forbidden headers removed.
+ */
+function stripForbiddenFetchHeaders(requestOptions: RequestInit): RequestInit {
+  if (requestOptions.headers instanceof Headers) {
+    requestOptions.headers.delete('Connection');
+    requestOptions.headers.delete('Content-Length');
+  }
+
+  return requestOptions;
 }
 
 /* v8 ignore stop */
