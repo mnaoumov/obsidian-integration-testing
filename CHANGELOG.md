@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 4.2.2
+
+- fix: enable Chromedriver autodownload for newer Obsidian WebViews
+- fix: strip forbidden Connection/Content-Length headers on Node 26
+
 ## 4.2.1
 
 - fix: prevent orphan windows when (un)registering a vault that isn't open `obsidian eval`'s CLI handler
