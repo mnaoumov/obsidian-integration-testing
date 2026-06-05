@@ -42,6 +42,11 @@ const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
 const CDP_DEFAULT_PORT = 8315;
+// Appium insecure feature letting the UiAutomator2 driver auto-download a
+// Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
+// Appium server (it has no effect as a capability) avoids the failure
+// "No Chromedriver found that can automate Chrome ...".
+const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownload';
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
@@ -227,9 +232,6 @@ class AppiumTransportFactory {
           'appium:automationName': 'UiAutomator2',
           'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
           'appium:noReset': true,
-          'appium:settings': {
-            'appium:chromedriverAutodownload': true
-          },
           'appium:udid': actualDeviceId,
           'appium:uiautomator2ServerInstallTimeout': SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS,
           'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
@@ -434,7 +436,7 @@ class AppiumTransportFactory {
   }
 
   private startAppiumServer(port: number): ChildProcess {
-    const child = spawn(`npx appium --log-timestamp --port ${String(port)}`, {
+    const child = spawn(`npx appium --log-timestamp --port ${String(port)} --allow-insecure=${CHROMEDRIVER_AUTODOWNLOAD_FEATURE}`, {
       detached: true,
       shell: true,
       stdio: ['ignore', 'inherit', 'inherit']
