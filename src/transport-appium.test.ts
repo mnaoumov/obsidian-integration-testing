@@ -1,3 +1,5 @@
+import type { Browser } from 'webdriverio';
+
 import { tmpdir } from 'node:os';
 import {
   beforeEach,
@@ -7,6 +9,7 @@ import {
   vi
 } from 'vitest';
 
+import { strictProxy } from './strict-proxy.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
@@ -57,7 +60,7 @@ describe('AppiumTransport.pushFiles', () => {
   beforeEach(() => {
     mockBrowser = createMockBrowser();
     transport = new AppiumTransport({
-      browser: mockBrowser as never,
+      browser: strictProxy<Browser>(mockBrowser),
       deviceId: 'emulator-5554',
       platform: 'android'
     });
@@ -149,7 +152,7 @@ describe('AppiumTransport.registerVault', () => {
     mockBrowser = createMockBrowser();
     mockBrowser.execute.mockResolvedValue(true);
     transport = new AppiumTransport({
-      browser: mockBrowser as never,
+      browser: strictProxy<Browser>(mockBrowser),
       deviceId: 'emulator-5554',
       platform: 'android'
     });
@@ -188,7 +191,7 @@ describe('AppiumTransport.evaluate', () => {
   beforeEach(() => {
     mockBrowser = createMockBrowser();
     transport = new AppiumTransport({
-      browser: mockBrowser as never,
+      browser: strictProxy<Browser>(mockBrowser),
       deviceId: 'emulator-5554',
       platform: 'android'
     });
