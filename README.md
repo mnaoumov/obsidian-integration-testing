@@ -387,13 +387,10 @@ Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. 
 1. Launch Obsidian with the `--remote-debugging-port` flag:
 
    ```powershell
-   # Windows (PowerShell)
-   & "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe" --remote-debugging-port=8315
-   ```
-
-   ```cmd
-   # Windows (CMD)
-   "%LOCALAPPDATA%\Programs\Obsidian\Obsidian.exe" --remote-debugging-port=8315
+   # Windows (PowerShell) — uses Obsidian from PATH (e.g. scoop), falling back to the installer location
+   $obsidian = (Get-Command Obsidian.exe -ErrorAction SilentlyContinue).Source
+   if (-not $obsidian) { $obsidian = "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe" }
+   Start-Process $obsidian -ArgumentList '--remote-debugging-port=8315'
    ```
 
    ```bash
