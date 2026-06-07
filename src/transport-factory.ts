@@ -151,7 +151,8 @@ class AppiumTransportFactory {
       logLevel: 'warn',
       path: url.pathname,
       port,
-      sessionId
+      sessionId,
+      transformRequest: stripForbiddenFetchHeaders
     });
 
     this.log('Reattached to Appium session.');
