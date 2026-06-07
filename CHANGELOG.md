@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 4.2.3
+
+- fix: strip forbidden fetch headers when reattaching to Appium session
+- docs: resolve Obsidian executable dynamically in CDP launch instructions
+- test: add strictProxy and castTo helpers for type-safe mocks
+
 ## 4.2.2
 
 - fix: enable Chromedriver autodownload for newer Obsidian WebViews
