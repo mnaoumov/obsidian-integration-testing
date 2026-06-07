@@ -6,8 +6,35 @@ import {
 
 import {
   assertNonNullable,
+  castTo,
+  ensureGenericObject,
   ensureNonNullable
 } from './type-guards.ts';
+
+interface Boxed {
+  value: number;
+}
+
+const TEST_VALUE = 42;
+
+describe('castTo', () => {
+  it('should return the same value', () => {
+    const value = { value: TEST_VALUE };
+    expect(castTo<Boxed>(value)).toBe(value);
+  });
+});
+
+describe('ensureGenericObject', () => {
+  it('should return the same object', () => {
+    const obj = { name: 'test' };
+    expect(ensureGenericObject(obj)).toBe(obj);
+  });
+
+  it('should expose dynamic string-keyed access', () => {
+    const obj = { name: 'test' };
+    expect(ensureGenericObject(obj)['missing']).toBeUndefined();
+  });
+});
 
 describe('assertNonNullable', () => {
   it('should not throw for a defined value', () => {
