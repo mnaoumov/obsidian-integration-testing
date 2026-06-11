@@ -221,9 +221,7 @@ class AppiumTransportFactory {
       const actualDeviceId = result.actualDeviceId;
 
       this.log(
-        `Connecting to Appium (device=${actualDeviceId}, app=${appId}, retryTimeout: ${String(APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS)}ms, retries: ${
-          String(APPIUM_CONNECTION_RETRY_COUNT)
-        })...`
+        `Connecting to Appium (device=${actualDeviceId}, app=${appId}, retryTimeout: ${String(APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS)}ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
       );
       const browser = await remote({
         capabilities: {
@@ -462,9 +460,7 @@ class AppiumTransportFactory {
 
   private async waitForAppiumReady(url: URL): Promise<void> {
     this.log(
-      `Waiting for Appium at ${url.href} (timeout: ${String(APPIUM_START_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${
-        String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)
-      }ms)...`
+      `Waiting for Appium at ${url.href} (timeout: ${String(APPIUM_START_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
     const deadline = Date.now() + APPIUM_START_TIMEOUT_IN_MILLISECONDS;
 
@@ -487,9 +483,7 @@ class AppiumTransportFactory {
   private async waitForBoot(deviceId: string, deadline: number): Promise<void> {
     const remainingMs = Math.max(0, deadline - Date.now());
     this.log(
-      `Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${
-        String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)
-      }ms)...`
+      `Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
 
     while (Date.now() < deadline) {
@@ -521,9 +515,7 @@ class AppiumTransportFactory {
 
   private async waitForNewDevice(deviceIdsBefore: string[]): Promise<string> {
     this.log(
-      `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${
-        String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)
-      }ms)...`
+      `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
     const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS;
 
@@ -626,9 +618,7 @@ function killProcessTree(child: ChildProcess): void {
       execFileSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore' });
     } catch (error: unknown) {
       log(
-        `[transport-factory] taskkill for PID ${String(child.pid)} failed (may have already exited): ${
-          error instanceof Error ? error.message : 'unknown error'
-        }`
+        `[transport-factory] taskkill for PID ${String(child.pid)} failed (may have already exited): ${error instanceof Error ? error.message : 'unknown error'}`
       );
     }
   } else {
