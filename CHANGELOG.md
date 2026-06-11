@@ -131,8 +131,7 @@ sd
 
 ## 2.5.9
 
-- fix(cli-transport): run enablePluginsInLocalStorage in existing vault window enablePluginsInLocalStorage sets a localStorage flag that must be set before the new vault loads. Since localStorage is shared across all Obsidian windows (same Electron origin), run the eval in an already-loaded vault instead of targeting the new vault that hasn't finished loading yet. Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-- chore: release 2.5.8
+- fix(cli-transport): run enablePluginsInLocalStorage in existing vault window
 
 ## 2.5.6
 

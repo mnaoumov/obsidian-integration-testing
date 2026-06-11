@@ -67,9 +67,7 @@
     "**/package.json",
     "dist/",
     "LICENSE",
-    "patches/",
-    "README.md",
-    "scripts/postinstall.mjs"
+    "README.md"
   ],
   "scripts": {
     "build": "jiti scripts/build.ts",
@@ -81,7 +79,6 @@
     "commit": "jiti scripts/commit.ts",
     "format": "jiti scripts/format.ts",
     "format:check": "jiti scripts/format-check.ts",
-    "postinstall": "node scripts/postinstall.mjs",
     "lint": "jiti scripts/lint.ts",
     "lint:fix": "jiti scripts/lint-fix.ts",
     "lint:md": "jiti scripts/lint-md.ts",
