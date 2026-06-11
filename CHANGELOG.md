@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 4.2.4
+
+- chore: format
+- chore: stop patching
+
 ## 4.2.3
 
 - fix: strip forbidden fetch headers when reattaching to Appium session
