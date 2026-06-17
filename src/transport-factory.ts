@@ -51,10 +51,40 @@ const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
+const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120000;
+
+/**
+ * Details of an emulator process that has exited.
+ */
+interface EmulatorExitInfo {
+  /** Exit code, or `null` if the process was terminated by a signal. */
+  code: null | number;
+
+  /** Terminating signal, or `null` if the process exited normally. */
+  signal: NodeJS.Signals | null;
+}
+
+/**
+ * A spawned emulator process together with helpers to inspect its captured
+ * output and exit status.
+ */
+interface EmulatorLaunch {
+  /** The spawned emulator process. */
+  process: ChildProcess;
+
+  /** Returns the exit details once the process has exited, otherwise `undefined`. */
+  readExitInfo: () => EmulatorExitInfo | undefined;
+
+  /** Returns the captured stdout+stderr (bounded to the most recent output). */
+  readOutput: () => string;
+
+  /** Stops accumulating output. Call once startup has succeeded. */
+  stopCapture: () => void;
+}
 
 /**
  * Result of {@link AppiumTransportFactory.ensureDeviceConnected}.
@@ -307,10 +337,17 @@ class AppiumTransportFactory {
     }
 
     this.log(`AVD "${avdName}" not found on any existing device, starting a new emulator...`);
-    const emulatorProcess = this.startEmulator(avdName);
-    const actualDeviceId = await this.waitForNewDevice(deviceIdsBefore);
+    const emulator = this.startEmulator(avdName);
+
+    let actualDeviceId: string;
+    try {
+      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator);
+    } finally {
+      emulator.stopCapture();
+    }
+
     this.log(`Emulator "${avdName}" started, device ${actualDeviceId} is connected.`);
-    return { actualDeviceId, emulatorProcess };
+    return { actualDeviceId, emulatorProcess: emulator.process };
   }
 
   private async findDeviceByAvdName(avdName: string, deviceIds: string[]): Promise<string | undefined> {
@@ -445,17 +482,52 @@ class AppiumTransportFactory {
     return child;
   }
 
-  private startEmulator(avdName: string): ChildProcess {
+  private startEmulator(avdName: string): EmulatorLaunch {
     const emulatorBinary = this.resolveEmulatorBinary();
     const args = buildEmulatorArgs(avdName);
     this.log(`Running: ${emulatorBinary} ${args.join(' ')}`);
+    /*
+     * Pipe (rather than ignore) stdout/stderr so an early failure such as
+     * "x86_64 emulation currently requires hardware acceleration" can be
+     * surfaced immediately instead of waiting out the full boot timeout.
+     */
     const child = spawn(emulatorBinary, args, {
       detached: true,
-      stdio: ['ignore', 'ignore', 'ignore']
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let capturedOutput = '';
+    let exitInfo: EmulatorExitInfo | undefined;
+    let isCapturing = true;
+
+    child.stdout.on('data', appendOutput);
+    child.stderr.on('data', appendOutput);
+    child.once('exit', (code, signal) => {
+      exitInfo = { code, signal };
     });
 
     child.unref();
-    return child;
+
+    return {
+      process: child,
+      readExitInfo: () => exitInfo,
+      readOutput: () => capturedOutput,
+      stopCapture: (): void => {
+        /*
+         * Leave the `data` listeners attached so the pipes keep draining (a
+         * full OS pipe buffer would block the long-running emulator); the flag
+         * just freezes the captured tail once startup has succeeded.
+         */
+        isCapturing = false;
+      }
+    };
+
+    function appendOutput(chunk: Buffer): void {
+      if (!isCapturing) {
+        return;
+      }
+      capturedOutput = (capturedOutput + chunk.toString()).slice(-EMULATOR_OUTPUT_TAIL_MAX_LENGTH);
+    }
   }
 
   private async waitForAppiumReady(url: URL): Promise<void> {
@@ -480,7 +552,7 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForBoot(deviceId: string, deadline: number): Promise<void> {
+  private async waitForBoot(deviceId: string, deadline: number, emulator: EmulatorLaunch): Promise<void> {
     const remainingMs = Math.max(0, deadline - Date.now());
     this.log(
       `Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
@@ -503,6 +575,11 @@ class AppiumTransportFactory {
         return;
       }
 
+      const exitInfo = emulator.readExitInfo();
+      if (exitInfo) {
+        throw new Error(buildEmulatorExitMessage(exitInfo, emulator.readOutput()));
+      }
+
       await new Promise((resolve) => {
         setTimeout(resolve, EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS);
       });
@@ -513,7 +590,7 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForNewDevice(deviceIdsBefore: string[]): Promise<string> {
+  private async waitForNewDevice(deviceIdsBefore: string[], emulator: EmulatorLaunch): Promise<string> {
     this.log(
       `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
@@ -526,9 +603,14 @@ class AppiumTransportFactory {
       if (newIds.length > 0) {
         const actualDeviceId = newIds[0] ?? '';
         this.log(`Device ${actualDeviceId} appeared in ADB, waiting for boot to complete...`);
-        await this.waitForBoot(actualDeviceId, deadline);
+        await this.waitForBoot(actualDeviceId, deadline, emulator);
         await this.wakeScreen(actualDeviceId);
         return actualDeviceId;
+      }
+
+      const exitInfo = emulator.readExitInfo();
+      if (exitInfo) {
+        throw new Error(buildEmulatorExitMessage(exitInfo, emulator.readOutput()));
       }
 
       await new Promise((resolve) => {
@@ -597,6 +679,25 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
   // eslint-disable-next-line require-atomic-updates -- Single-threaded worker; no concurrent writes.
   cachedTransport = result;
   return result;
+}
+
+/**
+ * Builds a descriptive error message for an emulator process that exited during
+ * startup, appending the captured output tail when available.
+ *
+ * @param exitInfo - The emulator's exit details.
+ * @param output - The captured stdout+stderr tail.
+ * @returns A human-readable error message.
+ */
+function buildEmulatorExitMessage(exitInfo: EmulatorExitInfo, output: string): string {
+  const reason = exitInfo.signal === null
+    ? `exited prematurely with code ${String(exitInfo.code)}`
+    : `was terminated by signal ${exitInfo.signal}`;
+  const trimmedOutput = output.trim();
+  const details = trimmedOutput.length > 0
+    ? `\n\nEmulator output (tail):\n${trimmedOutput}`
+    : '';
+  return `Android emulator ${reason} during startup.${details}`;
 }
 
 /**
