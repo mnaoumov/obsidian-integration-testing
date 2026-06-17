@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 4.2.5
+
+- fix: surface emulator startup failures immediately
+
 ## 4.2.4
 
 - chore: format
