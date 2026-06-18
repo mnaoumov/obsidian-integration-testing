@@ -49,16 +49,33 @@ async function findInPath(lookupCommand: string, executableName: string): Promis
     return undefined;
   }
 
-  const firstPath = output
+  const candidates = output
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .find((line) => line.length > 0);
+    .filter((line) => line.length > 0 && existsSync(line));
 
-  if (firstPath && existsSync(firstPath)) {
-    return firstPath;
-  }
+  /*
+   * Prefer a real executable over a launcher shim. `scoop` installs create a
+   * `<name>.exe` shim in `scoop\shims\` that forwards to the `.com` console
+   * binary; launching it runs the CLI (which exits immediately) instead of the
+   * GUI, so auto-launch would never start Obsidian. `where.exe` lists the shim
+   * before the actual `scoop\apps\<app>\current\<name>.exe`, so skip any shim.
+   */
+  const nonShim = candidates.find((candidate) => !isShim(candidate));
+  return nonShim ?? candidates[0];
+}
 
-  return undefined;
+/**
+ * Detects whether an executable path is a `scoop` shim rather than the real
+ * binary. Scoop shims have a sibling `<name>.shim` file describing the forward
+ * target; the real executable has no such companion.
+ *
+ * @param executablePath - The absolute path to the executable.
+ * @returns `true` if the path is a scoop shim.
+ */
+function isShim(executablePath: string): boolean {
+  const shimMarkerPath = executablePath.replace(/\.[^.\\/]+$/, '.shim');
+  return shimMarkerPath !== executablePath && existsSync(shimMarkerPath);
 }
 
 async function resolveOnLinux(): Promise<string> {
