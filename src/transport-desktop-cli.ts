@@ -221,7 +221,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    */
   public async registerVault(vaultPath: string): Promise<void> {
     log(`[cli-transport] Registering vault: ${vaultPath}`);
-    const openVaultPath = getAnyOpenVaultPath();
+    const openVaultPath = await this.getOpenEvalTargetVaultPath();
 
     if (openVaultPath) {
       await ensureNamespaceBootstrapped(this, openVaultPath);
@@ -268,7 +268,7 @@ export class DesktopCliTransport implements ObsidianTransport {
     }
 
     log('[cli-transport] Removing vault from registry...');
-    const evalTargetForRemoval = getAnyOpenVaultPath();
+    const evalTargetForRemoval = await this.getOpenEvalTargetVaultPath();
     try {
       if (evalTargetForRemoval) {
         await ensureNamespaceBootstrapped(this, evalTargetForRemoval);
@@ -379,6 +379,27 @@ export class DesktopCliTransport implements ObsidianTransport {
     }
 
     throw new Error(`Obsidian did not start within ${String(AUTO_START_TIMEOUT_IN_MILLISECONDS)}ms.`);
+  }
+
+  /**
+   * Returns the path of an already-open vault to use as an `obsidian eval`
+   * target, or `undefined` if there is none.
+   *
+   * The `open` flag in `obsidian.json` is only trustworthy while Obsidian is
+   * running — a killed or crashed process never resets it, leaving the user's
+   * last-session vault marked open. Acting on that stale flag would target the
+   * (possibly heavy) last-session vault and cause auto-start to reopen it.
+   * When Obsidian is not running we therefore report no open vault, so callers
+   * fall back to the direct-config path that opens only the temp vault.
+   *
+   * @returns The absolute path to an open vault, or `undefined`.
+   */
+  private async getOpenEvalTargetVaultPath(): Promise<string | undefined> {
+    if (!await isObsidianRunning()) {
+      return undefined;
+    }
+
+    return getAnyOpenVaultPath();
   }
 
   /**

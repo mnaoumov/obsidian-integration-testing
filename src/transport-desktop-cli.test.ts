@@ -110,7 +110,17 @@ vi.stubGlobal('window', {
 
 beforeEach(() => {
   transport = new DesktopCliTransport();
-  mockExec.mockReset().mockResolvedValue({ exitCode: 0, exitSignal: null, stderr: '', stdout: '' });
+  /*
+   * `exec` returns a plain string unless `shouldIncludeDetails` is set (then an
+   * ExecResult). Mirror that so `isObsidianRunning()` (a simple call) gets a
+   * string. Its stdout includes `Obsidian.exe`, reporting Obsidian as running —
+   * the state the warm-branch tests assume.
+   */
+  mockExec.mockReset().mockImplementation((_command, options) =>
+    options?.['shouldIncludeDetails']
+      ? Promise.resolve({ exitCode: 0, exitSignal: null, stderr: '', stdout: 'Obsidian.exe' })
+      : Promise.resolve('Obsidian.exe')
+  );
   mockExistsSync.mockReset().mockReturnValue(true);
   mockFsPromisesAccess.mockReset().mockResolvedValue(undefined);
   mockMkdir.mockReset().mockResolvedValue(undefined);
@@ -289,12 +299,13 @@ describe('DesktopCliTransport.registerVault', () => {
 
     await transport.registerVault(vaultPath);
 
-    // RegisterVault calls evaluate 3 times:
+    // RegisterVault runs exec in this order:
+    //   0. isObsidianRunning (tasklist — no cwd)
     //   1. vault-open IPC (cwd: existing registered vault)
     //   2. enablePluginsInLocalStorage (cwd: existing registered vault — localStorage is shared)
     //   3. poll loop (cwd: vaultPath)
-    const secondCall = ensureNonNullable(mockExec.mock.calls[1]);
-    const options = secondCall[1] as ExecOptions;
+    const enablePluginsCall = ensureNonNullable(mockExec.mock.calls[2]);
+    const options = enablePluginsCall[1] as ExecOptions;
     expect(options.cwd).toBe('/existing-vault');
   });
 
@@ -318,8 +329,8 @@ describe('DesktopCliTransport.registerVault', () => {
 
     await transport.registerVault(vaultPath);
 
-    // With getVaultId returning undefined, only 3 exec calls (IPC + poll + dismissTrustDialog), not 4 — the localStorage write is skipped.
-    expect(mockExec).toHaveBeenCalledTimes(3);
+    // With getVaultId returning undefined, 4 exec calls (isObsidianRunning + IPC + poll + dismissTrustDialog) — the localStorage write is skipped.
+    expect(mockExec).toHaveBeenCalledTimes(4);
   });
 
   it('should use an existing registered vault path for the initial vault-open IPC eval', async () => {
@@ -330,8 +341,9 @@ describe('DesktopCliTransport.registerVault', () => {
 
     await transport.registerVault(vaultPath);
 
-    const firstCall = ensureNonNullable(mockExec.mock.calls[0]);
-    const options = firstCall[1] as ExecOptions;
+    // Calls[0] is isObsidianRunning (tasklist); calls[1] is the vault-open IPC eval.
+    const vaultOpenIpcCall = ensureNonNullable(mockExec.mock.calls[1]);
+    const options = vaultOpenIpcCall[1] as ExecOptions;
     expect(options.cwd).toBe('/existing-vault');
   });
 
@@ -353,10 +365,30 @@ describe('DesktopCliTransport.registerVault', () => {
 
     await transport.registerVault(vaultPath);
 
-    // The poll loop call is the 3rd exec invocation.
-    const thirdCall = ensureNonNullable(mockExec.mock.calls[2]);
-    const options = thirdCall[1] as ExecOptions;
+    // Exec order: 0 isObsidianRunning, 1 vault-open IPC, 2 enablePlugins, 3 poll loop.
+    const pollLoopCall = ensureNonNullable(mockExec.mock.calls[3]);
+    const options = pollLoopCall[1] as ExecOptions;
     expect(options.cwd).toBe(vaultPath);
+  });
+
+  it('should use the direct-config path when Obsidian is not running even if a vault is marked open', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue('/existing-vault');
+    /*
+     * Obsidian not running: tasklist output omits `Obsidian.exe`, so the stale
+     * `open` flag must be ignored and the temp vault registered directly.
+     */
+    mockExec.mockImplementation((_command, options) =>
+      options?.['shouldIncludeDetails']
+        ? Promise.resolve({ exitCode: 0, exitSignal: null, stderr: '', stdout: '' })
+        : Promise.resolve('')
+    );
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    expect(mockRegisterVaultInConfig).toHaveBeenCalledWith(vaultPath);
   });
 });
 
