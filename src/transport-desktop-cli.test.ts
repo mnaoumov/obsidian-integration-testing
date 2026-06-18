@@ -405,6 +405,21 @@ describe('DesktopCliTransport.registerVault', () => {
 
     expect(mockRegisterVaultInConfig).toHaveBeenCalledWith(vaultPath);
   });
+
+  it('should kill Obsidian before opening the URI when it is running with no open vault', async () => {
+    const vaultPath = '/tmp/test-vault';
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    // No open vault, but Obsidian is running (default exec stdout includes
+    // `Obsidian.exe`): it sits on the vault switcher and would reject the URI
+    // For the freshly written registry entry, so it must be killed first.
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue(undefined);
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    const wasKilled = mockExec.mock.calls.some((call) => typeof call[0] === 'string' && /taskkill|pkill/.test(call[0]));
+    expect(wasKilled).toBe(true);
+  });
 });
 
 function getWrittenScript(mock: MockInstance<(path: string, content: string) => Promise<void>>): string {

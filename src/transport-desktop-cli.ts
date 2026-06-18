@@ -231,6 +231,18 @@ export class DesktopCliTransport implements ObsidianTransport {
     } else {
       log('[cli-transport] No open vault to target. Writing vault entry directly to obsidian.json...');
       registerVaultInConfig(vaultPath);
+      /*
+       * A running Obsidian with no open vault (e.g. sitting on the vault
+       * switcher) loaded its registry at startup and won't see the entry just
+       * written, so an `obsidian://open` URI for it fails with "Vault not
+       * found". Kill it first so the URI below triggers a fresh launch that
+       * reads the updated obsidian.json. We only reach this branch with no
+       * vault open, so nothing the user is working in is lost.
+       */
+      if (await isObsidianRunning()) {
+        log('[cli-transport] Obsidian is running without an open vault — restarting so it reads the new registry entry...');
+        await this.killObsidian();
+      }
       log('[cli-transport] Vault entry written. Opening vault via URI protocol...');
       await openVaultViaUri(vaultPath);
       await this.pollVaultReady(vaultPath);
@@ -403,6 +415,20 @@ export class DesktopCliTransport implements ObsidianTransport {
   }
 
   /**
+   * Kills the running Obsidian process (if any) and waits for it to exit.
+   */
+  private async killObsidian(): Promise<void> {
+    log('[cli-transport] Killing Obsidian process...');
+    try {
+      await exec(getKillObsidianCommand(), { isQuiet: true });
+    } catch {
+      // Process may not be running — that's fine.
+    }
+
+    await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
+  }
+
+  /**
    * Polls until the vault is ready and responding to eval calls.
    *
    * Each `obsidian eval` in the loop is given a per-call timeout. The overall
@@ -446,14 +472,7 @@ export class DesktopCliTransport implements ObsidianTransport {
    * @param vaultPath - The vault path to use for polling after restart.
    */
   private async restartObsidian(vaultPath: string): Promise<void> {
-    log('[cli-transport] Killing Obsidian process...');
-    try {
-      await exec(getKillObsidianCommand(), { isQuiet: true });
-    } catch {
-      // Process may not be running — that's fine.
-    }
-
-    await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
+    await this.killObsidian();
 
     const restartVaultId = getVaultId(vaultPath);
     const command = ['obsidian', ...(restartVaultId ? [`vault=${restartVaultId}`] : []), 'eval', 'code="1"'];
