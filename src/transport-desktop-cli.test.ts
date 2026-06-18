@@ -371,6 +371,21 @@ describe('DesktopCliTransport.registerVault', () => {
     expect(options.cwd).toBe(vaultPath);
   });
 
+  it('should apply a per-eval timeout in the poll loop so a hung eval cannot block forever', async () => {
+    const vaultPath = '/tmp/test-vault';
+    const VAULT_EVAL_TIMEOUT_IN_MILLISECONDS = 10000;
+    vi.mocked(getVaultId).mockReturnValue('abc123');
+    vi.mocked(getAnyOpenVaultPath).mockReturnValue('/existing-vault');
+    mockReadFile.mockResolvedValue(JSON.stringify({ value: JSON.stringify(vaultPath) }));
+
+    await transport.registerVault(vaultPath);
+
+    // Exec order: 0 isObsidianRunning, 1 vault-open IPC, 2 enablePlugins, 3 poll loop.
+    const pollLoopCall = ensureNonNullable(mockExec.mock.calls[3]);
+    const options = pollLoopCall[1] as ExecOptions;
+    expect(options['timeoutInMilliseconds']).toBe(VAULT_EVAL_TIMEOUT_IN_MILLISECONDS);
+  });
+
   it('should use the direct-config path when Obsidian is not running even if a vault is marked open', async () => {
     const vaultPath = '/tmp/test-vault';
     vi.mocked(getVaultId).mockReturnValue('abc123');

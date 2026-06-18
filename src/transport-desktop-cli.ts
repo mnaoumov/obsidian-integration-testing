@@ -405,6 +405,11 @@ export class DesktopCliTransport implements ObsidianTransport {
   /**
    * Polls until the vault is ready and responding to eval calls.
    *
+   * Each `obsidian eval` in the loop is given a per-call timeout. The overall
+   * deadline is only re-checked between awaits, so without it a single hung
+   * eval (e.g. a vault window that opened but never finished loading) would
+   * block past the deadline forever instead of failing and retrying.
+   *
    * @param vaultPath - The absolute path to the vault folder.
    */
   private async pollVaultReady(vaultPath: string): Promise<void> {
@@ -416,10 +421,10 @@ export class DesktopCliTransport implements ObsidianTransport {
     while (Date.now() < deadline) {
       try {
         if (!isBootstrapped) {
-          await ensureNamespaceBootstrapped(this, vaultPath);
+          await ensureNamespaceBootstrapped(this, vaultPath, VAULT_EVAL_TIMEOUT_IN_MILLISECONDS);
           isBootstrapped = true;
         }
-        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath });
+        const basePath = await this.evaluate(pollExpr, { cwd: vaultPath, timeoutInMilliseconds: VAULT_EVAL_TIMEOUT_IN_MILLISECONDS });
         if (JSON.parse(basePath) === vaultPath) {
           log('[cli-transport] Vault is ready.');
           return;

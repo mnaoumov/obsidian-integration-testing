@@ -9,7 +9,10 @@
 import type { App } from 'obsidian';
 
 import type { GenerateFunctionCallParams } from './generate-function-call.ts';
-import type { ObsidianTransport } from './transport.ts';
+import type {
+  ObsidianTransport,
+  TransportEvalOptions
+} from './transport.ts';
 
 import { generateFunctionCall } from './generate-function-call.ts';
 import { LIBRARY_VERSION } from './library.ts';
@@ -28,12 +31,19 @@ interface BootstrapNamespaceParams {
  *
  * @param transport - The transport to use for evaluation.
  * @param cwd - The working directory (vault path).
+ * @param timeoutInMilliseconds - Optional per-eval timeout. Forwarded to both
+ *   the version check and the bootstrap eval so a hung `obsidian eval` rejects
+ *   instead of blocking the caller indefinitely.
  */
-export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, cwd: string): Promise<void> {
+export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, cwd: string, timeoutInMilliseconds?: number): Promise<void> {
+  const evalOptions: TransportEvalOptions = {
+    cwd,
+    ...(timeoutInMilliseconds !== undefined && { timeoutInMilliseconds })
+  };
   const versionJson = JSON.stringify(LIBRARY_VERSION);
   const checkResult = await transport.evaluate(
     `JSON.stringify(window.__obsidianIntegrationTesting?.version === ${versionJson})`,
-    { cwd }
+    evalOptions
   );
 
   if (checkResult === 'true') {
@@ -41,7 +51,7 @@ export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, 
   }
 
   const bootstrapExpr = generateFunctionCall(bootstrapNamespace, { version: LIBRARY_VERSION });
-  await transport.evaluate(bootstrapExpr, { cwd });
+  await transport.evaluate(bootstrapExpr, evalOptions);
 }
 
 /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */

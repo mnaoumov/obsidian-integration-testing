@@ -52,6 +52,32 @@ describe('ensureNamespaceBootstrapped', () => {
     expect(mockEvaluate).toHaveBeenCalledTimes(2);
   });
 
+  it('should forward the timeout to both evals when provided', async () => {
+    mockEvaluate.mockResolvedValueOnce('false');
+    mockEvaluate.mockResolvedValueOnce('');
+    await ensureNamespaceBootstrapped(mockTransport, '/vault', 1234);
+    expect(mockEvaluate).toHaveBeenCalledTimes(2);
+    expect(mockEvaluate).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('window.__obsidianIntegrationTesting?.version'),
+      { cwd: '/vault', timeoutInMilliseconds: 1234 }
+    );
+    expect(mockEvaluate).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('function bootstrapNamespace'),
+      { cwd: '/vault', timeoutInMilliseconds: 1234 }
+    );
+  });
+
+  it('should omit the timeout from eval options when not provided', async () => {
+    mockEvaluate.mockResolvedValueOnce('true');
+    await ensureNamespaceBootstrapped(mockTransport, '/vault');
+    expect(mockEvaluate).toHaveBeenCalledWith(
+      expect.stringContaining('window.__obsidianIntegrationTesting?.version'),
+      { cwd: '/vault' }
+    );
+  });
+
   it('should produce syntactically valid JavaScript in the bootstrap expression', async () => {
     mockEvaluate.mockResolvedValueOnce('false');
     mockEvaluate.mockResolvedValueOnce('');
