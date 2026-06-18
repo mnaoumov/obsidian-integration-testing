@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 4.2.6
+
+- fix: restart Obsidian in the cold path when it runs without an open vault
+- fix: bound pollVaultReady with a per-eval timeout
+- fix: ignore stale obsidian.json open flag when Obsidian is not running
+- fix: resolve real Obsidian GUI executable over scoop shim
+
 ## 4.2.5
 
 - fix: surface emulator startup failures immediately
