@@ -53,8 +53,13 @@ Or add it to `compilerOptions.types` in your `tsconfig.json`:
 // jest.config.ts
 export default {
   globalSetup: 'obsidian-integration-testing/jest-global-setup',
+  globalTeardown: 'obsidian-integration-testing/jest-global-teardown',
 };
 ```
+
+> [!NOTE]
+>
+> Jest requires the `globalSetup` and `globalTeardown` modules to be **separate** entry points, each with a **default-export** function — that is why setup and teardown are imported from two different subpaths.
 
 To configure transport options with Jest, populate `globalThis.__obsidianIntegrationTesting` before the global setup runs (e.g., in a setup file or via Jest `globals`):
 
@@ -289,6 +294,72 @@ describe('my-plugin', () => {
   });
 });
 ```
+
+### Pre-populate the vault before Obsidian opens
+
+For large fixtures, write files into the vault **before** Obsidian opens it, so its startup scan indexes them in a single pass. Writing thousands of notes *after* open and forcing a re-scan is far slower and less reliable. The same `populate` map shape is used everywhere (`path` → file content; a path ending with `/` and empty content creates an empty folder; parent directories are created automatically).
+
+This capability reaches all three consumption paths.
+
+**Vitest** — create your own `globalSetup` module with `createSetup({ populate })` and point the config at it. `populate` is a thunk so large fixtures are built lazily, once, in the setup process:
+
+```ts
+// integration-global-setup.ts
+import { createSetup } from 'obsidian-integration-testing/vitest-global-setup';
+
+export const { setup, teardown } = createSetup({
+  populate: () => ({
+    'note.md': '# Hello',
+    'folder/nested.md': 'nested content'
+  })
+});
+```
+
+```ts
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globalSetup: ['./integration-global-setup.ts']
+  }
+});
+```
+
+**Jest** — same `createSetup({ populate })` factory, but Jest needs `globalSetup` and `globalTeardown` to be separate modules, each with a **default-export** function. Build the `createSetup` pair once in a shared module and re-export each half as a default:
+
+```ts
+// integration-global-setup.ts — shared createSetup pair
+import { createSetup } from 'obsidian-integration-testing/jest-global-setup';
+
+export const { setup, teardown } = createSetup({
+  populate: () => ({
+    'note.md': '# Hello',
+    'folder/nested.md': 'nested content'
+  })
+});
+
+export default setup;
+```
+
+```ts
+// integration-global-teardown.ts
+import { teardown } from './integration-global-setup.ts';
+
+export default teardown;
+```
+
+```ts
+// jest.config.ts
+export default {
+  globalSetup: '<rootDir>/integration-global-setup.ts',
+  globalTeardown: '<rootDir>/integration-global-teardown.ts'
+};
+```
+
+Both files share the same `createSetup` instance (via the common module), so `teardown` cleans up exactly what `setup` created.
+
+**Manual** — when wiring `TempVault` yourself (without a framework global setup), call `vault.populate()` before `vault.register()`, as shown in [Create a temporary vault](#create-a-temporary-vault).
 
 > [!WARNING]
 >
