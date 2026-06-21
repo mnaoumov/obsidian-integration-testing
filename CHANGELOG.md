@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 4.4.0
+
+- feat: serialize concurrent integration-test runs with a cross-process lock
+
 ## 4.3.0
 
 - docs: document vault pre-population across Vitest/Jest/Manual
