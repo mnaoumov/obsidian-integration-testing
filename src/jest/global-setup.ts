@@ -10,6 +10,7 @@
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
 import type { CoreSetupResult } from '../global-setup-core.ts';
+import type { PopulateFilesParams } from '../temp-vault.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 import {
@@ -49,7 +50,56 @@ declare global {
 setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions);
 setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.tempVaultPath);
 
-let setupResult: CoreSetupResult | undefined;
+/**
+ * Options for {@link createSetup}.
+ */
+export interface CreateSetupOptions {
+  /**
+   * Returns files/folders to write into the vault before Obsidian opens it (see
+   * {@link CoreSetupParams.populate}). A thunk so large fixtures are built lazily,
+   * once, in the setup process.
+   */
+  populate?(this: void): PopulateFilesParams;
+}
+
+/**
+ * A Jest `globalSetup` / `globalTeardown` module's `setup` / `teardown` pair.
+ */
+export interface JestGlobalSetup {
+  setup(this: void): Promise<void>;
+  teardown(this: void): Promise<void>;
+}
+
+/**
+ * Creates a Jest global setup/teardown pair, optionally pre-populating the vault
+ * before Obsidian opens it — use this for a dedicated large-vault/performance
+ * setup. The plain {@link setup} / {@link teardown} exports are the no-populate
+ * case (`createSetup()`).
+ *
+ * @param options - Setup options.
+ * @returns The `setup` and `teardown` functions to re-export from a `globalSetup` module.
+ */
+export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
+  let setupResult: CoreSetupResult | undefined;
+
+  return { setup, teardown };
+
+  async function setup(): Promise<void> {
+    const transportOptions = globalThis.__obsidianIntegrationTesting?.transportOptions;
+
+    setupResult = await coreSetup({ populate: options?.populate?.(), transportOptions });
+
+    globalThis.__obsidianIntegrationTesting = {
+      ...globalThis.__obsidianIntegrationTesting,
+      tempVaultPath: setupResult.tempVault.path,
+      transportOptions: setupResult.transportOptions
+    };
+  }
+
+  async function teardown(): Promise<void> {
+    await coreTeardown(setupResult);
+  }
+}
 
 /**
  * Returns the temporary vault provided by the global setup.
@@ -78,32 +128,26 @@ export function getTransportOptions(): ObsidianTransportOptions | undefined {
   return globalThis.__obsidianIntegrationTesting?.transportOptions;
 }
 
+const defaultGlobalSetup = createSetup();
+
 /**
- * Jest global setup function.
+ * Jest global setup function (no pre-population).
  *
  * Copies the built plugin into a temporary vault, enables it via the Obsidian CLI,
  * and populates `globalThis.__obsidianIntegrationTesting` for tests.
  *
  * Transport options are read from `globalThis.__obsidianIntegrationTesting.transportOptions`.
  * Set this in your Jest config via the `globals` option.
+ *
+ * @returns A promise that resolves when setup completes.
  */
-export async function setup(): Promise<void> {
-  const transportOptions = globalThis.__obsidianIntegrationTesting?.transportOptions;
-
-  setupResult = await coreSetup({ transportOptions });
-
-  globalThis.__obsidianIntegrationTesting = {
-    ...globalThis.__obsidianIntegrationTesting,
-    tempVaultPath: setupResult.tempVault.path,
-    transportOptions: setupResult.transportOptions
-  };
-}
+export const setup = defaultGlobalSetup.setup;
 
 /**
  * Jest global teardown function.
  *
  * Removes the temporary vault created during setup.
+ *
+ * @returns A promise that resolves when teardown completes.
  */
-export async function teardown(): Promise<void> {
-  await coreTeardown(setupResult);
-}
+export const teardown = defaultGlobalSetup.teardown;
