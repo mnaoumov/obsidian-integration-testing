@@ -40,6 +40,16 @@
         "default": "./dist/lib/cjs/jest/global-setup.cjs"
       }
     },
+    "./jest-global-teardown": {
+      "import": {
+        "types": "./dist/lib/esm/jest/global-teardown.d.mts",
+        "default": "./dist/lib/esm/jest/global-teardown.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/jest/global-teardown.d.cts",
+        "default": "./dist/lib/cjs/jest/global-teardown.cjs"
+      }
+    },
     "./vitest-global-setup": {
       "import": {
         "types": "./dist/lib/esm/vitest/global-setup.d.mts",

@@ -151,3 +151,7 @@ export const setup = defaultGlobalSetup.setup;
  * @returns A promise that resolves when teardown completes.
  */
 export const teardown = defaultGlobalSetup.teardown;
+
+// Jest's `globalSetup` config can reference this module directly because its default export is the setup function.
+// eslint-disable-next-line import-x/no-default-export -- Jest's globalSetup loader requires a default-export function.
+export default setup;
