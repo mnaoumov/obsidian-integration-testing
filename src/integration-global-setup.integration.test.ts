@@ -27,18 +27,18 @@ import { getOrCreateTransport } from './transport-factory.ts';
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
 
 interface CreateManifestParams {
-  id: string;
-  isDesktopOnly?: boolean;
+  readonly id: string;
+  readonly isDesktopOnly?: boolean;
 }
 
 interface LoadPluginParams {
-  pluginId: string;
-  vaultPath: string;
+  readonly pluginId: string;
+  readonly vaultPath: string;
 }
 
 interface ManifestCheckParams {
-  id: string;
-  isDesktopOnly: boolean;
+  readonly id: string;
+  readonly isDesktopOnly: boolean;
 }
 
 type PluginLoadTestResult = EnablePluginResult;

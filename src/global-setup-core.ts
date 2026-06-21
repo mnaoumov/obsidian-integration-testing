@@ -58,7 +58,7 @@ let isCleanupHandlerRegistered = false;
  */
 export interface CoreSetupParams {
   /** Transport options. When omitted, defaults to the CLI transport. */
-  transportOptions?: ObsidianTransportOptions | undefined;
+  readonly transportOptions?: ObsidianTransportOptions | undefined;
 }
 
 /**
@@ -67,16 +67,16 @@ export interface CoreSetupParams {
  */
 export interface CoreSetupResult {
   /** The temporary vault created during setup. */
-  tempVault: TempVault;
+  readonly tempVault: TempVault;
 
   /** The transport instance used during setup. */
-  transport: ObsidianTransport;
+  readonly transport: ObsidianTransport;
 
   /** Short label for log messages (e.g. `"obsidian-cli"`, `"obsidian-cdp"`). */
-  transportLabel: string;
+  readonly transportLabel: string;
 
   /** The transport options that were resolved. */
-  transportOptions: ObsidianTransportOptions | undefined;
+  readonly transportOptions: ObsidianTransportOptions | undefined;
 }
 
 /**

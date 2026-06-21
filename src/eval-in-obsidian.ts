@@ -77,7 +77,7 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
    * Additional arguments to pass to the function. Values may include functions —
    * they are serialized via `toString()`.
    */
-  args?: Args;
+  readonly args?: Args;
 
   /**
    * A {@link ContextId} linking this call to a persistent store on `window`
@@ -86,7 +86,7 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
    *
    * When omitted, `context` is a fresh empty object each call.
    */
-  contextId?: TContextId;
+  readonly contextId?: TContextId;
 
   /**
    * The function to evaluate in the Obsidian context.
@@ -99,18 +99,18 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
    *
    * @internal
    */
-  shouldSkipPreflightChecks?: boolean;
+  readonly shouldSkipPreflightChecks?: boolean;
 
   /**
    * Override the transport for this call. When omitted, uses the transport
    * configured via the context provider (set by the framework adapter's global setup).
    */
-  transport?: ObsidianTransport;
+  readonly transport?: ObsidianTransport;
 
   /**
    * The path to the Obsidian vault. Defaults to `process.cwd()`.
    */
-  vaultPath?: string;
+  readonly vaultPath?: string;
 }
 
 /**
@@ -155,12 +155,9 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
 
   const namespaceCallParams: GenerateNamespaceCallParams = {
     args,
-    fn
+    fn,
+    ...(contextId !== undefined && { contextId: String(contextId) })
   };
-
-  if (contextId !== undefined) {
-    namespaceCallParams.contextId = String(contextId);
-  }
 
   const expression = generateNamespaceCall(namespaceCallParams);
 

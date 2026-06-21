@@ -11,9 +11,9 @@
  */
 export interface EvalWrapperNamespaceParams {
   /** User-supplied arguments to pass to `fn`. */
-  args: Record<string, unknown>;
+  readonly args: Record<string, unknown>;
   /** Optional context ID for persistent storage. */
-  contextId?: string;
+  readonly contextId?: string;
   /** The user function to evaluate. */
   fn(args: Record<string, unknown>): unknown;
 }
@@ -23,9 +23,9 @@ export interface EvalWrapperNamespaceParams {
  */
 export interface IpcSendSyncNamespaceParams {
   /** The IPC arguments. */
-  args: unknown[];
+  readonly args: unknown[];
   /** The IPC channel name. */
-  channel: string;
+  readonly channel: string;
 }
 
 /**
@@ -123,7 +123,7 @@ export interface ObsidianIntegrationTestingNamespace {
  */
 export interface SetLocalStorageItemNamespaceParams {
   /** The localStorage key. */
-  key: string;
+  readonly key: string;
   /** The localStorage value. */
-  value: string;
+  readonly value: string;
 }

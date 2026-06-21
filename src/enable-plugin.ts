@@ -18,7 +18,7 @@ export interface EnablePluginParams {
   /**
    * The ID of the plugin to enable.
    */
-  pluginId: string;
+  readonly pluginId: string;
 }
 
 /**
@@ -28,19 +28,19 @@ export interface EnablePluginResult {
   /**
    * The error message if the plugin failed to load, or `undefined` if it loaded successfully.
    */
-  errorMessage: string | undefined;
+  readonly errorMessage: string | undefined;
 
   /**
    * Whether the plugin is in the enabled set after the enable attempt.
    * A plugin can be "enabled" (configured) but not "loaded" (failed to initialize).
    */
-  isEnabled: boolean;
+  readonly isEnabled: boolean;
 
   /**
    * Whether the plugin instance actually exists in `app.plugins.plugins`.
    * This is the definitive check — a plugin that is enabled but not loaded has failed.
    */
-  isLoaded: boolean;
+  readonly isLoaded: boolean;
 }
 
 interface IntegrationTestingHolder {

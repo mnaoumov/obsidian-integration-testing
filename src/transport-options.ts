@@ -13,12 +13,12 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * App package (Android) or bundle ID (iOS).
    * Defaults to `'md.obsidian'`
    */
-  appId?: string;
+  readonly appId?: string;
 
   /**
    * The Appium server URL (e.g. `'http://localhost:4723'`).
    */
-  appiumUrl: string;
+  readonly appiumUrl: string;
 
   /**
    * The Android AVD (Android Virtual Device) name.
@@ -29,7 +29,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
    *
    * Run `emulator -list-avds` to see available AVD names.
    */
-  avdName: string;
+  readonly avdName: string;
 
   /**
    * The device UDID to reuse (e.g. `'emulator-5554'`).
@@ -38,7 +38,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * established. When present alongside {@link sessionId}, the transport
    * factory skips emulator startup and attaches to the existing session.
    */
-  deviceId?: string;
+  readonly deviceId?: string;
 
   /**
    * An existing Appium session ID to reattach to.
@@ -48,7 +48,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * When present, the transport factory uses WebDriverIO's `attach()` instead
    * of creating a new session, avoiding duplicate Appium/ADB connections.
    */
-  sessionId?: string;
+  readonly sessionId?: string;
 
   /**
    * Whether to automatically start the Appium server if it is not reachable.
@@ -59,12 +59,12 @@ export interface ObsidianAndroidAppiumTransportOptions {
    *
    * @default `true`
    */
-  shouldAutoStartAppium?: boolean;
+  readonly shouldAutoStartAppium?: boolean;
 
   /**
    * Discriminant for the transport type.
    */
-  type: 'obsidian-android-appium';
+  readonly type: 'obsidian-android-appium';
 
   /**
    * Base path on the device where Obsidian stores vaults.
@@ -73,7 +73,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * - Android: `/sdcard/Documents/`
    * - iOS: `@md.obsidian:documents/`
    */
-  vaultBasePath?: string;
+  readonly vaultBasePath?: string;
 
   /**
    * Timeout in milliseconds for waiting for the WebView context to become available.
@@ -84,7 +84,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
    *
    * @default `60000`
    */
-  webviewTimeoutInMilliseconds?: number;
+  readonly webviewTimeoutInMilliseconds?: number;
 }
 
 /**
@@ -95,24 +95,24 @@ export interface ObsidianCdpTransportOptions {
    * Timeout in milliseconds for individual CDP commands.
    * Defaults to 30000
    */
-  commandTimeoutInMilliseconds?: number;
+  readonly commandTimeoutInMilliseconds?: number;
 
   /**
    * CDP host.
    * Defaults to `'localhost'`
    */
-  host?: string;
+  readonly host?: string;
 
   /**
    * CDP port.
    * Defaults to 8315
    */
-  port?: number;
+  readonly port?: number;
 
   /**
    * Discriminant for the transport type.
    */
-  type: 'obsidian-cdp';
+  readonly type: 'obsidian-cdp';
 }
 
 /**
@@ -124,7 +124,7 @@ export interface ObsidianCliTransportOptions {
   /**
    * Discriminant for the transport type.
    */
-  type: 'obsidian-cli';
+  readonly type: 'obsidian-cli';
 }
 
 /**

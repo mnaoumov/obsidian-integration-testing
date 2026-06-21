@@ -28,7 +28,7 @@ vi.mock('./log.ts', () => ({
 }));
 
 interface ExecOptions extends Record<string, unknown> {
-  cwd: string;
+  readonly cwd: string;
 }
 
 interface MockBrowser {

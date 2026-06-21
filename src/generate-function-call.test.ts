@@ -80,7 +80,7 @@ describe('generateFunctionCall', () => {
 
   it('should handle async functions', () => {
     interface FetchDataParams {
-      url: string;
+      readonly url: string;
     }
     async function fetchData(_params: GenerateFunctionCallParams<FetchDataParams>): Promise<string> {
       return await Promise.resolve('data');

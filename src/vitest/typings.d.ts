@@ -48,6 +48,6 @@ declare module 'vitest/node' {
      *
      * When omitted, defaults to the CLI transport (`obsidian-cli`).
      */
-    obsidianTransport?: ObsidianTransportOptions;
+    readonly obsidianTransport?: ObsidianTransportOptions;
   }
 }

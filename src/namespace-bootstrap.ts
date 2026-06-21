@@ -18,7 +18,7 @@ import { generateFunctionCall } from './generate-function-call.ts';
 import { LIBRARY_VERSION } from './library.ts';
 
 interface BootstrapNamespaceParams {
-  version: string;
+  readonly version: string;
 }
 
 /**
@@ -92,8 +92,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface EvalWrapperParams {
-    args: Record<string, unknown>;
-    contextId?: string;
+    readonly args: Record<string, unknown>;
+    readonly contextId?: string;
     fn(fnArgs: Record<string, unknown>): unknown;
   }
 
@@ -102,13 +102,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface IpcSendSyncParams {
-    args: unknown[];
-    channel: string;
+    readonly args: unknown[];
+    readonly channel: string;
   }
 
   interface SetLocalStorageItemParams {
-    key: string;
-    value: string;
+    readonly key: string;
+    readonly value: string;
   }
 
   /**

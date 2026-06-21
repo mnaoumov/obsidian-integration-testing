@@ -20,7 +20,7 @@ import {
 import { ensureNonNullable } from './type-guards.ts';
 
 interface ExecOptions extends Record<string, unknown> {
-  cwd: string;
+  readonly cwd: string;
 }
 
 interface ScriptErrorEnvelope {

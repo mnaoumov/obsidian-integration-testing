@@ -91,10 +91,10 @@ interface EmulatorLaunch {
  */
 interface EnsureDeviceConnectedResult {
   /** The actual device ID that is connected (may differ from the requested one). */
-  actualDeviceId: string;
+  readonly actualDeviceId: string;
 
   /** The emulator process, if one was auto-started. */
-  emulatorProcess?: ChildProcess | undefined;
+  readonly emulatorProcess?: ChildProcess | undefined;
 }
 
 /**
@@ -102,16 +102,16 @@ interface EnsureDeviceConnectedResult {
  */
 interface StartAppiumAndEmulatorParams {
   /** The Appium server URL. */
-  appiumUrl: URL;
+  readonly appiumUrl: URL;
 
   /** AVD name to start. */
-  avdName: string;
+  readonly avdName: string;
 
   /** The Appium server port. */
-  port: number;
+  readonly port: number;
 
   /** Whether Appium auto-start is allowed. */
-  shouldAutoStartAppium?: boolean | undefined;
+  readonly shouldAutoStartAppium?: boolean | undefined;
 }
 
 /**
@@ -119,13 +119,13 @@ interface StartAppiumAndEmulatorParams {
  */
 interface StartAppiumAndEmulatorResult {
   /** The actual device ID that is connected (may differ from the requested one). */
-  actualDeviceId: string;
+  readonly actualDeviceId: string;
 
   /** The Appium server process, if one was auto-started. */
-  appiumProcess?: ChildProcess | undefined;
+  readonly appiumProcess?: ChildProcess | undefined;
 
   /** The emulator process, if one was auto-started. */
-  emulatorProcess?: ChildProcess | undefined;
+  readonly emulatorProcess?: ChildProcess | undefined;
 }
 
 let cachedTransport: ObsidianTransport | undefined;

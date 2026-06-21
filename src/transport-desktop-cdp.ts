@@ -75,8 +75,8 @@ interface CdpResponse {
 }
 
 interface CdpResponseResult {
-  exceptionDetails?: CdpExceptionDetails;
-  result?: CdpValue;
+  readonly exceptionDetails?: CdpExceptionDetails;
+  readonly result?: CdpValue;
 }
 
 interface CdpTarget {

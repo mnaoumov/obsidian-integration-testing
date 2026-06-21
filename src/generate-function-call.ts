@@ -35,15 +35,15 @@ export type GenerateFunctionCallParams<Params = unknown> = AppParams & Params;
  */
 export interface GenerateNamespaceCallParams {
   /** User-supplied arguments to pass to the function. */
-  args?: Record<string, unknown>;
+  readonly args?: Record<string, unknown>;
   /** Optional context ID for persistent storage. */
-  contextId?: string;
+  readonly contextId?: string;
   /** The user function to evaluate inside Obsidian. */
-  fn: (...args: never[]) => unknown;
+  readonly fn: (...args: never[]) => unknown;
 }
 
 interface AppParams {
-  app: App;
+  readonly app: App;
 }
 /* v8 ignore stop */
 

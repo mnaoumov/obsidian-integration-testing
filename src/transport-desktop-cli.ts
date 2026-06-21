@@ -55,7 +55,7 @@ interface InvokeAndWriteResultFsPromises {
 
 interface InvokeAndWriteResultParams {
   evaluate(): Promise<unknown>;
-  resultPath: string;
+  readonly resultPath: string;
   serializeError(error: unknown): string;
 }
 
@@ -89,12 +89,12 @@ const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const VAULT_EVAL_TIMEOUT_IN_MILLISECONDS = 10000;
 
 interface BuildDiagnosticsParams {
-  command: string[];
-  cwd: string;
-  execResult: ExecResult | undefined;
-  resultPath: string;
-  scriptContent: string;
-  scriptPath: string;
+  readonly command: string[];
+  readonly cwd: string;
+  readonly execResult: ExecResult | undefined;
+  readonly resultPath: string;
+  readonly scriptContent: string;
+  readonly scriptPath: string;
 }
 
 /**
