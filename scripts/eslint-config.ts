@@ -343,6 +343,14 @@ function getJsdocsConfigs(): Linter.Config[] {
             ]
           }
         ],
+        /*
+         * Empty JSDoc blocks are never a valid substitute for real documentation, regardless of how they appear
+         * (hand-written or inserted by `jsdoc/require-jsdoc`'s autofix as a placeholder). `enableFixer: false` keeps
+         * the empty block in place and reports it, forcing a real description to be written instead of silently
+         * deleting the placeholder and re-triggering `require-jsdoc`.
+         */
+        'jsdoc/no-blank-blocks': ['error', { enableFixer: false }],
+        'jsdoc/require-description': 'error',
         'jsdoc/require-file-overview': [
           'error',
           {
@@ -475,28 +483,12 @@ function getNoRestrictedSyntaxRulesConfigs(): Linter.Config[] {
             selector: 'PropertyDefinition[declare=true]'
           },
           {
-            message: 'Do not use anonymous inline object types in function parameters. Define a named interface instead.',
-            selector: ':function > Identifier TSTypeLiteral'
+            message: 'Do not use anonymous inline object types. Define a named interface or `type` alias instead.',
+            selector: 'TSTypeLiteral:not(TSTypeAliasDeclaration > TSTypeLiteral)'
           },
           {
-            message: 'Do not use anonymous inline object types in function return types. Define a named interface instead.',
-            selector: ':function > TSTypeAnnotation TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types in interface/method signatures. Define a named interface instead.',
-            selector: 'TSMethodSignature TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types as type arguments. Define a named interface instead.',
-            selector: 'TSTypeParameterInstantiation TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types in type annotations. Define a named interface instead.',
-            selector: 'TSTypeAnnotation TSTypeLiteral'
-          },
-          {
-            message: 'Do not use anonymous inline object types in type assertions. Define a named interface instead.',
-            selector: 'TSAsExpression TSTypeLiteral'
+            message: 'Do not use anonymous inline mapped types. Define a named `type` alias instead.',
+            selector: 'TSMappedType:not(TSTypeAliasDeclaration > TSMappedType)'
           }
         ]
       }

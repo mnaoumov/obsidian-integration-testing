@@ -59,17 +59,26 @@ interface InvokeAndWriteResultParams {
   serializeError(error: unknown): string;
 }
 
+interface ScriptErrorEnvelope {
+  type: 'error' | 'null' | 'undefined';
+  value: string;
+}
+
 /**
  * Discriminated envelope written by the temporary script file.
  *
- * - `{ value: string, type: 'error' }` — the expression threw; `value` is the error message.
- * - `{ value: '', type: 'null' }` — the expression returned `null`.
- * - `{ value: '', type: 'undefined' }` — the expression returned `undefined`.
- * - `{ value: string }` — the expression returned a string value (no `type` field).
+ * - `ScriptErrorEnvelope` with `type: 'error'` — the expression threw; `value` is the error message.
+ * - `ScriptErrorEnvelope` with `type: 'null'` — the expression returned `null`.
+ * - `ScriptErrorEnvelope` with `type: 'undefined'` — the expression returned `undefined`.
+ * - `ScriptValueEnvelope` — the expression returned a string value (no `type` field).
  */
 type ScriptResultEnvelope =
-  | { type: 'error' | 'null' | 'undefined'; value: string }
-  | { value: string };
+  | ScriptErrorEnvelope
+  | ScriptValueEnvelope;
+
+interface ScriptValueEnvelope {
+  value: string;
+}
 
 const UNABLE_TO_FIND_OBSIDIAN = 'unable to find Obsidian';
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;

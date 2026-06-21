@@ -35,7 +35,11 @@ const PASSTHROUGH_PROPS = new Set<string | symbol>([
   'toJSON'
 ]);
 
-type MockClassLike<T> = { prototype: T } & MockClassRef;
+type MockClassLike<T> = MockClassPrototypeRef<T> & MockClassRef;
+
+interface MockClassPrototypeRef<T> {
+  prototype: T;
+}
 
 interface MockClassRef {
   name: string;

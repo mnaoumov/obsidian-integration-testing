@@ -27,17 +27,30 @@ import { generateNamespaceCall } from './generate-function-call.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
+interface EvalErrorEnvelope {
+  type: 'error';
+  value: string;
+}
+
 /**
  * Discriminated envelope returned by the registered `evalWrapper` from inside the Obsidian process.
  *
- * - `{ type: 'error', value: string }` — `fn` threw; `value` is the serialized error.
- * - `{ type: 'undefined' }` — `fn` returned `undefined`.
- * - `{ value: unknown }` — `fn` returned a JSON-serializable value.
+ * - `EvalErrorEnvelope` — `fn` threw; `value` is the serialized error.
+ * - `EvalUndefinedEnvelope` — `fn` returned `undefined`.
+ * - `EvalValueEnvelope` — `fn` returned a JSON-serializable value.
  */
 type EvalResultEnvelope =
-  | { type: 'error'; value: string }
-  | { type: 'undefined' }
-  | { value: unknown };
+  | EvalErrorEnvelope
+  | EvalUndefinedEnvelope
+  | EvalValueEnvelope;
+
+interface EvalUndefinedEnvelope {
+  type: 'undefined';
+}
+
+interface EvalValueEnvelope {
+  value: unknown;
+}
 
 const NO_OUTPUT = '(no output)';
 
