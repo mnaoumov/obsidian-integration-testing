@@ -14,6 +14,7 @@ import type { TestProject } from 'vitest/node';
 import { inject } from 'vitest';
 
 import type { CoreSetupResult } from '../global-setup-core.ts';
+import type { PopulateFilesParams } from '../temp-vault.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 import {
@@ -31,7 +32,64 @@ import { TempVault } from '../temp-vault.ts';
 setTransportOptionsResolver(() => inject('obsidianTransport'));
 setVaultPathResolver(() => inject('tempVaultPath'));
 
-let setupResult: CoreSetupResult | undefined;
+/**
+ * Options for {@link createSetup}.
+ */
+export interface CreateSetupOptions {
+  /**
+   * Returns files/folders to write into the vault before Obsidian opens it (see
+   * {@link CoreSetupParams.populate}). A thunk so large fixtures are built lazily,
+   * once, in the setup process.
+   */
+  populate?(this: void): PopulateFilesParams;
+}
+
+/**
+ * A Vitest `globalSetup` module's `setup` / `teardown` pair.
+ */
+export interface VitestGlobalSetup {
+  setup(this: void, project: TestProject): Promise<void>;
+  teardown(this: void): Promise<void>;
+}
+
+/**
+ * Creates a Vitest global setup/teardown pair, optionally pre-populating the vault
+ * before Obsidian opens it — use this for a dedicated large-vault/performance
+ * project. The plain {@link setup} / {@link teardown} exports are the no-populate
+ * case (`createSetup()`).
+ *
+ * @param options - Setup options.
+ * @returns The `setup` and `teardown` functions to re-export from a `globalSetup` module.
+ */
+export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
+  let setupResult: CoreSetupResult | undefined;
+
+  return { setup, teardown };
+
+  async function setup(project: TestProject): Promise<void> {
+    const environmentOptions = project.config.environmentOptions as Record<string, unknown> | undefined;
+    const transportOptions = environmentOptions?.['obsidianTransport'] as ObsidianTransportOptions | undefined;
+    const label = transportOptions?.type ?? 'obsidian-cli';
+
+    try {
+      setupResult = await coreSetup({ populate: options?.populate?.(), transportOptions });
+    } catch (error: unknown) {
+      // Catch setup errors so that other projects' tests can still run.
+      // Individual tests in this project will fail with the stored error
+      // When they try to inject the temp vault path.
+      log(`[integration-setup:${label}] Setup failed (tests for this project will be skipped): ${serializeError(error)}`);
+      project.provide('setupError', serializeError(error));
+      return;
+    }
+
+    project.provide('obsidianTransport', setupResult.transportOptions);
+    project.provide('tempVaultPath', setupResult.tempVault.path);
+  }
+
+  async function teardown(): Promise<void> {
+    await coreTeardown(setupResult);
+  }
+}
 
 /**
  * Returns the temporary vault provided by the global setup.
@@ -47,39 +105,24 @@ export function getTempVault(): TempVault {
   return new TempVault(tempVaultPath);
 }
 
+const defaultGlobalSetup = createSetup();
+
 /**
- * Vitest global setup function.
+ * Vitest global setup function (no pre-population).
  *
  * Copies the built plugin into a temporary vault, enables it via the Obsidian CLI,
  * and provides `tempVaultPath` to tests.
  *
  * @param project - The Vitest project.
+ * @returns A promise that resolves when setup completes.
  */
-export async function setup(project: TestProject): Promise<void> {
-  const environmentOptions = project.config.environmentOptions as Record<string, unknown> | undefined;
-  const transportOptions = environmentOptions?.['obsidianTransport'] as ObsidianTransportOptions | undefined;
-  const label = transportOptions?.type ?? 'obsidian-cli';
-
-  try {
-    setupResult = await coreSetup({ transportOptions });
-  } catch (error: unknown) {
-    // Catch setup errors so that other projects' tests can still run.
-    // Individual tests in this project will fail with the stored error
-    // When they try to inject the temp vault path.
-    log(`[integration-setup:${label}] Setup failed (tests for this project will be skipped): ${serializeError(error)}`);
-    project.provide('setupError', serializeError(error));
-    return;
-  }
-
-  project.provide('obsidianTransport', setupResult.transportOptions);
-  project.provide('tempVaultPath', setupResult.tempVault.path);
-}
+export const setup = defaultGlobalSetup.setup;
 
 /**
  * Vitest global teardown function.
  *
  * Removes the temporary vault created during setup.
+ *
+ * @returns A promise that resolves when teardown completes.
  */
-export async function teardown(): Promise<void> {
-  await coreTeardown(setupResult);
-}
+export const teardown = defaultGlobalSetup.teardown;

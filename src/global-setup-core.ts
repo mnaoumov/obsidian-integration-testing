@@ -24,6 +24,7 @@ import {
 import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
 
+import type { PopulateFilesParams } from './temp-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
@@ -57,6 +58,14 @@ let isCleanupHandlerRegistered = false;
  * Parameters for {@link coreSetup}.
  */
 export interface CoreSetupParams {
+  /**
+   * Files and folders to write into the vault **before** Obsidian opens it, so
+   * its startup scan indexes them in one pass (see {@link TempVault.populate}).
+   * Use this for large fixtures — writing thousands of notes after open and
+   * forcing a re-scan is far slower and less reliable.
+   */
+  readonly populate?: PopulateFilesParams | undefined;
+
   /** Transport options. When omitted, defaults to the CLI transport. */
   readonly transportOptions?: ObsidianTransportOptions | undefined;
 }
@@ -127,6 +136,12 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     await mkdir(pluginDir, { recursive: true });
     await cp(distPath, pluginDir, { recursive: true });
     await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+
+    if (params?.populate) {
+      const entryCount = Object.keys(params.populate).length;
+      log(`[integration-setup:${label}] Populating vault with ${String(entryCount)} entries before open...`);
+      tempVault.populate(params.populate);
+    }
 
     log(`[integration-setup:${label}] Syncing vault to device...`);
     await tempVault.syncToDevice(transport);
