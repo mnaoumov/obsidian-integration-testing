@@ -55,3 +55,11 @@ Every setup capability must reach **all three** consumption paths, never just on
 - **Jest adapter (`src/jest/global-setup.ts`)** — mirrors the Vitest adapter exactly: same `createSetup(options)` factory shape, same `CreateSetupOptions` fields (including thunk-vs-value conventions), same default `setup` / `teardown` exports.
 
 When adding or changing any adapter-facing option, update the core and **both** adapters in the same change. A capability that lands in only one framework is incomplete. Both adapter files are excluded from unit-test coverage (`v8 ignore`) because they are integration-time glue; keep them as thin as possible so the shared logic stays in the core.
+
+## L7. Cross-process run serialization
+
+Two integration-test runs that share the same Obsidian resources corrupt each other — on desktop the single local Obsidian instance, its `obsidian.json` registry and CDP port; on Android the emulator and Appium server. One run's setup/teardown kills or reconfigures the instance the other is mid-eval on (symptoms: `ECONNREFUSED`, "vault not open"), so both fail.
+
+`src/setup-lock.ts` provides a cross-process advisory lock (a PID-stamped sentinel file under `<tmpdir>/obsidian-integration-testing/<scope>.setup.lock`). `coreSetup` acquires it **first** (before creating the transport — transport creation is what starts the emulator/Appium/Obsidian) and **waits** until any competing run releases it; `coreTeardown` and the process cleanup handlers release it. A crashed run that never released is detected as stale (dead PID on the same host, or an age threshold across hosts) and stolen.
+
+Scope groups runs that contend on the same resources: `desktop` for the `obsidian-cli` and `obsidian-cdp` transports, `android` for `obsidian-android-appium`. A desktop run and an Android run use different scopes and may run concurrently. The lock lives entirely in the core, so all three consumption paths (Vitest / Jest / Manual) inherit it with no adapter changes.

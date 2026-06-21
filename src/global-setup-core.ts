@@ -24,6 +24,7 @@ import {
 import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
 
+import type { SetupLock } from './setup-lock.ts';
 import type { PopulateFilesParams } from './temp-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
@@ -32,6 +33,7 @@ import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
 import { serializeError } from './serialize-error.ts';
+import { acquireSetupLock } from './setup-lock.ts';
 import { TempVault } from './temp-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
@@ -53,6 +55,16 @@ const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
 const activeSetups = new Set<CoreSetupResult>();
 const disposedResults = new WeakSet<CoreSetupResult>();
 let isCleanupHandlerRegistered = false;
+
+/**
+ * The cross-process setup lock held by each active setup. Released when the
+ * setup is torn down (or by the process cleanup handlers), allowing a competing
+ * run to proceed. See {@link acquireSetupLock}.
+ */
+const setupLocks = new Map<CoreSetupResult, SetupLock>();
+
+const DESKTOP_LOCK_SCOPE = 'desktop';
+const ANDROID_LOCK_SCOPE = 'android';
 
 /**
  * Parameters for {@link coreSetup}.
@@ -107,13 +119,20 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
 
   const transportOptions = params?.transportOptions;
   const label = transportOptions?.type ?? DEFAULT_TRANSPORT_TYPE;
-  log(`[integration-setup:${label}] Creating transport...`);
-  const transport = await createTransportFromOptions(transportOptions);
-  log(`[integration-setup:${label}] Transport created: ${transport.constructor.name}`);
+  const lockScope = getLockScope(transportOptions);
 
+  log(`[integration-setup:${label}] Acquiring '${lockScope}' setup lock (serializes against any concurrent integration-test run)...`);
+  const lock = await acquireSetupLock({ label, scope: lockScope });
+  log(`[integration-setup:${label}] Setup lock acquired.`);
+
+  let transport: ObsidianTransport | undefined;
   let tempVault: TempVault | undefined;
 
   try {
+    log(`[integration-setup:${label}] Creating transport...`);
+    transport = await createTransportFromOptions(transportOptions);
+    log(`[integration-setup:${label}] Transport created: ${transport.constructor.name}`);
+
     log(`[integration-setup:${label}] Project root: ${projectRoot}`);
     const distPath = await resolveDistPath(projectRoot);
     const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
@@ -166,30 +185,34 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     }
 
     log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
+
+    const augmentedOptions = augmentTransportOptions(transportOptions, transport);
+    const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
+    activeSetups.add(result);
+    setupLocks.set(result, lock);
+    registerProcessCleanupHandler();
+    return result;
   } catch (error: unknown) {
     log(`[integration-setup:${label}] Setup failed, cleaning up...`);
     try {
-      if (tempVault) {
+      if (tempVault && transport) {
         await tempVault.dispose(transport);
       }
     } catch (cleanupError: unknown) {
       log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${serializeError(cleanupError)}`);
     }
     try {
-      await transport.dispose?.();
+      await transport?.dispose?.();
     } catch (cleanupError: unknown) {
       log(`[integration-setup:${label}] Transport cleanup error (non-fatal): ${serializeError(cleanupError)}`);
     }
 
+    // Release the lock so a waiting run can proceed even though this run failed.
+    lock.release();
+
     log(`[integration-setup:${label}] NOTE: If the test runner reports "No test files found", ignore it — it is a side effect of the setup failure above.`);
     throw error;
   }
-
-  const augmentedOptions = augmentTransportOptions(transportOptions, transport);
-  const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
-  activeSetups.add(result);
-  registerProcessCleanupHandler();
-  return result;
 }
 
 /**
@@ -213,6 +236,7 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
     log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${serializeError(error)}`);
   } finally {
     activeSetups.delete(result);
+    releaseSetupLock(result);
   }
 }
 
@@ -264,6 +288,18 @@ function findProjectRoot(): string {
     }
     dir = parent;
   }
+}
+
+/**
+ * Resolves the lock scope for a transport. Runs that share an Obsidian instance
+ * and its resources must serialize against each other, so the CLI and CDP
+ * desktop transports share one scope while the Android transport uses another.
+ *
+ * @param transportOptions - The resolved transport options.
+ * @returns The lock scope string.
+ */
+function getLockScope(transportOptions: ObsidianTransportOptions | undefined): string {
+  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_LOCK_SCOPE : DESKTOP_LOCK_SCOPE;
 }
 
 /**
@@ -336,9 +372,23 @@ function registerProcessCleanupHandler(): void {
       } catch (error: unknown) {
         log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${serializeError(error)}`);
       }
+      releaseSetupLock(result);
     }
     activeSetups.clear();
   });
+}
+
+/**
+ * Releases and forgets the setup lock associated with a result, if any.
+ *
+ * @param result - The setup result whose lock should be released.
+ */
+function releaseSetupLock(result: CoreSetupResult): void {
+  const lock = setupLocks.get(result);
+  if (lock) {
+    lock.release();
+    setupLocks.delete(result);
+  }
 }
 
 /**
