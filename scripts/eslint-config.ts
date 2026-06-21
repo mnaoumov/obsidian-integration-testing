@@ -510,6 +510,7 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
         'obsidian-dev-utils': obsidianDevUtilsPlugin
       },
       rules: {
+        'obsidian-dev-utils/no-unused-params-members': 'error',
         'obsidian-dev-utils/no-used-underscore-variables': 'error',
         'obsidian-dev-utils/readonly-params-options-result-members': 'error'
       }
