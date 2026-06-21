@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 4.3.0
+
+- docs: document vault pre-population across Vitest/Jest/Manual
+- feat(jest): add default-export globalSetup/globalTeardown entry points
+- chore: update libs
+- chore: normalize tsconfig lib casing to ES2022
+- docs: add framework-parity rule to project CLAUDE.md
+- feat(jest): mirror createSetup/populate into the Jest adapter
+- feat: pre-populate temp vault before Obsidian opens it
+- feat: add no-unused-params-members ESLint rule
+- feat(eslint): enforce readonly Params/Options/Result members
+- feat(eslint): migrate recent obsidian-dev-utils eslint changes
+
 ## 4.2.6
 
 - fix: restart Obsidian in the cold path when it runs without an open vault
