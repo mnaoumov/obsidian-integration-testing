@@ -63,3 +63,9 @@ Two integration-test runs that share the same Obsidian resources corrupt each ot
 `src/setup-lock.ts` provides a cross-process advisory lock (a PID-stamped sentinel file under `<tmpdir>/obsidian-integration-testing/<scope>.setup.lock`). `coreSetup` acquires it **first** (before creating the transport — transport creation is what starts the emulator/Appium/Obsidian) and **waits** until any competing run releases it; `coreTeardown` and the process cleanup handlers release it. A crashed run that never released is detected as stale (dead PID on the same host, or an age threshold across hosts) and stolen.
 
 Scope groups runs that contend on the same resources: `desktop` for the `obsidian-cli` and `obsidian-cdp` transports, `android` for `obsidian-android-appium`. A desktop run and an Android run use different scopes and may run concurrently. The lock lives entirely in the core, so all three consumption paths (Vitest / Jest / Manual) inherit it with no adapter changes.
+
+## Known Issues
+
+None.
+
+The previously-listed "CLI eval result polluted by in-flight background async" issue was a **stdout-era** bug: until the stdout→result-file migration (shipped in 2.5.0), `DesktopCliTransport.evaluate` read the eval result from `obsidian eval`'s stdout, so a fire-and-forget renderer promise resolving to a stray value (e.g. `"function"`) could interleave on that shared stream and break `JSON.parse`. Since 2.5.0 each result is written to a per-call `<scriptId>.result.json` and read back, removing the shared value channel. Verified resolved against 4.4.0: removing the downstream `afterAll` `detachLeavesOfType('markdown')` workaround in codescript's desktop integration suite and running all 7 desktop files produced 114/114 passing with no `non-JSON output` error.
