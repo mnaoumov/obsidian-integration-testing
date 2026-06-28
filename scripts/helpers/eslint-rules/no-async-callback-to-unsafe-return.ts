@@ -40,7 +40,7 @@ import {
   TypeFlags
 } from 'typescript';
 
-import { assertNonNullable } from '../../../src/type-guards.ts';
+import { assertNonNullable } from '../type-guards.ts';
 
 export const MESSAGE_ID = 'noAsyncCallbackToUnsafeReturn';
 

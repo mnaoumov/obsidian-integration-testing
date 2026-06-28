@@ -10,7 +10,7 @@
  */
 import type { Rule } from 'eslint';
 
-import { ensureNonNullable } from '../../../src/type-guards.ts';
+import { ensureNonNullable } from '../type-guards.ts';
 
 export const MESSAGE_ID = 'readonlyParamsOptionsResultMembers';
 
