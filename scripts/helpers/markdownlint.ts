@@ -2,7 +2,10 @@ import { glob } from 'node:fs/promises';
 import { relative } from 'node:path';
 import process from 'node:process';
 
-import { execFromRoot } from './root.ts';
+import {
+  execFromRoot,
+  toPosixPath
+} from './root.ts';
 
 interface LintParams {
   readonly paths?: string[] | undefined;
@@ -11,12 +14,11 @@ interface LintParams {
 
 export async function lint(params?: LintParams): Promise<void> {
   const { paths, shouldFix = false } = params ?? {};
-  const relativePaths = paths?.map((p) => relative(process.cwd(), p) || p);
-  const targets = relativePaths?.length ? relativePaths : ['.'];
+  const targets = paths?.length ? paths : ['.'];
   await execFromRoot(['npx', 'markdownlint-cli2', ...(shouldFix ? ['--fix'] : []), { batchedArgs: targets }]);
 
-  const mdFiles = relativePaths?.length
-    ? relativePaths
+  const mdFiles = paths?.length
+    ? paths.map((p) => toPosixPath(relative(process.cwd(), p)) || p)
     : await toArray(glob(['**/*.md'], {
       exclude: [
         '.git/**',
