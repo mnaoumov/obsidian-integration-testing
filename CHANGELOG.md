@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 5.1.1
+
+- test: guard the owned-instance worker-attach path
+- fix: attach test workers to the harness-owned CDP instance
+
 ## 5.1.0
 
 - feat: provide typeIntoEditor trusted-input helper in evalInObsidian callbacks
