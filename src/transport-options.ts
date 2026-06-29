@@ -135,10 +135,13 @@ export interface ObsidianCdpTransportOptions {
   readonly obsidianVersion?: string | undefined;
 
   /**
-   * CDP port of an already-running Obsidian to **attach** to. When set, the
-   * harness attaches instead of owning an instance, and the version knobs are
-   * ignored. When omitted, an owned isolated instance is launched on a free port.
-   * Defaults to 8315 (attach mode only)
+   * CDP port of an already-running Obsidian to **attach** to (the
+   * `--remote-debugging-port` it was launched with). When set, the harness
+   * attaches instead of owning an instance, and the version knobs are ignored.
+   * When omitted, an owned isolated instance is launched on an automatically
+   * chosen free port (no port is hardcoded).
+   *
+   * @default `undefined`
    */
   readonly port?: number;
 

@@ -58,8 +58,9 @@ export interface DesktopCdpTransportConfig {
   cdpHost?: string;
 
   /**
-   * CDP port. Defaults to `8315`. Ignored in owned-instance mode (a free port
-   * is chosen at launch).
+   * CDP port for **attach** mode (the `--remote-debugging-port` the running
+   * Obsidian was launched with). In owned-instance mode this is ignored — a
+   * free port is chosen at launch.
    */
   cdpPort?: number;
 
@@ -139,7 +140,6 @@ interface CdpValue {
   value?: unknown;
 }
 
-const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10000;
@@ -179,10 +179,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public constructor(config?: DesktopCdpTransportConfig) {
     this.cdpHost = config?.cdpHost ?? 'localhost';
-    this.cdpPort = config?.cdpPort ?? CDP_DEFAULT_PORT;
-    this.cdpUrl = `http://${this.cdpHost}:${String(this.cdpPort)}`;
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
     this.ownedConfig = config?.ownedInstance;
+    // Owned mode picks a free port at launch (assigned in registerVault).
+    // Attach mode connects to the configured port; no port is hardcoded.
+    this.cdpPort = config?.cdpPort ?? 0;
+    this.cdpUrl = config?.cdpPort === undefined ? '' : `http://${this.cdpHost}:${String(config.cdpPort)}`;
   }
 
   /**
