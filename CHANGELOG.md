@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 5.0.0
+
+- chore: update libs
+- docs: document hermetic owned-instance transport and version pinning
+- refactor: never hardcode the CDP port
+- feat!: run desktop tests in a hermetic owned Obsidian instance
+- docs: propose trusted keyboard input helper for evalInObsidian
+- refactor(scripts): make eslint rule helpers self-contained
+- refactor(scripts): make format.ts helper self-contained
+- feat(scripts): add linkinator and unify markdownlint.ts link-checking
+- refactor(scripts): import process explicitly in spellcheck
+- feat(scripts): add isVerbose option to check-project-types
+- fix(scripts): make markdownlint schema Rule import type-only
+- chore: read .env and honor NANO_STAGED opt-out in nano-staged config
+- docs: correct desktop run file count in known-issues note
+- docs: close stale CLI-eval-pollution known issue
+
 ## 4.4.0
 
 - feat: serialize concurrent integration-test runs with a cross-process lock
