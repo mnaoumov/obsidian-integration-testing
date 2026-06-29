@@ -110,6 +110,23 @@ export interface ObsidianCdpTransportOptions {
   readonly host?: string;
 
   /**
+   * Marks {@link port} as the CDP port of a **harness-owned, isolated instance**
+   * that the global setup already launched and prepared (vault registered,
+   * plugin enabled).
+   *
+   * Populated automatically by the global setup and provided to test workers via
+   * the framework's context mechanism (e.g. Vitest `provide`/`inject`). When set,
+   * the worker **attaches** to the owned instance on {@link port} instead of
+   * launching its own, and skips the user-scope vault-registration preflight —
+   * the owned instance's vault lives in an isolated user-data config, not the
+   * user-scope registry. Do not set this manually; for plain attach mode use
+   * {@link port} alone.
+   *
+   * @default `undefined`
+   */
+  readonly isHarnessOwnedInstance?: boolean | undefined;
+
+  /**
    * Pins the **Electron shell** (installer build) the owned instance runs.
    *
    * Accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`.

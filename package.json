@@ -50,6 +50,16 @@
         "default": "./dist/lib/cjs/jest/global-teardown.cjs"
       }
     },
+    "./jest-setup": {
+      "import": {
+        "types": "./dist/lib/esm/jest/setup.d.mts",
+        "default": "./dist/lib/esm/jest/setup.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/jest/setup.d.cts",
+        "default": "./dist/lib/cjs/jest/setup.cjs"
+      }
+    },
     "./vitest-global-setup": {
       "import": {
         "types": "./dist/lib/esm/vitest/global-setup.d.mts",
@@ -58,6 +68,16 @@
       "require": {
         "types": "./dist/lib/cjs/vitest/global-setup.d.cts",
         "default": "./dist/lib/cjs/vitest/global-setup.cjs"
+      }
+    },
+    "./vitest-setup": {
+      "import": {
+        "types": "./dist/lib/esm/vitest/setup.d.mts",
+        "default": "./dist/lib/esm/vitest/setup.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/vitest/setup.d.cts",
+        "default": "./dist/lib/cjs/vitest/setup.cjs"
       }
     },
     "./vitest/typings": {

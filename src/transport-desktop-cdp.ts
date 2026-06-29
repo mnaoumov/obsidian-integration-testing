@@ -71,6 +71,14 @@ export interface DesktopCdpTransportConfig {
   commandTimeoutInMilliseconds?: number;
 
   /**
+   * When attaching (i.e. {@link cdpPort} is set), marks the target as a
+   * **harness-owned, already-prepared** instance. Suppresses the user-scope
+   * vault-registration preflight, since the owned instance's vault lives in an
+   * isolated user-data config rather than the user-scope registry.
+   */
+  isHarnessOwnedInstance?: boolean;
+
+  /**
    * When set, the transport launches and owns an isolated Obsidian instance
    * instead of attaching to a running one. This is the default desktop mode.
    */
@@ -140,6 +148,17 @@ interface CdpValue {
   value?: unknown;
 }
 
+/**
+ * The CDP endpoint of a launched, harness-owned instance.
+ */
+interface OwnedInstanceEndpoint {
+  /** CDP host (e.g. `'localhost'`). */
+  readonly host: string;
+
+  /** The free CDP port the owned instance was launched on. */
+  readonly port: number;
+}
+
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10000;
@@ -167,6 +186,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private cdpPort: number;
   private cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
+  private readonly isHarnessOwnedInstance: boolean;
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
@@ -180,6 +200,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   public constructor(config?: DesktopCdpTransportConfig) {
     this.cdpHost = config?.cdpHost ?? 'localhost';
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
+    this.isHarnessOwnedInstance = config?.isHarnessOwnedInstance ?? false;
     this.ownedConfig = config?.ownedInstance;
     // Owned mode picks a free port at launch (assigned in registerVault).
     // Attach mode connects to the configured port; no port is hardcoded.
@@ -261,6 +282,21 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Returns the CDP endpoint of the owned, launched instance so the global setup
+   * can hand it to test workers (which then **attach** to it instead of
+   * launching their own). Returns `undefined` when this transport is not an
+   * owned instance, or its instance has not been launched yet.
+   *
+   * @returns The owned instance's CDP host and port, or `undefined`.
+   */
+  public getOwnedInstanceEndpoint(): OwnedInstanceEndpoint | undefined {
+    if (!this.ownedConfig || !this.ownedInstance) {
+      return undefined;
+    }
+    return { host: this.cdpHost, port: this.cdpPort };
+  }
+
+  /**
    * Verifies that the CDP endpoint is reachable and has Obsidian targets.
    *
    * If Obsidian is not running, attempts to auto-start it via URI protocol
@@ -269,10 +305,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The vault path (used for vault registration check).
    */
   public async preflightCheck(vaultPath: string): Promise<void> {
-    if (this.ownedConfig) {
-      // Owned instance: readiness is guaranteed by registerVault, and the vault
-      // Lives in the isolated config — there is nothing to verify against the
-      // User-scope registry.
+    if (this.ownedConfig || this.isHarnessOwnedInstance) {
+      // Owned instance (launched here) or a worker attached to one: readiness is
+      // Guaranteed by the global setup's registerVault, and the vault lives in
+      // The isolated config — there is nothing to verify against the user-scope
+      // Registry.
       return;
     }
 

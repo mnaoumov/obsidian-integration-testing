@@ -718,11 +718,13 @@ function buildEmulatorExitMessage(exitInfo: EmulatorExitInfo, output: string): s
  */
 async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promise<ObsidianTransport> {
   if (options?.port !== undefined) {
-    log(`[transport-factory:obsidian-cdp] Attaching to running Obsidian (host=${options.host ?? 'localhost'}, port=${String(options.port)})`);
+    const ownedSuffix = options.isHarnessOwnedInstance ? ' (harness-owned)' : '';
+    log(`[transport-factory:obsidian-cdp] Attaching to running Obsidian${ownedSuffix} (host=${options.host ?? 'localhost'}, port=${String(options.port)})`);
     return new DesktopCdpTransport({
       ...(options.host !== undefined && { cdpHost: options.host }),
       cdpPort: options.port,
-      ...(options.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds })
+      ...(options.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+      ...(options.isHarnessOwnedInstance !== undefined && { isHarnessOwnedInstance: options.isHarnessOwnedInstance })
     });
   }
 

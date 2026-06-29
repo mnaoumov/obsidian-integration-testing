@@ -36,6 +36,7 @@ import { serializeError } from './serialize-error.ts';
 import { acquireSetupLock } from './setup-lock.ts';
 import { TempVault } from './temp-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
+import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
@@ -245,11 +246,15 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
 }
 
 /**
- * Augments transport options with session reuse info when the transport
- * supports it (currently Appium only).
+ * Augments transport options with reuse info so test workers can reattach to the
+ * instance the global setup already launched instead of creating their own:
  *
- * The augmented options are provided to test workers so they can reattach
- * to the existing session instead of creating a new one.
+ * - **Appium** — injects the established `sessionId`/`deviceId`.
+ * - **Owned desktop CDP** — injects the owned instance's `host`/`port` (chosen
+ *   at launch) plus the internal `isHarnessOwnedInstance` flag, so each worker
+ *   **attaches** to that instance over CDP rather than launching (and never
+ *   registering) its own — the bug that otherwise leaves a worker's transport
+ *   with no CDP endpoint.
  *
  * @param options - The original transport options.
  * @param transport - The transport instance created during setup.
@@ -259,18 +264,31 @@ function augmentTransportOptions(
   options: ObsidianTransportOptions | undefined,
   transport: ObsidianTransport
 ): ObsidianTransportOptions | undefined {
-  if (options?.type !== 'obsidian-android-appium' || !(transport instanceof AppiumTransport)) {
-    return options;
+  if (options?.type === 'obsidian-android-appium' && transport instanceof AppiumTransport) {
+    const sessionInfo = transport.getSessionInfo();
+    log(`[integration-setup:${options.type}] Session reuse info: sessionId=${sessionInfo.sessionId}, deviceId=${sessionInfo.deviceId}`);
+    return {
+      ...options,
+      deviceId: sessionInfo.deviceId,
+      sessionId: sessionInfo.sessionId
+    };
   }
 
-  const sessionInfo = transport.getSessionInfo();
-  log(`[integration-setup:${options.type}] Session reuse info: sessionId=${sessionInfo.sessionId}, deviceId=${sessionInfo.deviceId}`);
+  if ((options === undefined || options.type === 'obsidian-cdp') && transport instanceof DesktopCdpTransport) {
+    const endpoint = transport.getOwnedInstanceEndpoint();
+    if (endpoint) {
+      log(`[integration-setup:${DEFAULT_TRANSPORT_TYPE}] Owned instance reuse info: host=${endpoint.host}, port=${String(endpoint.port)}`);
+      return {
+        ...options,
+        host: endpoint.host,
+        isHarnessOwnedInstance: true,
+        port: endpoint.port,
+        type: 'obsidian-cdp'
+      };
+    }
+  }
 
-  return {
-    ...options,
-    deviceId: sessionInfo.deviceId,
-    sessionId: sessionInfo.sessionId
-  };
+  return options;
 }
 
 /**
