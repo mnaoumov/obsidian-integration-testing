@@ -10,9 +10,11 @@ The package exports these entry points:
 |-----------------------------------------------------|------------------------------------------------------------------------------|
 | `obsidian-integration-testing`                      | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types         |
 | `obsidian-integration-testing/vitest-global-setup`  | Vitest global `setup`/`teardown` + `getTempVault()`                          |
+| `obsidian-integration-testing/vitest-setup`         | Vitest **per-worker** `setupFiles` entry — registers the context resolvers   |
 | `obsidian-integration-testing/vitest/typings`       | Opt-in Vitest module augmentations (`ProvidedContext`, `EnvironmentOptions`) |
 | `obsidian-integration-testing/jest-global-setup`    | Jest global setup (default + named `setup`/`teardown`) + `getTempVault()`    |
 | `obsidian-integration-testing/jest-global-teardown` | Jest global teardown (default export) — separate module Jest requires        |
+| `obsidian-integration-testing/jest-setup`           | Jest **per-worker** `setupFiles` entry — registers the context resolvers     |
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
@@ -29,7 +31,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 ## L3. Testing
 
 - Unit tests: `npm run test` (Vitest, `--project unit-tests`).
-- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed).
+- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs two projects: `integration-tests` (each suite registers its vault in-worker) and `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics.
 
 ## L4. Peer dependencies
@@ -116,6 +118,42 @@ run its obsidian-integration vitest project serially (`fileParallelism: false`, 
 `obsidian-dev-utils` still ships a local stopgap `src/test-helpers/type-into-editor.ts` (a
 self-contained function passed into closures via `args`). Now that the helper is shipped here, remove
 the dev-utils copy and switch its integration tests to the `typeIntoEditor` provided in `CommonArgs`.
+
+## L9. Test workers must register the context resolvers (`vitest-setup` / `jest-setup`)
+
+`getTransportOptions()` / `getVaultPath()` are resolved through resolvers registered by
+`setTransportOptionsResolver` / `setVaultPathResolver`. Those registrations live in the framework
+**global-setup** modules, which run **only in the main process** — not in the test workers that
+actually call `evalInObsidian`. Under the retired CLI default this was invisible: with no resolver,
+`getTransportOptions()` returned `undefined`, and the CLI transport needs no port. The owned-CDP
+default **does** need a port (the free port the owned instance was launched on), so a worker with no
+resolver silently rebuilds an owned transport that never launches → its `cdpUrl` is empty →
+`fetch('/json')` throws `Failed to parse URL from /json` on the first eval.
+
+Fix (this is the mechanism — keep it in mind whenever a capability must reach workers):
+
+1. **Propagate the endpoint.** `coreSetup` runs `augmentTransportOptions`, which for an owned
+   `DesktopCdpTransport` injects the launched `host`/`port` plus the internal
+   `isHarnessOwnedInstance` flag into the options handed to workers (mirroring the Appium
+   `sessionId`/`deviceId` reuse path). The factory's `port` branch then builds an **attach**
+   transport; `isHarnessOwnedInstance` makes `preflightCheck` skip the user-scope vault-registration
+   check (the owned vault lives in an isolated user-data config, not the user-scope registry).
+2. **Register the resolver in the worker.** Consumers MUST add the per-worker setup file to their
+   integration vitest project's `setupFiles`: `setupFiles: ['obsidian-integration-testing/vitest-setup']`
+   (Jest: add `obsidian-integration-testing/jest-setup` to `setupFiles`). It registers
+   `setTransportOptionsResolver(() => inject('obsidianTransport'))` and the vault-path resolver, so
+   the worker reads what the global setup published via `provide`.
+
+Per L6 the mechanism reaches both frameworks. Caveat: Vitest's `provide`/`inject` carries the
+**dynamically** chosen owned port to workers; Jest has no `globalSetup`→worker channel for dynamic
+values (its `globals` are static config), so under Jest the owned-CDP default cannot hand workers the
+auto-chosen port — attach to a fixed `port` via the transport options in `globals`.
+
+**23-plugin migration impact:** the pending migration is no longer just "switch `type:
+'obsidian-cli'` → `obsidian-cdp`". Every plugin running desktop integration tests with the owned-CDP
+default must also add `obsidian-integration-testing/vitest-setup` to its integration project's
+`setupFiles` (best done once in the shared `obsidian-dev-utils` vitest config so the fleet inherits
+it).
 
 ## Known Issues
 

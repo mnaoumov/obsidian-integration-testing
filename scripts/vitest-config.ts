@@ -5,6 +5,12 @@ const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
 const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
+// The owned-instance worker-attach regression suite runs in its own project: it
+// Owns the instance in the global setup and evals from a worker (every other
+// Integration suite registers in-worker), so it needs the harness-owned global
+// Setup plus the per-worker `vitest-setup` resolvers.
+const OWNED_ATTACH_TEST_FILE = 'src/owned-instance-worker-attach.integration.test.ts';
+
 export const config = defineConfig({
   test: {
     coverage: {
@@ -35,9 +41,22 @@ export const config = defineConfig({
       {
         test: {
           environment: 'node',
-          exclude: SHARED_EXCLUDE,
+          exclude: [...SHARED_EXCLUDE, OWNED_ATTACH_TEST_FILE],
           include: [INTEGRATION_TEST_FILES],
           name: 'integration-tests',
+          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+        }
+      },
+      {
+        test: {
+          environment: 'node',
+          exclude: SHARED_EXCLUDE,
+          fileParallelism: false,
+          globalSetup: ['./scripts/owned-attach-regression-global-setup.ts'],
+          include: [OWNED_ATTACH_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:owned-attach',
+          setupFiles: ['./src/vitest/setup.ts'],
           testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }
       }
