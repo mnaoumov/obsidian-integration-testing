@@ -71,7 +71,7 @@ globalThis.__obsidianIntegrationTesting = {
 
 After setup, `globalThis.__obsidianIntegrationTesting.tempVaultPath` is available in test workers.
 
-By default this uses the **`CLI` transport** (requires `CLI` enabled in Obsidian settings). See [Transport modes](#transport-modes) for alternatives.
+By default this launches a **harness-owned, isolated `CDP` instance** (a temporary Obsidian that never touches your real config). See [Transport modes](#transport-modes) for version pinning, attaching to a running Obsidian, and mobile.
 
 ### Write integration tests
 
@@ -365,7 +365,7 @@ Both files share the same `createSetup` instance (via the common module), so `te
 >
 > **Parallelism:**
 >
-> The Obsidian `CLI` does not support executing multiple commands concurrently. If your test runner launches tests in parallel, `CLI` calls may collide and produce flaky failures. Disable file-level parallelism in your Vitest config:
+> A test run shares a single Obsidian instance and one temporary vault. Running test files in parallel makes them race on that shared instance and vault, producing flaky failures. Disable file-level parallelism in your Vitest config:
 >
 > ```ts
 > // vitest.config.ts
@@ -432,48 +432,20 @@ const title2 = await evalInObsidian({
 
 The transport determines how the library communicates with Obsidian. Configure it via transport options in your test framework's config (see [Quick start](#quick-start)):
 
-| Type                       | Platform | Mechanism                                                   |
-|----------------------------|----------|-------------------------------------------------------------|
-| `obsidian-cli` (default)   | Desktop  | Obsidian `Command Line Interface` (`CLI`) (`obsidian eval`) |
-| `obsidian-cdp`             | Desktop  | Obsidian `Chrome DevTools Protocol` (`CDP`)                 |
-| `obsidian-android-appium`  | Mobile   | Obsidian Android Appium WebView JS injection                |
+| Type                      | Platform | Mechanism                                   |
+|---------------------------|----------|---------------------------------------------|
+| `obsidian-cdp` (default)  | Desktop  | Obsidian `Chrome DevTools Protocol` (`CDP`) |
+| `obsidian-android-appium` | Mobile   | Obsidian Android Appium WebView injection   |
 
-#### `CLI` transport (default)
+#### `CDP` transport (default)
 
-Shells out to the Obsidian `Command Line Interface` (`CLI`) binary for each eval call. This is the default when no `obsidianTransport` is configured.
-
-**Setup:**
-
-1. [Install the Obsidian `CLI`](https://obsidian.md/help/cli#Install+Obsidian+CLI).
-2. Enable `CLI` in Obsidian: `Settings → General → Developer tools → Enable CLI`.
-
-No additional vitest configuration needed — `CLI` is the default transport.
-
-#### `CDP` transport
-
-Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. No `CLI` binary needed, no `CLI enabled` setting required, and lower overhead per eval.
+By default the library **launches and owns an isolated Obsidian instance** in a temporary `--user-data-dir` on a free `--remote-debugging-port`, and communicates with it over the Obsidian `Chrome DevTools Protocol` (`CDP`). The owned instance never touches your real Obsidian — your config, vault registry, running window, and auto-update are all left untouched — and it runs in parallel with your everyday Obsidian.
 
 **Setup:**
 
-1. Launch Obsidian with the `--remote-debugging-port` flag:
-
-   ```powershell
-   # Windows (PowerShell) — uses Obsidian from PATH (e.g. scoop), falling back to the installer location
-   $obsidian = (Get-Command Obsidian.exe -ErrorAction SilentlyContinue).Source
-   if (-not $obsidian) { $obsidian = "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe" }
-   Start-Process $obsidian -ArgumentList '--remote-debugging-port=8315'
-   ```
-
-   ```bash
-   # macOS
-   /Applications/Obsidian.app/Contents/MacOS/Obsidian --remote-debugging-port=8315
-
-   # Linux
-   obsidian --remote-debugging-port=8315
-   ```
-
+1. [Install Obsidian](https://obsidian.md/download) (the desktop app) so a shell is available to launch.
 2. Ensure [`Node.js`](https://nodejs.org/) 22+ is installed (uses built-in `WebSocket` and `fetch` globals).
-3. Configure vitest:
+3. No transport configuration is required — the owned `CDP` instance is the default:
 
    ```ts
    // vitest.config.ts
@@ -481,27 +453,52 @@ Connects via WebSocket to Obsidian `Chrome DevTools Protocol` (`CDP`) endpoint. 
      test: {
        fileParallelism: false,
        globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
-       environmentOptions: {
-         obsidianTransport: { type: 'obsidian-cdp' },
-       },
      },
    });
    ```
 
-   Optional configuration:
+##### Pinning an Obsidian version
 
-   ```ts
-   environmentOptions: {
-     obsidianTransport: {
-       type: 'obsidian-cdp',
+To run the tests against a specific Obsidian version, set `obsidianVersion` and/or `obsidianInstallerVersion`. Each accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`. Downloaded asars and installer shells are cached under the system temp dir for reuse.
 
-       // default values can be omitted
-       host: 'localhost',
-       port: 8315,
-       commandTimeoutInMilliseconds: 30000
-     },
-   }
-   ```
+```ts
+environmentOptions: {
+  obsidianTransport: {
+    type: 'obsidian-cdp',
+    // The Obsidian app version (asar). At or above the installed shell version
+    // it is applied as a fast asar swap; an older version transparently
+    // downloads the matching installer.
+    obsidianVersion: '1.8.10',
+  },
+}
+```
+
+- **`obsidianVersion`** pins the app code (asar). When omitted, the owned instance runs the same version your installed Obsidian currently runs.
+- **`obsidianInstallerVersion`** pins the Electron shell (installer build), downloaded and extracted from the matching GitHub release (Windows installers require [7-Zip](https://www.7-zip.org/) on `PATH`). Public releases only — catalyst/beta builds have no public installer, so a catalyst version can only be pinned at the asar level.
+
+##### Attaching to a running Obsidian
+
+To attach to an already-running Obsidian instead of owning one, launch Obsidian with `--remote-debugging-port=<port>` and set `port` to that same port (the version-pinning options do not apply in attach mode):
+
+```powershell
+# Windows (PowerShell) — uses Obsidian from PATH (e.g. scoop), falling back to the installer location
+$obsidian = (Get-Command Obsidian.exe -ErrorAction SilentlyContinue).Source
+if (-not $obsidian) { $obsidian = "$env:LOCALAPPDATA\Programs\Obsidian\Obsidian.exe" }
+Start-Process $obsidian -ArgumentList '--remote-debugging-port=8315'
+```
+
+```ts
+environmentOptions: {
+  obsidianTransport: {
+    type: 'obsidian-cdp',
+    port: 8315, // must match the --remote-debugging-port Obsidian was launched with
+
+    // default values can be omitted
+    host: 'localhost',
+    commandTimeoutInMilliseconds: 30000,
+  },
+}
+```
 
 #### Obsidian Android Appium transport
 

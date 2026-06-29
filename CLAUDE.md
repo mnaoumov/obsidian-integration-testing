@@ -1,6 +1,6 @@
 # Project: obsidian-integration-testing
 
-A library that provides helpers for integration testing Obsidian plugins against a running Obsidian instance.
+A library that provides helpers for integration testing Obsidian plugins against an Obsidian instance. On desktop it launches and owns an isolated Obsidian instance by default (it can also attach to a running one); on Android it drives Obsidian Mobile via Appium.
 
 ## L1. Architecture
 
@@ -16,7 +16,9 @@ The package exports these entry points:
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
-Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`) are not re-exported.
+Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `obsidian-instance`, `kill-process-tree`) are not re-exported.
+
+The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: own vs. attach), with `obsidian-instance.ts` (launch + free port + kill), `obsidian-version*.ts` (asar version resolution/download/cache), and `obsidian-installer.ts` (shell version detect/download/extract). `transport-factory.ts` resolves the owned-instance config (shell exe + asar + temp user-data dir) from the version knobs.
 
 ## L2. Build
 
@@ -27,7 +29,7 @@ Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-gu
 ## L3. Testing
 
 - Unit tests: `npm run test` (Vitest, `--project unit-tests`).
-- Integration tests: `npm run test:integration` (requires a running Obsidian instance with CLI enabled).
+- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics.
 
 ## L4. Peer dependencies
@@ -36,7 +38,15 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None.
+**Hermetic, version-pinned desktop testing — implementation complete on branch
+`feat/hermetic-version-pinned-instance`** (owned isolated CDP instance is the new default; CLI
+retired; `obsidianVersion`/`obsidianInstallerVersion` pinning with caching). Full gate green;
+validated end-to-end on Windows (owned default, asar upgrade pin, installer downgrade pin). PENDING
+(user-owned): a **major (`5.0.0`) release** — this is a breaking change (drops `obsidian-cli`,
+`DesktopCliTransport`, `ObsidianCliTransportOptions`; default transport changes) — run via the repo's
+release flow. Then the **23-plugin migration**: any plugin explicitly setting `type: 'obsidian-cli'`
+must switch to `obsidian-cdp` (most rely on the default and need nothing). Not yet validated on
+macOS/Linux (the installer-extraction + shell-version-detection paths are platform-specific).
 
 ## Pending Questions
 
@@ -44,7 +54,9 @@ None.
 
 ## L5. Transport configuration
 
-Transport is configured via the framework adapter's config mechanism. The discriminated union `ObsidianTransportOptions` (`type: 'obsidian-cli' | 'obsidian-cdp' | 'obsidian-android-appium'`) drives which transport the globalSetup creates. Vitest uses `environmentOptions.obsidianTransport`; Jest uses `globalThis.__obsidianIntegrationTesting.transportOptions`. Other frameworks can register a custom resolver via `setTransportOptionsResolver()`.
+Transport is configured via the framework adapter's config mechanism. The discriminated union `ObsidianTransportOptions` (`type: 'obsidian-cdp' | 'obsidian-android-appium'`) drives which transport the globalSetup creates; `obsidian-cdp` is the default when omitted. Vitest uses `environmentOptions.obsidianTransport`; Jest uses `globalThis.__obsidianIntegrationTesting.transportOptions`. Other frameworks can register a custom resolver via `setTransportOptionsResolver()`.
+
+Desktop (`obsidian-cdp`) defaults to a **harness-owned, isolated instance** (temp `--user-data-dir` + free CDP port; never touches user-scope Obsidian). Set `port` to **attach** to a running Obsidian instead. `obsidianVersion` (asar) and `obsidianInstallerVersion` (shell) pin the version — each accepts `x.y.z` / `public-latest` / `catalyst-latest`; asar swap is upgrade-only vs. the shell, so older versions auto-use the matching installer (downloads/extracts via 7-Zip on Windows). Both version knobs ride the existing `transportOptions` channel, so all three consumption paths get them with no adapter change.
 
 ## L6. Framework parity (Vitest / Jest / Manual)
 
@@ -58,11 +70,11 @@ When adding or changing any adapter-facing option, update the core and **both** 
 
 ## L7. Cross-process run serialization
 
-Two integration-test runs that share the same Obsidian resources corrupt each other — on desktop the single local Obsidian instance, its `obsidian.json` registry and CDP port; on Android the emulator and Appium server. One run's setup/teardown kills or reconfigures the instance the other is mid-eval on (symptoms: `ECONNREFUSED`, "vault not open"), so both fail.
+Two integration-test runs that share the same Obsidian resources corrupt each other. On **Android** the emulator and Appium server are shared, so concurrent runs collide (symptoms: `ECONNREFUSED`, "vault not open"). On **desktop** this no longer applies: each run owns an isolated instance (its own temp `--user-data-dir` and free CDP port; Electron's single-instance lock is per-userData), so desktop runs are independent and need no lock.
 
-`src/setup-lock.ts` provides a cross-process advisory lock (a PID-stamped sentinel file under `<tmpdir>/obsidian-integration-testing/<scope>.setup.lock`). `coreSetup` acquires it **first** (before creating the transport — transport creation is what starts the emulator/Appium/Obsidian) and **waits** until any competing run releases it; `coreTeardown` and the process cleanup handlers release it. A crashed run that never released is detected as stale (dead PID on the same host, or an age threshold across hosts) and stolen.
+`src/setup-lock.ts` provides a cross-process advisory lock (a PID-stamped sentinel file under `<tmpdir>/obsidian-integration-testing/<scope>.setup.lock`). `coreSetup` acquires it **first** (before creating the transport — transport creation is what starts the emulator/Appium) and **waits** until any competing run releases it; `coreTeardown` and the process cleanup handlers release it. A crashed run that never released is detected as stale (dead PID on the same host, or an age threshold across hosts) and stolen.
 
-Scope groups runs that contend on the same resources: `desktop` for the `obsidian-cli` and `obsidian-cdp` transports, `android` for `obsidian-android-appium`. A desktop run and an Android run use different scopes and may run concurrently. The lock lives entirely in the core, so all three consumption paths (Vitest / Jest / Manual) inherit it with no adapter changes.
+Only the **`android`** scope (`obsidian-android-appium`) takes the lock now; `getLockScope` returns `undefined` for desktop, so no lock is acquired. The lock lives entirely in the core, so all three consumption paths (Vitest / Jest / Manual) inherit this with no adapter changes. (Note: the **attach** desktop mode shares the user's running Obsidian, but attaching is an explicit advanced opt-in and is the user's responsibility to serialize.)
 
 ## Proposed feature: trusted keyboard input in `evalInObsidian` callbacks
 
@@ -131,4 +143,4 @@ the dev-utils copy and switch its integration tests to the `typeIntoEditor` prov
 
 None.
 
-The previously-listed "CLI eval result polluted by in-flight background async" issue was a **stdout-era** bug: until the stdout→result-file migration (shipped in 2.5.0), `DesktopCliTransport.evaluate` read the eval result from `obsidian eval`'s stdout, so a fire-and-forget renderer promise resolving to a stray value (e.g. `"function"`) could interleave on that shared stream and break `JSON.parse`. Since 2.5.0 each result is written to a per-call `<scriptId>.result.json` and read back, removing the shared value channel. Verified resolved against 4.4.0: removing the downstream `afterAll` `detachLeavesOfType('markdown')` workaround in codescript's desktop integration suite and running the full desktop suite produced 114/114 passing (9 test files) with no `non-JSON output` error.
+(The historical "CLI eval result polluted by in-flight background async" note was removed: the `DesktopCliTransport` it described has been retired in favour of the owned-instance CDP transport.)
