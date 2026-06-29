@@ -10,10 +10,14 @@ import type { ChildProcess } from 'node:child_process';
 
 import {
   execFile,
-  execFileSync,
   spawn
 } from 'node:child_process';
+import {
+  mkdirSync,
+  mkdtempSync
+} from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import {
@@ -21,17 +25,31 @@ import {
   remote
 } from 'webdriverio';
 
+import type { OwnedInstanceConfig } from './transport-desktop-cdp.ts';
 import type {
   ObsidianAndroidAppiumTransportOptions,
+  ObsidianCdpTransportOptions,
   ObsidianTransportOptions
 } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { buildEmulatorArgs } from './emulator-args.ts';
+import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
+import { getObsidianConfigDir } from './obsidian-config.ts';
+import { resolveObsidianExecutable } from './obsidian-executable.ts';
+import {
+  detectInstalledShellVersion,
+  ensureShellCached
+} from './obsidian-installer.ts';
+import {
+  ensureAsarCached,
+  findNewestAsar,
+  resolveConcreteVersion
+} from './obsidian-version-switch.ts';
+import { compareVersions } from './obsidian-version.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
-import { DesktopCliTransport } from './transport-desktop-cli.ts';
 
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
@@ -41,14 +59,14 @@ const APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
-const CDP_DEFAULT_PORT = 8315;
+const OWNED_USER_DATA_PREFIX = 'userdata-';
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
 // Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
 // Appium server (it has no effect as a capability) avoids the failure
 // "No Chromedriver found that can automate Chrome ...".
 const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownload';
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
-const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
+const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
@@ -642,18 +660,8 @@ class AppiumTransportFactory {
 export async function createTransportFromOptions(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   const type = options?.type ?? DEFAULT_TRANSPORT_TYPE;
 
-  if (!options || options.type === 'obsidian-cli') {
-    log(`[transport-factory:${type}] Creating DesktopCliTransport`);
-    return new DesktopCliTransport();
-  }
-
-  if (options.type === 'obsidian-cdp') {
-    log(`[transport-factory:${type}] Creating DesktopCdpTransport (host=${options.host ?? 'localhost'}, port=${String(options.port ?? CDP_DEFAULT_PORT)})`);
-    return new DesktopCdpTransport({
-      ...(options.host !== undefined && { cdpHost: options.host }),
-      ...(options.port !== undefined && { cdpPort: options.port }),
-      ...(options.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds })
-    });
+  if (!options || options.type === 'obsidian-cdp') {
+    return createCdpTransport(options);
   }
 
   const factory = new AppiumTransportFactory(type);
@@ -701,30 +709,88 @@ function buildEmulatorExitMessage(exitInfo: EmulatorExitInfo, output: string): s
 }
 
 /**
- * Kills a child process and its entire process tree.
+ * Creates a desktop CDP transport. When an explicit `port` is given the
+ * transport attaches to an already-running Obsidian on that port; otherwise it
+ * launches and owns an isolated instance (the default, hermetic mode).
  *
- * On Windows, `child.kill()` only sends SIGTERM to the direct process,
- * leaving spawned grandchildren (e.g. QEMU, UiAutomator) alive.
- * `taskkill /F /T /PID` forcefully terminates the entire tree.
- *
- * @param child - The child process to kill.
+ * @param options - CDP transport options.
+ * @returns A configured CDP transport.
  */
-function killProcessTree(child: ChildProcess): void {
-  if (child.pid === undefined) {
-    return;
+async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promise<ObsidianTransport> {
+  if (options?.port !== undefined) {
+    log(`[transport-factory:obsidian-cdp] Attaching to running Obsidian (host=${options.host ?? 'localhost'}, port=${String(options.port)})`);
+    return new DesktopCdpTransport({
+      ...(options.host !== undefined && { cdpHost: options.host }),
+      cdpPort: options.port,
+      ...(options.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds })
+    });
   }
 
-  if (process.platform === 'win32') {
-    try {
-      execFileSync('taskkill', ['/F', '/T', '/PID', String(child.pid)], { stdio: 'ignore' });
-    } catch (error: unknown) {
-      log(
-        `[transport-factory] taskkill for PID ${String(child.pid)} failed (may have already exited): ${error instanceof Error ? error.message : 'unknown error'}`
-      );
+  log('[transport-factory:obsidian-cdp] Creating owned isolated Obsidian instance');
+  const ownedInstance = await resolveOwnedInstanceConfig(options);
+  return new DesktopCdpTransport({
+    ...(options?.host !== undefined && { cdpHost: options.host }),
+    ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+    ownedInstance
+  });
+}
+
+/**
+ * Creates a fresh, isolated user-data directory for an owned instance.
+ *
+ * @returns The absolute path to the new directory.
+ */
+function createOwnedUserDataDir(): string {
+  const root = join(tmpdir(), 'obsidian-integration-testing');
+  mkdirSync(root, { recursive: true });
+  return mkdtempSync(join(root, OWNED_USER_DATA_PREFIX));
+}
+
+/**
+ * Resolves the shell executable, asar provisioning, and isolated user-data dir
+ * for a harness-owned instance from the requested version knobs.
+ *
+ * - `obsidianInstallerVersion` pins the Electron shell (downloads + extracts a
+ *   portable build when it differs from the installed shell).
+ * - `obsidianVersion` pins the app: an asar-swap when it is >= the shell version
+ *   (cheap), otherwise the matching installer shell is used (downgrade).
+ * - When neither is set, the user's newest installed asar is copied in (so the
+ *   owned instance matches the version the user currently runs) with zero network.
+ *
+ * @param options - CDP transport options.
+ * @returns The resolved owned-instance config.
+ */
+async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions): Promise<OwnedInstanceConfig> {
+  let exePath = await resolveObsidianExecutable();
+  let shellVersion = detectInstalledShellVersion(exePath);
+
+  if (options?.obsidianInstallerVersion !== undefined) {
+    const installerVersion = await resolveConcreteVersion(options.obsidianInstallerVersion);
+    if (shellVersion !== installerVersion) {
+      exePath = await ensureShellCached(installerVersion);
     }
-  } else {
-    child.kill('SIGKILL');
+    shellVersion = installerVersion;
   }
+
+  let asar: OwnedInstanceConfig['asar'];
+  if (options?.obsidianVersion !== undefined) {
+    const asarVersion = await resolveConcreteVersion(options.obsidianVersion);
+    if (shellVersion === undefined || compareVersions(asarVersion, shellVersion) >= 0) {
+      asar = { path: await ensureAsarCached(asarVersion), version: asarVersion };
+    } else {
+      // Downgrade vs. the shell: asar-swap is upgrade-only, so use the matching
+      // Installer shell instead (its bundled asar is this version).
+      log(`[transport-factory:obsidian-cdp] ${asarVersion} is older than shell ${shellVersion}; using its installer shell.`);
+      exePath = await ensureShellCached(asarVersion);
+    }
+  } else if (options?.obsidianInstallerVersion === undefined) {
+    const newest = findNewestAsar(getObsidianConfigDir());
+    if (newest && (shellVersion === undefined || compareVersions(newest.version, shellVersion) >= 0)) {
+      asar = { path: newest.path, version: newest.version };
+    }
+  }
+
+  return { ...(asar && { asar }), exePath, userDataDir: createOwnedUserDataDir() };
 }
 
 /**

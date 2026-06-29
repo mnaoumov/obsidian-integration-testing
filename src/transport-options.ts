@@ -89,6 +89,12 @@ export interface ObsidianAndroidAppiumTransportOptions {
 
 /**
  * Transport options for desktop testing via Chrome DevTools Protocol.
+ *
+ * This is the default desktop transport. By default the harness **launches and
+ * owns an isolated Obsidian instance** in a temporary user-data dir (never
+ * touching the user's Obsidian), connected over a free CDP port. Provide
+ * {@link ObsidianCdpTransportOptions.port} to instead attach to an
+ * already-running Obsidian.
  */
 export interface ObsidianCdpTransportOptions {
   /**
@@ -104,8 +110,35 @@ export interface ObsidianCdpTransportOptions {
   readonly host?: string;
 
   /**
-   * CDP port.
-   * Defaults to 8315
+   * Pins the **Electron shell** (installer build) the owned instance runs.
+   *
+   * Accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`.
+   * The matching GitHub release installer is downloaded and extracted to a
+   * portable shell (cached for reuse). Public releases only — catalyst builds
+   * have no public installer. Ignored when {@link port} (attach mode) is set.
+   *
+   * @default `undefined`
+   */
+  readonly obsidianInstallerVersion?: string | undefined;
+
+  /**
+   * Pins the **Obsidian app version** (asar) the owned instance runs.
+   *
+   * Accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`.
+   * Versions at or above the shell version are applied as a cheap asar swap;
+   * older versions transparently use the matching installer shell. When omitted,
+   * the user's currently-installed version is used. Ignored when {@link port}
+   * (attach mode) is set.
+   *
+   * @default `undefined`
+   */
+  readonly obsidianVersion?: string | undefined;
+
+  /**
+   * CDP port of an already-running Obsidian to **attach** to. When set, the
+   * harness attaches instead of owning an instance, and the version knobs are
+   * ignored. When omitted, an owned isolated instance is launched on a free port.
+   * Defaults to 8315 (attach mode only)
    */
   readonly port?: number;
 
@@ -116,18 +149,6 @@ export interface ObsidianCdpTransportOptions {
 }
 
 /**
- * Transport options for desktop testing via the Obsidian CLI.
- *
- * This is the default transport when no `obsidianTransport` is configured.
- */
-export interface ObsidianCliTransportOptions {
-  /**
-   * Discriminant for the transport type.
-   */
-  readonly type: 'obsidian-cli';
-}
-
-/**
  * Discriminated union of all supported transport configurations.
  *
  * Used in vitest `environmentOptions.obsidianTransport` to select and
@@ -135,5 +156,4 @@ export interface ObsidianCliTransportOptions {
  */
 export type ObsidianTransportOptions =
   | ObsidianAndroidAppiumTransportOptions
-  | ObsidianCdpTransportOptions
-  | ObsidianCliTransportOptions;
+  | ObsidianCdpTransportOptions;

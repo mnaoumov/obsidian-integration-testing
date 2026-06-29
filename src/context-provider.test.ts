@@ -21,7 +21,7 @@ describe('context-provider', () => {
     });
 
     it('should return the value from the registered resolver', () => {
-      const options: ObsidianTransportOptions = { type: 'obsidian-cli' };
+      const options: ObsidianTransportOptions = { type: 'obsidian-cdp' };
       setTransportOptionsResolver(() => options);
       expect(getTransportOptions()).toBe(options);
     });

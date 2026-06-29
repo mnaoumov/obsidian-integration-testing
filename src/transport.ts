@@ -9,8 +9,8 @@
  * Obsidian instance and manages vault lifecycle.
  *
  * Implementations handle the platform-specific details:
- * - {@link DesktopCliTransport} — Desktop Obsidian via CLI (`obsidian eval`)
  * - {@link DesktopCdpTransport} — Desktop Obsidian via Chrome DevTools Protocol
+ *   (a harness-owned isolated instance by default, or attach to a running one)
  * - {@link AppiumTransport} — Mobile Obsidian via Appium WebView JS injection
  */
 export interface ObsidianTransport {

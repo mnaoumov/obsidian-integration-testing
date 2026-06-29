@@ -38,7 +38,7 @@ import { TempVault } from './temp-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 
-const DEFAULT_TRANSPORT_TYPE = 'obsidian-cli';
+const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DIST_DEV = 'dist/dev';
 const DIST_BUILD = 'dist/build';
 const MAIN_JS = 'main.js';
@@ -63,7 +63,6 @@ let isCleanupHandlerRegistered = false;
  */
 const setupLocks = new Map<CoreSetupResult, SetupLock>();
 
-const DESKTOP_LOCK_SCOPE = 'desktop';
 const ANDROID_LOCK_SCOPE = 'android';
 
 /**
@@ -93,7 +92,7 @@ export interface CoreSetupResult {
   /** The transport instance used during setup. */
   readonly transport: ObsidianTransport;
 
-  /** Short label for log messages (e.g. `"obsidian-cli"`, `"obsidian-cdp"`). */
+  /** Short label for log messages (e.g. `"obsidian-cdp"`). */
   readonly transportLabel: string;
 
   /** The transport options that were resolved. */
@@ -121,9 +120,12 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   const label = transportOptions?.type ?? DEFAULT_TRANSPORT_TYPE;
   const lockScope = getLockScope(transportOptions);
 
-  log(`[integration-setup:${label}] Acquiring '${lockScope}' setup lock (serializes against any concurrent integration-test run)...`);
-  const lock = await acquireSetupLock({ label, scope: lockScope });
-  log(`[integration-setup:${label}] Setup lock acquired.`);
+  let lock: SetupLock | undefined;
+  if (lockScope !== undefined) {
+    log(`[integration-setup:${label}] Acquiring '${lockScope}' setup lock (serializes against any concurrent integration-test run)...`);
+    lock = await acquireSetupLock({ label, scope: lockScope });
+    log(`[integration-setup:${label}] Setup lock acquired.`);
+  }
 
   let transport: ObsidianTransport | undefined;
   let tempVault: TempVault | undefined;
@@ -189,7 +191,9 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     const augmentedOptions = augmentTransportOptions(transportOptions, transport);
     const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
     activeSetups.add(result);
-    setupLocks.set(result, lock);
+    if (lock) {
+      setupLocks.set(result, lock);
+    }
     registerProcessCleanupHandler();
     return result;
   } catch (error: unknown) {
@@ -208,7 +212,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     }
 
     // Release the lock so a waiting run can proceed even though this run failed.
-    lock.release();
+    lock?.release();
 
     log(`[integration-setup:${label}] NOTE: If the test runner reports "No test files found", ignore it — it is a side effect of the setup failure above.`);
     throw error;
@@ -291,15 +295,18 @@ function findProjectRoot(): string {
 }
 
 /**
- * Resolves the lock scope for a transport. Runs that share an Obsidian instance
- * and its resources must serialize against each other, so the CLI and CDP
- * desktop transports share one scope while the Android transport uses another.
+ * Resolves the cross-process lock scope for a transport, or `undefined` when no
+ * lock is needed.
+ *
+ * Desktop runs use harness-owned, isolated instances (their own user-data dir
+ * and CDP port), so they no longer contend and need no lock. Only the Android
+ * transport, which shares the single emulator and Appium server, must serialize.
  *
  * @param transportOptions - The resolved transport options.
- * @returns The lock scope string.
+ * @returns The lock scope string, or `undefined` if no lock is needed.
  */
-function getLockScope(transportOptions: ObsidianTransportOptions | undefined): string {
-  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_LOCK_SCOPE : DESKTOP_LOCK_SCOPE;
+function getLockScope(transportOptions: ObsidianTransportOptions | undefined): string | undefined {
+  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_LOCK_SCOPE : undefined;
 }
 
 /**

@@ -4,24 +4,31 @@
  * Desktop CDP transport — evaluates expressions via Chrome DevTools Protocol
  * over WebSocket and manages vaults via Electron IPC.
  *
- * Obsidian exposes CDP on port 8315 by default. This transport connects to
- * page targets, sends `Runtime.evaluate` commands, and routes to the correct
- * vault target using `getBasePath()` probing.
+ * Two modes:
+ * - **Owned (default)**: the transport launches and owns an isolated Obsidian
+ *   instance against a temporary `--user-data-dir` on a free `--remote-debugging-port`,
+ *   never touching the user's Obsidian. Supports version pinning via the user-data asar.
+ * - **Attach**: when an explicit CDP port is configured, the transport connects
+ *   to an already-running Obsidian on that port.
  *
- * Advantages over CLI transport:
- * - No CLI binary installation needed
- * - No "CLI enabled" setting required in Obsidian
- * - Lower overhead (WebSocket vs. process spawn per eval)
+ * It connects to page targets, sends `Runtime.evaluate` commands, and routes to
+ * the correct vault target using `getBasePath()` probing.
  *
- * Requirements:
- * - Obsidian must be running with remote debugging enabled (port 8315)
- * - Node.js 22+ (uses built-in `WebSocket` and `fetch` globals)
+ * Requirements: Node.js 22+ (uses built-in `WebSocket` and `fetch` globals).
  */
 
 /* v8 ignore start -- Integration-time code covered by integration tests, not unit tests. */
 
+import { randomBytes } from 'node:crypto';
+import {
+  mkdirSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
+import { join } from 'node:path';
 import process from 'node:process';
 
+import type { OwnedObsidianInstance } from './obsidian-instance.ts';
 import type {
   ObsidianTransport,
   TransportEvalOptions
@@ -37,6 +44,8 @@ import {
   removeVaultFromConfig
 } from './obsidian-config.ts';
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
+import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
+import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
 /**
@@ -49,7 +58,8 @@ export interface DesktopCdpTransportConfig {
   cdpHost?: string;
 
   /**
-   * CDP port. Defaults to `8315`.
+   * CDP port. Defaults to `8315`. Ignored in owned-instance mode (a free port
+   * is chosen at launch).
    */
   cdpPort?: number;
 
@@ -58,6 +68,43 @@ export interface DesktopCdpTransportConfig {
    * Defaults to `30000`.
    */
   commandTimeoutInMilliseconds?: number;
+
+  /**
+   * When set, the transport launches and owns an isolated Obsidian instance
+   * instead of attaching to a running one. This is the default desktop mode.
+   */
+  ownedInstance?: OwnedInstanceConfig;
+}
+
+/**
+ * An asar to provision into a harness-owned instance's user-data dir before launch.
+ */
+export interface OwnedInstanceAsar {
+  /** Absolute path to the cached/source asar file. */
+  readonly path: string;
+
+  /** The asar's `x.y.z` version. */
+  readonly version: string;
+}
+
+/**
+ * Configuration for a harness-owned, isolated Obsidian instance.
+ *
+ * When present, the transport launches and owns its own Obsidian process
+ * against an isolated user-data dir instead of attaching to a running instance.
+ */
+export interface OwnedInstanceConfig {
+  /** Optional asar to provision into {@link userDataDir} before launch. */
+  readonly asar?: OwnedInstanceAsar | undefined;
+
+  /** Absolute path to the Obsidian shell executable to launch. */
+  readonly exePath: string;
+
+  /**
+   * Absolute path to the isolated user-data dir. Created and owned by the
+   * transport, and deleted on dispose.
+   */
+  readonly userDataDir: string;
 }
 
 interface CdpExceptionDetails {
@@ -94,6 +141,9 @@ interface CdpValue {
 
 const CDP_DEFAULT_PORT = 8315;
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 30000;
+const VAULT_ID_BYTE_LENGTH = 8;
+const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10000;
+const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
 const NO_OUTPUT = '(no output)';
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
@@ -113,10 +163,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public readonly isMobile = false;
   private activeVaultPath: null | string = null;
-  private readonly cdpPort: number;
-  private readonly cdpUrl: string;
+  private readonly cdpHost: string;
+  private cdpPort: number;
+  private cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
   private messageId = 0;
+  private readonly ownedConfig: OwnedInstanceConfig | undefined;
+  private ownedInstance: OwnedObsidianInstance | undefined;
   private ws: null | WebSocket = null;
 
   /**
@@ -125,18 +178,53 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param config - CDP connection configuration.
    */
   public constructor(config?: DesktopCdpTransportConfig) {
-    const host = config?.cdpHost ?? 'localhost';
+    this.cdpHost = config?.cdpHost ?? 'localhost';
     this.cdpPort = config?.cdpPort ?? CDP_DEFAULT_PORT;
-    this.cdpUrl = `http://${host}:${String(this.cdpPort)}`;
+    this.cdpUrl = `http://${this.cdpHost}:${String(this.cdpPort)}`;
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
+    this.ownedConfig = config?.ownedInstance;
   }
 
   /**
-   * Disposes of the active WebSocket connection.
+   * Disposes of the active WebSocket connection and, in owned-instance mode,
+   * kills the owned Obsidian process and removes its isolated user-data dir.
+   *
+   * The removal is retried because Windows briefly holds the just-killed
+   * process's file handles, which would otherwise fail `rmSync` with `EPERM`.
    */
   public async dispose(): Promise<void> {
     this.disconnect();
-    await Promise.resolve();
+    if (!this.ownedConfig) {
+      return;
+    }
+
+    this.ownedInstance?.kill();
+    const { userDataDir } = this.ownedConfig;
+    const deadline = Date.now() + USER_DATA_RM_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      if (tryRemoveDir(userDataDir)) {
+        return;
+      }
+      await delay(USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS);
+    }
+    if (!tryRemoveDir(userDataDir)) {
+      log(`[cdp-transport] Could not remove owned user-data dir within ${String(USER_DATA_RM_TIMEOUT_IN_MILLISECONDS)}ms (non-fatal): ${userDataDir}`);
+    }
+  }
+
+  /**
+   * Synchronous disposal — kills the owned instance and makes a best-effort
+   * removal of its user-data dir. Safe to call from a process `exit` handler
+   * (where async retries are impossible; a leftover temp dir is acceptable).
+   */
+  public disposeSync(): void {
+    this.disconnect();
+    if (this.ownedConfig) {
+      this.ownedInstance?.kill();
+      if (!tryRemoveDir(this.ownedConfig.userDataDir)) {
+        log(`[cdp-transport] Owned user-data dir not removed synchronously (process may still hold handles): ${this.ownedConfig.userDataDir}`);
+      }
+    }
   }
 
   /**
@@ -179,6 +267,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The vault path (used for vault registration check).
    */
   public async preflightCheck(vaultPath: string): Promise<void> {
+    if (this.ownedConfig) {
+      // Owned instance: readiness is guaranteed by registerVault, and the vault
+      // Lives in the isolated config — there is nothing to verify against the
+      // User-scope registry.
+      return;
+    }
+
     log(`[cdp-transport] Running preflight check for vault: ${vaultPath}`);
     if (!isVaultRegistered(vaultPath)) {
       throw new Error(
@@ -206,6 +301,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async registerVault(vaultPath: string): Promise<void> {
+    if (this.ownedConfig) {
+      await this.registerVaultInOwnedInstance(vaultPath);
+      return;
+    }
+
     log(`[cdp-transport] Registering vault: ${vaultPath}`);
     const targets = await this.getPageTargets();
     if (targets.length === 0) {
@@ -250,6 +350,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
+    if (this.ownedConfig) {
+      // The owned instance is killed wholesale on dispose; no per-vault
+      // Unregister is needed (and the registry lives in the isolated config).
+      return;
+    }
+
     try {
       await ensureNamespaceBootstrapped(this, vaultPath);
       const target = await this.findTargetForVault(vaultPath);
@@ -486,6 +592,42 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Launches and connects to a harness-owned, isolated Obsidian instance for a
+   * vault: provisions the asar (if any), pre-seeds the isolated `obsidian.json`
+   * so the vault opens directly, launches the instance on a free CDP port, then
+   * waits until the vault window is ready and dismisses the trust dialog.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async registerVaultInOwnedInstance(vaultPath: string): Promise<void> {
+    const config = ensureNonNullable(this.ownedConfig);
+    log(`[cdp-transport] Launching owned Obsidian instance for vault: ${vaultPath}`);
+
+    mkdirSync(config.userDataDir, { recursive: true });
+    if (config.asar) {
+      copyAsarIntoUserData(config.asar.path, config.asar.version, config.userDataDir);
+    }
+
+    const vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
+    const obsidianJson = {
+      updateDisabled: true,
+      vaults: { [vaultId]: { open: true, path: vaultPath, ts: Date.now() } }
+    };
+    writeFileSync(join(config.userDataDir, 'obsidian.json'), JSON.stringify(obsidianJson));
+
+    const instance = await launchOwnedObsidianInstance({
+      cdpHost: this.cdpHost,
+      exePath: config.exePath,
+      userDataDir: config.userDataDir
+    });
+    this.ownedInstance = instance;
+    this.cdpPort = instance.port;
+    this.cdpUrl = instance.cdpUrl;
+
+    await this.waitForOwnedVaultReady(vaultPath);
+  }
+
+  /**
    * Sends a CDP command over WebSocket and waits for the response.
    *
    * @param ws - The WebSocket connection.
@@ -532,6 +674,30 @@ export class DesktopCdpTransport implements ObsidianTransport {
     await ensureNamespaceBootstrapped(this, vaultPath);
     await this.evaluate('window.__obsidianIntegrationTesting.pollVaultBasePath()', { cwd: vaultPath });
   }
+
+  /**
+   * Polls the owned instance until the vault target exists, layout is ready, and
+   * the trust dialog (if any) has been dismissed.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async waitForOwnedVaultReady(vaultPath: string): Promise<void> {
+    log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      try {
+        await this.findTargetForVault(vaultPath);
+        await this.waitForLayoutReady(vaultPath);
+        await this.dismissTrustDialog(vaultPath);
+        log('[cdp-transport] Owned vault is ready.');
+        return;
+      } catch {
+        // Vault target not ready yet.
+      }
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+    throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+  }
 }
 
 /**
@@ -566,6 +732,21 @@ async function getObsidianLaunchCommand(port: number): Promise<string> {
   }
 
   return `"${exePath}" ${flag} &`;
+}
+
+/**
+ * Attempts to remove a directory recursively, returning whether it succeeded.
+ *
+ * @param dir - The directory to remove.
+ * @returns `true` if removed, `false` if the removal threw (e.g. handles held).
+ */
+function tryRemoveDir(dir: string): boolean {
+  try {
+    rmSync(dir, { force: true, recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /* v8 ignore stop */

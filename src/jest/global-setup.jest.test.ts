@@ -30,8 +30,8 @@ describe('jest global-setup', () => {
 
   it('should return transport options when configured', () => {
     globalThis.__obsidianIntegrationTesting = {
-      transportOptions: { type: 'obsidian-cli' }
+      transportOptions: { type: 'obsidian-cdp' }
     };
-    expect(getTransportOptions()).toEqual({ type: 'obsidian-cli' });
+    expect(getTransportOptions()).toEqual({ type: 'obsidian-cdp' });
   });
 });

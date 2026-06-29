@@ -46,7 +46,7 @@ declare module 'vitest/node' {
      * Configures the transport used by `obsidian-integration-testing` to
      * communicate with a running Obsidian instance.
      *
-     * When omitted, defaults to the CLI transport (`obsidian-cli`).
+     * When omitted, defaults to a harness-owned isolated CDP instance (`obsidian-cdp`).
      */
     readonly obsidianTransport?: ObsidianTransportOptions;
   }

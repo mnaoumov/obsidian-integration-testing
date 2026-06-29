@@ -69,7 +69,7 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
   async function setup(project: TestProject): Promise<void> {
     const environmentOptions = project.config.environmentOptions as Record<string, unknown> | undefined;
     const transportOptions = environmentOptions?.['obsidianTransport'] as ObsidianTransportOptions | undefined;
-    const label = transportOptions?.type ?? 'obsidian-cli';
+    const label = transportOptions?.type ?? 'obsidian-cdp';
 
     try {
       setupResult = await coreSetup({ populate: options?.populate?.(), transportOptions });
