@@ -4,7 +4,10 @@
  * Evaluates a function inside a running Obsidian instance via a pluggable transport.
  */
 
-import type { App } from 'obsidian';
+import type {
+  App,
+  Editor
+} from 'obsidian';
 // eslint-disable-next-line import-x/no-namespace -- We need to reference `obsidian` module.
 import type * as obsidian from 'obsidian';
 import type { Promisable } from 'type-fest';
@@ -67,6 +70,28 @@ export interface CommonArgs {
    * The `obsidian` module, resolved at runtime inside the Obsidian process.
    */
   obsidianModule: typeof obsidian;
+
+  /**
+   * Types text into a CodeMirror {@link Editor} using **trusted** Electron
+   * keyboard input.
+   *
+   * A trusted event (injected via Electron's `webContents.sendInputEvent`)
+   * behaves like a real keypress: it is delivered to the window's DOM-focused
+   * element and flows through CodeMirror's real input pipeline, so the typed
+   * text reaches the document **only if the editor genuinely holds focus**.
+   * This makes "the user typed into the editor" a faithful end-to-end check,
+   * unlike `dispatchEvent(new KeyboardEvent(...))` (untrusted — ignored by
+   * CodeMirror) or `execCommand('insertText')` (mutates the selection even
+   * when the editor is not focused, masking focus bugs as false positives).
+   *
+   * After injecting the keystrokes it polls until the document reflects the
+   * input, or a bounded timeout elapses (the expected outcome when the editor
+   * is read-only and rejects the input, or when focus was stolen).
+   *
+   * @param params - The editor to type into and the text to type.
+   * @returns A {@link Promise} that resolves once the keystrokes have settled.
+   */
+  typeIntoEditor(this: void, params: TypeIntoEditorParams): Promise<void>;
 }
 
 /**
@@ -117,6 +142,22 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
  * A plain object with string keys.
  */
 export type GenericObject = Record<string, unknown>;
+
+/**
+ * Parameters for {@link CommonArgs.typeIntoEditor}.
+ */
+export interface TypeIntoEditorParams {
+  /**
+   * The editor to type into. It is focused (with the caret moved to the end of
+   * the document) before the keystrokes are injected.
+   */
+  readonly editor: Editor;
+
+  /**
+   * The text to type, one trusted character event per code point.
+   */
+  readonly text: string;
+}
 
 /**
  * Evaluates a function inside the running Obsidian instance

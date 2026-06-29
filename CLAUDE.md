@@ -76,7 +76,13 @@ Two integration-test runs that share the same Obsidian resources corrupt each ot
 
 Only the **`android`** scope (`obsidian-android-appium`) takes the lock now; `getLockScope` returns `undefined` for desktop, so no lock is acquired. The lock lives entirely in the core, so all three consumption paths (Vitest / Jest / Manual) inherit this with no adapter changes. (Note: the **attach** desktop mode shares the user's running Obsidian, but attaching is an explicit advanced opt-in and is the user's responsibility to serialize.)
 
-## Proposed feature: trusted keyboard input in `evalInObsidian` callbacks
+## L8. Trusted keyboard input (`typeIntoEditor`)
+
+Every `evalInObsidian` callback receives a `typeIntoEditor(params: { editor: Editor; text: string })`
+helper on its args (alongside `app` / `obsidianModule`), exposed via `CommonArgs`
+(`src/eval-in-obsidian.ts`) and defined in the in-process namespace (`namespace-bootstrap.ts`,
+wired into the `fullArgs` literal). Per **L6** it lives once on the Obsidian side, so Vitest / Jest /
+Manual all inherit it.
 
 Reliably testing "the user typed into a CodeMirror editor" needs a **trusted** key event (the kind
 only the browser/OS produces). Both in-page alternatives give false results:
@@ -86,45 +92,17 @@ only the browser/OS produces). Both in-page alternatives give false results:
 - `execCommand('insertText')` mutates the selection directly → it inserts text **even when the editor
   is not focused**, masking focus bugs (e.g. a modal focus trap) as false-positive passes.
 
-Electron's `webContents.sendInputEvent({ keyCode, type: 'char' })` injects a **trusted** event at the
-Chromium level: it is delivered to the window's DOM-focused element and flows through CodeMirror's
-real input pipeline, so the text lands **only if the editor genuinely holds focus** — a faithful
-end-to-end check. Reach it via `window.electron.remote.getCurrentWebContents()` (the namespace
-bootstrap already uses `window.electron.ipcRenderer`, so this is consistent). Use
-`getCurrentWebContents()`, **not** `getFocusedWebContents()` — the latter returns `null` when no
-Obsidian window holds OS-level focus, which is exactly the headless/CI case.
-
-### Suggested implementation (expose via `CommonArgs`)
-
-Inject the helper into every closure's args, mirroring how `app` / `obsidianModule` are provided:
-
-1. `CommonArgs` (`src/eval-in-obsidian.ts`): add
-   `typeIntoEditor(params: { editor: Editor; text: string }): Promise<void>;` (type-only `Editor`
-   import from `obsidian`).
-2. `namespace-bootstrap.ts`: define the helper on the Obsidian side and add it to the `fullArgs`
-   literal (`{ ...params.args, app: this.app, context, obsidianModule }`). Because it is defined in
-   the in-process namespace (not serialized per call), it can be a normal function:
-
-   ```ts
-   async function typeIntoEditor({ editor, text }) {
-     const valueBefore = editor.getValue();
-     editor.focus();
-     editor.setCursor(editor.lastLine(), editor.getLine(editor.lastLine()).length);
-     await sleep(300); // let any focus trap (a setTimeout(0) re-focus) fire before typing
-     const webContents = window.electron.remote.getCurrentWebContents();
-     for (const char of text) {
-       webContents.sendInputEvent({ keyCode: char, type: 'char' });
-     }
-     // Poll (NOT a fixed delay) until the document reflects the input, or a bounded timeout: a
-     // read-only/rejecting editor never changes, and under full-suite load the apply can be slow.
-     const startTime = Date.now();
-     while (editor.getValue() === valueBefore && Date.now() - startTime < 5000) {
-       await sleep(50);
-     }
-   }
-   ```
-
-   Per **L6**, implement it once on the Obsidian side so Vitest / Jest / Manual all inherit it.
+`typeIntoEditor` injects a **trusted** event via Electron's
+`webContents.sendInputEvent({ keyCode, type: 'char' })` at the Chromium level: it is delivered to the
+window's DOM-focused element and flows through CodeMirror's real input pipeline, so the text lands
+**only if the editor genuinely holds focus** — a faithful end-to-end check. It reaches `webContents`
+via `window.electron.remote.getCurrentWebContents()` (consistent with the bootstrap's existing
+`window.electron.ipcRenderer` use), and uses `getCurrentWebContents()`, **not**
+`getFocusedWebContents()` — the latter returns `null` when no Obsidian window holds OS-level focus,
+which is exactly the headless/CI case. `obsidian-typings`' `ElectronWebContents` omits
+`sendInputEvent`, so the helper casts to a local interface that adds it. After injecting the
+keystrokes it **polls** (not a fixed delay) until the document reflects the input, or a bounded
+timeout elapses (the expected outcome when the editor is read-only/rejecting, or focus was stolen).
 
 ### Consumer responsibility: serialize focus-dependent integration files
 
@@ -133,10 +111,10 @@ test **files** must not run in parallel against the one shared Obsidian instance
 and a `detachLeavesOfType('markdown')` in one file wipes another's editor. The consuming project must
 run its obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
 
-### Migration
+### Pending migration (`obsidian-dev-utils`)
 
-`obsidian-dev-utils` currently ships a local stopgap `src/test-helpers/type-into-editor.ts` (a
-self-contained function passed into closures via `args`). Once this helper is released here, remove
+`obsidian-dev-utils` still ships a local stopgap `src/test-helpers/type-into-editor.ts` (a
+self-contained function passed into closures via `args`). Now that the helper is shipped here, remove
 the dev-utils copy and switch its integration tests to the `typeIntoEditor` provided in `CommonArgs`.
 
 ## Known Issues

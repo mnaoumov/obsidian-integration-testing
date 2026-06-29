@@ -13,7 +13,10 @@ export {
   setTransportOptionsResolver,
   setVaultPathResolver
 } from './context-provider.ts';
-export type { EvalInObsidianParams } from './eval-in-obsidian.ts';
+export type {
+  EvalInObsidianParams,
+  TypeIntoEditorParams
+} from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
 export type {
   PopulateFileContent,

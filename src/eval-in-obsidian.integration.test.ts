@@ -295,6 +295,35 @@ ${name}`;
     });
   });
 
+  describe('typeIntoEditor', () => {
+    it('should type trusted keyboard input into a focused editor', async () => {
+      const result = await evalInObsidian({
+        async fn({ app, obsidianModule, typeIntoEditor }): Promise<string> {
+          const filePath = 'type-into-editor-test.md';
+          const existing = app.vault.getFileByPath(filePath);
+          if (existing) {
+            await app.vault.delete(existing);
+          }
+          const file = await app.vault.create(filePath, '');
+          try {
+            const leaf = app.workspace.getLeaf(true);
+            await leaf.openFile(file, { active: true });
+            const view = leaf.view;
+            if (!(view instanceof obsidianModule.MarkdownView)) {
+              throw new Error('Expected a MarkdownView');
+            }
+            await typeIntoEditor({ editor: view.editor, text: 'hello' });
+            return view.editor.getValue();
+          } finally {
+            await app.vault.delete(file);
+          }
+        },
+        vaultPath
+      });
+      expect(result).toBe('hello');
+    });
+  });
+
   describe('context', () => {
     it('should persist values across calls and dispose cleanly', async () => {
       interface Context {

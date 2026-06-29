@@ -6,7 +6,10 @@
  * between `eval-in-obsidian.ts` and the transport modules.
  */
 
-import type { App } from 'obsidian';
+import type {
+  App,
+  Editor
+} from 'obsidian';
 
 import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import type {
@@ -111,6 +114,20 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly value: string;
   }
 
+  interface TypeIntoEditorNsParams {
+    readonly editor: Editor;
+    readonly text: string;
+  }
+
+  interface ElectronWebContentsWithSendInputEvent {
+    sendInputEvent(inputEvent: SendInputEventKeyboardInput): void;
+  }
+
+  interface SendInputEventKeyboardInput {
+    keyCode: string;
+    type: 'char' | 'keyDown' | 'keyUp';
+  }
+
   /**
    * Delay (in ms) before invoking `electronWindow.destroy()` so the eval that
    * triggered the call has time to return its result to the caller. Without
@@ -155,7 +172,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const context = params.contextId
         ? (this.contexts[params.contextId] ??= {})
         : {};
-      const fullArgs = { ...params.args, app: this.app, context, obsidianModule };
+      const fullArgs = { ...params.args, app: this.app, context, obsidianModule, typeIntoEditor };
       try {
         const result = await params.fn(fullArgs);
         if (result === undefined) {
@@ -244,6 +261,35 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
   (window as unknown as Partial<IntegrationTestingHolder>).__obsidianIntegrationTesting = ns;
+
+  async function typeIntoEditor(typeParams: TypeIntoEditorNsParams): Promise<void> {
+    const FOCUS_SETTLE_DELAY_IN_MILLISECONDS = 300;
+    const INPUT_POLL_INTERVAL_IN_MILLISECONDS = 50;
+    const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
+
+    const { editor, text } = typeParams;
+    const valueBeforeTyping = editor.getValue();
+
+    // Focus the editor and place the caret at the end of the document.
+    editor.focus();
+    const lastLine = editor.lastLine();
+    editor.setCursor(lastLine, editor.getLine(lastLine).length);
+
+    // Let any focus trap (a `setTimeout(0)` re-focus) fire before typing, so stolen focus is detected.
+    await sleep(FOCUS_SETTLE_DELAY_IN_MILLISECONDS);
+
+    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) keypress.
+    const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
+    for (const char of text) {
+      webContents.sendInputEvent({ keyCode: char, type: 'char' });
+    }
+
+    // Poll until the document reflects the input or the timeout elapses, instead of a fixed settle.
+    const startTime = Date.now();
+    while (editor.getValue() === valueBeforeTyping && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
+      await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
 }
 
 /* v8 ignore stop */
