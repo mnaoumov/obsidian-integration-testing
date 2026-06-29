@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 5.1.0
+
+- feat: provide typeIntoEditor trusted-input helper in evalInObsidian callbacks
+
 ## 5.0.0
 
 - chore: update libs
