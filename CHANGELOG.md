@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 5.1.2
+
+- test: add opt-in Windows installer download and extract test
+- test: cover asar download and unpack for both channels
+- fix: download public asars from GitHub releases, catalyst from CDN
+- refactor: keep only first line of each commit in changelog
+
 ## 5.1.1
 
 - test: guard the owned-instance worker-attach path
