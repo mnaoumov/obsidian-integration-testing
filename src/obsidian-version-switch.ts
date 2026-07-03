@@ -43,6 +43,19 @@ import {
  */
 const DOWNLOAD_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36';
 
+/**
+ * Base URL for **public** (stable) release asars, published as GitHub release
+ * assets under `.../download/v<version>/obsidian-<version>.asar.gz`.
+ */
+const PUBLIC_ASAR_RELEASE_BASE_URL = 'https://github.com/obsidianmd/obsidian-releases/releases/download';
+
+/**
+ * Base URL for **catalyst** (early access / insider) release asars, served from
+ * the Obsidian CDN as `.../release/obsidian-<version>.asar.gz`. Public versions
+ * are NOT hosted here (the CDN returns an empty body for them).
+ */
+const CATALYST_ASAR_RELEASE_BASE_URL = 'https://releases.obsidian.md/release';
+
 const CACHE_ROOT = join(tmpdir(), 'obsidian-integration-testing');
 const ASAR_CACHE_DIR = join(CACHE_ROOT, 'asar-cache');
 const ASAR_FILE_PATTERN = /^obsidian-(?<version>\d+\.\d+\.\d+)\.asar$/;
@@ -83,23 +96,29 @@ export function copyAsarIntoUserData(asarPath: string, version: string, userData
  */
 export async function ensureAsarCached(version: string): Promise<string> {
   mkdirSync(ASAR_CACHE_DIR, { recursive: true });
-  const cachedPath = join(ASAR_CACHE_DIR, getVersionAsarFileName(version));
+  const cachedPath = getCachedAsarPath(version);
   if (existsSync(cachedPath)) {
     log(`[version-switch] Using cached asar for ${version}.`);
     return cachedPath;
   }
 
-  const url = `https://releases.obsidian.md/release/${getVersionAsarFileName(version)}.gz`;
-  log(`[version-switch] Downloading asar ${version} from ${url} ...`);
-  const response = await fetch(url, { headers: { 'User-Agent': DOWNLOAD_USER_AGENT } });
-  if (!response.ok) {
-    throw new Error(`Failed to download Obsidian asar ${version}: HTTP ${String(response.status)} from ${url}`);
+  // A version's asar.gz lives on exactly one host depending on its channel
+  // (public → GitHub release assets, catalyst → the Obsidian CDN). The concrete
+  // Version alone does not tell us which, so try both and use the first that
+  // Returns a valid archive.
+  const errors: string[] = [];
+  for (const url of getAsarDownloadUrls(version)) {
+    try {
+      const asar = await downloadAndDecompressAsar(url);
+      writeFileSync(cachedPath, asar);
+      log(`[version-switch] Cached asar ${version} (${String(asar.length)} bytes) -> ${cachedPath}`);
+      return cachedPath;
+    } catch (error) {
+      errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
-  const gz = Buffer.from(await response.arrayBuffer());
-  writeFileSync(cachedPath, gunzipSync(gz));
-  log(`[version-switch] Cached asar ${version} (${String(gz.length)} bytes compressed) -> ${cachedPath}`);
-  return cachedPath;
+  throw new Error(`Failed to download Obsidian asar ${version}. Attempts: ${errors.join('; ')}`);
 }
 
 /**
@@ -145,6 +164,17 @@ export function findNewestAsar(dir: string): DiscoveredAsar | undefined {
 }
 
 /**
+ * Returns the local cache path for a concrete version's asar (the file may not
+ * yet exist).
+ *
+ * @param version - A concrete `x.y.z` version.
+ * @returns The absolute path the asar is cached at.
+ */
+export function getCachedAsarPath(version: string): string {
+  return join(ASAR_CACHE_DIR, getVersionAsarFileName(version));
+}
+
+/**
  * Resolves a version specifier (explicit or channel alias) to a concrete
  * `x.y.z` version, fetching the manifest only when a channel alias is used.
  *
@@ -158,6 +188,42 @@ export async function resolveConcreteVersion(spec: string): Promise<string> {
   }
   const manifest = await fetchDesktopReleasesManifest();
   return resolveVersionFromManifest(manifest, parsed.channel);
+}
+
+/**
+ * Downloads a gzip-compressed asar from a URL and decompresses it.
+ *
+ * @param url - The `.asar.gz` URL.
+ * @returns The decompressed asar bytes.
+ * @throws Error if the request fails, the body is empty, or decompression fails.
+ */
+async function downloadAndDecompressAsar(url: string): Promise<Buffer> {
+  log(`[version-switch] Downloading asar from ${url} ...`);
+  const response = await fetch(url, { headers: { 'User-Agent': DOWNLOAD_USER_AGENT } });
+  if (!response.ok) {
+    throw new Error(`HTTP ${String(response.status)}`);
+  }
+
+  const gz = Buffer.from(await response.arrayBuffer());
+  if (gz.length === 0) {
+    throw new Error('empty response body');
+  }
+  return gunzipSync(gz);
+}
+
+/**
+ * Returns the candidate `.asar.gz` download URLs for a concrete version, public
+ * (GitHub) first, then catalyst (CDN).
+ *
+ * @param version - A concrete `x.y.z` version.
+ * @returns The URLs to try, in order.
+ */
+function getAsarDownloadUrls(version: string): string[] {
+  const asarGzFileName = `${getVersionAsarFileName(version)}.gz`;
+  return [
+    `${PUBLIC_ASAR_RELEASE_BASE_URL}/v${version}/${asarGzFileName}`,
+    `${CATALYST_ASAR_RELEASE_BASE_URL}/${asarGzFileName}`
+  ];
 }
 
 /* v8 ignore stop */
