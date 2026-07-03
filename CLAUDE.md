@@ -6,15 +6,15 @@ A library that provides helpers for integration testing Obsidian plugins against
 
 The package exports these entry points:
 
-| Entry point                                         | Purpose                                                                      |
-|-----------------------------------------------------|------------------------------------------------------------------------------|
-| `obsidian-integration-testing`                      | Main — `evalInObsidian`, `ContextId`, `TempVault`, transports, types         |
-| `obsidian-integration-testing/vitest-global-setup`  | Vitest global `setup`/`teardown` + `getTempVault()`                          |
-| `obsidian-integration-testing/vitest-setup`         | Vitest **per-worker** `setupFiles` entry — registers the context resolvers   |
-| `obsidian-integration-testing/vitest/typings`       | Opt-in Vitest module augmentations (`ProvidedContext`, `EnvironmentOptions`) |
-| `obsidian-integration-testing/jest-global-setup`    | Jest global setup (default + named `setup`/`teardown`) + `getTempVault()`    |
-| `obsidian-integration-testing/jest-global-teardown` | Jest global teardown (default export) — separate module Jest requires        |
-| `obsidian-integration-testing/jest-setup`           | Jest **per-worker** `setupFiles` entry — registers the context resolvers     |
+| Entry point                                         | Purpose                                                                              |
+|-----------------------------------------------------|--------------------------------------------------------------------------------------|
+| `obsidian-integration-testing`                      | Main — `evalInObsidian`, `connectToCdp`, `ContextId`, `TempVault`, transports, types |
+| `obsidian-integration-testing/vitest-global-setup`  | Vitest global `setup`/`teardown` + `getTempVault()`                                  |
+| `obsidian-integration-testing/vitest-setup`         | Vitest **per-worker** `setupFiles` entry — registers the context resolvers           |
+| `obsidian-integration-testing/vitest/typings`       | Opt-in Vitest module augmentations (`ProvidedContext`, `EnvironmentOptions`)         |
+| `obsidian-integration-testing/jest-global-setup`    | Jest global setup (default + named `setup`/`teardown`) + `getTempVault()`            |
+| `obsidian-integration-testing/jest-global-teardown` | Jest global teardown (default export) — separate module Jest requires                |
+| `obsidian-integration-testing/jest-setup`           | Jest **per-worker** `setupFiles` entry — registers the context resolvers             |
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
@@ -154,6 +154,27 @@ auto-chosen port — attach to a fixed `port` via the transport options in `glob
 default must also add `obsidian-integration-testing/vitest-setup` to its integration project's
 `setupFiles` (best done once in the shared `obsidian-dev-utils` vitest config so the fleet inherits
 it).
+
+## L10. `connectToCdp` — standalone CDP debugging helper
+
+`connectToCdp(options?)` (`src/connect-to-cdp.ts`, exported from the main entry) is a thin,
+framework-agnostic convenience over `createTransportFromOptions` + `TempVault` + `evalInObsidian`. It
+launches (or, with `port`, attaches to) a CDP Obsidian instance, opens a vault, bootstraps the runtime
+helper namespace, and returns a disposable `CdpConnection` exposing `port`, `cdpUrl`, `vault`,
+`invoke(expr)` (raw), and `evalInObsidian({ fn, args })` (rich). It targets ad-hoc real-app debugging
+(the R5 / CDP-debugging workflow) rather than test suites.
+
+**Vault-removal safety.** `TempVault.dispose()` unconditionally `rm`s its directory, so a real vault
+passed by path must never be routed through it. `connectToCdp` encodes this: `dispose()` removes the
+vault dir only when `shouldRemoveVaultOnDispose` is `true`, which **defaults to `true` for an implicit
+temp vault** (no `vault` given) and **`false` when a `vault` path is given** (a real vault is never
+auto-deleted). A real vault is only unregistered (window closed), not removed.
+
+The whole module is integration-time glue (spawns Obsidian / CDP), so — like `transport-factory.ts` /
+`obsidian-instance.ts` — it is wrapped in a module-level `v8 ignore` and covered by
+`src/connect-to-cdp.desktop.integration.test.ts`, not unit tests. A thin CLI (`src/cli.ts` +
+`bin/obsidian-integration-testing.mjs`, wired via `package.json` `bin`) wraps it for when an external
+tool must attach to a printed port.
 
 ## Known Issues
 

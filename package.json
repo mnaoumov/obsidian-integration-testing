@@ -92,9 +92,13 @@
   "main": "dist/lib/cjs/index.cjs",
   "module": "dist/lib/esm/index.mjs",
   "types": "dist/lib/esm/index.d.mts",
+  "bin": {
+    "obsidian-integration-testing": "bin/obsidian-integration-testing.mjs"
+  },
   "files": [
     "!dist/*.tgz",
     "**/package.json",
+    "bin/",
     "dist/",
     "LICENSE",
     "README.md"

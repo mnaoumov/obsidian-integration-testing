@@ -4,6 +4,11 @@
  * Contains the entry point for the integration testing module.
  */
 
+export type {
+  CdpConnection,
+  ConnectToCdpOptions
+} from './connect-to-cdp.ts';
+export { connectToCdp } from './connect-to-cdp.ts';
 export { ContextId } from './context-id.ts';
 export type {
   TransportOptionsResolver,
