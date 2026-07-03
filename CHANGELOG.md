@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 5.2.0
+
+- docs: document connectToCdp and the CLI in the README
+- feat: add connectToCdp helper and CLI for ad-hoc CDP debugging
+
 ## 5.1.2
 
 - test: add opt-in Windows installer download and extract test
