@@ -636,6 +636,45 @@ npx vitest run --project integration-tests:android-appium
 npx vitest run --project integration-tests:*
 ```
 
+## Ad-hoc debugging (`connectToCdp` and the CLI)
+
+Outside of a test framework, `connectToCdp()` launches (or attaches to) a `CDP` Obsidian instance, opens a vault, bootstraps the runtime helpers, and returns a disposable connection — handy for reproducing behavior in a real Obsidian from a throwaway script or the REPL.
+
+```ts
+import { connectToCdp } from 'obsidian-integration-testing';
+
+// Owns an isolated instance + an empty temp vault (both cleaned up on dispose).
+await using conn = await connectToCdp();
+
+console.log(conn.port, conn.cdpUrl); // the free CDP port the instance was launched on
+
+// Raw expression → normalized string result:
+await conn.invoke('app.vault.getName()');
+
+// Rich, typed path — `fn` runs in the Obsidian renderer with { app, obsidianModule, typeIntoEditor, context }:
+await conn.evalInObsidian({ fn: ({ app }) => app.workspace.getActiveFile()?.path ?? null });
+```
+
+`connectToCdp` accepts the same version knobs as the transport (`obsidianVersion`, `obsidianInstallerVersion`, `host`, `commandTimeoutInMilliseconds`, both defaulting to your installed Obsidian), plus:
+
+- **`vault`** — path to an existing vault to open. When omitted, an empty temporary vault is created.
+- **`port`** — attach to an already-running Obsidian on this `CDP` port instead of owning an instance (as in [Attaching to a running Obsidian](#attaching-to-a-running-obsidian)).
+- **`shouldRemoveVaultOnDispose`** — whether `dispose()` removes the vault directory. Defaults to `true` for an implicit temp vault and `false` when a `vault` path is given, so a **real vault is never auto-deleted**. Set it explicitly to override.
+
+> [!WARNING]
+>
+> Opening a **real** vault in the owned instance may write to that vault's `.obsidian` config (normal Obsidian behavior). The vault directory itself is never deleted unless `shouldRemoveVaultOnDispose` is `true`.
+
+### CLI
+
+The package ships an `obsidian-integration-testing` bin that wraps `connectToCdp`, prints the chosen port/URL, and stays alive until `Ctrl+C` — useful when an external tool (raw `CDP` `ws`, DevTools) needs to attach to a printed port:
+
+```bash
+npx obsidian-integration-testing --vault F:/path/to/vault --obsidian-version 1.8.10
+```
+
+Flags mirror the options above: `--vault`, `--obsidian-version`, `--obsidian-installer-version`, `--port`, `--host`, `--command-timeout`, and `--no-remove-vault` (keep the temp vault on exit).
+
 ## Support
 
 <!-- markdownlint-disable MD033 -->
