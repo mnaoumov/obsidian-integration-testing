@@ -89,7 +89,7 @@ export function detectInstalledShellVersion(exePath: string): string | undefined
  * @throws Error if the asset cannot be downloaded or extracted.
  */
 export async function ensureShellCached(version: string): Promise<string> {
-  const shellDir = join(SHELL_CACHE_DIR, version);
+  const shellDir = getCachedShellDir(version);
   const exePath = getCachedShellExePath(shellDir);
   if (existsSync(exePath)) {
     log(`[installer] Using cached shell for ${version}.`);
@@ -108,6 +108,17 @@ export async function ensureShellCached(version: string): Promise<string> {
   }
   log(`[installer] Extracted shell ${version} -> ${exePath}`);
   return exePath;
+}
+
+/**
+ * Returns the cache directory a version's extracted shell lives in (the
+ * directory may not yet exist).
+ *
+ * @param version - A concrete public `x.y.z` version.
+ * @returns The absolute shell cache directory for the version.
+ */
+export function getCachedShellDir(version: string): string {
+  return join(SHELL_CACHE_DIR, version);
 }
 
 /**
