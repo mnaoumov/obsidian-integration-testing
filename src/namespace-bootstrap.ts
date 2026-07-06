@@ -6,11 +6,9 @@
  * between `eval-in-obsidian.ts` and the transport modules.
  */
 
-import type {
-  App,
-  Editor
-} from 'obsidian';
+import type { App } from 'obsidian';
 
+import type { TypeIntoEditorParams } from './eval-in-obsidian.ts';
 import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import type {
   ObsidianTransport,
@@ -112,11 +110,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   interface SetLocalStorageItemParams {
     readonly key: string;
     readonly value: string;
-  }
-
-  interface TypeIntoEditorNsParams {
-    readonly editor: Editor;
-    readonly text: string;
   }
 
   interface ElectronWebContentsWithSendInputEvent {
@@ -262,7 +255,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
   (window as unknown as Partial<IntegrationTestingHolder>).__obsidianIntegrationTesting = ns;
 
-  async function typeIntoEditor(typeParams: TypeIntoEditorNsParams): Promise<void> {
+  async function typeIntoEditor(typeParams: TypeIntoEditorParams): Promise<void> {
     const FOCUS_SETTLE_DELAY_IN_MILLISECONDS = 300;
     const INPUT_POLL_INTERVAL_IN_MILLISECONDS = 50;
     const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
