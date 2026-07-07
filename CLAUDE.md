@@ -176,6 +176,49 @@ The whole module is integration-time glue (spawns Obsidian / CDP), so — like `
 `bin/obsidian-integration-testing.mjs`, wired via `package.json` `bin`) wraps it for when an external
 tool must attach to a printed port.
 
+## L11. Trusted pointer input (`moveMouse` / `hoverElement` / `unhoverElement`)
+
+Every `evalInObsidian` callback also receives a trusted-pointer trio on its args (alongside
+`typeIntoEditor`), exposed via `CommonArgs` (`src/eval-in-obsidian.ts`) and defined in the in-process
+namespace (`namespace-bootstrap.ts`, wired into the `fullArgs` literal). Per **L6** they live once on
+the Obsidian side, so Vitest / Jest / Manual all inherit them. This is the pointer analog of L8's
+trusted keyboard input, and shares its mechanism and caveats.
+
+Some CSS is reachable only through a real pointer **state**. `:hover` is the canonical case: it is not
+an event you can synthesize — `dispatchEvent(new MouseEvent('mouseover'))` is untrusted and never sets
+`:hover`, so a test that needs to observe a genuine hover (real theme `var()` values, real compositing;
+e.g. verifying the `.minimized-modal-bar` box stays opaque on hover) cannot hand-simulate it. The only
+faithful trigger is a **trusted** pointer move, injected via Electron's
+`webContents.sendInputEvent({ type: 'mouseMove', x, y })` at the Chromium level — the exact analog of
+`typeIntoEditor`'s trusted keypress. It reaches `webContents` the same way: via
+`window.electron.remote.getCurrentWebContents()` (using `getCurrentWebContents`, **not**
+`getFocusedWebContents`, since headless CI has no OS focus), through the same local `sendInputEvent`
+interface, widened to also accept a `mouseMove` input.
+
+Three helpers over one shared internal move, so the primitive and the conveniences never diverge:
+
+- **`moveMouse({ x, y })`** — the raw primitive. Injects a single trusted move at the given web-contents
+  DIP coordinates and does **not** poll (callers poll their own readiness signal). Use it directly when
+  an element-relative target does not fit (e.g. a full-viewport element with no point outside its box).
+- **`hoverElement({ element })`** — moves to the element's center, then **polls** (not a fixed delay)
+  until `element.matches(':hover')`, so it is robust under shared-instance load.
+- **`unhoverElement({ element })`** — moves to a point just outside the element's bounding box, then
+  polls until `!element.matches(':hover')`.
+
+### Consumer responsibility: serialize pointer-dependent integration files
+
+A trusted move changes the single shared window's **global** pointer target, so only one element is
+hovered at a time. As with L8's trusted keyboard focus, pointer-dependent integration test **files**
+must not run in parallel against the one shared Obsidian instance — the consuming project must run its
+obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
+
+### Pending migration (`obsidian-dev-utils`)
+
+`obsidian-dev-utils` writes its red-first advanced-note-composer #124 integration test (the
+minimized-modal-bar opaque-on-hover regression) against `CommonArgs.hoverElement` from this helper —
+see that repo's `## Current Task — Fix minimized modal bar transparent on hover`, and, per L8's
+pending-migration note, it uses the shipped helper rather than any local stopgap.
+
 ## Known Issues
 
 None.
