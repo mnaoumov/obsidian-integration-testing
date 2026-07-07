@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 5.3.0
+
+- docs: document trusted keyboard and pointer input helpers
+- test: retry the flaky network-connectivity check
+- test: align plugin-load-detection expectations with real Obsidian behavior
+- fix: relaunch the owned instance per vault, never the vault picker
+- docs: document trusted-pointer helpers (L11)
+- test: remove stale obsidian eval CLI focus-steal tests
+- feat: add trusted-pointer hover and move helpers
+- refactor: reuse public param types in namespace bootstrap
+
 ## 5.2.0
 
 - docs: document connectToCdp and the CLI in the README
