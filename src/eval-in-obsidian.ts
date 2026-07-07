@@ -148,6 +148,30 @@ export interface CommonArgs {
    *   `:hover`.
    */
   unhoverElement(this: void, params: UnhoverElementParams): Promise<void>;
+
+  /**
+   * Polls a predicate until it becomes truthy, or rejects once a bounded
+   * timeout elapses.
+   *
+   * Integration-test `evalInObsidian` callbacks routinely need to wait for an
+   * asynchronous effect to settle (a view to open, a DOM node to appear, a
+   * setting to apply). Because the callback is serialized via `toString()` and
+   * cannot import modules, it can't reuse `obsidian-dev-utils`'
+   * `retryWithTimeout` / `runWithTimeout`. This helper is the shared,
+   * injected replacement for the per-closure poll loops consumers would
+   * otherwise hand-roll.
+   *
+   * The `predicate` may be synchronous or asynchronous — it is awaited on every
+   * poll. It is checked immediately, then re-checked every
+   * `intervalInMilliseconds` until it returns truthy or `timeoutInMilliseconds`
+   * elapses, at which point the returned {@link Promise} rejects (the error
+   * includes `message` when provided).
+   *
+   * @param params - The predicate to poll plus optional timeout, interval, and
+   *   timeout message.
+   * @returns A {@link Promise} that resolves once the predicate is truthy.
+   */
+  waitUntil(this: void, params: WaitUntilParams): Promise<void>;
 }
 
 /**
@@ -253,6 +277,40 @@ export interface UnhoverElementParams {
    * (same as {@link TypeIntoEditorParams.editor}).
    */
   readonly element: HTMLElement;
+}
+
+/**
+ * Parameters for {@link CommonArgs.waitUntil}.
+ */
+export interface WaitUntilParams {
+  /**
+   * The polling interval between predicate checks.
+   *
+   * @default `50`
+   */
+  readonly intervalInMilliseconds?: number;
+
+  /**
+   * An optional detail appended to the timeout error message, describing what
+   * was being waited for.
+   */
+  readonly message?: string;
+
+  /**
+   * The condition to wait for. Polled immediately, then on every interval until
+   * it returns a truthy value. May be synchronous or asynchronous — it is
+   * awaited on each poll.
+   *
+   * @returns Whether the awaited condition has been met.
+   */
+  predicate(this: void): boolean | Promise<boolean>;
+
+  /**
+   * The maximum time to wait before rejecting.
+   *
+   * @default `5000`
+   */
+  readonly timeoutInMilliseconds?: number;
 }
 
 /**

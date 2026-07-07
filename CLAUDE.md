@@ -219,6 +219,38 @@ minimized-modal-bar opaque-on-hover regression) against `CommonArgs.hoverElement
 see that repo's `## Current Task — Fix minimized modal bar transparent on hover`, and, per L8's
 pending-migration note, it uses the shipped helper rather than any local stopgap.
 
+## L12. Reusable async wait (`waitUntil`)
+
+Every `evalInObsidian` callback also receives a `waitUntil(params: WaitUntilParams)` helper on its
+args (alongside `typeIntoEditor` / the pointer trio), exposed via `CommonArgs`
+(`src/eval-in-obsidian.ts`) and defined in the in-process namespace (`namespace-bootstrap.ts`, wired
+into the `fullArgs` literal). Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
+all inherit it.
+
+Integration-test closures constantly need to wait for an asynchronous effect to settle (a view to
+open, a DOM node to appear, a setting to apply). The closure is serialized via `toString()` and
+**cannot import modules**, so it can't reuse `obsidian-dev-utils`' `retryWithTimeout` / `runWithTimeout`.
+Before this helper, every consumer hand-rolled the same poll loop inside each closure
+(`obsidian-codescript-toolkit` defined a local `waitUntil` per test; `obsidian-advanced-note-composer`'s
+`modal-instructions.desktop.integration.test.ts` hand-rolled one too). Injecting through `CommonArgs`
+is the **only** way to share such a helper into the serialized closure — the same mechanism as
+`hoverElement` / `typeIntoEditor` / `moveMouse`.
+
+- **API shape** — a params object `waitUntil({ predicate })`, matching every other `CommonArgs` helper
+  (not a positional `waitUntil(() => cond)`), so the injected-helper surface stays uniform.
+- **`predicate`** may be **synchronous or asynchronous** — it is `await`ed on every poll. It is checked
+  immediately, then re-checked every `intervalInMilliseconds` (default `50`) until it returns truthy or
+  `timeoutInMilliseconds` (default `5000`) elapses, at which point the returned `Promise` **rejects**
+  with a clear timeout error (`message` is appended when provided). Both the interval and timeout are
+  overridable via the params. `WaitUntilParams` is exported from the main entry.
+
+### Pending migration (consumer cleanup)
+
+Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUntil` from `CommonArgs`
+(destructure `async fn({ app, waitUntil }) { … }`). First consumers: `obsidian-advanced-note-composer`
+(`modal-instructions.desktop.integration.test.ts`) and `obsidian-codescript-toolkit`. Each needs its
+`obsidian-integration-testing` dependency bumped to the version that ships this helper.
+
 ## Known Issues
 
 None.

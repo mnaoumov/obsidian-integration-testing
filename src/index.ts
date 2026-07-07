@@ -23,7 +23,8 @@ export type {
   HoverElementParams,
   MoveMouseParams,
   TypeIntoEditorParams,
-  UnhoverElementParams
+  UnhoverElementParams,
+  WaitUntilParams
 } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
 export type {

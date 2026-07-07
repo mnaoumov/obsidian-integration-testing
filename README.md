@@ -167,6 +167,39 @@ await evalInObsidian({
 > `detachLeavesOfType('markdown')` in one file wipes another's editor). Run your
 > obsidian-integration Vitest project serially — `fileParallelism: false` and `maxWorkers: 1`.
 
+### Wait for an async condition (`waitUntil`)
+
+Every callback also receives a `waitUntil({ predicate })` helper for polling until an
+asynchronous effect settles (a view opens, a DOM node appears, a setting applies). Because
+the callback is serialized via `toString()` and **cannot import modules**, it can't reuse a
+library poll helper — `waitUntil` is the shared, injected replacement for the loops you would
+otherwise hand-roll in every closure.
+
+The `predicate` may be synchronous or asynchronous (it is `await`ed on each poll). It is
+checked immediately, then re-checked every `intervalInMilliseconds` until it returns truthy or
+`timeoutInMilliseconds` elapses, at which point the returned promise **rejects** (the error
+includes `message` when given).
+
+| Option                   | Purpose                                               | Default |
+|--------------------------|-------------------------------------------------------|---------|
+| `predicate`              | Condition to poll; sync or async, awaited each check. | —       |
+| `intervalInMilliseconds` | Delay between polls.                                  | `50`    |
+| `timeoutInMilliseconds`  | Max time to wait before rejecting.                    | `5000`  |
+| `message`                | Detail appended to the timeout error message.         | —       |
+
+```ts
+// Wait until the plugin has opened a Markdown view, then read its editor.
+const value = await evalInObsidian({
+  fn: async ({ app, obsidianModule, waitUntil }) => {
+    await waitUntil({
+      message: 'no active Markdown view',
+      predicate: () => Boolean(app.workspace.getActiveViewOfType(obsidianModule.MarkdownView))
+    });
+    return app.workspace.getActiveViewOfType(obsidianModule.MarkdownView)?.editor.getValue() ?? null;
+  }
+});
+```
+
 ### Pass complex arguments
 
 Arguments are JSON-serialized. You can even pass functions — they are serialized via `toString()`:

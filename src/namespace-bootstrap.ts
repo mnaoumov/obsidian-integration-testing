@@ -12,7 +12,8 @@ import type {
   HoverElementParams,
   MoveMouseParams,
   TypeIntoEditorParams,
-  UnhoverElementParams
+  UnhoverElementParams,
+  WaitUntilParams
 } from './eval-in-obsidian.ts';
 import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import type {
@@ -154,6 +155,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    */
   const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
 
+  /**
+   * Default interval (in ms) between {@link waitUntil} predicate checks when the
+   * caller does not override it.
+   */
+  const WAIT_UNTIL_POLL_INTERVAL_IN_MILLISECONDS = 50;
+
+  /**
+   * Default maximum time (in ms) {@link waitUntil} waits for its predicate to
+   * become truthy before rejecting, when the caller does not override it.
+   */
+  const WAIT_UNTIL_TIMEOUT_IN_MILLISECONDS = 5000;
+
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
   const holder = window as unknown as Partial<IntegrationTestingHolder>;
   const existingContexts = holder.__obsidianIntegrationTesting?.contexts ?? {};
@@ -190,7 +203,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const context = params.contextId
         ? (this.contexts[params.contextId] ??= {})
         : {};
-      const fullArgs = { ...params.args, app: this.app, context, hoverElement, moveMouse, obsidianModule, typeIntoEditor, unhoverElement };
+      const fullArgs = { ...params.args, app: this.app, context, hoverElement, moveMouse, obsidianModule, typeIntoEditor, unhoverElement, waitUntil };
       try {
         const result = await params.fn(fullArgs);
         if (result === undefined) {
@@ -352,6 +365,24 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const startTime = Date.now();
     while (element.matches(':hover') && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+
+  async function waitUntil(waitParams: WaitUntilParams): Promise<void> {
+    const {
+      intervalInMilliseconds = WAIT_UNTIL_POLL_INTERVAL_IN_MILLISECONDS,
+      message,
+      predicate,
+      timeoutInMilliseconds = WAIT_UNTIL_TIMEOUT_IN_MILLISECONDS
+    } = waitParams;
+
+    const startTime = Date.now();
+    while (!(await predicate())) {
+      if (Date.now() - startTime >= timeoutInMilliseconds) {
+        const suffix = message === undefined ? '' : `: ${message}`;
+        throw new Error(`waitUntil timed out after ${String(timeoutInMilliseconds)} milliseconds${suffix}`);
+      }
+      await sleep(intervalInMilliseconds);
     }
   }
 }

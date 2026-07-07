@@ -392,6 +392,101 @@ ${name}`;
     });
   });
 
+  describe('waitUntil', () => {
+    it('should resolve once a synchronous predicate becomes truthy', async () => {
+      const result = await evalInObsidian({
+        async fn({ waitUntil }): Promise<number> {
+          const FLIP_AFTER_IN_MILLISECONDS = 200;
+          const startTime = Date.now();
+          let callCount = 0;
+          await waitUntil({
+            predicate(): boolean {
+              callCount++;
+              return Date.now() - startTime >= FLIP_AFTER_IN_MILLISECONDS;
+            }
+          });
+          return callCount;
+        },
+        vaultPath
+      });
+      // Polled at least twice: false at least once, then truthy.
+      expect(result).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should await an asynchronous predicate', async () => {
+      const result = await evalInObsidian({
+        async fn({ waitUntil }): Promise<boolean> {
+          const FLIP_AFTER_IN_MILLISECONDS = 150;
+          const startTime = Date.now();
+          await waitUntil({
+            async predicate(): Promise<boolean> {
+              await Promise.resolve();
+              return Date.now() - startTime >= FLIP_AFTER_IN_MILLISECONDS;
+            }
+          });
+          return true;
+        },
+        vaultPath
+      });
+      expect(result).toBe(true);
+    });
+
+    it('should reject with the message when the predicate never becomes truthy', async () => {
+      await expect(evalInObsidian({
+        async fn({ waitUntil }): Promise<void> {
+          const TIMEOUT_IN_MILLISECONDS = 100;
+          await waitUntil({
+            intervalInMilliseconds: 10,
+            message: 'never happened',
+            predicate: (): boolean => false,
+            timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
+          });
+        },
+        vaultPath
+      })).rejects.toThrow('waitUntil timed out after 100 milliseconds: never happened');
+    });
+
+    it('should apply the default timeout when none is provided', async () => {
+      const DEFAULT_TIMEOUT_IN_MILLISECONDS = 5000;
+      const result = await evalInObsidian({
+        async fn({ waitUntil }): Promise<number> {
+          const startTime = Date.now();
+          try {
+            await waitUntil({ predicate: (): boolean => false });
+            return -1;
+          } catch {
+            return Date.now() - startTime;
+          }
+        },
+        vaultPath
+      });
+      // The default timeout (5000 ms) fired: elapsed is close to it, not the ~50 ms interval.
+      const LOWER_BOUND_IN_MILLISECONDS = 4000;
+      const UPPER_BOUND_IN_MILLISECONDS = 8000;
+      expect(result).toBeGreaterThanOrEqual(LOWER_BOUND_IN_MILLISECONDS);
+      expect(result).toBeLessThan(UPPER_BOUND_IN_MILLISECONDS);
+      expect(DEFAULT_TIMEOUT_IN_MILLISECONDS).toBeGreaterThan(LOWER_BOUND_IN_MILLISECONDS);
+    });
+
+    it('should poll at the fast default interval when none is provided', async () => {
+      const result = await evalInObsidian({
+        async fn({ waitUntil }): Promise<number> {
+          const FLIP_AFTER_IN_MILLISECONDS = 200;
+          const startTime = Date.now();
+          await waitUntil({
+            predicate: (): boolean => Date.now() - startTime >= FLIP_AFTER_IN_MILLISECONDS
+          });
+          return Date.now() - startTime;
+        },
+        vaultPath
+      });
+      // With the default 50 ms interval, it resolves shortly after the 200 ms flip.
+      // Well below the default 5000 ms timeout, proving the default interval is small.
+      const UPPER_BOUND_IN_MILLISECONDS = 1000;
+      expect(result).toBeLessThan(UPPER_BOUND_IN_MILLISECONDS);
+    });
+  });
+
   describe('context', () => {
     it('should persist values across calls and dispose cleanly', async () => {
       interface Context {
