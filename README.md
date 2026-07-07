@@ -109,6 +109,64 @@ const title = await evalInObsidian({
 });
 ```
 
+### Simulate real user input (trusted keyboard & pointer)
+
+Every callback also receives helpers that inject **trusted** input at the Chromium level
+(via Electron's `webContents.sendInputEvent`) — the kind of event only the browser/OS
+normally produces. This matters because the in-page alternatives give false results:
+`dispatchEvent(new KeyboardEvent(...))` / `new MouseEvent(...)` are untrusted
+(`isTrusted: false`), so CodeMirror ignores the keystroke and `:hover` never takes effect;
+`execCommand('insertText')` mutates the selection even when the editor is not focused,
+masking focus bugs as false passes. The trusted helpers flow through the real input
+pipeline, so text lands **only if the editor genuinely holds focus** and `:hover` rules
+genuinely apply.
+
+The element/editor arguments are live renderer DOM nodes — the callback runs in the Obsidian
+renderer, so no cross-process serialization is needed.
+
+| Helper                             | Purpose                                                                                                              |
+|------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `typeIntoEditor({ editor, text })` | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.      |
+| `hoverElement({ element })`        | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                               |
+| `unhoverElement({ element })`      | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`.             |
+| `moveMouse({ x, y })`              | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates (does **not** poll). |
+
+```ts
+// Type into the active editor — only succeeds if the editor truly holds focus.
+const typed = await evalInObsidian({
+  fn: async ({ app, obsidianModule, typeIntoEditor }) => {
+    const view = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView);
+    const editor = view?.editor;
+    if (!editor) {
+      return null;
+    }
+
+    await typeIntoEditor({ editor, text: 'Hello, world!' });
+    return editor.getValue();
+  }
+});
+
+// Observe a genuine :hover state (real theme var() values, real compositing).
+await evalInObsidian({
+  fn: async ({ hoverElement, unhoverElement }) => {
+    const bar = document.querySelector<HTMLElement>('.minimized-modal-bar');
+    if (!bar) {
+      return;
+    }
+
+    await hoverElement({ element: bar });
+    // ...assert the hovered appearance...
+    await unhoverElement({ element: bar });
+  }
+});
+```
+
+> **Serialize focus/pointer-dependent test files.** Trusted input targets the single shared
+> window's **global** focus and pointer, so test files that depend on either must not run in
+> parallel against the one shared Obsidian instance (they race for focus, and a
+> `detachLeavesOfType('markdown')` in one file wipes another's editor). Run your
+> obsidian-integration Vitest project serially — `fileParallelism: false` and `maxWorkers: 1`.
+
 ### Pass complex arguments
 
 Arguments are JSON-serialized. You can even pass functions — they are serialized via `toString()`:
