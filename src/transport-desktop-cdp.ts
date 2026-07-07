@@ -169,6 +169,7 @@ const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
+const INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS = 500;
 
 /**
  * Transport that communicates with Desktop Obsidian via Chrome DevTools Protocol.
@@ -345,42 +346,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return;
     }
 
-    log(`[cdp-transport] Registering vault: ${vaultPath}`);
-    const targets = await this.getPageTargets();
-    if (targets.length === 0) {
-      throw new Error('No Obsidian CDP targets available. Is Obsidian running?');
-    }
-
-    const ipcWs = await this.connectToTarget(ensureNonNullable(targets[0]));
-    try {
-      await ensureNamespaceBootstrapped(this, vaultPath);
-      const ipcExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath, false], channel: 'vault-open' })})`;
-      await this.sendCommand(ipcWs, 'Runtime.evaluate', {
-        awaitPromise: true,
-        expression: ipcExpr,
-        returnByValue: true
-      });
-
-      await this.enablePluginsInLocalStorage(ipcWs, vaultPath);
-    } finally {
-      ipcWs.close();
-    }
-
-    log(`[cdp-transport] Polling for vault target (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
-    while (Date.now() < deadline) {
-      try {
-        await this.findTargetForVault(vaultPath);
-        log('[cdp-transport] Vault target found.');
-        await this.waitForLayoutReady(vaultPath);
-        await this.dismissTrustDialog(vaultPath);
-        return;
-      } catch {
-        // Vault target not ready yet.
-      }
-      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
-    }
-    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+    await this.openVaultInRunningInstance(vaultPath);
   }
 
   /**
@@ -609,6 +575,57 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Opens a vault in an already-running Obsidian instance via the `vault-open`
+   * Electron IPC (evaluated through CDP on an existing target), then polls until
+   * the new vault's window target appears, is layout-ready, and its trust dialog
+   * (if any) has been dismissed.
+   *
+   * Shared by the attach-mode {@link registerVault} and the owned-mode
+   * "instance already launched" path, so opening an additional vault never
+   * relaunches the process (which would surface the vault picker).
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async openVaultInRunningInstance(vaultPath: string): Promise<void> {
+    log(`[cdp-transport] Registering vault: ${vaultPath}`);
+    const targets = await this.getPageTargets();
+    if (targets.length === 0) {
+      throw new Error('No Obsidian CDP targets available. Is Obsidian running?');
+    }
+
+    const ipcWs = await this.connectToTarget(ensureNonNullable(targets[0]));
+    try {
+      await ensureNamespaceBootstrapped(this, vaultPath);
+      const ipcExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath, false], channel: 'vault-open' })})`;
+      await this.sendCommand(ipcWs, 'Runtime.evaluate', {
+        awaitPromise: true,
+        expression: ipcExpr,
+        returnByValue: true
+      });
+
+      await this.enablePluginsInLocalStorage(ipcWs, vaultPath);
+    } finally {
+      ipcWs.close();
+    }
+
+    log(`[cdp-transport] Polling for vault target (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      try {
+        await this.findTargetForVault(vaultPath);
+        log('[cdp-transport] Vault target found.');
+        await this.waitForLayoutReady(vaultPath);
+        await this.dismissTrustDialog(vaultPath);
+        return;
+      } catch {
+        // Vault target not ready yet.
+      }
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+  }
+
+  /**
    * Probes a target to discover which vault path it has open.
    *
    * Creates a temporary WebSocket connection, evaluates `getBasePath()`,
@@ -640,7 +657,25 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private async registerVaultInOwnedInstance(vaultPath: string): Promise<void> {
     const config = ensureNonNullable(this.ownedConfig);
-    log(`[cdp-transport] Launching owned Obsidian instance for vault: ${vaultPath}`);
+
+    if (this.ownedInstance) {
+      // A prior vault's instance is still running in this (per-worker cached)
+      // Transport. Relaunch fresh for the new vault: relaunching over the live
+      // Instance is forwarded by Electron's single-instance lock on the shared
+      // User-data dir and surfaces the vault picker, and opening a second window
+      // Via IPC leaves stale windows that break vault-target routing. So kill the
+      // Running instance, wait for it to exit (releasing the lock), then launch
+      // Again below with the new vault pre-seeded — each vault gets a pristine
+      // Single-window instance opened directly, never the selector.
+      log(`[cdp-transport] Relaunching owned instance for new vault: ${vaultPath}`);
+      this.disconnect();
+      const previousCdpUrl = this.cdpUrl;
+      this.ownedInstance.kill();
+      this.ownedInstance = undefined;
+      await this.waitForInstanceExit(previousCdpUrl);
+    } else {
+      log(`[cdp-transport] Launching owned Obsidian instance for vault: ${vaultPath}`);
+    }
 
     mkdirSync(config.userDataDir, { recursive: true });
     if (config.asar) {
@@ -695,6 +730,30 @@ export class DesktopCdpTransport implements ObsidianTransport {
       ws.addEventListener('message', handler);
       ws.send(JSON.stringify({ id, method, params }));
     });
+  }
+
+  /**
+   * Polls a killed owned instance's CDP endpoint until it stops responding,
+   * confirming the process has exited and released Electron's single-instance
+   * lock on the shared user-data dir before a fresh instance is launched into it.
+   *
+   * @param cdpUrl - The CDP URL of the instance that was just killed.
+   */
+  private async waitForInstanceExit(cdpUrl: string): Promise<void> {
+    log(`[cdp-transport] Waiting for previous owned instance at ${cdpUrl} to exit...`);
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch(`${cdpUrl}/json`);
+        await response.body?.cancel();
+      } catch {
+        // The endpoint is gone: the process has exited and released the lock.
+        await delay(INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS);
+        return;
+      }
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+    log('[cdp-transport] Previous instance still responded before timeout; relaunching anyway.');
   }
 
   /**
