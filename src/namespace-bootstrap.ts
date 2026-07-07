@@ -8,7 +8,12 @@
 
 import type { App } from 'obsidian';
 
-import type { TypeIntoEditorParams } from './eval-in-obsidian.ts';
+import type {
+  HoverElementParams,
+  MoveMouseParams,
+  TypeIntoEditorParams,
+  UnhoverElementParams
+} from './eval-in-obsidian.ts';
 import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import type {
   ObsidianTransport,
@@ -113,12 +118,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface ElectronWebContentsWithSendInputEvent {
-    sendInputEvent(inputEvent: SendInputEventKeyboardInput): void;
+    sendInputEvent(inputEvent: SendInputEventKeyboardInput | SendInputEventMouseInput): void;
   }
 
   interface SendInputEventKeyboardInput {
     keyCode: string;
     type: 'char' | 'keyDown' | 'keyUp';
+  }
+
+  interface SendInputEventMouseInput {
+    type: 'mouseMove';
+    x: number;
+    y: number;
   }
 
   /**
@@ -128,6 +139,20 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    * full eval timeout, and stale `BrowserWindow` entries pile up.
    */
   const DESTROY_DELAY_IN_MILLISECONDS = 50;
+
+  /**
+   * Interval (in ms) between polls while waiting for a trusted input event to
+   * take effect (the editor document updates, or an element's `:hover` state
+   * flips). Shared by every trusted-input helper.
+   */
+  const INPUT_POLL_INTERVAL_IN_MILLISECONDS = 50;
+
+  /**
+   * Maximum time (in ms) to wait for a trusted input event to take effect
+   * before giving up (the expected outcome when the input is rejected — e.g. a
+   * read-only editor, or a pointer move that never lands on the element).
+   */
+  const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
 
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
   const holder = window as unknown as Partial<IntegrationTestingHolder>;
@@ -165,7 +190,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const context = params.contextId
         ? (this.contexts[params.contextId] ??= {})
         : {};
-      const fullArgs = { ...params.args, app: this.app, context, obsidianModule, typeIntoEditor };
+      const fullArgs = { ...params.args, app: this.app, context, hoverElement, moveMouse, obsidianModule, typeIntoEditor, unhoverElement };
       try {
         const result = await params.fn(fullArgs);
         if (result === undefined) {
@@ -257,8 +282,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   async function typeIntoEditor(typeParams: TypeIntoEditorParams): Promise<void> {
     const FOCUS_SETTLE_DELAY_IN_MILLISECONDS = 300;
-    const INPUT_POLL_INTERVAL_IN_MILLISECONDS = 50;
-    const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
 
     const { editor, text } = typeParams;
     const valueBeforeTyping = editor.getValue();
@@ -280,6 +303,54 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Poll until the document reflects the input or the timeout elapses, instead of a fixed settle.
     const startTime = Date.now();
     while (editor.getValue() === valueBeforeTyping && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
+      await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+
+  async function hoverElement(hoverParams: HoverElementParams): Promise<void> {
+    const CENTER_DIVISOR = 2;
+
+    const { element } = hoverParams;
+
+    // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`.
+    const rect = element.getBoundingClientRect();
+    moveMouseTo(Math.round(rect.left + rect.width / CENTER_DIVISOR), Math.round(rect.top + rect.height / CENTER_DIVISOR));
+
+    // Poll until the real `:hover` state has actually taken, instead of a fixed settle.
+    const startTime = Date.now();
+    while (!element.matches(':hover') && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
+      await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+
+  function moveMouse(moveParams: MoveMouseParams): Promise<void> {
+    moveMouseTo(Math.round(moveParams.x), Math.round(moveParams.y));
+    return Promise.resolve();
+  }
+
+  function moveMouseTo(x: number, y: number): void {
+    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) pointer move.
+    const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
+    webContents.sendInputEvent({ type: 'mouseMove', x, y });
+  }
+
+  async function unhoverElement(unhoverParams: UnhoverElementParams): Promise<void> {
+    const CENTER_DIVISOR = 2;
+    const OUTSIDE_OFFSET_IN_PIXELS = 1;
+
+    const { element } = unhoverParams;
+
+    // Move to a point just outside the element's box.
+    // When flush against the viewport's left edge, use just past the right edge.
+    // A full-viewport-width element should use `moveMouse` directly instead.
+    const rect = element.getBoundingClientRect();
+    const x = rect.left >= OUTSIDE_OFFSET_IN_PIXELS ? rect.left - OUTSIDE_OFFSET_IN_PIXELS : rect.right + OUTSIDE_OFFSET_IN_PIXELS;
+    const y = rect.top + rect.height / CENTER_DIVISOR;
+    moveMouseTo(Math.round(x), Math.round(y));
+
+    // Poll until the real `:hover` state has actually cleared, instead of a fixed settle.
+    const startTime = Date.now();
+    while (element.matches(':hover') && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
     }
   }

@@ -19,6 +19,19 @@ interface AbArgs {
   b: number;
 }
 
+interface HoverSnapshot {
+  backgroundColor: string;
+  isHovered: boolean;
+}
+
+interface HoverTestResult {
+  readonly afterHover: HoverSnapshot;
+  readonly afterMoveOff: HoverSnapshot;
+  readonly afterMoveOn: HoverSnapshot;
+  readonly afterUnhover: HoverSnapshot;
+  readonly initial: HoverSnapshot;
+}
+
 const tempVault = new TempVault();
 let vaultPath: string;
 
@@ -321,6 +334,82 @@ ${name}`;
         vaultPath
       });
       expect(result).toBe('hello');
+    });
+  });
+
+  describe('hover', () => {
+    it('should drive a real :hover state via trusted pointer moves', async () => {
+      const result = await evalInObsidian({
+        async fn({ hoverElement, moveMouse, unhoverElement }): Promise<HoverTestResult> {
+          const ELEMENT_LEFT_IN_PIXELS = 100;
+          const ELEMENT_TOP_IN_PIXELS = 100;
+          const ELEMENT_WIDTH_IN_PIXELS = 200;
+          const ELEMENT_HEIGHT_IN_PIXELS = 100;
+          const CENTER_DIVISOR = 2;
+          const HOVER_Z_INDEX = 99999;
+          const centerX = ELEMENT_LEFT_IN_PIXELS + ELEMENT_WIDTH_IN_PIXELS / CENTER_DIVISOR;
+          const centerY = ELEMENT_TOP_IN_PIXELS + ELEMENT_HEIGHT_IN_PIXELS / CENTER_DIVISOR;
+
+          const style = document.createElement('style');
+          style.textContent = `[data-hover-test] { position: fixed; left: ${String(ELEMENT_LEFT_IN_PIXELS)}px; top: ${String(ELEMENT_TOP_IN_PIXELS)}px; `
+            + `width: ${String(ELEMENT_WIDTH_IN_PIXELS)}px; height: ${String(ELEMENT_HEIGHT_IN_PIXELS)}px; z-index: ${String(HOVER_Z_INDEX)}; `
+            + 'background-color: rgb(10, 20, 30); } [data-hover-test]:hover { background-color: rgb(1, 2, 3); }';
+          document.head.appendChild(style);
+
+          const element = document.createElement('div');
+          element.setAttribute('data-hover-test', '');
+          document.body.appendChild(element);
+
+          try {
+            const initial = snapshot();
+
+            // Convenience helper: moves to the center and polls until `:hover` takes.
+            await hoverElement({ element });
+            const afterHover = snapshot();
+
+            // Convenience helper: moves just outside and polls until `:hover` clears.
+            await unhoverElement({ element });
+            const afterUnhover = snapshot();
+
+            // Raw primitive: it does not poll, so the test waits for `:hover` itself.
+            await moveMouse({ x: centerX, y: centerY });
+            await pollHover(true);
+            const afterMoveOn = snapshot();
+
+            await moveMouse({ x: 0, y: 0 });
+            await pollHover(false);
+            const afterMoveOff = snapshot();
+
+            return { afterHover, afterMoveOff, afterMoveOn, afterUnhover, initial };
+          } finally {
+            element.remove();
+            style.remove();
+          }
+
+          async function pollHover(shouldBeHovered: boolean): Promise<void> {
+            const POLL_INTERVAL_IN_MILLISECONDS = 50;
+            const POLL_TIMEOUT_IN_MILLISECONDS = 5000;
+            const startTime = Date.now();
+            while (element.matches(':hover') !== shouldBeHovered && Date.now() - startTime < POLL_TIMEOUT_IN_MILLISECONDS) {
+              await sleep(POLL_INTERVAL_IN_MILLISECONDS);
+            }
+          }
+
+          function snapshot(): HoverSnapshot {
+            return {
+              backgroundColor: getComputedStyle(element).backgroundColor,
+              isHovered: element.matches(':hover')
+            };
+          }
+        },
+        vaultPath
+      });
+
+      expect(result.initial).toStrictEqual({ backgroundColor: 'rgb(10, 20, 30)', isHovered: false });
+      expect(result.afterHover).toStrictEqual({ backgroundColor: 'rgb(1, 2, 3)', isHovered: true });
+      expect(result.afterUnhover).toStrictEqual({ backgroundColor: 'rgb(10, 20, 30)', isHovered: false });
+      expect(result.afterMoveOn).toStrictEqual({ backgroundColor: 'rgb(1, 2, 3)', isHovered: true });
+      expect(result.afterMoveOff).toStrictEqual({ backgroundColor: 'rgb(10, 20, 30)', isHovered: false });
     });
   });
 

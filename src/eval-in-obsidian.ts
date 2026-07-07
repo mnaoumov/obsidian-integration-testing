@@ -67,6 +67,45 @@ export interface CommonArgs {
   app: App;
 
   /**
+   * Moves the mouse pointer to the center of an element using **trusted**
+   * Electron pointer input, then polls until the element actually matches
+   * `:hover`.
+   *
+   * Because the move is trusted (see {@link CommonArgs.moveMouse}), the real
+   * `:hover` state takes effect in the CSS engine — real theme `var()` values
+   * and real compositing — instead of a hand-simulated cascade. It polls the
+   * live `element.matches(':hover')` state (not a fixed delay), so it is robust
+   * under shared-instance load. It targets the single shared window's
+   * **global** pointer, so only one element is hovered at a time.
+   *
+   * @param params - The element to hover.
+   * @returns A {@link Promise} that resolves once the element matches `:hover`.
+   */
+  hoverElement(this: void, params: HoverElementParams): Promise<void>;
+
+  /**
+   * Moves the mouse pointer to the given web-contents coordinates using a
+   * **trusted** Electron pointer move.
+   *
+   * A trusted move (injected via Electron's `webContents.sendInputEvent`)
+   * updates the real pointer state in the CSS engine, so `:hover` rules
+   * genuinely apply — unlike `dispatchEvent(new MouseEvent('mouseover'))`,
+   * which is untrusted and never sets `:hover`. It targets the single shared
+   * window's **global** pointer, so only one element is hovered at a time.
+   *
+   * This is the low-level primitive: it performs a single move and does **not**
+   * wait for any state to settle (callers poll their own readiness signal).
+   * Prefer {@link CommonArgs.hoverElement} / {@link CommonArgs.unhoverElement}
+   * for element-relative moves; use `moveMouse` directly when an
+   * element-relative target does not fit (e.g. an element spanning the full
+   * viewport width).
+   *
+   * @param params - The web-contents DIP coordinates to move to.
+   * @returns A {@link Promise} that resolves once the move has been injected.
+   */
+  moveMouse(this: void, params: MoveMouseParams): Promise<void>;
+
+  /**
    * The `obsidian` module, resolved at runtime inside the Obsidian process.
    */
   obsidianModule: typeof obsidian;
@@ -92,6 +131,23 @@ export interface CommonArgs {
    * @returns A {@link Promise} that resolves once the keystrokes have settled.
    */
   typeIntoEditor(this: void, params: TypeIntoEditorParams): Promise<void>;
+
+  /**
+   * Moves the mouse pointer to a point just outside an element's bounding box
+   * using a **trusted** Electron pointer move, then polls until the element no
+   * longer matches `:hover`.
+   *
+   * The inverse of {@link CommonArgs.hoverElement}. It targets the single
+   * shared window's **global** pointer, so only one element is hovered at a
+   * time. When an element spans the full viewport (no point outside its box is
+   * reachable), use {@link CommonArgs.moveMouse} directly to move the pointer
+   * to a known empty coordinate instead.
+   *
+   * @param params - The element to move the pointer away from.
+   * @returns A {@link Promise} that resolves once the element no longer matches
+   *   `:hover`.
+   */
+  unhoverElement(this: void, params: UnhoverElementParams): Promise<void>;
 }
 
 /**
@@ -144,6 +200,33 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
 export type GenericObject = Record<string, unknown>;
 
 /**
+ * Parameters for {@link CommonArgs.hoverElement}.
+ */
+export interface HoverElementParams {
+  /**
+   * The element to hover. The pointer is moved to its center. This is a live
+   * renderer DOM node — the callback runs in-renderer, so no cross-process
+   * serialization is needed (same as {@link TypeIntoEditorParams.editor}).
+   */
+  readonly element: HTMLElement;
+}
+
+/**
+ * Parameters for {@link CommonArgs.moveMouse}.
+ */
+export interface MoveMouseParams {
+  /**
+   * The x coordinate (web-contents DIP) to move the pointer to.
+   */
+  readonly x: number;
+
+  /**
+   * The y coordinate (web-contents DIP) to move the pointer to.
+   */
+  readonly y: number;
+}
+
+/**
  * Parameters for {@link CommonArgs.typeIntoEditor}.
  */
 export interface TypeIntoEditorParams {
@@ -157,6 +240,19 @@ export interface TypeIntoEditorParams {
    * The text to type, one trusted character event per code point.
    */
   readonly text: string;
+}
+
+/**
+ * Parameters for {@link CommonArgs.unhoverElement}.
+ */
+export interface UnhoverElementParams {
+  /**
+   * The element to move the pointer away from. The pointer is moved to a point
+   * just outside its bounding box. This is a live renderer DOM node — the
+   * callback runs in-renderer, so no cross-process serialization is needed
+   * (same as {@link TypeIntoEditorParams.editor}).
+   */
+  readonly element: HTMLElement;
 }
 
 /**

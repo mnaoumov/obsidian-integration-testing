@@ -20,7 +20,10 @@ export {
 } from './context-provider.ts';
 export type {
   EvalInObsidianParams,
-  TypeIntoEditorParams
+  HoverElementParams,
+  MoveMouseParams,
+  TypeIntoEditorParams,
+  UnhoverElementParams
 } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
 export type {
