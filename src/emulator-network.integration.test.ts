@@ -18,7 +18,14 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TempVault } from './temp-vault.ts';
 
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
-const FETCH_TIMEOUT_IN_MILLISECONDS = 15000;
+// Generous overall budget: the connectivity check retries a flaky public
+// Endpoint several times with backoff before giving up.
+const FETCH_TIMEOUT_IN_MILLISECONDS = 60000;
+
+interface NetworkCheckResult {
+  readonly status: number;
+  readonly textLength: number;
+}
 
 const tempVault = new TempVault();
 
@@ -31,28 +38,34 @@ afterAll(async () => {
 });
 
 describe('emulator network connectivity', () => {
-  it('should be able to reach the internet via fetch', async () => {
-    const statusCode = await evalInObsidian({
-      fn: async (): Promise<number> => {
-        const response = await fetch('https://httpbin.org/get');
-        return response.status;
+  it('should reach the internet over HTTPS (DNS + status + body)', async () => {
+    // One retrying request exercises DNS, the HTTPS handshake, status, and body.
+    // `httpbin.org` intermittently drops requests, so we retry with backoff.
+    const result = await evalInObsidian({
+      fn: async (): Promise<NetworkCheckResult> => {
+        const MAX_ATTEMPTS = 5;
+        const RETRY_DELAY_IN_MILLISECONDS = 1500;
+        const PER_ATTEMPT_TIMEOUT_IN_MILLISECONDS = 8000;
+
+        let lastError: unknown = new Error('No fetch attempt was made.');
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            const response = await fetch('https://httpbin.org/get', {
+              signal: AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_IN_MILLISECONDS)
+            });
+            const text = await response.text();
+            return { status: response.status, textLength: text.length };
+          } catch (error) {
+            lastError = error;
+            await sleep(RETRY_DELAY_IN_MILLISECONDS);
+          }
+        }
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
       },
       vaultPath: tempVault.path
     });
 
-    expect(statusCode).toBe(200);
-  }, FETCH_TIMEOUT_IN_MILLISECONDS);
-
-  it('should be able to resolve DNS and fetch HTTPS content', async () => {
-    const hasBody = await evalInObsidian({
-      fn: async (): Promise<boolean> => {
-        const response = await fetch('https://httpbin.org/get');
-        const text = await response.text();
-        return text.length > 0;
-      },
-      vaultPath: tempVault.path
-    });
-
-    expect(hasBody).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.textLength).toBeGreaterThan(0);
   }, FETCH_TIMEOUT_IN_MILLISECONDS);
 });
