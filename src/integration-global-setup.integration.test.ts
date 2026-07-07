@@ -125,13 +125,14 @@ interface PluginTestCase {
 const TEST_CASES: PluginTestCase[] = [
   { id: 'test-sync-ok', mainJs: SYNC_OK_MAIN, name: 'sync onload (no error)', shouldBeEnabled: true, shouldBeLoaded: true },
   { id: 'test-async-ok', mainJs: ASYNC_OK_MAIN, name: 'async onload (no error)', shouldBeEnabled: true, shouldBeLoaded: true },
+  // An onload crash still registers the instance, so `isLoaded` stays true (the error is captured).
   {
     expectedError: 'sync onload crash',
     id: 'test-sync-crash',
     mainJs: SYNC_CRASH_MAIN,
     name: 'sync onload (crash)',
     shouldBeEnabled: false,
-    shouldBeLoaded: false
+    shouldBeLoaded: true
   },
   {
     expectedError: 'async onload crash',
@@ -139,7 +140,7 @@ const TEST_CASES: PluginTestCase[] = [
     mainJs: ASYNC_CRASH_MAIN,
     name: 'async onload (crash)',
     shouldBeEnabled: false,
-    shouldBeLoaded: false
+    shouldBeLoaded: true
   },
   {
     expectedError: 'constructor crash',
@@ -149,11 +150,12 @@ const TEST_CASES: PluginTestCase[] = [
     shouldBeEnabled: false,
     shouldBeLoaded: false
   },
+  // An invalid export fails construction — neither enabled nor loaded (the error is captured).
   {
     id: 'test-invalid-export',
     mainJs: INVALID_EXPORT_MAIN,
     name: 'invalid export (not a Plugin class)',
-    shouldBeEnabled: true,
+    shouldBeEnabled: false,
     shouldBeLoaded: false,
     shouldHaveError: true
   }
