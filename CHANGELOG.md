@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 5.4.0
+
+- feat: add reusable waitUntil poll helper to CommonArgs
+
 ## 5.3.0
 
 - docs: document trusted keyboard and pointer input helpers
