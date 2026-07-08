@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 5.5.0
+
+- fix: suppress Android crash/ANR dialogs after boot
+
 ## 5.4.0
 
 - feat: add reusable waitUntil poll helper to CommonArgs
