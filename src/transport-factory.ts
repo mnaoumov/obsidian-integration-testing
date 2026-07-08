@@ -351,6 +351,7 @@ class AppiumTransportFactory {
 
     if (existingDeviceId) {
       this.log(`AVD "${avdName}" is already running on device ${existingDeviceId}, reusing.`);
+      await this.suppressErrorDialogs(existingDeviceId);
       return { actualDeviceId: existingDeviceId };
     }
 
@@ -365,6 +366,7 @@ class AppiumTransportFactory {
     }
 
     this.log(`Emulator "${avdName}" started, device ${actualDeviceId} is connected.`);
+    await this.suppressErrorDialogs(actualDeviceId);
     return { actualDeviceId, emulatorProcess: emulator.process };
   }
 
@@ -546,6 +548,47 @@ class AppiumTransportFactory {
       }
       capturedOutput = (capturedOutput + chunk.toString()).slice(-EMULATOR_OUTPUT_TAIL_MAX_LENGTH);
     }
+  }
+
+  /**
+   * Disables the guest's crash/ANR dialogs on the given device.
+   *
+   * A resource-starved emulator can raise a "Process system isn't responding"
+   * ANR (an `ActivityManagerService` timeout) whose dialog overlays the UI. If
+   * it appears before Appium attaches, nothing can dismiss it and the run hangs
+   * or fails intermittently. Setting the `hide_error_dialogs` global — the same
+   * flag Android's own test infra uses — tells `ActivityManagerService` to
+   * never draw crash/ANR dialogs, so the ANR can no longer block automation.
+   *
+   * This is the earliest point at which the flag can be set: the framework
+   * (`system_server`) must be up before `settings put` works, so callers invoke
+   * it only after `sys.boot_completed`. It narrows — but cannot fully close —
+   * the race with an ANR that fires between boot completing and this call; a
+   * pre-baked snapshot with the flag already set is the only way to eliminate
+   * it entirely. Best-effort: a failure is logged, not thrown, since it only
+   * suppresses a symptom.
+   *
+   * @param deviceId - The device UDID to configure.
+   */
+  private async suppressErrorDialogs(deviceId: string): Promise<void> {
+    this.log(`Disabling crash/ANR dialogs on device ${deviceId} (settings put global hide_error_dialogs 1)...`);
+
+    await new Promise<void>((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'shell', 'settings', 'put', 'global', 'hide_error_dialogs', '1'],
+        { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+        (error) => {
+          if (error) {
+            this.log(
+              `Warning: failed to disable crash/ANR dialogs: ${error instanceof Error ? error.message : 'unknown error'}`
+            );
+          }
+
+          resolve();
+        }
+      );
+    });
   }
 
   private async waitForAppiumReady(url: URL): Promise<void> {

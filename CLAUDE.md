@@ -251,6 +251,25 @@ Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUnt
 (`modal-instructions.desktop.integration.test.ts`) and `obsidian-codescript-toolkit`. Each needs its
 `obsidian-integration-testing` dependency bumped to the version that ships this helper.
 
+## L13. Android boot: suppress crash/ANR dialogs (`hide_error_dialogs`)
+
+A resource-starved emulator can raise a "Process system isn't responding" ANR (an
+`ActivityManagerService` timeout) whose dialog overlays the UI. When it appears **before** Appium
+attaches, nothing can dismiss it and the run hangs or fails intermittently. In
+`transport-factory.ts`, `AppiumTransportFactory.suppressErrorDialogs` runs
+`adb -s <deviceId> shell settings put global hide_error_dialogs 1` so `ActivityManagerService` never
+draws crash/ANR dialogs. `ensureDeviceConnected` calls it for **both** the newly-started path (after
+`waitForNewDevice`, which already waits for `sys.boot_completed`) and the reused-device path — the
+earliest safe point, since `system_server` must be up before `settings put` works. It is best-effort
+(a failure is logged via the same warn-don't-throw pattern as `sendKeyEvent`, since it only
+suppresses a symptom).
+
+This narrows but cannot fully close the race: an ANR that fires between boot completing and the
+`settings put` still slips through. Fully eliminating it needs a pre-baked snapshot with the flag
+already set (the flag persists across reboot but not `wipe-data`). The ANR itself signals an
+under-provisioned emulator (too few vCPUs/RAM, or missing hardware acceleration), so treat the
+suppression as symptom relief, not a root-cause fix.
+
 ## Known Issues
 
 None.

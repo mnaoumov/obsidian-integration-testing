@@ -652,6 +652,18 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 >
 > Plugins with `isDesktopOnly: true` in `manifest.json` automatically reject Android tests.
 
+#### Troubleshooting: "Process system isn't responding"
+
+A resource-starved emulator can raise a **"Process system isn't responding"** ANR dialog during boot.
+If it appears before Appium attaches, nothing can dismiss it and the run fails intermittently. As soon
+as the device reports `sys.boot_completed`, the harness runs
+`adb shell settings put global hide_error_dialogs 1` so Android no longer draws crash/ANR dialogs.
+This narrows but cannot fully close the race — an ANR that fires between boot completing and that
+command still slips through. To eliminate it entirely, boot the AVD once, run the command yourself,
+save a snapshot, and always boot from that snapshot. Either way, an ANR signals the emulator is
+under-provisioned, so also give the AVD more vCPUs/RAM and confirm hardware acceleration
+(`emulator -accel-check`).
+
 ### Running multiple platforms
 
 Use vitest projects to run the same tests on multiple platforms:
