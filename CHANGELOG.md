@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 5.6.0
+
+- feat: add trusted pressKey helper
+- chore: update libs
+
 ## 5.5.0
 
 - fix: suppress Android crash/ANR dialogs after boot
