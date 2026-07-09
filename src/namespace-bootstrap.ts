@@ -11,6 +11,7 @@ import type { App } from 'obsidian';
 import type {
   HoverElementParams,
   MoveMouseParams,
+  PressKeyParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
   WaitUntilParams
@@ -122,8 +123,17 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     sendInputEvent(inputEvent: SendInputEventKeyboardInput | SendInputEventMouseInput): void;
   }
 
+  interface ObsidianModuleWithPlatform {
+    Platform: ObsidianPlatform;
+  }
+
+  interface ObsidianPlatform {
+    isMacOS: boolean;
+  }
+
   interface SendInputEventKeyboardInput {
     keyCode: string;
+    modifiers?: string[];
     type: 'char' | 'keyDown' | 'keyUp';
   }
 
@@ -203,7 +213,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const context = params.contextId
         ? (this.contexts[params.contextId] ??= {})
         : {};
-      const fullArgs = { ...params.args, app: this.app, context, hoverElement, moveMouse, obsidianModule, typeIntoEditor, unhoverElement, waitUntil };
+      const fullArgs = { ...params.args, app: this.app, context, hoverElement, moveMouse, obsidianModule, pressKey, typeIntoEditor, unhoverElement, waitUntil };
       try {
         const result = await params.fn(fullArgs);
         if (result === undefined) {
@@ -307,10 +317,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Let any focus trap (a `setTimeout(0)` re-focus) fire before typing, so stolen focus is detected.
     await sleep(FOCUS_SETTLE_DELAY_IN_MILLISECONDS);
 
-    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) keypress.
-    const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
+    // Typing is pressing each character key in turn: `pressKey` injects the same trusted
+    // `keyDown` -> `char` -> `keyUp` a real user produces — text lands only if the editor holds focus.
     for (const char of text) {
-      webContents.sendInputEvent({ keyCode: char, type: 'char' });
+      await pressKey({ key: char });
     }
 
     // Poll until the document reflects the input or the timeout elapses, instead of a fixed settle.
@@ -318,6 +328,38 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     while (editor.getValue() === valueBeforeTyping && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
     }
+  }
+
+  function pressKey(pressParams: PressKeyParams): Promise<void> {
+    const { key, modifiers = [] } = pressParams;
+
+    // 'Mod' is Obsidian's platform-agnostic modifier: Cmd (meta) on macOS, Ctrl elsewhere.
+    // Reading `Platform.isMacOS` off the resolved obsidian module is safe here:
+    // `evalWrapper` always resolves that module before any callback (and thus `pressKey`) can run.
+    const isMacOS = (ns.obsidianModule as ObsidianModuleWithPlatform).Platform.isMacOS;
+
+    // Map Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
+    // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
+    const electronModifiers = modifiers.map((modifier): string => {
+      if (modifier === 'Mod') {
+        return isMacOS ? 'meta' : 'control';
+      }
+      if (modifier === 'Ctrl') {
+        return 'control';
+      }
+      return modifier.toLowerCase();
+    });
+
+    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) key press.
+    const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
+
+    // A trusted key press is keyDown -> char -> keyUp: keyDown fires `keydown`, char fires
+    // `keypress`/`beforeinput`/`input`, keyUp fires `keyup` — the full real key pipeline.
+    webContents.sendInputEvent({ keyCode: key, modifiers: electronModifiers, type: 'keyDown' });
+    webContents.sendInputEvent({ keyCode: key, modifiers: electronModifiers, type: 'char' });
+    webContents.sendInputEvent({ keyCode: key, modifiers: electronModifiers, type: 'keyUp' });
+
+    return Promise.resolve();
   }
 
   async function hoverElement(hoverParams: HoverElementParams): Promise<void> {

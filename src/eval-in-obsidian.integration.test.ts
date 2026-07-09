@@ -31,6 +31,19 @@ interface HoverTestResult {
   readonly initial: HoverSnapshot;
 }
 
+interface PressKeyPipelineResult {
+  readonly insertedValue: string;
+  readonly keydownIsTrusted: boolean;
+  readonly keydownKey: string;
+  readonly keydownShiftKey: boolean;
+  readonly keyupIsTrusted: boolean;
+  readonly sawBeforeInput: boolean;
+  readonly sawInput: boolean;
+  readonly sawKeydown: boolean;
+  readonly sawKeypress: boolean;
+  readonly sawKeyup: boolean;
+}
+
 const tempVault = new TempVault();
 let vaultPath: string;
 
@@ -313,6 +326,97 @@ ${name}`;
         vaultPath
       });
       expect(result).toBe('hello');
+    });
+  });
+
+  describe('pressKey', () => {
+    it('should fire the full trusted key pipeline on the focused element', async () => {
+      const result = await evalInObsidian({
+        async fn({ pressKey, waitUntil }): Promise<PressKeyPipelineResult> {
+          const input = document.createElement('input');
+          input.type = 'text';
+          document.body.appendChild(input);
+
+          // Record the real Event objects (a const collection — safe to close over in the loop).
+          const captured = new Map<string, Event>();
+          for (const eventType of ['beforeinput', 'input', 'keydown', 'keypress', 'keyup']) {
+            input.addEventListener(eventType, (domEvent): void => {
+              captured.set(eventType, domEvent);
+            });
+          }
+
+          try {
+            input.focus();
+            await pressKey({ key: 'a', modifiers: ['Shift'] });
+            await waitUntil({ message: 'keyup never fired', predicate: (): boolean => captured.has('keyup') });
+
+            const keydownEvent = captured.get('keydown');
+            const keyupEvent = captured.get('keyup');
+
+            return {
+              insertedValue: input.value,
+              keydownIsTrusted: keydownEvent?.isTrusted ?? false,
+              keydownKey: keydownEvent instanceof KeyboardEvent ? keydownEvent.key : '',
+              keydownShiftKey: keydownEvent instanceof KeyboardEvent ? keydownEvent.shiftKey : false,
+              keyupIsTrusted: keyupEvent?.isTrusted ?? false,
+              sawBeforeInput: captured.has('beforeinput'),
+              sawInput: captured.has('input'),
+              sawKeydown: captured.has('keydown'),
+              sawKeypress: captured.has('keypress'),
+              sawKeyup: captured.has('keyup')
+            };
+          } finally {
+            input.remove();
+          }
+        },
+        vaultPath
+      });
+
+      expect(result.sawKeydown).toBe(true);
+      expect(result.sawKeypress).toBe(true);
+      expect(result.sawBeforeInput).toBe(true);
+      expect(result.sawInput).toBe(true);
+      expect(result.sawKeyup).toBe(true);
+      expect(result.keydownIsTrusted).toBe(true);
+      expect(result.keyupIsTrusted).toBe(true);
+      expect(result.keydownShiftKey).toBe(true);
+      // Electron's `char` event inserts the literal keyCode ('a') even though Shift is held; the
+      // `keydown.key` still reflects Shift as 'A'. Case-correct text is `typeIntoEditor`'s job.
+      expect(result.keydownKey).toBe('A');
+      expect(result.insertedValue).toBe('a');
+    });
+
+    it('should insert a newline via a trusted Enter in a focused editor', async () => {
+      const result = await evalInObsidian({
+        async fn({ app, obsidianModule, pressKey, typeIntoEditor, waitUntil }): Promise<string> {
+          const filePath = 'press-key-enter-test.md';
+          const existing = app.vault.getFileByPath(filePath);
+          if (existing) {
+            await app.vault.delete(existing);
+          }
+          const file = await app.vault.create(filePath, '');
+          try {
+            const leaf = app.workspace.getLeaf(true);
+            await leaf.openFile(file, { active: true });
+            const view = leaf.view;
+            if (!(view instanceof obsidianModule.MarkdownView)) {
+              throw new Error('Expected a MarkdownView');
+            }
+            const { editor } = view;
+
+            await typeIntoEditor({ editor, text: 'a' });
+            await pressKey({ key: 'Enter' });
+            await waitUntil({ message: 'Enter did not insert a newline', predicate: (): boolean => editor.getValue() === 'a\n' });
+            await typeIntoEditor({ editor, text: 'b' });
+
+            return editor.getValue();
+          } finally {
+            await app.vault.delete(file);
+          }
+        },
+        vaultPath
+      });
+      expect(result).toBe('a\nb');
     });
   });
 

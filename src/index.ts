@@ -22,6 +22,7 @@ export type {
   EvalInObsidianParams,
   HoverElementParams,
   MoveMouseParams,
+  PressKeyParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
   WaitUntilParams

@@ -124,12 +124,13 @@ genuinely apply.
 The element/editor arguments are live renderer DOM nodes — the callback runs in the Obsidian
 renderer, so no cross-process serialization is needed.
 
-| Helper                             | Purpose                                                                                                              |
-|------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `typeIntoEditor({ editor, text })` | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.      |
-| `hoverElement({ element })`        | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                               |
-| `unhoverElement({ element })`      | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`.             |
-| `moveMouse({ x, y })`              | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates (does **not** poll). |
+| Helper                             | Purpose                                                                                                                                                                                                         |
+|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `typeIntoEditor({ editor, text })` | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                 |
+| `pressKey({ key, modifiers })`     | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
+| `hoverElement({ element })`        | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                                                                                                                          |
+| `unhoverElement({ element })`      | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`.                                                                                                        |
+| `moveMouse({ x, y })`              | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates (does **not** poll).                                                                                            |
 
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
@@ -143,6 +144,18 @@ const typed = await evalInObsidian({
 
     await typeIntoEditor({ editor, text: 'Hello, world!' });
     return editor.getValue();
+  }
+});
+
+// Press special keys / shortcuts (Obsidian `Modifier` names; `'Mod'` = Cmd on macOS, Ctrl elsewhere).
+// A key press has no universal effect, so pair it with `waitUntil` to await the outcome.
+await evalInObsidian({
+  fn: async ({ app, obsidianModule, pressKey, waitUntil }) => {
+    const editor = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView)?.editor;
+    editor?.focus();
+
+    await pressKey({ key: 'Enter', modifiers: ['Shift'] }); // soft line break
+    await waitUntil({ predicate: () => (editor?.getValue().includes('\n') ?? false) });
   }
 });
 

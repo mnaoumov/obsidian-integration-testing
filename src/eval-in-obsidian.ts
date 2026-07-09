@@ -6,7 +6,8 @@
 
 import type {
   App,
-  Editor
+  Editor,
+  Modifier
 } from 'obsidian';
 // eslint-disable-next-line import-x/no-namespace -- We need to reference `obsidian` module.
 import type * as obsidian from 'obsidian';
@@ -111,13 +112,45 @@ export interface CommonArgs {
   obsidianModule: typeof obsidian;
 
   /**
+   * Presses a single key (optionally with modifiers) using **trusted** Electron
+   * keyboard input, firing the full real key pipeline —
+   * `keydown` → `keypress` → `beforeinput` → `input` → `keyup`.
+   *
+   * This is the key-press analog of {@link CommonArgs.typeIntoEditor}: it
+   * injects a trusted `keyDown` → `char` → `keyUp` sequence via Electron's
+   * `webContents.sendInputEvent`, so it is delivered to the window's DOM-focused
+   * element and flows through the real input pipeline — unlike
+   * `dispatchEvent(new KeyboardEvent(...))`, which is untrusted (`isTrusted:
+   * false`) and ignored by CodeMirror and most key handlers. Use it for special
+   * keys (`'Enter'`, `'Escape'`, `'Tab'`, arrow keys) and modifier combinations
+   * (`Shift+Enter`, `Ctrl+A`) that {@link CommonArgs.typeIntoEditor} (which
+   * types printable text) does not cover.
+   *
+   * This is the low-level primitive: it injects the key press and does **not**
+   * poll for any effect (a key press has no universal observable outcome —
+   * `Enter` edits the document, `Escape` closes a modal, `ArrowDown` moves the
+   * selection). The caller focuses the intended target first, then awaits the
+   * expected effect via {@link CommonArgs.waitUntil}. It targets the single
+   * shared window's **global** focus, so only the DOM-focused element receives
+   * the key.
+   *
+   * @param params - The key to press and any modifiers to hold.
+   * @returns A {@link Promise} that resolves once the key press has been
+   *   injected.
+   */
+  pressKey(this: void, params: PressKeyParams): Promise<void>;
+
+  /**
    * Types text into a CodeMirror {@link Editor} using **trusted** Electron
    * keyboard input.
    *
-   * A trusted event (injected via Electron's `webContents.sendInputEvent`)
-   * behaves like a real keypress: it is delivered to the window's DOM-focused
-   * element and flows through CodeMirror's real input pipeline, so the typed
-   * text reaches the document **only if the editor genuinely holds focus**.
+   * Typing is pressing each character key in turn: this focuses the editor
+   * (caret to end) and presses every code point of `text` via
+   * {@link CommonArgs.pressKey} — the same trusted `keyDown` → `char` → `keyUp`
+   * a real user produces. Each keystroke is delivered to the window's
+   * DOM-focused element and flows through CodeMirror's real input pipeline, so
+   * the typed text reaches the document **only if the editor genuinely holds
+   * focus**.
    * This makes "the user typed into the editor" a faithful end-to-end check,
    * unlike `dispatchEvent(new KeyboardEvent(...))` (untrusted — ignored by
    * CodeMirror) or `execCommand('insertText')` (mutates the selection even
@@ -251,6 +284,31 @@ export interface MoveMouseParams {
 }
 
 /**
+ * Parameters for {@link CommonArgs.pressKey}.
+ */
+export interface PressKeyParams {
+  /**
+   * The key to press, given as an Electron Accelerator key name — e.g.
+   * `'Enter'`, `'Escape'`, `'Tab'`, `'Backspace'`, `'Delete'`, an arrow key
+   * (`'Up'` / `'Down'` / `'Left'` / `'Right'`), or a printable character
+   * (`'a'`, `'1'`). The produced character (when the key inserts text) is the
+   * literal `key` value; case-correct text belongs to
+   * {@link CommonArgs.typeIntoEditor}, not a key-press primitive.
+   */
+  readonly key: string;
+
+  /**
+   * The modifier keys to hold while the key is pressed, using Obsidian's
+   * {@link Modifier} names (the same values as an Obsidian `Hotkey`). `'Mod'`
+   * resolves per-platform (Cmd on macOS, Ctrl elsewhere); each is mapped to
+   * Electron's lowercase `sendInputEvent` modifier name.
+   *
+   * @default `[]`
+   */
+  readonly modifiers?: readonly Modifier[];
+}
+
+/**
  * Parameters for {@link CommonArgs.typeIntoEditor}.
  */
 export interface TypeIntoEditorParams {
@@ -261,7 +319,8 @@ export interface TypeIntoEditorParams {
   readonly editor: Editor;
 
   /**
-   * The text to type, one trusted character event per code point.
+   * The text to type. Each code point is pressed via {@link CommonArgs.pressKey}
+   * (a trusted `keyDown` → `char` → `keyUp`), exactly as a real user typing.
    */
   readonly text: string;
 }

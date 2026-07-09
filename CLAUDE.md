@@ -94,17 +94,16 @@ only the browser/OS produces). Both in-page alternatives give false results:
 - `execCommand('insertText')` mutates the selection directly → it inserts text **even when the editor
   is not focused**, masking focus bugs (e.g. a modal focus trap) as false-positive passes.
 
-`typeIntoEditor` injects a **trusted** event via Electron's
-`webContents.sendInputEvent({ keyCode, type: 'char' })` at the Chromium level: it is delivered to the
-window's DOM-focused element and flows through CodeMirror's real input pipeline, so the text lands
-**only if the editor genuinely holds focus** — a faithful end-to-end check. It reaches `webContents`
-via `window.electron.remote.getCurrentWebContents()` (consistent with the bootstrap's existing
-`window.electron.ipcRenderer` use), and uses `getCurrentWebContents()`, **not**
-`getFocusedWebContents()` — the latter returns `null` when no Obsidian window holds OS-level focus,
-which is exactly the headless/CI case. `obsidian-typings`' `ElectronWebContents` omits
-`sendInputEvent`, so the helper casts to a local interface that adds it. After injecting the
-keystrokes it **polls** (not a fixed delay) until the document reflects the input, or a bounded
-timeout elapses (the expected outcome when the editor is read-only/rejecting, or focus was stolen).
+`typeIntoEditor` focuses the editor (caret to end), then **presses each code point of `text` via
+`pressKey`** (see **L14**) — typing is just pressing each character key in turn, so it reuses the same
+trusted `keyDown` → `char` → `keyUp` a real user produces rather than duplicating a `sendInputEvent`
+call. Each keystroke is delivered to the window's DOM-focused element and flows through CodeMirror's
+real input pipeline, so the text lands **only if the editor genuinely holds focus** — a faithful
+end-to-end check. (`pressKey` reaches `webContents` via
+`window.electron.remote.getCurrentWebContents()` — using `getCurrentWebContents()`, **not**
+`getFocusedWebContents()`, which returns `null` in the headless/CI case; see L14.) After pressing the
+keys it **polls** (not a fixed delay) until the document reflects the input, or a bounded timeout
+elapses (the expected outcome when the editor is read-only/rejecting, or focus was stolen).
 
 ### Consumer responsibility: serialize focus-dependent integration files
 
@@ -269,6 +268,51 @@ This narrows but cannot fully close the race: an ANR that fires between boot com
 already set (the flag persists across reboot but not `wipe-data`). The ANR itself signals an
 under-provisioned emulator (too few vCPUs/RAM, or missing hardware acceleration), so treat the
 suppression as symptom relief, not a root-cause fix.
+
+## L14. Trusted key press (`pressKey`)
+
+Every `evalInObsidian` callback also receives a `pressKey(params: PressKeyParams)` helper on its args
+(alongside `typeIntoEditor` / the pointer trio / `waitUntil`), exposed via `CommonArgs`
+(`src/eval-in-obsidian.ts`) and defined in the in-process namespace (`namespace-bootstrap.ts`, wired
+into the `fullArgs` literal). Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
+all inherit it. This is the key-press analog of L8's `typeIntoEditor`, and shares its trusted-input
+mechanism and caveats.
+
+`pressKey` is the shared primitive for **all** trusted keyboard input: `typeIntoEditor` **builds on
+it**, pressing each code point of its `text` via `pressKey` (typing is pressing each character key in
+turn), so the two paths are identical and there is a single `sendInputEvent` keyboard call site.
+`typeIntoEditor` adds the editor-typing wrapper (focus + caret-to-end + poll until the document
+settles); `pressKey` on its own presses a **single key** (optionally with modifiers) on whatever
+element currently holds DOM focus — for special keys (`Enter`, `Escape`, `Tab`, arrows) and modifier
+combos (`Shift+Enter`, `Mod+A`) that plain typing does not cover.
+It injects a trusted `keyDown` → `char` → `keyUp` sequence via
+`webContents.sendInputEvent`, firing the **full real pipeline**: `keydown` → `keypress` →
+`beforeinput` → `input` → `keyup`, all with `isTrusted: true` (untrusted `dispatchEvent(new
+KeyboardEvent(...))` is ignored by CodeMirror and most key handlers). Confirmed end-to-end on Windows
+(Obsidian 1.13.1): all five events fire trusted, and a trusted `Enter` inserts a newline in a live
+CodeMirror editor.
+
+- **API shape** — `pressKey({ key, modifiers? })`, matching every other `CommonArgs` helper (params
+  object). `key` is an **Electron Accelerator key name** (`'Enter'`, `'Escape'`, `'Up'`, `'a'`, …).
+  `modifiers` reuses Obsidian's own `Modifier` type (`'Mod' | 'Ctrl' | 'Meta' | 'Shift' | 'Alt'`) — the
+  same values as an Obsidian `Hotkey` — rather than a bespoke type. `'Mod'` resolves per-platform (Cmd
+  on macOS, Ctrl elsewhere) via **`Platform.isMacOS`** read off the resolved obsidian module
+  (`ns.obsidianModule`, always populated because `evalWrapper` resolves the module before any callback
+  runs); the others map to Electron's lowercase `sendInputEvent` names (`'Ctrl'` → `'control'`, the rest
+  lowercase directly). `PressKeyParams` is exported from the main entry.
+- **No polling** (like `moveMouse`, unlike `typeIntoEditor`): a key press has **no universal
+  observable effect** (`Enter` edits the doc, `Escape` closes a modal, `ArrowDown` moves selection), so
+  it injects and returns; the caller focuses the target first, then awaits the expected effect via
+  `waitUntil`.
+- **Produced character is the literal `key`.** Electron's `char` event inserts the raw `keyCode`
+  (`pressKey({ key: 'a', modifiers: ['Shift'] })` inserts `'a'`, though `keydown.key` reflects Shift as
+  `'A'`). Case-correct text is `typeIntoEditor`'s job, not a key-press primitive's.
+
+### Consumer responsibility: serialize focus-dependent integration files
+
+Identical to L8: a trusted key press targets the single shared window's **global** focus, so
+focus-dependent integration test **files** must not run in parallel against the one shared Obsidian
+instance (`fileParallelism: false`, `maxWorkers: 1`).
 
 ## Known Issues
 
