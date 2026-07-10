@@ -50,6 +50,21 @@ release flow. Then the **23-plugin migration**: any plugin explicitly setting `t
 must switch to `obsidian-cdp` (most rely on the default and need nothing). Not yet validated on
 macOS/Linux (the installer-extraction + shell-version-detection paths are platform-specific).
 
+### Fix intermittent Android `waitForLayoutReady` 30s timeout (from the @obsidian G10d release loop, 2026-07-10)
+
+**Symptom.** During plugin releases (`npm run version patch` → `test:integration`), the `integration-tests:android` smoke test intermittently fails at setup with `Error: Obsidian layout did not become ready within 30000ms` (`AppiumTransport.waitForLayoutReady`, `src/transport-appium.ts`). Reproduced on `obsidian-smart-rename`'s release; it will flake **every** plugin's release the same way.
+
+**Root cause.** `registerVault` (`transport-appium.ts:325`) pushes the vault marker, `ensureWebViewContext()`, sets localStorage, then `location.reload()` — a **full Obsidian re-init** (reopen vault + reload all plugins, the heaviest startup step) — then `waitForLayoutReady()` polls `app.workspace.layoutReady` for a **hardcoded, non-configurable `LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 30000`** (`transport-appium.ts:131`, used at `:447`). On a cold-booted / under-provisioned emulator (see **L13**), that post-reload init intermittently exceeds 30s. Design gap: the *lighter* `ensureWebViewContext` step already has a **configurable** timeout (`webviewTimeoutInMilliseconds`, `@default 60000`, options field ~`:122`, ctor field ~`:179`), but the *heavier* layout step got a shorter, fixed one.
+
+**Fix (mirror `webviewTimeoutInMilliseconds` end-to-end).**
+1. Add `layoutReadyTimeoutInMilliseconds?: number` to the Appium transport options interface (next to `webviewTimeoutInMilliseconds`, `@default 90000` — verified by a test per the `@default`-tag rule). Thread it: options type → `AppiumTransportFactory` → `AppiumTransport` constructor → a `private readonly layoutReadyTimeoutInMilliseconds: number` field, and use the field in `waitForLayoutReady` instead of the module constant. Keep the constant as the default value.
+2. **Raise the default `30000` → `90000`** (≥ the webview default; the post-reload full init deserves the most headroom).
+3. Optional robustness: `log(...)` elapsed time each poll for diagnosis; and after `location.reload()` re-`ensureWebViewContext()` explicitly so WebView re-acquisition time isn't silently charged against the layout budget (currently the swallowed `execute` errors conflate "context not back yet" with "layout not ready").
+4. Add a unit test covering the new option + its default (repo requires 100% coverage). The transport module is integration-glue; check whether the option-plumbing is unit-reachable or needs a small extraction.
+5. Note in the change: the deeper cause is emulator provisioning (L13) — the timeout raise is headroom, not a substitute for adequate vCPU/RAM/HW-accel or a pre-booted snapshot.
+
+**Release.** This ships in the repo's own release; it can ride the pending `5.0.0` (it is not itself breaking, so a minor would also do). After release, the @obsidian plugins consuming it get the headroom via the version bump (already part of the periodic libs refresh); no per-plugin code change needed.
+
 ## Pending Questions
 
 None.
