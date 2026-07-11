@@ -17,15 +17,20 @@ import type {
   WaitUntilParams
 } from './eval-in-obsidian.ts';
 import type { GenerateFunctionCallParams } from './generate-function-call.ts';
+import type { LibResolver } from './lib-registry.ts';
 import type {
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
 
 import { generateFunctionCall } from './generate-function-call.ts';
-import { LIBRARY_VERSION } from './library.ts';
+import {
+  getBootstrapVersion,
+  getRegisteredLibResolvers
+} from './lib-registry.ts';
 
 interface BootstrapNamespaceParams {
+  readonly libResolvers: LibResolver[];
   readonly version: string;
 }
 
@@ -48,7 +53,8 @@ export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, 
     cwd,
     ...(timeoutInMilliseconds !== undefined && { timeoutInMilliseconds })
   };
-  const versionJson = JSON.stringify(LIBRARY_VERSION);
+  const bootstrapVersion = getBootstrapVersion();
+  const versionJson = JSON.stringify(bootstrapVersion);
   const checkResult = await transport.evaluate(
     `JSON.stringify(window.__obsidianIntegrationTesting?.version === ${versionJson})`,
     evalOptions
@@ -58,7 +64,10 @@ export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, 
     return;
   }
 
-  const bootstrapExpr = generateFunctionCall(bootstrapNamespace, { version: LIBRARY_VERSION });
+  const bootstrapExpr = generateFunctionCall(bootstrapNamespace, {
+    libResolvers: [...getRegisteredLibResolvers()],
+    version: bootstrapVersion
+  });
   await transport.evaluate(bootstrapExpr, evalOptions);
 }
 
@@ -83,6 +92,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   interface IntegrationTestingNamespaceState {
     contexts: Record<string, Record<string, unknown>>;
+    libResolvers: LibResolver[];
     obsidianModule?: unknown;
     version: string;
   }
@@ -213,7 +223,14 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const context = params.contextId
         ? (this.contexts[params.contextId] ??= {})
         : {};
-      const fullArgs = { ...params.args, app: this.app, context, hoverElement, moveMouse, obsidianModule, pressKey, typeIntoEditor, unhoverElement, waitUntil };
+      // The injected `lib` bag: base helpers from the harness, then providers on top.
+      // Resolvers run in-renderer (they read renderer globals a provider published).
+      // Rebuilding per eval keeps `lib` fresh and tolerant of a late-loaded provider.
+      const lib = { hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
+      for (const resolveLib of this.libResolvers) {
+        Object.assign(lib, resolveLib());
+      }
+      const fullArgs = { ...params.args, app: this.app, context, lib, obsidianModule };
       try {
         const result = await params.fn(fullArgs);
         if (result === undefined) {
@@ -263,6 +280,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       await this.ensureLayoutReady();
       window.electron.ipcRenderer.sendSync(params.channel, ...params.args);
     },
+
+    libResolvers: bootstrapParams.libResolvers,
 
     obsidianModule: existingObsidianModule,
 

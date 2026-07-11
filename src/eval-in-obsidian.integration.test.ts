@@ -303,7 +303,7 @@ ${name}`;
   describe('typeIntoEditor', () => {
     it('should type trusted keyboard input into a focused editor', async () => {
       const result = await evalInObsidian({
-        async fn({ app, obsidianModule, typeIntoEditor }): Promise<string> {
+        async fn({ app, lib: { typeIntoEditor }, obsidianModule }): Promise<string> {
           const filePath = 'type-into-editor-test.md';
           const existing = app.vault.getFileByPath(filePath);
           if (existing) {
@@ -332,7 +332,7 @@ ${name}`;
   describe('pressKey', () => {
     it('should fire the full trusted key pipeline on the focused element', async () => {
       const result = await evalInObsidian({
-        async fn({ pressKey, waitUntil }): Promise<PressKeyPipelineResult> {
+        async fn({ lib: { pressKey, waitUntil } }): Promise<PressKeyPipelineResult> {
           const input = document.createElement('input');
           input.type = 'text';
           document.body.appendChild(input);
@@ -388,7 +388,7 @@ ${name}`;
 
     it('should insert a newline via a trusted Enter in a focused editor', async () => {
       const result = await evalInObsidian({
-        async fn({ app, obsidianModule, pressKey, typeIntoEditor, waitUntil }): Promise<string> {
+        async fn({ app, lib: { pressKey, typeIntoEditor, waitUntil }, obsidianModule }): Promise<string> {
           const filePath = 'press-key-enter-test.md';
           const existing = app.vault.getFileByPath(filePath);
           if (existing) {
@@ -423,7 +423,7 @@ ${name}`;
   describe('hover', () => {
     it('should drive a real :hover state via trusted pointer moves', async () => {
       const result = await evalInObsidian({
-        async fn({ hoverElement, moveMouse, unhoverElement }): Promise<HoverTestResult> {
+        async fn({ lib: { hoverElement, moveMouse, unhoverElement } }): Promise<HoverTestResult> {
           const ELEMENT_LEFT_IN_PIXELS = 100;
           const ELEMENT_TOP_IN_PIXELS = 100;
           const ELEMENT_WIDTH_IN_PIXELS = 200;
@@ -499,7 +499,7 @@ ${name}`;
   describe('waitUntil', () => {
     it('should resolve once a synchronous predicate becomes truthy', async () => {
       const result = await evalInObsidian({
-        async fn({ waitUntil }): Promise<number> {
+        async fn({ lib: { waitUntil } }): Promise<number> {
           const FLIP_AFTER_IN_MILLISECONDS = 200;
           const startTime = Date.now();
           let callCount = 0;
@@ -519,7 +519,7 @@ ${name}`;
 
     it('should await an asynchronous predicate', async () => {
       const result = await evalInObsidian({
-        async fn({ waitUntil }): Promise<boolean> {
+        async fn({ lib: { waitUntil } }): Promise<boolean> {
           const FLIP_AFTER_IN_MILLISECONDS = 150;
           const startTime = Date.now();
           await waitUntil({
@@ -537,7 +537,7 @@ ${name}`;
 
     it('should reject with the message when the predicate never becomes truthy', async () => {
       await expect(evalInObsidian({
-        async fn({ waitUntil }): Promise<void> {
+        async fn({ lib: { waitUntil } }): Promise<void> {
           const TIMEOUT_IN_MILLISECONDS = 100;
           await waitUntil({
             intervalInMilliseconds: 10,
@@ -553,7 +553,7 @@ ${name}`;
     it('should apply the default timeout when none is provided', async () => {
       const DEFAULT_TIMEOUT_IN_MILLISECONDS = 5000;
       const result = await evalInObsidian({
-        async fn({ waitUntil }): Promise<number> {
+        async fn({ lib: { waitUntil } }): Promise<number> {
           const startTime = Date.now();
           try {
             await waitUntil({ predicate: (): boolean => false });
@@ -574,7 +574,7 @@ ${name}`;
 
     it('should poll at the fast default interval when none is provided', async () => {
       const result = await evalInObsidian({
-        async fn({ waitUntil }): Promise<number> {
+        async fn({ lib: { waitUntil } }): Promise<number> {
           const FLIP_AFTER_IN_MILLISECONDS = 200;
           const startTime = Date.now();
           await waitUntil({
