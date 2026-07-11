@@ -211,6 +211,7 @@ class AppiumTransportFactory {
       deviceId,
       isSessionOwner: false,
       platform: 'android',
+      ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
       ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
       ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
     });
@@ -299,6 +300,7 @@ class AppiumTransportFactory {
         browser,
         deviceId: actualDeviceId,
         platform: 'android',
+        ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
         ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
         ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
       });

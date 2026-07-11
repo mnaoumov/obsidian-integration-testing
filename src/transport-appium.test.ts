@@ -9,6 +9,7 @@ import {
   vi
 } from 'vitest';
 
+import { log } from './log.ts';
 import { strictProxy } from './strict-proxy.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { ensureNonNullable } from './type-guards.ts';
@@ -181,6 +182,43 @@ describe('AppiumTransport.registerVault', () => {
       expect.any(Function),
       '/sdcard/Documents/my-vault'
     );
+  });
+});
+
+describe('AppiumTransport layout-ready timeout', () => {
+  let mockBrowser: MockBrowser;
+
+  beforeEach(() => {
+    mockBrowser = createMockBrowser();
+    // Report layout ready immediately so registerVault resolves without waiting.
+    mockBrowser.execute.mockResolvedValue(true);
+    vi.mocked(log).mockClear();
+  });
+
+  it('should default the layout-ready timeout to 90000ms', async () => {
+    const transport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android'
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Waiting for layout ready (timeout=90000ms)'));
+  });
+
+  it('should use the configured layoutReadyTimeoutInMilliseconds', async () => {
+    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 12345;
+    const transport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      layoutReadyTimeoutInMilliseconds: CUSTOM_TIMEOUT_IN_MILLISECONDS,
+      platform: 'android'
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Waiting for layout ready (timeout=12345ms)'));
   });
 });
 

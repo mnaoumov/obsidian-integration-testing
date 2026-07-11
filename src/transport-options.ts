@@ -41,6 +41,20 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly deviceId?: string;
 
   /**
+   * Timeout in milliseconds for waiting for `app.workspace.layoutReady` after
+   * the vault is (re)opened.
+   *
+   * Registering a vault triggers a full Obsidian re-init (`location.reload()`
+   * reopens the vault and reloads every plugin — the heaviest startup step). On
+   * a cold-booted or under-provisioned emulator that init can take a while, so
+   * this budget is the largest of the transport timeouts. Raise it further if
+   * releases still flake on slow CI emulators.
+   *
+   * @default `90000`
+   */
+  readonly layoutReadyTimeoutInMilliseconds?: number;
+
+  /**
    * An existing Appium session ID to reattach to.
    *
    * Populated automatically by the global setup and provided to test workers

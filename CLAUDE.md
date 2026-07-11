@@ -40,30 +40,35 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-**Hermetic, version-pinned desktop testing — implementation complete on branch
-`feat/hermetic-version-pinned-instance`** (owned isolated CDP instance is the new default; CLI
-retired; `obsidianVersion`/`obsidianInstallerVersion` pinning with caching). Full gate green;
-validated end-to-end on Windows (owned default, asar upgrade pin, installer downgrade pin). PENDING
-(user-owned): a **major (`5.0.0`) release** — this is a breaking change (drops `obsidian-cli`,
-`DesktopCliTransport`, `ObsidianCliTransportOptions`; default transport changes) — run via the repo's
-release flow. Then the **23-plugin migration**: any plugin explicitly setting `type: 'obsidian-cli'`
-must switch to `obsidian-cdp` (most rely on the default and need nothing). Not yet validated on
-macOS/Linux (the installer-extraction + shell-version-detection paths are platform-specific).
+None. The Android `waitForLayoutReady` timeout fix (below) is implemented and gate-green; it
+ships in the repo's next release (user-owned, non-breaking → a minor bump suffices).
 
-### Fix intermittent Android `waitForLayoutReady` 30s timeout (from the @obsidian G10d release loop, 2026-07-10)
+### Post-release follow-ups (user-owned / cross-repo)
 
-**Symptom.** During plugin releases (`npm run version patch` → `test:integration`), the `integration-tests:android` smoke test intermittently fails at setup with `Error: Obsidian layout did not become ready within 30000ms` (`AppiumTransport.waitForLayoutReady`, `src/transport-appium.ts`). Reproduced on `obsidian-smart-rename`'s release; it will flake **every** plugin's release the same way.
+The hermetic version-pinned desktop transport + CLI retirement shipped in **5.0.0** (current
+version 5.6.0). Two follow-ups remain, neither an implementation task in *this* repo:
 
-**Root cause.** `registerVault` (`transport-appium.ts:325`) pushes the vault marker, `ensureWebViewContext()`, sets localStorage, then `location.reload()` — a **full Obsidian re-init** (reopen vault + reload all plugins, the heaviest startup step) — then `waitForLayoutReady()` polls `app.workspace.layoutReady` for a **hardcoded, non-configurable `LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 30000`** (`transport-appium.ts:131`, used at `:447`). On a cold-booted / under-provisioned emulator (see **L13**), that post-reload init intermittently exceeds 30s. Design gap: the *lighter* `ensureWebViewContext` step already has a **configurable** timeout (`webviewTimeoutInMilliseconds`, `@default 60000`, options field ~`:122`, ctor field ~`:179`), but the *heavier* layout step got a shorter, fixed one.
+- **23-plugin migration** (cross-repo; the user drives each from its own repo). Any plugin
+  explicitly setting `type: 'obsidian-cli'` switches to `obsidian-cdp` (most rely on the default
+  and need nothing). Additionally, every plugin using the owned-CDP desktop default must add
+  `obsidian-integration-testing/vitest-setup` to its integration project's `setupFiles` — best
+  done once in the shared `obsidian-dev-utils` vitest config so the fleet inherits it (see **L9**).
+- **macOS/Linux validation** — the owned-instance installer-extraction and shell-version-detection
+  paths are platform-specific and validated only on Windows so far.
 
-**Fix (mirror `webviewTimeoutInMilliseconds` end-to-end).**
-1. Add `layoutReadyTimeoutInMilliseconds?: number` to the Appium transport options interface (next to `webviewTimeoutInMilliseconds`, `@default 90000` — verified by a test per the `@default`-tag rule). Thread it: options type → `AppiumTransportFactory` → `AppiumTransport` constructor → a `private readonly layoutReadyTimeoutInMilliseconds: number` field, and use the field in `waitForLayoutReady` instead of the module constant. Keep the constant as the default value.
-2. **Raise the default `30000` → `90000`** (≥ the webview default; the post-reload full init deserves the most headroom).
-3. Optional robustness: `log(...)` elapsed time each poll for diagnosis; and after `location.reload()` re-`ensureWebViewContext()` explicitly so WebView re-acquisition time isn't silently charged against the layout budget (currently the swallowed `execute` errors conflate "context not back yet" with "layout not ready").
-4. Add a unit test covering the new option + its default (repo requires 100% coverage). The transport module is integration-glue; check whether the option-plumbing is unit-reachable or needs a small extraction.
-5. Note in the change: the deeper cause is emulator provisioning (L13) — the timeout raise is headroom, not a substitute for adequate vCPU/RAM/HW-accel or a pre-booted snapshot.
+### Android `waitForLayoutReady` timeout — DONE (ships next release)
 
-**Release.** This ships in the repo's own release; it can ride the pending `5.0.0` (it is not itself breaking, so a minor would also do). After release, the @obsidian plugins consuming it get the headroom via the version bump (already part of the periodic libs refresh); no per-plugin code change needed.
+The `integration-tests:android` smoke test intermittently failed at setup with `Obsidian layout
+did not become ready within 30000ms` because `registerVault`'s post-`location.reload()` full
+Obsidian re-init (reopen vault + reload all plugins) can exceed 30s on a cold/under-provisioned
+emulator (**L13**), and the layout-ready timeout was hardcoded while the lighter
+`ensureWebViewContext` step was already configurable. Fixed by mirroring
+`webviewTimeoutInMilliseconds` end-to-end: added `layoutReadyTimeoutInMilliseconds`
+(`@default 90000`) to the Appium options type, threaded it through `AppiumTransportFactory` →
+`AppiumTransport` → a `private readonly` field used in `waitForLayoutReady`, raised the default
+`30000` → `90000`, and added per-poll elapsed-time logging. The raise is headroom, not a fix for
+the underlying emulator provisioning. Consuming plugins pick up the headroom via the version bump;
+no per-plugin change needed.
 
 ## Pending Questions
 

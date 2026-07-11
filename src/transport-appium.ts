@@ -101,6 +101,14 @@ export interface AppiumTransportConfig {
   isSessionOwner?: boolean;
 
   /**
+   * Timeout in milliseconds for waiting for `app.workspace.layoutReady` after
+   * the vault is (re)opened.
+   *
+   * @default `90000`
+   */
+  layoutReadyTimeoutInMilliseconds?: number;
+
+  /**
    * Target platform. Determines WebView context naming and device file paths.
    */
   platform: 'android' | 'ios';
@@ -128,7 +136,7 @@ const WEBVIEW_CONTEXT_PREFIX = 'WEBVIEW_md.obsidian';
 const WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 60000;
 const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 
@@ -173,6 +181,7 @@ export class AppiumTransport implements ObsidianTransport {
    */
   private isInWebViewContext = false;
   private readonly isSessionOwner: boolean;
+  private readonly layoutReadyTimeoutInMilliseconds: number;
   private readonly platform: 'android' | 'ios';
   private readonly vaultBasePath: string;
 
@@ -187,6 +196,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.browser = config.browser;
     this.deviceId = config.deviceId;
     this.isSessionOwner = config.isSessionOwner ?? true;
+    this.layoutReadyTimeoutInMilliseconds = config.layoutReadyTimeoutInMilliseconds ?? DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS;
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
@@ -444,8 +454,9 @@ export class AppiumTransport implements ObsidianTransport {
    * Polls until `app.workspace.layoutReady` is `true` in the WebView.
    */
   private async waitForLayoutReady(): Promise<void> {
-    const deadline = Date.now() + LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS;
-    log(`[appium-transport] Waiting for layout ready (timeout=${String(LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    const start = Date.now();
+    const deadline = start + this.layoutReadyTimeoutInMilliseconds;
+    log(`[appium-transport] Waiting for layout ready (timeout=${String(this.layoutReadyTimeoutInMilliseconds)}ms)...`);
 
     while (Date.now() < deadline) {
       try {
@@ -455,7 +466,7 @@ export class AppiumTransport implements ObsidianTransport {
           return !!app?.workspace?.layoutReady;
         });
         if (isReady) {
-          log('[appium-transport] Layout is ready.');
+          log(`[appium-transport] Layout is ready after ${String(Date.now() - start)}ms.`);
           this.isInWebViewContext = true;
           return;
         }
@@ -463,10 +474,11 @@ export class AppiumTransport implements ObsidianTransport {
         // App not ready yet (page may be reloading).
       }
 
+      log(`[appium-transport] Layout not ready yet (elapsed=${String(Date.now() - start)}ms). Retrying...`);
       await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(`Obsidian layout did not become ready within ${String(LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+    throw new Error(`Obsidian layout did not become ready within ${String(this.layoutReadyTimeoutInMilliseconds)}ms`);
   }
 }
 
