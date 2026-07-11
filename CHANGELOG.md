@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 6.0.0
+
+- docs: document the process-visibility flags
+- feat: add process-uvisibility options, hidden by default
+- docs: note the unreproduced layout-trip caveat and next step in CLAUDE.md
+- docs: record Android setup-timeout profiling findings in CLAUDE.md
+- feat: make the Appium session-establishment timeout configurable
+- perf: push Android vault marker via adb instead of the slow WebDriver pushFile
+- docs: document Appium transport timeout options and de-stale CLI references
+- fix: make Android layout-ready timeout configurable; raise default to 90s
+- chore: update libs
+
 ## 5.6.0
 
 - feat: add trusted pressKey helper
