@@ -106,6 +106,16 @@ export interface ConnectToCdpOptions {
   readonly host?: string;
 
   /**
+   * Whether the Obsidian window is shown on screen. Unlike the test transports
+   * (hidden by default), `connectToCdp` **defaults to `true`** — it is meant for
+   * watching/debugging a real Obsidian. Set `false` to launch it off-screen.
+   * Ignored in attach mode ({@link port} set).
+   *
+   * @default `true`
+   */
+  readonly isObsidianAppVisible?: boolean;
+
+  /**
    * Pins the Electron shell (installer build) the owned instance runs. Accepts
    * `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`. Ignored when
    * {@link port} (attach mode) is set. When omitted, the installed shell is used.
@@ -167,6 +177,7 @@ interface ResolvedEndpoint {
  */
 export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpConnection> {
   const transportOptions: ObsidianCdpTransportOptions = {
+    isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
     type: 'obsidian-cdp',
     ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
     ...(options?.host !== undefined && { host: options.host }),

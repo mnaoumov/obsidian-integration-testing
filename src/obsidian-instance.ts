@@ -32,6 +32,13 @@ export interface LaunchOwnedObsidianInstanceParams {
   /** Absolute path to the Obsidian executable (shell) to launch. */
   readonly exePath: string;
 
+  /**
+   * Extra command-line args appended after `--user-data-dir` and
+   * `--remote-debugging-port` — used to pass the keep-alive Chromium flags when
+   * the instance is launched hidden (off-screen). Empty by default.
+   */
+  readonly extraArgs?: readonly string[];
+
   /** Absolute path to the isolated user-data dir to pass via `--user-data-dir`. */
   readonly userDataDir: string;
 }
@@ -76,7 +83,7 @@ export async function launchOwnedObsidianInstance(
   log(`[obsidian-instance] Launching owned Obsidian: userData=${params.userDataDir}, cdpPort=${String(port)}`);
   const child = spawn(
     params.exePath,
-    [`--user-data-dir=${params.userDataDir}`, `--remote-debugging-port=${String(port)}`],
+    [`--user-data-dir=${params.userDataDir}`, `--remote-debugging-port=${String(port)}`, ...(params.extraArgs ?? [])],
     { detached: true, stdio: 'ignore' }
   );
   child.unref();

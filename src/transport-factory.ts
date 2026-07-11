@@ -51,6 +51,10 @@ import {
 import { compareVersions } from './obsidian-version.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
+import {
+  shouldHideAppiumConsole,
+  shouldHideEmulatorWindow
+} from './visibility.ts';
 
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
@@ -124,6 +128,12 @@ interface StartAppiumAndEmulatorParams {
 
   /** AVD name to start. */
   readonly avdName: string;
+
+  /** Whether the auto-started Appium server console window is shown (omitted → hidden). */
+  readonly isAppiumConsoleVisible?: boolean | undefined;
+
+  /** Whether the auto-started emulator window is shown (omitted → hidden). */
+  readonly isEmulatorVisible?: boolean | undefined;
 
   /** The Appium server port. */
   readonly port: number;
@@ -261,6 +271,8 @@ class AppiumTransportFactory {
       const result = await this.startAppiumAndEmulator({
         appiumUrl: url,
         avdName: options.avdName,
+        isAppiumConsoleVisible: options.isAppiumConsoleVisible,
+        isEmulatorVisible: options.isEmulatorVisible,
         port,
         shouldAutoStartAppium: options.shouldAutoStartAppium
       });
@@ -346,7 +358,7 @@ class AppiumTransportFactory {
     }
   }
 
-  private async ensureDeviceConnected(avdName: string): Promise<EnsureDeviceConnectedResult> {
+  private async ensureDeviceConnected(avdName: string, isEmulatorVisible?: boolean): Promise<EnsureDeviceConnectedResult> {
     const deviceIdsBefore = await this.getConnectedDeviceIds();
     this.log(`Checking existing devices for AVD "${avdName}"... (connected: [${deviceIdsBefore.join(', ')}])`);
 
@@ -359,7 +371,7 @@ class AppiumTransportFactory {
     }
 
     this.log(`AVD "${avdName}" not found on any existing device, starting a new emulator...`);
-    const emulator = this.startEmulator(avdName);
+    const emulator = this.startEmulator(avdName, isEmulatorVisible);
 
     let actualDeviceId: string;
     try {
@@ -448,7 +460,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumUrl, avdName, port, shouldAutoStartAppium } = params;
+    const { appiumUrl, avdName, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
 
@@ -467,7 +479,7 @@ class AppiumTransportFactory {
 
     if (needsAppiumStart) {
       this.log(`Appium not reachable, auto-starting on port ${String(port)}...`);
-      appiumProcess = this.startAppiumServer(port);
+      appiumProcess = this.startAppiumServer(port, isAppiumConsoleVisible);
     }
 
     try {
@@ -477,7 +489,7 @@ class AppiumTransportFactory {
             this.log('Auto-started Appium server is ready.');
           })
           : Promise.resolve(),
-        this.ensureDeviceConnected(avdName)
+        this.ensureDeviceConnected(avdName, isEmulatorVisible)
       ]);
 
       return {
@@ -494,20 +506,21 @@ class AppiumTransportFactory {
     }
   }
 
-  private startAppiumServer(port: number): ChildProcess {
+  private startAppiumServer(port: number, isAppiumConsoleVisible?: boolean): ChildProcess {
     const child = spawn(`npx appium --log-timestamp --port ${String(port)} --allow-insecure=${CHROMEDRIVER_AUTODOWNLOAD_FEATURE}`, {
       detached: true,
       shell: true,
-      stdio: ['ignore', 'inherit', 'inherit']
+      stdio: ['ignore', 'inherit', 'inherit'],
+      windowsHide: shouldHideAppiumConsole(isAppiumConsoleVisible)
     });
 
     child.unref();
     return child;
   }
 
-  private startEmulator(avdName: string): EmulatorLaunch {
+  private startEmulator(avdName: string, isEmulatorVisible?: boolean): EmulatorLaunch {
     const emulatorBinary = this.resolveEmulatorBinary();
-    const args = buildEmulatorArgs(avdName);
+    const args = buildEmulatorArgs({ avdName, isHidden: shouldHideEmulatorWindow(isEmulatorVisible) });
     this.log(`Running: ${emulatorBinary} ${args.join(' ')}`);
     /*
      * Pipe (rather than ignore) stdout/stderr so an early failure such as
@@ -779,6 +792,7 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
   return new DesktopCdpTransport({
     ...(options?.host !== undefined && { cdpHost: options.host }),
     ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+    ...(options?.isObsidianAppVisible !== undefined && { isObsidianAppVisible: options.isObsidianAppVisible }),
     ownedInstance
   });
 }

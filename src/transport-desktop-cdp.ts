@@ -47,6 +47,10 @@ import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
 import { ensureNonNullable } from './type-guards.ts';
+import {
+  resolveOwnedHiddenLaunchArgs,
+  shouldHideObsidianApp
+} from './visibility.ts';
 
 /**
  * Configuration for the CDP transport.
@@ -77,6 +81,16 @@ export interface DesktopCdpTransportConfig {
    * isolated user-data config rather than the user-scope registry.
    */
   isHarnessOwnedInstance?: boolean;
+
+  /**
+   * Whether the owned Obsidian window is shown on screen. When `false` (the
+   * default), the owned instance is launched with keep-alive Chromium flags and
+   * its window is moved off-screen after launch. Only meaningful in owned mode;
+   * attach mode never touches the (user's) window.
+   *
+   * @default `false`
+   */
+  isObsidianAppVisible?: boolean;
 
   /**
    * When set, the transport launches and owns an isolated Obsidian instance
@@ -170,6 +184,9 @@ const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
 const INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS = 500;
+const OWNED_WINDOW_OFFSCREEN_MARGIN_IN_PIXELS = 200;
+const OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS = 20000;
+const OWNED_WINDOW_HIDE_POLL_INTERVAL_IN_MILLISECONDS = 250;
 
 /**
  * Transport that communicates with Desktop Obsidian via Chrome DevTools Protocol.
@@ -188,6 +205,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
   private readonly isHarnessOwnedInstance: boolean;
+  private readonly isObsidianAppVisible: boolean;
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
@@ -202,6 +220,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     this.cdpHost = config?.cdpHost ?? 'localhost';
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
     this.isHarnessOwnedInstance = config?.isHarnessOwnedInstance ?? false;
+    this.isObsidianAppVisible = config?.isObsidianAppVisible ?? false;
     this.ownedConfig = config?.ownedInstance;
     // Owned mode picks a free port at launch (assigned in registerVault).
     // Attach mode connects to the configured port; no port is hardcoded.
@@ -575,6 +594,57 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Moves the owned instance's window off-screen so a hidden run never steals
+   * focus. Uses Electron's remote bridge (`window.electron.remote`) — the only
+   * cross-platform way to reposition the window — placing it just beyond the
+   * right edge of all displays. The window stays "visible" to Chromium (so
+   * timers, `requestAnimationFrame`, `:hover`, and trusted input keep working),
+   * unlike minimizing, which would freeze `requestAnimationFrame`.
+   *
+   * The remote bridge is not available the instant CDP starts serving, so this
+   * polls until the move succeeds. Best-effort: if the window cannot be moved
+   * within the timeout, the keep-alive launch flags still apply and the run
+   * proceeds (worst case the window is briefly visible).
+   */
+  private async moveOwnedWindowOffscreen(): Promise<void> {
+    const moveExpr = `(() => {
+      const remote = window.electron && window.electron.remote;
+      if (!remote || typeof remote.getCurrentWindow !== 'function') { return 'no-bridge'; }
+      const win = remote.getCurrentWindow();
+      const displays = remote.screen.getAllDisplays();
+      const maxRight = Math.max(...displays.map((display) => display.bounds.x + display.bounds.width));
+      win.setPosition(maxRight + ${String(OWNED_WINDOW_OFFSCREEN_MARGIN_IN_PIXELS)}, 0);
+      return 'moved';
+    })()`;
+
+    const deadline = Date.now() + OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      try {
+        const target = (await this.getPageTargets())[0];
+        if (target) {
+          const ws = await this.connectToTarget(target);
+          try {
+            const response = await this.sendCommand(ws, 'Runtime.evaluate', {
+              expression: moveExpr,
+              returnByValue: true
+            });
+            if (response.result?.result?.value === 'moved') {
+              log('[cdp-transport] Moved owned Obsidian window off-screen (hidden mode).');
+              return;
+            }
+          } finally {
+            ws.close();
+          }
+        }
+      } catch {
+        // CDP endpoint / target / remote bridge not ready yet — keep polling.
+      }
+      await delay(OWNED_WINDOW_HIDE_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+    log(`[cdp-transport] Could not move owned window off-screen within ${String(OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS)}ms (non-fatal; keep-alive flags still applied).`);
+  }
+
+  /**
    * Opens a vault in an already-running Obsidian instance via the `vault-open`
    * Electron IPC (evaluated through CDP on an existing target), then polls until
    * the new vault's window target appears, is layout-ready, and its trust dialog
@@ -692,11 +762,16 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const instance = await launchOwnedObsidianInstance({
       cdpHost: this.cdpHost,
       exePath: config.exePath,
+      extraArgs: resolveOwnedHiddenLaunchArgs(this.isObsidianAppVisible),
       userDataDir: config.userDataDir
     });
     this.ownedInstance = instance;
     this.cdpPort = instance.port;
     this.cdpUrl = instance.cdpUrl;
+
+    if (shouldHideObsidianApp(this.isObsidianAppVisible)) {
+      await this.moveOwnedWindowOffscreen();
+    }
 
     await this.waitForOwnedVaultReady(vaultPath);
   }

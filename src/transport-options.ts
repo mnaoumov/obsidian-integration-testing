@@ -41,6 +41,29 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly deviceId?: string;
 
   /**
+   * Whether the auto-started Appium server console window is shown.
+   *
+   * When `false` (the default), the `npx appium` server process is spawned with
+   * its console window hidden (`windowsHide`), so it never steals focus. Ignored
+   * when attaching to an already-running Appium server ({@link shouldAutoStartAppium}
+   * `false`, or the server already reachable). Set `true` to see the server log window.
+   *
+   * @default `false`
+   */
+  readonly isAppiumConsoleVisible?: boolean;
+
+  /**
+   * Whether the auto-started Android emulator window is shown on screen.
+   *
+   * When `false` (the default), the emulator is started with `-no-window`
+   * (headless), so it never steals focus. Ignored when reusing an already-running
+   * device (nothing is launched to hide). Set `true` to watch the emulator UI.
+   *
+   * @default `false`
+   */
+  readonly isEmulatorVisible?: boolean;
+
+  /**
    * Timeout in milliseconds for waiting for `app.workspace.layoutReady` after
    * the vault is (re)opened.
    *
@@ -151,6 +174,22 @@ export interface ObsidianCdpTransportOptions {
    * @default `undefined`
    */
   readonly isHarnessOwnedInstance?: boolean | undefined;
+
+  /**
+   * Whether the owned desktop Obsidian window is shown on screen.
+   *
+   * When `false` (the default), the harness launches the owned instance with
+   * keep-alive Chromium flags and moves its window **off-screen** once Electron's
+   * remote bridge is available, so the run never steals focus or pops a window in
+   * front of you. Off-screen (not minimized) keeps the renderer live, so
+   * `setTimeout`, `requestAnimationFrame`, `:hover`, and trusted input behave
+   * identically to a visible window. Set `true` to watch the window (e.g. when
+   * debugging). Ignored in attach mode ({@link port} set) — the harness never
+   * moves the user's own running window.
+   *
+   * @default `false`
+   */
+  readonly isObsidianAppVisible?: boolean;
 
   /**
    * Pins the **Electron shell** (installer build) the owned instance runs.
