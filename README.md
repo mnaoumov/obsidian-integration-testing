@@ -125,7 +125,7 @@ The element/editor arguments are live renderer DOM nodes — the callback runs i
 renderer, so no cross-process serialization is needed.
 
 | Helper                             | Purpose                                                                                                                                                                                                         |
-|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typeIntoEditor({ editor, text })` | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                 |
 | `pressKey({ key, modifiers })`     | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
 | `hoverElement({ element })`        | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                                                                                                                          |
@@ -194,7 +194,7 @@ checked immediately, then re-checked every `intervalInMilliseconds` until it ret
 includes `message` when given).
 
 | Option                   | Purpose                                               | Default |
-|--------------------------|-------------------------------------------------------|---------|
+| ------------------------ | ----------------------------------------------------- | ------- |
 | `predicate`              | Condition to poll; sync or async, awaited each check. | —       |
 | `intervalInMilliseconds` | Delay between polls.                                  | `50`    |
 | `timeoutInMilliseconds`  | Max time to wait before rejecting.                    | `5000`  |
@@ -537,7 +537,7 @@ const title2 = await evalInObsidian({
 The transport determines how the library communicates with Obsidian. Configure it via transport options in your test framework's config (see [Quick start](#quick-start)):
 
 | Type                      | Platform | Mechanism                                   |
-|---------------------------|----------|---------------------------------------------|
+| ------------------------- | -------- | ------------------------------------------- |
 | `obsidian-cdp` (default)  | Desktop  | Obsidian `Chrome DevTools Protocol` (`CDP`) |
 | `obsidian-android-appium` | Mobile   | Obsidian Android Appium WebView injection   |
 
@@ -579,6 +579,25 @@ environmentOptions: {
 
 - **`obsidianVersion`** pins the app code (asar). When omitted, the owned instance runs the same version your installed Obsidian currently runs.
 - **`obsidianInstallerVersion`** pins the Electron shell (installer build), downloaded and extracted from the matching GitHub release (Windows installers require [7-Zip](https://www.7-zip.org/) on `PATH`). Public releases only — catalyst/beta builds have no public installer, so a catalyst version can only be pinned at the asar level.
+
+##### Window visibility
+
+By default the owned Obsidian window is **hidden** — it never steals focus or pops in front of your other apps. `isObsidianAppVisible` controls this:
+
+```ts
+environmentOptions: {
+  obsidianTransport: {
+    type: 'obsidian-cdp',
+    isObsidianAppVisible: true, // show the window (default: false)
+  },
+}
+```
+
+- **`isObsidianAppVisible`** (default `false`) — when hidden, the harness launches the owned instance with keep-alive Chromium flags and moves its window **off-screen** once Electron's remote bridge is up. Off-screen (not minimized) keeps the renderer fully live, so `setTimeout`, `requestAnimationFrame`, `:hover`, and trusted keyboard/pointer input behave exactly as they would for a visible window — tests are unaffected. Set `true` to watch the window (e.g. when debugging). Ignored in attach mode — the harness never moves your own running Obsidian.
+
+> [!NOTE]
+>
+> There is a brief (~1–2 s) flash while the window appears and is then moved off-screen: Obsidian's own process shows and focuses the window at launch, which the harness cannot prevent from outside. The persistent focus theft is eliminated, not the initial flash.
 
 ##### Attaching to a running Obsidian
 
@@ -663,14 +682,16 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs (all with sensible defaults):
 
-| Option                                        | Purpose                                                                                                  | Default                |
-|-----------------------------------------------|----------------------------------------------------------------------------------------------------------|------------------------|
-| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                | `'md.obsidian'`        |
-| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.             | `90000`                |
-| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost. | `180000`               |
-| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                           | `true`                 |
-| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                           | `'/sdcard/Documents/'` |
-| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                        | `60000`                |
+| Option                                        | Purpose                                                                                                         | Default                |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                       | `'md.obsidian'`        |
+| `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window. Hidden (`windowsHide`) by default so it never steals focus. | `false`                |
+| `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.     | `false`                |
+| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.                    | `90000`                |
+| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.        | `180000`               |
+| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                  | `true`                 |
+| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                  | `'/sdcard/Documents/'` |
+| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                               | `60000`                |
 
 > [!NOTE]
 >
@@ -779,6 +800,7 @@ await conn.evalInObsidian({ fn: ({ app }) => app.workspace.getActiveFile()?.path
 `connectToCdp` accepts the same version knobs as the transport (`obsidianVersion`, `obsidianInstallerVersion`, `host`, `commandTimeoutInMilliseconds`, both defaulting to your installed Obsidian), plus:
 
 - **`vault`** — path to an existing vault to open. When omitted, an empty temporary vault is created.
+- **`isObsidianAppVisible`** — whether the window is shown. Unlike the test transport (hidden by default), `connectToCdp` **defaults to `true`** since it is meant for watching/debugging a real Obsidian. Set `false` to launch it off-screen.
 - **`port`** — attach to an already-running Obsidian on this `CDP` port instead of owning an instance (as in [Attaching to a running Obsidian](#attaching-to-a-running-obsidian)).
 - **`shouldRemoveVaultOnDispose`** — whether `dispose()` removes the vault directory. Defaults to `true` for an implicit temp vault and `false` when a `vault` path is given, so a **real vault is never auto-deleted**. Set it explicitly to override.
 

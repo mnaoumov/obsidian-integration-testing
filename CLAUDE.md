@@ -40,8 +40,9 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None. The Android setup-timeout profiling + fixes (below) are implemented and gate-green; they
-ship in the repo's next release (user-owned, non-breaking → a minor bump suffices).
+None. The process-visibility flags (**L15** — `isObsidianAppVisible` / `isEmulatorVisible` /
+`isAppiumConsoleVisible`, all hidden by default) are implemented and gate-green; they ship in the next
+release (user-owned, non-breaking → a minor bump suffices).
 
 ### Post-release follow-ups (user-owned / cross-repo)
 
@@ -103,6 +104,8 @@ None.
 Transport is configured via the framework adapter's config mechanism. The discriminated union `ObsidianTransportOptions` (`type: 'obsidian-cdp' | 'obsidian-android-appium'`) drives which transport the globalSetup creates; `obsidian-cdp` is the default when omitted. Vitest uses `environmentOptions.obsidianTransport`; Jest uses `globalThis.__obsidianIntegrationTesting.transportOptions`. Other frameworks can register a custom resolver via `setTransportOptionsResolver()`.
 
 Desktop (`obsidian-cdp`) defaults to a **harness-owned, isolated instance** (temp `--user-data-dir` + free CDP port; never touches user-scope Obsidian). Set `port` to **attach** to a running Obsidian instead. `obsidianVersion` (asar) and `obsidianInstallerVersion` (shell) pin the version — each accepts `x.y.z` / `public-latest` / `catalyst-latest`; asar swap is upgrade-only vs. the shell, so older versions auto-use the matching installer (downloads/extracts via 7-Zip on Windows). Both version knobs ride the existing `transportOptions` channel, so all three consumption paths get them with no adapter change.
+
+**Process visibility (hidden by default — see L15):** three granular booleans, all default `false` (hidden), keep integration runs from stealing focus. `obsidian-cdp`: `isObsidianAppVisible` (owned desktop window). `obsidian-android-appium`: `isEmulatorVisible` (emulator `-no-window`) and `isAppiumConsoleVisible` (Appium spawn `windowsHide`). Like the version knobs they ride the `transportOptions` channel (no adapter change). `connectToCdp` overrides `isObsidianAppVisible` to `true` (debugging).
 
 ## L6. Framework parity (Vitest / Jest / Manual)
 
@@ -357,6 +360,40 @@ CodeMirror editor.
 Identical to L8: a trusted key press targets the single shared window's **global** focus, so
 focus-dependent integration test **files** must not run in parallel against the one shared Obsidian
 instance (`fileParallelism: false`, `maxWorkers: 1`).
+
+## L15. Process visibility — hidden by default; off-screen, never minimize
+
+Three granular booleans (all `@default false`, so launched processes are hidden and never steal focus)
+live on the transport options and are resolved by the pure, unit-tested `src/visibility.ts` (the
+launchers themselves — factory / CDP transport / `obsidian-instance` — are `v8 ignore` integration
+glue, so the `@default false` resolution is extracted there to stay testable, mirroring
+`appium-session-config.ts`):
+
+- **`isObsidianAppVisible`** (`obsidian-cdp`, owned mode only). When hidden, the owned instance is
+  launched with `OWNED_HIDDEN_LAUNCH_FLAGS` and, once Electron's remote bridge is up (~4.4s),
+  `DesktopCdpTransport.moveOwnedWindowOffscreen` moves the window beyond all displays via
+  `window.electron.remote.getCurrentWindow().setPosition(...)`. Best-effort (warn, don't throw).
+  Attach mode never moves the user's window. `connectToCdp` overrides the default to `true`.
+- **`isEmulatorVisible`** → `buildEmulatorArgs({ isHidden })` appends `-no-window` (headless emulator).
+- **`isAppiumConsoleVisible`** → `startAppiumServer` spawns with `windowsHide`.
+
+**Off-screen, NOT minimize — this is the crux (empirically established, see the auto-memory
+`reference_obsidian_background_window_throttling`).** A *minimized* Chromium renderer freezes
+`requestAnimationFrame` (0/s) regardless of any flag (no surface to composite) and inflates CDP command
+latency ~3×; the keep-alive flags rescue `setTimeout` but cannot rescue rAF. An **off-screen** window
+stays `visibilityState: 'visible'` to Chromium, so timers, rAF, `:hover`, and trusted input all behave
+exactly as when visible. Hence hide = move off-screen (+ `--disable-features=CalculateNativeWinOcclusion`
+and the backgrounding-disable flags so a covered/long-running off-screen window is never throttled),
+never `win.minimize()` / `win.hide()`. Confirmed via the real transport: hidden → `screenX` beyond the
+display, `visibility: visible`, rAF ~60/s; regression-tested in `connect-to-cdp.integration.test.ts`.
+
+**Honest limit (not solvable from outside):** Obsidian's own process shows and focuses the window at
+launch, so there is a brief (~1–2 s) flash before it is moved off-screen. The persistent focus theft is
+eliminated; the initial flash is not. Zero-flash would need Obsidian to launch hidden (a main-process
+option the harness does not control) or a separate Win32/virtual desktop. Also: Electron's CDP does
+**not** implement `Browser.getWindowForTarget`/`setWindowBounds`, and `--window-position`/`--window-size`
+are ignored — window control must go through Electron remote (available only in a loaded vault window)
+or OS-level Win32, which is why the move uses Electron remote.
 
 ## Known Issues
 
