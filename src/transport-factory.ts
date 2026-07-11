@@ -37,6 +37,10 @@ import {
   resolveAppiumStartTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
+import {
+  checkDeviceIdle,
+  resolveDeviceIdleTimeoutInMilliseconds
+} from './device-readiness.ts';
 import { buildEmulatorArgs } from './emulator-args.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
@@ -73,6 +77,7 @@ const OWNED_USER_DATA_PREFIX = 'userdata-';
 const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownload';
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
+const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
@@ -111,6 +116,20 @@ interface EmulatorLaunch {
 }
 
 /**
+ * Parameters for {@link AppiumTransportFactory.ensureDeviceConnected}.
+ */
+interface EnsureDeviceConnectedParams {
+  /** AVD name to connect to (starting a new emulator if not already running). */
+  readonly avdName: string;
+
+  /** Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it). */
+  readonly deviceIdleTimeoutInMilliseconds: number;
+
+  /** Whether the auto-started emulator window is shown (omitted → hidden). */
+  readonly isEmulatorVisible?: boolean | undefined;
+}
+
+/**
  * Result of {@link AppiumTransportFactory.ensureDeviceConnected}.
  */
 interface EnsureDeviceConnectedResult {
@@ -133,6 +152,9 @@ interface StartAppiumAndEmulatorParams {
 
   /** AVD name to start. */
   readonly avdName: string;
+
+  /** Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it). */
+  readonly deviceIdleTimeoutInMilliseconds: number;
 
   /** Whether the auto-started Appium server console window is shown (omitted → hidden). */
   readonly isAppiumConsoleVisible?: boolean | undefined;
@@ -277,6 +299,7 @@ class AppiumTransportFactory {
         appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
         appiumUrl: url,
         avdName: options.avdName,
+        deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
         isAppiumConsoleVisible: options.isAppiumConsoleVisible,
         isEmulatorVisible: options.isEmulatorVisible,
         port,
@@ -364,7 +387,8 @@ class AppiumTransportFactory {
     }
   }
 
-  private async ensureDeviceConnected(avdName: string, isEmulatorVisible?: boolean): Promise<EnsureDeviceConnectedResult> {
+  private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
+    const { avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible } = params;
     const deviceIdsBefore = await this.getConnectedDeviceIds();
     this.log(`Checking existing devices for AVD "${avdName}"... (connected: [${deviceIdsBefore.join(', ')}])`);
 
@@ -381,7 +405,7 @@ class AppiumTransportFactory {
 
     let actualDeviceId: string;
     try {
-      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator);
+      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, deviceIdleTimeoutInMilliseconds);
     } finally {
       emulator.stopCapture();
     }
@@ -432,6 +456,34 @@ class AppiumTransportFactory {
       .map((line) => line.split('\t')[0] ?? '');
   }
 
+  private getDeviceProp(deviceId: string, prop: string): Promise<string> {
+    return new Promise((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'shell', 'getprop', prop],
+        { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          // Return no output on timeout/error (not partial stdout) so a non-responsive guest reads as "not idle".
+          resolve(error ? '' : stdout);
+        }
+      );
+    });
+  }
+
+  private listInstalledPackages(deviceId: string): Promise<string> {
+    return new Promise((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'shell', 'cmd', 'package', 'list', 'packages'],
+        { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          // Return no output on timeout/error so a churning guest's slow/partial package list can't falsely read as idle.
+          resolve(error ? '' : stdout);
+        }
+      );
+    });
+  }
+
   private log(message: string): void {
     log(`[transport-factory:${this.type}] ${message}`);
   }
@@ -466,7 +518,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoStartAppium } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
 
@@ -495,7 +547,7 @@ class AppiumTransportFactory {
             this.log('Auto-started Appium server is ready.');
           })
           : Promise.resolve(),
-        this.ensureDeviceConnected(avdName, isEmulatorVisible)
+        this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible })
       ]);
 
       return {
@@ -676,7 +728,59 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForNewDevice(deviceIdsBefore: string[], emulator: EmulatorLaunch): Promise<string> {
+  /**
+   * Waits for a freshly-booted emulator to become idle before the session is
+   * established.
+   *
+   * `sys.boot_completed` fires before the guest is actually idle — package
+   * optimization and services keep churning — so establishing the Appium
+   * session immediately makes every serialized UiAutomator2 `adb` round-trip
+   * contend with that work and inflates session establishment ~3x. This polls
+   * a later, quieter signal (boot animation stopped + package manager serving,
+   * via {@link checkDeviceIdle}) and returns as soon as it is satisfied.
+   *
+   * Best-effort: if the guest does not report idle within the budget it logs a
+   * warning and proceeds (a slow session is better than a failed run), and a
+   * budget of `0` skips the wait entirely.
+   *
+   * @param deviceId - The device UDID to poll.
+   * @param timeoutInMilliseconds - Maximum time to wait; `0` skips the wait.
+   */
+  private async waitForDeviceIdle(deviceId: string, timeoutInMilliseconds: number): Promise<void> {
+    if (timeoutInMilliseconds <= 0) {
+      this.log(`Skipping post-boot idle wait for device ${deviceId} (timeout is 0).`);
+      return;
+    }
+
+    const start = Date.now();
+    const deadline = start + timeoutInMilliseconds;
+    this.log(
+      `Waiting for device ${deviceId} to become idle (timeout: ${String(timeoutInMilliseconds)}ms, poll: ${String(DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
+    );
+
+    while (Date.now() < deadline) {
+      const [bootAnimationProp, packageListOutput] = await Promise.all([
+        this.getDeviceProp(deviceId, 'init.svc.bootanim'),
+        this.listInstalledPackages(deviceId)
+      ]);
+
+      if (checkDeviceIdle({ bootAnimationProp, packageListOutput })) {
+        this.log(`Device ${deviceId} is idle after ${String(Date.now() - start)}ms.`);
+        return;
+      }
+
+      this.log(`Device ${deviceId} not idle yet (elapsed: ${String(Date.now() - start)}ms). Retrying...`);
+      await new Promise((resolve) => {
+        setTimeout(resolve, DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+
+    this.log(
+      `Warning: device ${deviceId} did not report idle within ${String(timeoutInMilliseconds)}ms; proceeding with session establishment anyway.`
+    );
+  }
+
+  private async waitForNewDevice(deviceIdsBefore: string[], emulator: EmulatorLaunch, deviceIdleTimeoutInMilliseconds: number): Promise<string> {
     this.log(
       `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
@@ -690,6 +794,7 @@ class AppiumTransportFactory {
         const actualDeviceId = newIds[0] ?? '';
         this.log(`Device ${actualDeviceId} appeared in ADB, waiting for boot to complete...`);
         await this.waitForBoot(actualDeviceId, deadline, emulator);
+        await this.waitForDeviceIdle(actualDeviceId, deviceIdleTimeoutInMilliseconds);
         await this.wakeScreen(actualDeviceId);
         return actualDeviceId;
       }

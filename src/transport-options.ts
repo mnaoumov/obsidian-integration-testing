@@ -54,6 +54,24 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly deviceId?: string;
 
   /**
+   * Timeout in milliseconds for waiting, after `sys.boot_completed`, for a
+   * harness-started emulator to become idle before the Appium session is
+   * established.
+   *
+   * `sys.boot_completed` fires *before* the guest is actually idle: package
+   * optimization and system services keep churning, so establishing the session
+   * immediately makes every one of UiAutomator2's serialized `adb` round-trips
+   * contend with that work and inflates session establishment ~3x. The factory
+   * instead waits until the boot animation has stopped and the package manager
+   * is serving, proceeding early once idle or after this budget (best-effort — a
+   * timeout logs a warning and proceeds). Set `0` to skip the wait. Only applies
+   * to a harness-started emulator, not a reused one.
+   *
+   * @default `60000`
+   */
+  readonly deviceIdleTimeoutInMilliseconds?: number;
+
+  /**
    * Whether the auto-started Appium server console window is shown.
    *
    * When `false` (the default), the `npx appium` server process is spawned with
