@@ -33,7 +33,10 @@ import type {
 } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
-import { resolveSessionConnectionRetryTimeoutInMilliseconds } from './appium-session-config.ts';
+import {
+  resolveAppiumStartTimeoutInMilliseconds,
+  resolveSessionConnectionRetryTimeoutInMilliseconds
+} from './appium-session-config.ts';
 import { buildEmulatorArgs } from './emulator-args.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
@@ -62,7 +65,6 @@ const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_CONNECTION_RETRY_COUNT = 3;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
 const OWNED_USER_DATA_PREFIX = 'userdata-';
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
 // Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
@@ -123,6 +125,9 @@ interface EnsureDeviceConnectedResult {
  * Parameters for {@link AppiumTransportFactory.startAppiumAndEmulator}.
  */
 interface StartAppiumAndEmulatorParams {
+  /** Resolved timeout in milliseconds for the auto-started Appium server to become ready. */
+  readonly appiumStartTimeoutInMilliseconds: number;
+
   /** The Appium server URL. */
   readonly appiumUrl: URL;
 
@@ -269,6 +274,7 @@ class AppiumTransportFactory {
 
     try {
       const result = await this.startAppiumAndEmulator({
+        appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
         appiumUrl: url,
         avdName: options.avdName,
         isAppiumConsoleVisible: options.isAppiumConsoleVisible,
@@ -460,7 +466,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumUrl, avdName, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoStartAppium } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
 
@@ -485,7 +491,7 @@ class AppiumTransportFactory {
     try {
       const [, deviceResult] = await Promise.all([
         needsAppiumStart
-          ? this.waitForAppiumReady(appiumUrl).then(() => {
+          ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds).then(() => {
             this.log('Auto-started Appium server is ready.');
           })
           : Promise.resolve(),
@@ -607,17 +613,20 @@ class AppiumTransportFactory {
     });
   }
 
-  private async waitForAppiumReady(url: URL): Promise<void> {
+  private async waitForAppiumReady(url: URL, timeoutInMilliseconds: number): Promise<void> {
+    const start = Date.now();
     this.log(
-      `Waiting for Appium at ${url.href} (timeout: ${String(APPIUM_START_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
+      `Waiting for Appium at ${url.href} (timeout: ${String(timeoutInMilliseconds)}ms, poll: ${String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
-    const deadline = Date.now() + APPIUM_START_TIMEOUT_IN_MILLISECONDS;
+    const deadline = start + timeoutInMilliseconds;
 
     while (Date.now() < deadline) {
       try {
         await this.checkAppiumReachable(url);
+        this.log(`Appium server ready after ${String(Date.now() - start)}ms.`);
         return;
       } catch {
+        this.log(`Appium server not ready yet (elapsed: ${String(Date.now() - start)}ms). Retrying...`);
         await new Promise((resolve) => {
           setTimeout(resolve, APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS);
         });
@@ -625,7 +634,7 @@ class AppiumTransportFactory {
     }
 
     throw new Error(
-      `Auto-started Appium server did not become ready within ${String(APPIUM_START_TIMEOUT_IN_MILLISECONDS)}ms`
+      `Auto-started Appium server did not become ready within ${String(timeoutInMilliseconds)}ms`
     );
   }
 

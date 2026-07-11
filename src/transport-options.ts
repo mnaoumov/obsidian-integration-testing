@@ -16,6 +16,19 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly appId?: string;
 
   /**
+   * Timeout in milliseconds for the auto-started Appium server to become ready
+   * (its `/status` endpoint to respond).
+   *
+   * Only applies when the harness auto-starts the Appium server
+   * ({@link shouldAutoStartAppium}); ignored when attaching to an
+   * already-running server. On a cold machine the `npx appium` server can take
+   * a while to finish booting, so raise this if startup times out.
+   *
+   * @default `180000`
+   */
+  readonly appiumStartTimeoutInMilliseconds?: number;
+
+  /**
    * The Appium server URL (e.g. `'http://localhost:4723'`).
    */
   readonly appiumUrl: string;
