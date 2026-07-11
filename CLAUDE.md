@@ -40,10 +40,12 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-**OPEN (Part 2 code decision only).** Part 1 (the release-unblock) shipped; Part 2 is root-caused
-(empirical profiling below). What remains is a design decision on which of the identified code levers
-to implement — see "Part 2 — remaining decision". The process-visibility flags (**L15**) are
-implemented and gate-green; they ship in the next release (user-owned, non-breaking → a minor bump).
+**OPEN (levers 2–4 only — provisioning, user-owned).** Part 1 (release-unblock) shipped; Part 2 is
+root-caused (empirical profiling below) and its top code lever — the **boot-idle gate** — is
+implemented and gate-green (see "Part 2 — boot-idle gate"). The remaining levers (2 warm/snapshot
+reuse, 3 persistent Appium server, 4 pre-provisioned chromedriver) are provisioning concerns, not
+code. The process-visibility flags (**L15**) are implemented and gate-green too; all ship in the next
+release (user-owned, non-breaking → a minor bump).
 
 ### Android — Appium SERVER-ready 60s timeout (release blocker) + root-cause the 140–200s cold cost (found 2026-07-11)
 
@@ -80,23 +82,38 @@ Ruled out and confirmed empirically (see the auto-memory `reference_android_appi
   themselves are inside the UiAutomator2 driver — not harness-controllable per-call; the fix is to stop
   paying the cold/contended multiplier.
 
-**Part 2 — remaining decision (which code lever to implement).** In descending value:
+**Part 2 — boot-idle gate (DONE, implemented + cold-boot-confirmed 2026-07-11).** After
+`sys.boot_completed`, `waitForNewDevice` now calls `waitForDeviceIdle` before the session runs, so
+`remote()` executes against an idle guest (~27–53s) instead of a churning one (~140–200s). Design:
 
-1. **Boot-idle gate (recommended, directly attacks the 140–200s).** After `sys.boot_completed`, wait
-   until the guest is genuinely idle (e.g. `pm` responsive / package manager settled / boot animation
-   stopped) *before* `createNewSession` does `remote()`, so the session runs against an idle guest
-   (~53s) instead of a churning one (~140–200s). Lives in `ensureDeviceConnected`/`waitForBoot`.
-2. **Warm/snapshot emulator reuse (biggest single chunk — eliminates the ~112s boot).** `emulator-args.ts`
+- New pure, unit-tested `src/device-readiness.ts` — `checkDeviceIdle({ bootAnimationProp,
+  packageListOutput })` (idle ⇔ `init.svc.bootanim` == `stopped` **and** `cmd package list packages`
+  lists ≥1 package) + `resolveDeviceIdleTimeoutInMilliseconds` (`@default 60000`). The factory
+  (v8-ignored) polls two `adb` probes and applies `checkDeviceIdle`; best-effort — on timeout it warns
+  and proceeds, and a `0` timeout skips the wait. New option `deviceIdleTimeoutInMilliseconds`.
+- **Robustness (from the confirmation):** the probe helpers return `''` on adb timeout/error, so a
+  churning guest's slow/partial `package list` can't falsely read as idle. This makes "the package
+  list completes within the 5s adb timeout" the effective package-manager-responsive latency signal.
+- **Cold-boot confirmation:** at `sys.boot_completed` an `adb cmd package list packages` took **~50s**
+  to return (vs ~1–2s idle) — direct proof of the ~25–50× round-trip inflation; once idle
+  (`bootanim=stopped`, 261 packages) a session established in **26.7s**. `checkDeviceIdle` read the
+  real signals correctly. **Honest limit:** on this fast WHPX host the without-gate session isn't as
+  slow as the 140–200s a starved release env sees, so the gate's headline speedup is confidence-based
+  for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured.
+
+**Part 2 — remaining levers (provisioning, user-owned).** In descending value:
+
+1. **Warm/snapshot emulator reuse (biggest single chunk — eliminates the ~112s boot).** `emulator-args.ts`
    passes `-no-snapshot-save`, so on a fresh CI AVD every run is a full cold boot (no quick-boot snapshot
    is ever persisted). Make snapshot load+save an opt-in option so a persistent runner warm-boots.
    Changes test-isolation semantics (hermeticity) — a deliberate user tradeoff; default stays cold.
-3. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
+2. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
    the release environment.
-4. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
+3. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
 
-Levers 2–4 are largely provisioning; lever 1 is the pure code win. The honest limit stands: the residual
-cold cost is dominated by emulator provisioning/contention, which code makes resilient (idle-gate), not
-zero.
+These remaining levers are provisioning, not code; the shipped boot-idle gate is the pure code win. The
+honest limit stands: the residual cold cost is dominated by emulator provisioning/contention, which code
+makes resilient (idle-gate), not zero.
 
 **Release impact (consumer side).** With Part 1 shipped and plugins bumped, the 60s server cliff is
 gone. If a release still aborts on the cold session on a slow runner, interim options: run where the
