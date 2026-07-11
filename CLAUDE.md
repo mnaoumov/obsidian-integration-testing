@@ -40,9 +40,68 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None. The process-visibility flags (**L15** — `isObsidianAppVisible` / `isEmulatorVisible` /
-`isAppiumConsoleVisible`, all hidden by default) are implemented and gate-green; they ship in the next
-release (user-owned, non-breaking → a minor bump suffices).
+**OPEN (Part 2 code decision only).** Part 1 (the release-unblock) shipped; Part 2 is root-caused
+(empirical profiling below). What remains is a design decision on which of the identified code levers
+to implement — see "Part 2 — remaining decision". The process-visibility flags (**L15**) are
+implemented and gate-green; they ship in the next release (user-owned, non-breaking → a minor bump).
+
+### Android — Appium SERVER-ready 60s timeout (release blocker) + root-cause the 140–200s cold cost (found 2026-07-11)
+
+**Symptom.** A fleet libs-refresh release (`obsidian-backlink-cache`, `npm run version patch`,
+integration-testing 6.0.0) aborted its `integration-tests:android` preflight with `Error:
+Auto-started Appium server did not become ready within 60000ms`
+(`AppiumTransportFactory.waitForAppiumReady`). It waits for the auto-started Appium **server's
+`/status`** to answer; that one server-ready timeout was left at 60s while its sibling session timeout
+was already raised to 180s — the tightest remaining cliff.
+
+**Part 1 — immediate unblock (DONE, shipped 2026-07-11).** `appiumStartTimeoutInMilliseconds`
+(`@default 180000`, resolved via the testable `appium-session-config.ts`, threaded factory →
+`waitForAppiumReady` with per-poll elapsed logging; the old `APPIUM_START_TIMEOUT_IN_MILLISECONDS`
+constant is gone). Unit-tested (option + default). Commit `feat: make the Appium server-start timeout
+configurable`.
+
+**Part 2 — root-cause the 140–200s cold cost (PROFILED 2026-07-11 on the real WHPX emulator).**
+Ruled out and confirmed empirically (see the auto-memory `reference_android_appium_cold_cost_breakdown`):
+
+- **`npx appium` re-install — RULED OUT.** `npx appium` resolves to the global `appium@3.5.0`
+  (`npx --no-install` succeeds); no re-download. Adds ~1–4s, not minutes. UiAutomator2 `7.6.0` is
+  persistently installed in `~/.appium`; `chromedriver v149` is cached in the driver dir.
+- **Appium server cold-start — real but secondary.** Server `/status` ready in ~13.5s warm, of which
+  **~8.7s is loading the UiAutomator2 driver's node modules**; cold disk + release-time memory pressure
+  pushes that past the old 60s cliff. (Part 1 raised the ceiling; a persistent/reused server removes it.)
+- **Emulator COLD BOOT ≈ 112s** — 32s start→device-online + **80s device-online→`sys.boot_completed`**.
+  Pure boot cost, entirely avoided by a warm/snapshotted guest.
+- **Session `remote()` — the "140–200s" is session-DURING-post-boot-churn, not the session itself.**
+  With the guest allowed to settle ~15s after boot, cold `remote()` was **53.5s** (vs 29s fully warm).
+  The harness proceeds to `remote()` the instant `sys.boot_completed=1` fires — but that flag fires
+  **before** the guest is idle (package optimization / services still churning), so every one of
+  UiAutomator2's ~40 serialized `adb`/instrumentation round-trips contends and inflates. That
+  contention is what turns a 53s cold session into the 140–200s the release saw. The ~40 round-trips
+  themselves are inside the UiAutomator2 driver — not harness-controllable per-call; the fix is to stop
+  paying the cold/contended multiplier.
+
+**Part 2 — remaining decision (which code lever to implement).** In descending value:
+
+1. **Boot-idle gate (recommended, directly attacks the 140–200s).** After `sys.boot_completed`, wait
+   until the guest is genuinely idle (e.g. `pm` responsive / package manager settled / boot animation
+   stopped) *before* `createNewSession` does `remote()`, so the session runs against an idle guest
+   (~53s) instead of a churning one (~140–200s). Lives in `ensureDeviceConnected`/`waitForBoot`.
+2. **Warm/snapshot emulator reuse (biggest single chunk — eliminates the ~112s boot).** `emulator-args.ts`
+   passes `-no-snapshot-save`, so on a fresh CI AVD every run is a full cold boot (no quick-boot snapshot
+   is ever persisted). Make snapshot load+save an opt-in option so a persistent runner warm-boots.
+   Changes test-isolation semantics (hermeticity) — a deliberate user tradeoff; default stays cold.
+3. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
+   the release environment.
+4. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
+
+Levers 2–4 are largely provisioning; lever 1 is the pure code win. The honest limit stands: the residual
+cold cost is dominated by emulator provisioning/contention, which code makes resilient (idle-gate), not
+zero.
+
+**Release impact (consumer side).** With Part 1 shipped and plugins bumped, the 60s server cliff is
+gone. If a release still aborts on the cold session on a slow runner, interim options: run where the
+emulator is warm, or `version patch -- --no-checks` (skips the integration preflight; the unit gate is
+validated separately per plugin).
 
 ### Post-release follow-ups (user-owned / cross-repo)
 
