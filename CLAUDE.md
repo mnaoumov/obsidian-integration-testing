@@ -171,7 +171,7 @@ push is the one measured, unconditional win. **To close it definitively, capture
 during an actual release** — the per-poll elapsed logging now pinpoints whether the culprit is a
 starved-guest layout slowdown, a command-latency burst, or session establishment.
 
-### Expose the whole `obsidian-dev-utils` library to `evalInObsidian` closures via `lib` (mechanism DONE 2026-07-11; dev-utils hand-off pending)
+### Expose the whole `obsidian-dev-utils` library to `evalInObsidian` closures via `lib` (mechanism + base-`lib` DONE 2026-07-11; dev-utils hand-off pending)
 
 **Origin.** Closures are serialized via `toString()` and cannot `import`, so consumers hand-roll null
 guards / casts / poll loops and re-derive `obsidian-dev-utils` logic inline (drift). The initial idea
@@ -179,12 +179,19 @@ guards / casts / poll loops and re-derive `obsidian-dev-utils` logic inline (dri
 dev-utils. Instead this repo ships a generic, type-safe **`lib` extension point** so a provider exposes
 its *whole real* library at once (see **L16**).
 
-**Done in this repo (the mechanism).** `registerLibResolver` (`src/lib-registry.ts`) + augmentable
+**Done in this repo.** (a) *The mechanism*: `registerLibResolver` (`src/lib-registry.ts`) + augmentable
 `interface Lib` (`src/eval-in-obsidian.ts`) + `lib` on `CommonArgs`, merged into `fullArgs` in
 `evalWrapper` (`src/namespace-bootstrap.ts`) via `Object.assign` of every registered resolver's result,
-with a resolver-fingerprinted bootstrap version. Unit test `src/lib-registry.test.ts` (100%) +
-end-to-end `src/lib-injection.integration.test.ts` (real Obsidian: flat access, destructuring,
-multi-resolver merge, absent keys). Barrel exports `registerLibResolver`, `Lib`, `LibResolver`.
+with a resolver-fingerprinted bootstrap version. (b) ***BREAKING* base-`lib` refactor**: the six
+renderer-driving helpers (`typeIntoEditor` / `pressKey` / `moveMouse` / `hoverElement` /
+`unhoverElement` / `waitUntil`) moved OUT of top-level `CommonArgs` INTO the harness-seeded **base**
+`lib` (so `lib` is never empty and the harness stays self-contained); closures now destructure them from
+`lib` (`fn({ lib: { typeIntoEditor } })`). `CommonArgs` is now just `app` / `lib` / `obsidianModule`
+(**L16**). Tests + L8/L11/L12/L14 + README migrated. Unit `src/lib-registry.test.ts` (100%) + end-to-end
+`src/lib-injection.integration.test.ts` + the migrated `src/eval-in-obsidian.integration.test.ts`. Barrel
+exports `registerLibResolver`, `Lib`, `LibResolver`. **This is a breaking API change → the next release
+is a MAJOR bump**, and consuming plugins must migrate their closures
+(`{ typeIntoEditor }` → `{ lib: { typeIntoEditor } }`, etc.).
 
 **Pending — dev-utils hand-off (cross-repo, G55).** The runtime already exists there
 (`integration-test-plugin` sets `window.__obsidianDevUtilsModule__`; harness installs it). Remaining:
@@ -199,6 +206,10 @@ multi-resolver merge, absent keys). Barrel exports `registerLibResolver`, `Lib`,
 4. Migrate the ~13 `src/obsidian/*.obsidian.integration.test.ts` closures from
    `const lib = window.__obsidianDevUtilsModule__; if (!lib) throw; lib.X` → `fn({ app, lib }) => lib.X`.
 5. Bump the `obsidian-integration-testing` dep to the version shipping `lib`.
+6. **(Duplication, accepted.)** Also add the six harness base helpers to dev-utils' `test-helpers` and
+   expose them via `__merged`, so `lib.typeIntoEditor` etc. resolve to dev-utils' copies (overriding the
+   harness base) when the provider is registered. This deliberately duplicates the harness
+   implementations — the tradeoff for a single dev-utils-owned source of closure helpers.
    (Full plan: `~/.claude/plans/linked-soaring-nebula.md`.)
 
 ## Pending Questions
@@ -234,10 +245,10 @@ Only the **`android`** scope (`obsidian-android-appium`) takes the lock now; `ge
 ## L8. Trusted keyboard input (`typeIntoEditor`)
 
 Every `evalInObsidian` callback receives a `typeIntoEditor(params: { editor: Editor; text: string })`
-helper on its args (alongside `app` / `obsidianModule`), exposed via `CommonArgs`
-(`src/eval-in-obsidian.ts`) and defined in the in-process namespace (`namespace-bootstrap.ts`,
-wired into the `fullArgs` literal). Per **L6** it lives once on the Obsidian side, so Vitest / Jest /
-Manual all inherit it.
+helper as a **base** member of the injected **`lib`** bag (destructure `fn({ lib: { typeIntoEditor } })`),
+typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
+(`namespace-bootstrap.ts`, the bag `evalWrapper` builds). See **L16** for the `lib` mechanism. Per **L6**
+it lives once on the Obsidian side, so Vitest / Jest / Manual all inherit it.
 
 Reliably testing "the user typed into a CodeMirror editor" needs a **trusted** key event (the kind
 only the browser/OS produces). Both in-page alternatives give false results:
@@ -267,9 +278,11 @@ run its obsidian-integration vitest project serially (`fileParallelism: false`, 
 
 ### Pending migration (`obsidian-dev-utils`)
 
-`obsidian-dev-utils` still ships a local stopgap `src/test-helpers/type-into-editor.ts` (a
-self-contained function passed into closures via `args`). Now that the helper is shipped here, remove
-the dev-utils copy and switch its integration tests to the `typeIntoEditor` provided in `CommonArgs`.
+`obsidian-dev-utils` ships a local `src/test-helpers/type-into-editor.ts`. Under the base-`lib` +
+duplication decision (see the Current Task hand-off), dev-utils **keeps** its own copies of the
+trusted-input / `waitUntil` helpers (duplication accepted) and exposes them through its `__merged`
+surface, so they merge onto the base `lib`; its integration tests destructure them from `lib`
+(`async fn({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `args`.
 
 ## L9. Test workers must register the context resolvers (`vitest-setup` / `jest-setup`)
 
@@ -330,10 +343,10 @@ tool must attach to a printed port.
 
 ## L11. Trusted pointer input (`moveMouse` / `hoverElement` / `unhoverElement`)
 
-Every `evalInObsidian` callback also receives a trusted-pointer trio on its args (alongside
-`typeIntoEditor`), exposed via `CommonArgs` (`src/eval-in-obsidian.ts`) and defined in the in-process
-namespace (`namespace-bootstrap.ts`, wired into the `fullArgs` literal). Per **L6** they live once on
-the Obsidian side, so Vitest / Jest / Manual all inherit them. This is the pointer analog of L8's
+Every `evalInObsidian` callback also gets a trusted-pointer trio as **base** members of the injected
+**`lib`** bag (alongside `typeIntoEditor`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into
+the base `lib` in the in-process namespace (`namespace-bootstrap.ts`); see **L16**. Per **L6** they live
+once on the Obsidian side, so Vitest / Jest / Manual all inherit them. This is the pointer analog of L8's
 trusted keyboard input, and shares its mechanism and caveats.
 
 Some CSS is reachable only through a real pointer **state**. `:hover` is the canonical case: it is not
@@ -367,16 +380,16 @@ obsidian-integration vitest project serially (`fileParallelism: false`, `maxWork
 ### Pending migration (`obsidian-dev-utils`)
 
 `obsidian-dev-utils` writes its red-first advanced-note-composer #124 integration test (the
-minimized-modal-bar opaque-on-hover regression) against `CommonArgs.hoverElement` from this helper —
+minimized-modal-bar opaque-on-hover regression) against `lib.hoverElement` from this helper —
 see that repo's `## Current Task — Fix minimized modal bar transparent on hover`, and, per L8's
 pending-migration note, it uses the shipped helper rather than any local stopgap.
 
 ## L12. Reusable async wait (`waitUntil`)
 
-Every `evalInObsidian` callback also receives a `waitUntil(params: WaitUntilParams)` helper on its
-args (alongside `typeIntoEditor` / the pointer trio), exposed via `CommonArgs`
-(`src/eval-in-obsidian.ts`) and defined in the in-process namespace (`namespace-bootstrap.ts`, wired
-into the `fullArgs` literal). Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
+Every `evalInObsidian` callback also gets a `waitUntil(params: WaitUntilParams)` helper as a **base**
+member of the injected **`lib`** bag (alongside `typeIntoEditor` / the pointer trio), typed on `Lib`
+(`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
+(`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
 all inherit it.
 
 Integration-test closures constantly need to wait for an asynchronous effect to settle (a view to
@@ -388,7 +401,7 @@ Before this helper, every consumer hand-rolled the same poll loop inside each cl
 is the **only** way to share such a helper into the serialized closure — the same mechanism as
 `hoverElement` / `typeIntoEditor` / `moveMouse`.
 
-- **API shape** — a params object `waitUntil({ predicate })`, matching every other `CommonArgs` helper
+- **API shape** — a params object `waitUntil({ predicate })`, matching every other `lib` helper
   (not a positional `waitUntil(() => cond)`), so the injected-helper surface stays uniform.
 - **`predicate`** may be **synchronous or asynchronous** — it is `await`ed on every poll. It is checked
   immediately, then re-checked every `intervalInMilliseconds` (default `50`) until it returns truthy or
@@ -398,8 +411,8 @@ is the **only** way to share such a helper into the serialized closure — the s
 
 ### Pending migration (consumer cleanup)
 
-Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUntil` from `CommonArgs`
-(destructure `async fn({ app, waitUntil }) { … }`). First consumers: `obsidian-advanced-note-composer`
+Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUntil` from the `lib` bag
+(destructure `async fn({ app, lib: { waitUntil } }) { … }`). First consumers: `obsidian-advanced-note-composer`
 (`modal-instructions.desktop.integration.test.ts`) and `obsidian-codescript-toolkit`. Each needs its
 `obsidian-integration-testing` dependency bumped to the version that ships this helper.
 
@@ -424,10 +437,10 @@ suppression as symptom relief, not a root-cause fix.
 
 ## L14. Trusted key press (`pressKey`)
 
-Every `evalInObsidian` callback also receives a `pressKey(params: PressKeyParams)` helper on its args
-(alongside `typeIntoEditor` / the pointer trio / `waitUntil`), exposed via `CommonArgs`
-(`src/eval-in-obsidian.ts`) and defined in the in-process namespace (`namespace-bootstrap.ts`, wired
-into the `fullArgs` literal). Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
+Every `evalInObsidian` callback also gets a `pressKey(params: PressKeyParams)` helper as a **base**
+member of the injected **`lib`** bag (alongside `typeIntoEditor` / the pointer trio / `waitUntil`),
+typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
+(`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
 all inherit it. This is the key-press analog of L8's `typeIntoEditor`, and shares its trusted-input
 mechanism and caveats.
 
@@ -445,7 +458,7 @@ KeyboardEvent(...))` is ignored by CodeMirror and most key handlers). Confirmed 
 (Obsidian 1.13.1): all five events fire trusted, and a trusted `Enter` inserts a newline in a live
 CodeMirror editor.
 
-- **API shape** — `pressKey({ key, modifiers? })`, matching every other `CommonArgs` helper (params
+- **API shape** — `pressKey({ key, modifiers? })`, matching every other `lib` helper (params
   object). `key` is an **Electron Accelerator key name** (`'Enter'`, `'Escape'`, `'Up'`, `'a'`, …).
   `modifiers` reuses Obsidian's own `Modifier` type (`'Mod' | 'Ctrl' | 'Meta' | 'Shift' | 'Alt'`) — the
   same values as an Obsidian `Hotkey` — rather than a bespoke type. `'Mod'` resolves per-platform (Cmd
@@ -504,11 +517,17 @@ or OS-level Win32, which is why the move uses Electron remote.
 ## L16. Extensible, type-safe `lib` injection (register a whole library into every closure)
 
 Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArgs`, `src/eval-in-obsidian.ts`)
-— a single flat bag into which provider packages inject their **whole real** renderer-safe library, so
-a serialized closure can call shared helpers (`lib.getFileOrNull({ app, … })`, `lib.ensureNonNullable(x)`)
-instead of hand-rolling them or reaching a `window` global. This is distinct from the L8/L11/L12/L14
-helpers: those are harness-owned, self-contained functions defined once in `namespace-bootstrap.ts`;
-`lib` is **externally provided** and **not reimplemented here** (this repo has no dev-utils dependency).
+— a single flat bag of shared closure helpers, so a serialized closure can call them
+(`lib.typeIntoEditor({ editor, text })`, `lib.getFileOrNull({ app, … })`) instead of hand-rolling them
+or reaching a `window` global. Two layers compose into it:
+
+- a **base** the harness itself seeds — the renderer-driving helpers of L8/L11/L12/L14
+  (`typeIntoEditor` / `pressKey` / `moveMouse` / `hoverElement` / `unhoverElement` / `waitUntil`), so
+  `lib` is never empty and the harness stays self-contained (no dev-utils dependency; it tests them
+  itself); and
+- **provider additions** — a provider package `Object.assign`s its **whole real** renderer-safe library
+  on top, so its functions (and any override of a base helper) win. Nothing dev-utils-owned is
+  reimplemented here.
 
 **Mechanism.**
 
@@ -522,14 +541,15 @@ helpers: those are harness-owned, self-contained functions defined once in `name
 - **Bake + merge.** `ensureNamespaceBootstrapped` threads the registered resolvers into
   `bootstrapNamespace` (serialized as real function literals by the existing `json-with-functions`
   path). `evalWrapper` runs each resolver and `Object.assign`s the results into one `lib` bag added to
-  `fullArgs`. Default `{}` when none registered; **multiple providers compose** (runtime `Object.assign`).
+  `fullArgs`. The bag starts from the harness base helpers, then each provider merges on top (later
+  wins); with no provider it is exactly the base. **Multiple providers compose** (runtime `Object.assign`).
 - **Version gate.** `getBootstrapVersion` / `computeBootstrapVersion` fold the resolver sources into the
   `window.__obsidianIntegrationTesting.version` used for the bootstrap-skip check, so a changed resolver
   set (e.g. different test files sharing one owned instance) forces a re-bootstrap instead of leaking a
   stale `lib`.
 
-**Type-safety (declaration merging, the `i18next` `CustomTypeOptions` idiom).** `interface Lib {}` is
-empty and **augmentable**: a provider does
+**Type-safety (declaration merging, the `i18next` `CustomTypeOptions` idiom).** `interface Lib` declares
+the base helpers and is **augmentable**: a provider does
 `declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('…')) {} }`.
 Multiple augmentations merge (like the multiple `Object.assign`s at runtime). Cycle-safe: `lib` is a
 live renderer object injected into `fullArgs` (never JSON-serialized — only `fn`'s return value is),

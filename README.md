@@ -111,7 +111,7 @@ const title = await evalInObsidian({
 
 ### Simulate real user input (trusted keyboard & pointer)
 
-Every callback also receives helpers that inject **trusted** input at the Chromium level
+The callback's `lib` bag provides helpers that inject **trusted** input at the Chromium level
 (via Electron's `webContents.sendInputEvent`) — the kind of event only the browser/OS
 normally produces. This matters because the in-page alternatives give false results:
 `dispatchEvent(new KeyboardEvent(...))` / `new MouseEvent(...)` are untrusted
@@ -135,7 +135,7 @@ renderer, so no cross-process serialization is needed.
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
 const typed = await evalInObsidian({
-  fn: async ({ app, obsidianModule, typeIntoEditor }) => {
+  fn: async ({ app, lib: { typeIntoEditor }, obsidianModule }) => {
     const view = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView);
     const editor = view?.editor;
     if (!editor) {
@@ -150,7 +150,7 @@ const typed = await evalInObsidian({
 // Press special keys / shortcuts (Obsidian `Modifier` names; `'Mod'` = Cmd on macOS, Ctrl elsewhere).
 // A key press has no universal effect, so pair it with `waitUntil` to await the outcome.
 await evalInObsidian({
-  fn: async ({ app, obsidianModule, pressKey, waitUntil }) => {
+  fn: async ({ app, lib: { pressKey, waitUntil }, obsidianModule }) => {
     const editor = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView)?.editor;
     editor?.focus();
 
@@ -161,7 +161,7 @@ await evalInObsidian({
 
 // Observe a genuine :hover state (real theme var() values, real compositing).
 await evalInObsidian({
-  fn: async ({ hoverElement, unhoverElement }) => {
+  fn: async ({ lib: { hoverElement, unhoverElement } }) => {
     const bar = document.querySelector<HTMLElement>('.minimized-modal-bar');
     if (!bar) {
       return;
@@ -182,7 +182,7 @@ await evalInObsidian({
 
 ### Wait for an async condition (`waitUntil`)
 
-Every callback also receives a `waitUntil({ predicate })` helper for polling until an
+The `lib` bag also provides a `waitUntil({ predicate })` helper for polling until an
 asynchronous effect settles (a view opens, a DOM node appears, a setting applies). Because
 the callback is serialized via `toString()` and **cannot import modules**, it can't reuse a
 library poll helper — `waitUntil` is the shared, injected replacement for the loops you would
@@ -203,7 +203,7 @@ includes `message` when given).
 ```ts
 // Wait until the plugin has opened a Markdown view, then read its editor.
 const value = await evalInObsidian({
-  fn: async ({ app, obsidianModule, waitUntil }) => {
+  fn: async ({ app, lib: { waitUntil }, obsidianModule }) => {
     await waitUntil({
       message: 'no active Markdown view',
       predicate: () => Boolean(app.workspace.getActiveViewOfType(obsidianModule.MarkdownView))
@@ -244,7 +244,7 @@ declare module 'obsidian-integration-testing' {
 }
 
 const name = await evalInObsidian({
-  fn: ({ lib }) => lib.getThing('a').name
+  fn: ({ lib: { getThing } }) => getThing('a').name
 });
 ```
 

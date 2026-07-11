@@ -6,7 +6,7 @@
  *
  * A single {@link connectToCdp} call resolves the owned-instance config, opens a
  * vault, and bootstraps `window.__obsidianIntegrationTesting` (so `evalWrapper`,
- * `typeIntoEditor`, `serializeError`, `getObsidianModule`, … are available), then
+ * the base `lib` helpers, `serializeError`, `getObsidianModule`, … are available), then
  * hands back a disposable {@link CdpConnection} exposing the chosen CDP port, a
  * raw {@link CdpConnection.invoke} and the rich {@link CdpConnection.evalInObsidian}.
  */
@@ -55,9 +55,10 @@ export interface CdpConnection extends AsyncDisposable {
 
   /**
    * Evaluates a self-contained function inside Obsidian via the rich helper
-   * path, receiving `{ app, obsidianModule, typeIntoEditor, context }` plus any
-   * `args`. Mirrors the top-level `evalInObsidian`, with the transport and vault
-   * path pre-bound to this connection.
+   * path, receiving `{ app, lib, obsidianModule, context }` plus any `args`
+   * (shared helpers like `typeIntoEditor` / `waitUntil` live on `lib`). Mirrors
+   * the top-level `evalInObsidian`, with the transport and vault path pre-bound
+   * to this connection.
    *
    * @param params - The evaluation parameters (`fn`, optional `args`/`contextId`).
    * @returns A {@link Promise} that resolves to the return value of `fn`.

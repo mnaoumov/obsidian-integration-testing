@@ -223,14 +223,14 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const context = params.contextId
         ? (this.contexts[params.contextId] ??= {})
         : {};
-      // Build the injected `lib` bag by merging every registered resolver's result.
-      // Resolvers run in-renderer (reading renderer globals a provider published);
+      // The injected `lib` bag: base helpers from the harness, then providers on top.
+      // Resolvers run in-renderer (they read renderer globals a provider published).
       // Rebuilding per eval keeps `lib` fresh and tolerant of a late-loaded provider.
-      const lib = {};
+      const lib = { hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
       for (const resolveLib of this.libResolvers) {
         Object.assign(lib, resolveLib());
       }
-      const fullArgs = { ...params.args, app: this.app, context, hoverElement, lib, moveMouse, obsidianModule, pressKey, typeIntoEditor, unhoverElement, waitUntil };
+      const fullArgs = { ...params.args, app: this.app, context, lib, obsidianModule };
       try {
         const result = await params.fn(fullArgs);
         if (result === undefined) {

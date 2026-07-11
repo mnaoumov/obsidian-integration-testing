@@ -68,156 +68,22 @@ export interface CommonArgs {
   app: App;
 
   /**
-   * Moves the mouse pointer to the center of an element using **trusted**
-   * Electron pointer input, then polls until the element actually matches
-   * `:hover`.
+   * The shared library bag injected into every callback — see {@link Lib}.
    *
-   * Because the move is trusted (see {@link CommonArgs.moveMouse}), the real
-   * `:hover` state takes effect in the CSS engine — real theme `var()` values
-   * and real compositing — instead of a hand-simulated cascade. It polls the
-   * live `element.matches(':hover')` state (not a fixed delay), so it is robust
-   * under shared-instance load. It targets the single shared window's
-   * **global** pointer, so only one element is hovered at a time.
-   *
-   * @param params - The element to hover.
-   * @returns A {@link Promise} that resolves once the element matches `:hover`.
-   */
-  hoverElement(this: void, params: HoverElementParams): Promise<void>;
-
-  /**
-   * The shared library surface injected into every callback — see {@link Lib}.
-   *
-   * Empty (`{}`) unless a provider registered a resolver via
-   * {@link registerLibResolver}. Providers (chiefly `obsidian-dev-utils`) expose
-   * their whole renderer-safe library here as a flat, type-safe bag, so a
-   * serialized closure can call shared helpers (`lib.getFileOrNull({ app, … })`,
-   * `lib.ensureNonNullable(x)`) instead of hand-rolling them or reaching a
-   * `window` global. When a provider offers a grouped/namespaced form it is
-   * reachable through its own back-reference (e.g. `lib.__namespaces.path.normalize`).
+   * Never empty: the harness pre-populates a **base** set of renderer-driving
+   * helpers (trusted input — `typeIntoEditor` / `pressKey` / `moveMouse` /
+   * `hoverElement` / `unhoverElement` — and `waitUntil`), and provider packages
+   * (chiefly `obsidian-dev-utils`) `Object.assign` their whole renderer-safe
+   * library on top via {@link registerLibResolver}. A serialized closure reaches
+   * every shared helper through `lib` — `lib.typeIntoEditor({ editor, text })`,
+   * `lib.getFileOrNull({ app, … })` — instead of importing or hand-rolling them.
    */
   lib: Lib;
-
-  /**
-   * Moves the mouse pointer to the given web-contents coordinates using a
-   * **trusted** Electron pointer move.
-   *
-   * A trusted move (injected via Electron's `webContents.sendInputEvent`)
-   * updates the real pointer state in the CSS engine, so `:hover` rules
-   * genuinely apply — unlike `dispatchEvent(new MouseEvent('mouseover'))`,
-   * which is untrusted and never sets `:hover`. It targets the single shared
-   * window's **global** pointer, so only one element is hovered at a time.
-   *
-   * This is the low-level primitive: it performs a single move and does **not**
-   * wait for any state to settle (callers poll their own readiness signal).
-   * Prefer {@link CommonArgs.hoverElement} / {@link CommonArgs.unhoverElement}
-   * for element-relative moves; use `moveMouse` directly when an
-   * element-relative target does not fit (e.g. an element spanning the full
-   * viewport width).
-   *
-   * @param params - The web-contents DIP coordinates to move to.
-   * @returns A {@link Promise} that resolves once the move has been injected.
-   */
-  moveMouse(this: void, params: MoveMouseParams): Promise<void>;
 
   /**
    * The `obsidian` module, resolved at runtime inside the Obsidian process.
    */
   obsidianModule: typeof obsidian;
-
-  /**
-   * Presses a single key (optionally with modifiers) using **trusted** Electron
-   * keyboard input, firing the full real key pipeline —
-   * `keydown` → `keypress` → `beforeinput` → `input` → `keyup`.
-   *
-   * This is the key-press analog of {@link CommonArgs.typeIntoEditor}: it
-   * injects a trusted `keyDown` → `char` → `keyUp` sequence via Electron's
-   * `webContents.sendInputEvent`, so it is delivered to the window's DOM-focused
-   * element and flows through the real input pipeline — unlike
-   * `dispatchEvent(new KeyboardEvent(...))`, which is untrusted (`isTrusted:
-   * false`) and ignored by CodeMirror and most key handlers. Use it for special
-   * keys (`'Enter'`, `'Escape'`, `'Tab'`, arrow keys) and modifier combinations
-   * (`Shift+Enter`, `Ctrl+A`) that {@link CommonArgs.typeIntoEditor} (which
-   * types printable text) does not cover.
-   *
-   * This is the low-level primitive: it injects the key press and does **not**
-   * poll for any effect (a key press has no universal observable outcome —
-   * `Enter` edits the document, `Escape` closes a modal, `ArrowDown` moves the
-   * selection). The caller focuses the intended target first, then awaits the
-   * expected effect via {@link CommonArgs.waitUntil}. It targets the single
-   * shared window's **global** focus, so only the DOM-focused element receives
-   * the key.
-   *
-   * @param params - The key to press and any modifiers to hold.
-   * @returns A {@link Promise} that resolves once the key press has been
-   *   injected.
-   */
-  pressKey(this: void, params: PressKeyParams): Promise<void>;
-
-  /**
-   * Types text into a CodeMirror {@link Editor} using **trusted** Electron
-   * keyboard input.
-   *
-   * Typing is pressing each character key in turn: this focuses the editor
-   * (caret to end) and presses every code point of `text` via
-   * {@link CommonArgs.pressKey} — the same trusted `keyDown` → `char` → `keyUp`
-   * a real user produces. Each keystroke is delivered to the window's
-   * DOM-focused element and flows through CodeMirror's real input pipeline, so
-   * the typed text reaches the document **only if the editor genuinely holds
-   * focus**.
-   * This makes "the user typed into the editor" a faithful end-to-end check,
-   * unlike `dispatchEvent(new KeyboardEvent(...))` (untrusted — ignored by
-   * CodeMirror) or `execCommand('insertText')` (mutates the selection even
-   * when the editor is not focused, masking focus bugs as false positives).
-   *
-   * After injecting the keystrokes it polls until the document reflects the
-   * input, or a bounded timeout elapses (the expected outcome when the editor
-   * is read-only and rejects the input, or when focus was stolen).
-   *
-   * @param params - The editor to type into and the text to type.
-   * @returns A {@link Promise} that resolves once the keystrokes have settled.
-   */
-  typeIntoEditor(this: void, params: TypeIntoEditorParams): Promise<void>;
-
-  /**
-   * Moves the mouse pointer to a point just outside an element's bounding box
-   * using a **trusted** Electron pointer move, then polls until the element no
-   * longer matches `:hover`.
-   *
-   * The inverse of {@link CommonArgs.hoverElement}. It targets the single
-   * shared window's **global** pointer, so only one element is hovered at a
-   * time. When an element spans the full viewport (no point outside its box is
-   * reachable), use {@link CommonArgs.moveMouse} directly to move the pointer
-   * to a known empty coordinate instead.
-   *
-   * @param params - The element to move the pointer away from.
-   * @returns A {@link Promise} that resolves once the element no longer matches
-   *   `:hover`.
-   */
-  unhoverElement(this: void, params: UnhoverElementParams): Promise<void>;
-
-  /**
-   * Polls a predicate until it becomes truthy, or rejects once a bounded
-   * timeout elapses.
-   *
-   * Integration-test `evalInObsidian` callbacks routinely need to wait for an
-   * asynchronous effect to settle (a view to open, a DOM node to appear, a
-   * setting to apply). Because the callback is serialized via `toString()` and
-   * cannot import modules, it can't reuse `obsidian-dev-utils`'
-   * `retryWithTimeout` / `runWithTimeout`. This helper is the shared,
-   * injected replacement for the per-closure poll loops consumers would
-   * otherwise hand-roll.
-   *
-   * The `predicate` may be synchronous or asynchronous — it is awaited on every
-   * poll. It is checked immediately, then re-checked every
-   * `intervalInMilliseconds` until it returns truthy or `timeoutInMilliseconds`
-   * elapses, at which point the returned {@link Promise} rejects (the error
-   * includes `message` when provided).
-   *
-   * @param params - The predicate to poll plus optional timeout, interval, and
-   *   timeout message.
-   * @returns A {@link Promise} that resolves once the predicate is truthy.
-   */
-  waitUntil(this: void, params: WaitUntilParams): Promise<void>;
 }
 
 /**
@@ -270,28 +136,6 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
 export type GenericObject = Record<string, unknown>;
 
 /**
- * The shared library surface injected into every {@link evalInObsidian} callback
- * as {@link CommonArgs.lib}.
- *
- * Empty by default — this is an intentionally **augmentable** interface (the
- * `i18next` `CustomTypeOptions` idiom). A provider package registers a
- * renderer-side resolver via {@link registerLibResolver} to populate `lib` at
- * runtime, and augments this interface via
- * `declare module 'obsidian-integration-testing'` to type it. Multiple providers
- * compose: their exports merge at runtime (`Object.assign`) and their
- * augmentations merge in the type system (`interface Lib extends …`).
- *
- * @example
- * ```ts
- * declare module 'obsidian-integration-testing' {
- *   interface Lib extends (typeof import('obsidian-dev-utils/__merged')) {}
- * }
- * ```
- */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Intentionally empty; augmented by provider packages via declaration merging (the i18next CustomTypeOptions idiom).
-export interface Lib {}
-
-/**
  * Parameters for {@link CommonArgs.hoverElement}.
  */
 export interface HoverElementParams {
@@ -301,6 +145,160 @@ export interface HoverElementParams {
    * serialization is needed (same as {@link TypeIntoEditorParams.editor}).
    */
   readonly element: HTMLElement;
+}
+
+/**
+ * The shared library bag injected into every {@link evalInObsidian} callback as
+ * {@link CommonArgs.lib}.
+ *
+ * Two layers compose into this one bag. The **base** — the harness-provided
+ * renderer-driving helpers declared below (the trusted-input primitives and
+ * {@link Lib.waitUntil}) — is always present. On top, provider packages register
+ * a renderer-side resolver via {@link registerLibResolver} to `Object.assign`
+ * their whole renderer-safe library at runtime, and augment this **augmentable**
+ * interface (the `i18next` `CustomTypeOptions` idiom) via
+ * `declare module 'obsidian-integration-testing'` to type it. Multiple providers
+ * compose: their exports merge at runtime and their augmentations merge in the
+ * type system (`interface Lib extends …`).
+ *
+ * @example
+ * ```ts
+ * declare module 'obsidian-integration-testing' {
+ *   interface Lib extends (typeof import('obsidian-dev-utils/__merged')) {}
+ * }
+ * ```
+ */
+export interface Lib {
+  /**
+   * Moves the mouse pointer to the center of an element using **trusted**
+   * Electron pointer input, then polls until the element actually matches
+   * `:hover`.
+   *
+   * Because the move is trusted (see {@link Lib.moveMouse}), the real `:hover`
+   * state takes effect in the CSS engine — real theme `var()` values and real
+   * compositing — instead of a hand-simulated cascade. It polls the live
+   * `element.matches(':hover')` state (not a fixed delay), so it is robust under
+   * shared-instance load. It targets the single shared window's **global**
+   * pointer, so only one element is hovered at a time.
+   *
+   * @param params - The element to hover.
+   * @returns A {@link Promise} that resolves once the element matches `:hover`.
+   */
+  hoverElement(this: void, params: HoverElementParams): Promise<void>;
+
+  /**
+   * Moves the mouse pointer to the given web-contents coordinates using a
+   * **trusted** Electron pointer move.
+   *
+   * A trusted move (injected via Electron's `webContents.sendInputEvent`)
+   * updates the real pointer state in the CSS engine, so `:hover` rules
+   * genuinely apply — unlike `dispatchEvent(new MouseEvent('mouseover'))`,
+   * which is untrusted and never sets `:hover`. It targets the single shared
+   * window's **global** pointer, so only one element is hovered at a time.
+   *
+   * This is the low-level primitive: it performs a single move and does **not**
+   * wait for any state to settle (callers poll their own readiness signal).
+   * Prefer {@link Lib.hoverElement} / {@link Lib.unhoverElement} for
+   * element-relative moves; use `moveMouse` directly when an element-relative
+   * target does not fit (e.g. an element spanning the full viewport width).
+   *
+   * @param params - The web-contents DIP coordinates to move to.
+   * @returns A {@link Promise} that resolves once the move has been injected.
+   */
+  moveMouse(this: void, params: MoveMouseParams): Promise<void>;
+
+  /**
+   * Presses a single key (optionally with modifiers) using **trusted** Electron
+   * keyboard input, firing the full real key pipeline —
+   * `keydown` → `keypress` → `beforeinput` → `input` → `keyup`.
+   *
+   * This is the key-press analog of {@link Lib.typeIntoEditor}: it injects a
+   * trusted `keyDown` → `char` → `keyUp` sequence via Electron's
+   * `webContents.sendInputEvent`, so it is delivered to the window's DOM-focused
+   * element and flows through the real input pipeline — unlike
+   * `dispatchEvent(new KeyboardEvent(...))`, which is untrusted (`isTrusted:
+   * false`) and ignored by CodeMirror and most key handlers. Use it for special
+   * keys (`'Enter'`, `'Escape'`, `'Tab'`, arrow keys) and modifier combinations
+   * (`Shift+Enter`, `Ctrl+A`) that {@link Lib.typeIntoEditor} (which types
+   * printable text) does not cover.
+   *
+   * This is the low-level primitive: it injects the key press and does **not**
+   * poll for any effect (a key press has no universal observable outcome —
+   * `Enter` edits the document, `Escape` closes a modal, `ArrowDown` moves the
+   * selection). The caller focuses the intended target first, then awaits the
+   * expected effect via {@link Lib.waitUntil}. It targets the single shared
+   * window's **global** focus, so only the DOM-focused element receives the key.
+   *
+   * @param params - The key to press and any modifiers to hold.
+   * @returns A {@link Promise} that resolves once the key press has been
+   *   injected.
+   */
+  pressKey(this: void, params: PressKeyParams): Promise<void>;
+
+  /**
+   * Types text into a CodeMirror {@link Editor} using **trusted** Electron
+   * keyboard input.
+   *
+   * Typing is pressing each character key in turn: this focuses the editor
+   * (caret to end) and presses every code point of `text` via
+   * {@link Lib.pressKey} — the same trusted `keyDown` → `char` → `keyUp` a real
+   * user produces. Each keystroke is delivered to the window's DOM-focused
+   * element and flows through CodeMirror's real input pipeline, so the typed
+   * text reaches the document **only if the editor genuinely holds focus**.
+   * This makes "the user typed into the editor" a faithful end-to-end check,
+   * unlike `dispatchEvent(new KeyboardEvent(...))` (untrusted — ignored by
+   * CodeMirror) or `execCommand('insertText')` (mutates the selection even
+   * when the editor is not focused, masking focus bugs as false positives).
+   *
+   * After injecting the keystrokes it polls until the document reflects the
+   * input, or a bounded timeout elapses (the expected outcome when the editor
+   * is read-only and rejects the input, or when focus was stolen).
+   *
+   * @param params - The editor to type into and the text to type.
+   * @returns A {@link Promise} that resolves once the keystrokes have settled.
+   */
+  typeIntoEditor(this: void, params: TypeIntoEditorParams): Promise<void>;
+
+  /**
+   * Moves the mouse pointer to a point just outside an element's bounding box
+   * using a **trusted** Electron pointer move, then polls until the element no
+   * longer matches `:hover`.
+   *
+   * The inverse of {@link Lib.hoverElement}. It targets the single shared
+   * window's **global** pointer, so only one element is hovered at a time. When
+   * an element spans the full viewport (no point outside its box is reachable),
+   * use {@link Lib.moveMouse} directly to move the pointer to a known empty
+   * coordinate instead.
+   *
+   * @param params - The element to move the pointer away from.
+   * @returns A {@link Promise} that resolves once the element no longer matches
+   *   `:hover`.
+   */
+  unhoverElement(this: void, params: UnhoverElementParams): Promise<void>;
+
+  /**
+   * Polls a predicate until it becomes truthy, or rejects once a bounded
+   * timeout elapses.
+   *
+   * Integration-test `evalInObsidian` callbacks routinely need to wait for an
+   * asynchronous effect to settle (a view to open, a DOM node to appear, a
+   * setting to apply). Because the callback is serialized via `toString()` and
+   * cannot import modules, it can't reuse `obsidian-dev-utils`'
+   * `retryWithTimeout` / `runWithTimeout`. This helper is the shared, injected
+   * replacement for the per-closure poll loops consumers would otherwise
+   * hand-roll.
+   *
+   * The `predicate` may be synchronous or asynchronous — it is awaited on every
+   * poll. It is checked immediately, then re-checked every
+   * `intervalInMilliseconds` until it returns truthy or `timeoutInMilliseconds`
+   * elapses, at which point the returned {@link Promise} rejects (the error
+   * includes `message` when provided).
+   *
+   * @param params - The predicate to poll plus optional timeout, interval, and
+   *   timeout message.
+   * @returns A {@link Promise} that resolves once the predicate is truthy.
+   */
+  waitUntil(this: void, params: WaitUntilParams): Promise<void>;
 }
 
 /**
