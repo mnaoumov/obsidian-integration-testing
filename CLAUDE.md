@@ -86,6 +86,14 @@ Three landed changes (all gate-green, verified on the real emulator where noted)
 The true root cause is environmental (emulator provisioning / host contention — **L13**), which code
 can only be made resilient to, not eliminate. Consuming plugins pick up all three via the version bump.
 
+**Honest limit:** the exact `30000ms` layout trip was **not** directly reproduced on this
+WHPX-accelerated emulator — even full host stress only slowed the layout wait to ~8.4s, because an
+accelerated guest keeps getting CPU. Reproducing it needs a more-starved guest (no/poor HW accel or
+few vCPUs, i.e. CI). So the "layout" changes are confidence-based mitigation, while the `perf` marker
+push is the one measured, unconditional win. **To close it definitively, capture a real failing trace
+during an actual release** — the per-poll elapsed logging now pinpoints whether the culprit is a
+starved-guest layout slowdown, a command-latency burst, or session establishment.
+
 ## Pending Questions
 
 None.
