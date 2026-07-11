@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 6.2.0
+
+- chore: republish
+
 ## 6.1.0
 
 - docs: mark the boot-idle gate done and cold-boot-confirmed
