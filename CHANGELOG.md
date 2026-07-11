@@ -3,7 +3,7 @@
 ## 6.0.0
 
 - docs: document the process-visibility flags
-- feat: add process-uvisibility options, hidden by default
+- feat: add process-visibility options, hidden by default
 - docs: note the unreproduced layout-trip caveat and next step in CLAUDE.md
 - docs: record Android setup-timeout profiling findings in CLAUDE.md
 - feat: make the Appium session-establishment timeout configurable
