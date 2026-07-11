@@ -188,6 +188,7 @@ multi-resolver merge, absent keys). Barrel exports `registerLibResolver`, `Lib`,
 
 **Pending — dev-utils hand-off (cross-repo, G55).** The runtime already exists there
 (`integration-test-plugin` sets `window.__obsidianDevUtilsModule__`; harness installs it). Remaining:
+
 1. Add a generated flat named-re-export barrel **`obsidian-dev-utils/__merged`** (kebab index →
    flat), with a `__namespaces` back-reference to the grouped root (camelCase aliases beside the kebab
    keys). Omit the one genuine cross-module collision (`normalize` — `path.ts` vs `string.ts`) from
@@ -510,6 +511,7 @@ helpers: those are harness-owned, self-contained functions defined once in `name
 `lib` is **externally provided** and **not reimplemented here** (this repo has no dev-utils dependency).
 
 **Mechanism.**
+
 - **Register (worker-side).** A provider calls `registerLibResolver(resolver)` (`src/lib-registry.ts`)
   from its per-worker test setup (`setupFiles`) — same worker-registration constraint as the context
   resolvers (**L9**), because the namespace bootstrap is generated per-worker. A `LibResolver` is a

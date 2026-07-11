@@ -213,6 +213,41 @@ const value = await evalInObsidian({
 });
 ```
 
+### Inject a shared library (`lib`)
+
+Because a callback is serialized via `toString()` and **cannot import modules**, it can't reuse
+your utility library directly. Every callback receives a `lib` argument — a single bag that
+**provider packages populate** with their whole (renderer-safe) library, so closures can call
+shared helpers instead of hand-rolling them. `lib` is `{}` until a provider registers a resolver.
+
+A provider registers a **renderer-side resolver** with `registerLibResolver` from its per-worker
+test setup (a `setupFiles` entry, the same place the context resolvers are registered). The
+resolver runs inside Obsidian and returns an object; every registered resolver's result is merged
+(`Object.assign`) into the one `lib` bag, so multiple providers compose. The resolver is
+serialized, so it must be self-contained — read a value a fixture plugin published on `window`:
+
+```ts
+// provider's setup file (registered via setupFiles)
+import { registerLibResolver } from 'obsidian-integration-testing';
+
+registerLibResolver(() => window.__myLibraryModule__);
+```
+
+Make `lib` type-safe by augmenting the `Lib` interface (multiple augmentations merge, mirroring
+the runtime merge):
+
+```ts
+declare module 'obsidian-integration-testing' {
+  interface Lib {
+    getThing(id: string): Thing;
+  }
+}
+
+const name = await evalInObsidian({
+  fn: ({ lib }) => lib.getThing('a').name
+});
+```
+
 ### Pass complex arguments
 
 Arguments are JSON-serialized. You can even pass functions — they are serialized via `toString()`:
