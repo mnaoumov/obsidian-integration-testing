@@ -661,6 +661,16 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    });
    ```
 
+Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs (all with sensible defaults):
+
+| Option                             | Purpose                                                                                      | Default                |
+|------------------------------------|----------------------------------------------------------------------------------------------|------------------------|
+| `appId`                            | App package (Android) or bundle ID (iOS).                                                    | `'md.obsidian'`        |
+| `layoutReadyTimeoutInMilliseconds` | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators. | `90000`                |
+| `shouldAutoStartAppium`            | Auto-start the Appium server when it is not already reachable.                               | `true`                 |
+| `vaultBasePath`                    | Base device path where Obsidian stores vaults.                                               | `'/sdcard/Documents/'` |
+| `webviewTimeoutInMilliseconds`     | Max wait for the WebView context after the Appium session starts.                            | `60000`                |
+
 > [!NOTE]
 >
 > Plugins with `isDesktopOnly: true` in `manifest.json` automatically reject Android tests.
@@ -677,6 +687,15 @@ save a snapshot, and always boot from that snapshot. Either way, an ANR signals 
 under-provisioned, so also give the AVD more vCPUs/RAM and confirm hardware acceleration
 (`emulator -accel-check`).
 
+#### Troubleshooting: "Obsidian layout did not become ready"
+
+Registering a vault reloads the page, triggering a full Obsidian re-init (reopen the vault and
+reload every plugin — the heaviest startup step). On a cold-booted or under-provisioned emulator
+that can exceed the default `90000`ms budget and fail setup with
+`Obsidian layout did not become ready within 90000ms`. Give the AVD more resources (see above) and,
+if needed, raise the budget via `layoutReadyTimeoutInMilliseconds` in the transport options. It is
+headroom, not a substitute for adequate provisioning.
+
 ### Running multiple platforms
 
 Use vitest projects to run the same tests on multiple platforms:
@@ -690,24 +709,12 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'integration-tests:desktop-cli',
-          fileParallelism: false,
-          globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
-          include: ['src/**/*.integration.test.ts'],
-          exclude: ['src/**/*.android.integration.test.ts'],
-          // default, can be omitted
-          environmentOptions: {
-            obsidianTransport: { type: 'obsidian-cdp' },
-          },
-        },
-      },
-      {
-        test: {
           name: 'integration-tests:desktop-cdp',
           fileParallelism: false,
           globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
+          // default transport, can be omitted
           environmentOptions: {
             obsidianTransport: { type: 'obsidian-cdp' },
           },
@@ -738,9 +745,6 @@ Run specific platforms:
 ```bash
 # All tests
 npx vitest run
-
-# Desktop CLI only
-npx vitest run --project integration-tests:desktop-cli
 
 # Desktop CDP only
 npx vitest run --project integration-tests:desktop-cdp
