@@ -21,6 +21,7 @@ export {
 export type {
   EvalInObsidianParams,
   HoverElementParams,
+  Lib,
   MoveMouseParams,
   PressKeyParams,
   TypeIntoEditorParams,
@@ -28,6 +29,8 @@ export type {
   WaitUntilParams
 } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
+export type { LibResolver } from './lib-registry.ts';
+export { registerLibResolver } from './lib-registry.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams

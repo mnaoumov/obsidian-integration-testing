@@ -171,6 +171,35 @@ push is the one measured, unconditional win. **To close it definitively, capture
 during an actual release** — the per-poll elapsed logging now pinpoints whether the culprit is a
 starved-guest layout slowdown, a command-latency burst, or session establishment.
 
+### Expose the whole `obsidian-dev-utils` library to `evalInObsidian` closures via `lib` (mechanism DONE 2026-07-11; dev-utils hand-off pending)
+
+**Origin.** Closures are serialized via `toString()` and cannot `import`, so consumers hand-roll null
+guards / casts / poll loops and re-derive `obsidian-dev-utils` logic inline (drift). The initial idea
+(inject `castTo`/`ensureNonNullable` one-by-one) was **superseded** — re-inlining reimplements
+dev-utils. Instead this repo ships a generic, type-safe **`lib` extension point** so a provider exposes
+its *whole real* library at once (see **L16**).
+
+**Done in this repo (the mechanism).** `registerLibResolver` (`src/lib-registry.ts`) + augmentable
+`interface Lib` (`src/eval-in-obsidian.ts`) + `lib` on `CommonArgs`, merged into `fullArgs` in
+`evalWrapper` (`src/namespace-bootstrap.ts`) via `Object.assign` of every registered resolver's result,
+with a resolver-fingerprinted bootstrap version. Unit test `src/lib-registry.test.ts` (100%) +
+end-to-end `src/lib-injection.integration.test.ts` (real Obsidian: flat access, destructuring,
+multi-resolver merge, absent keys). Barrel exports `registerLibResolver`, `Lib`, `LibResolver`.
+
+**Pending — dev-utils hand-off (cross-repo, G55).** The runtime already exists there
+(`integration-test-plugin` sets `window.__obsidianDevUtilsModule__`; harness installs it). Remaining:
+1. Add a generated flat named-re-export barrel **`obsidian-dev-utils/__merged`** (kebab index →
+   flat), with a `__namespaces` back-reference to the grouped root (camelCase aliases beside the kebab
+   keys). Omit the one genuine cross-module collision (`normalize` — `path.ts` vs `string.ts`) from
+   flat; reach it via `lib.__namespaces.path.normalize`. Make the flat generator fail loud on any other
+   genuine collision.
+2. In `scripts/integration-test-obsidian-setup.ts`, `registerLibResolver(() => window.__obsidianDevUtilsModule__.__merged)`.
+3. Ship a typings augmentation `declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('obsidian-dev-utils/__merged')) {} }`, auto-included via its integration setup.
+4. Migrate the ~13 `src/obsidian/*.obsidian.integration.test.ts` closures from
+   `const lib = window.__obsidianDevUtilsModule__; if (!lib) throw; lib.X` → `fn({ app, lib }) => lib.X`.
+5. Bump the `obsidian-integration-testing` dep to the version shipping `lib`.
+   (Full plan: `~/.claude/plans/linked-soaring-nebula.md`.)
+
 ## Pending Questions
 
 None.
@@ -470,6 +499,43 @@ option the harness does not control) or a separate Win32/virtual desktop. Also: 
 **not** implement `Browser.getWindowForTarget`/`setWindowBounds`, and `--window-position`/`--window-size`
 are ignored — window control must go through Electron remote (available only in a loaded vault window)
 or OS-level Win32, which is why the move uses Electron remote.
+
+## L16. Extensible, type-safe `lib` injection (register a whole library into every closure)
+
+Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArgs`, `src/eval-in-obsidian.ts`)
+— a single flat bag into which provider packages inject their **whole real** renderer-safe library, so
+a serialized closure can call shared helpers (`lib.getFileOrNull({ app, … })`, `lib.ensureNonNullable(x)`)
+instead of hand-rolling them or reaching a `window` global. This is distinct from the L8/L11/L12/L14
+helpers: those are harness-owned, self-contained functions defined once in `namespace-bootstrap.ts`;
+`lib` is **externally provided** and **not reimplemented here** (this repo has no dev-utils dependency).
+
+**Mechanism.**
+- **Register (worker-side).** A provider calls `registerLibResolver(resolver)` (`src/lib-registry.ts`)
+  from its per-worker test setup (`setupFiles`) — same worker-registration constraint as the context
+  resolvers (**L9**), because the namespace bootstrap is generated per-worker. A `LibResolver` is a
+  self-contained `(this: void) => object` that runs **in the renderer** and returns an object to merge;
+  it is serialized via `toString()`, so it must not close over module scope — it reads a renderer global
+  a fixture plugin published (e.g. `() => window.__obsidianDevUtilsModule__.__merged`). Registration is
+  deduped by source text.
+- **Bake + merge.** `ensureNamespaceBootstrapped` threads the registered resolvers into
+  `bootstrapNamespace` (serialized as real function literals by the existing `json-with-functions`
+  path). `evalWrapper` runs each resolver and `Object.assign`s the results into one `lib` bag added to
+  `fullArgs`. Default `{}` when none registered; **multiple providers compose** (runtime `Object.assign`).
+- **Version gate.** `getBootstrapVersion` / `computeBootstrapVersion` fold the resolver sources into the
+  `window.__obsidianIntegrationTesting.version` used for the bootstrap-skip check, so a changed resolver
+  set (e.g. different test files sharing one owned instance) forces a re-bootstrap instead of leaking a
+  stale `lib`.
+
+**Type-safety (declaration merging, the `i18next` `CustomTypeOptions` idiom).** `interface Lib {}` is
+empty and **augmentable**: a provider does
+`declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('…')) {} }`.
+Multiple augmentations merge (like the multiple `Object.assign`s at runtime). Cycle-safe: `lib` is a
+live renderer object injected into `fullArgs` (never JSON-serialized — only `fn`'s return value is),
+exactly like `app`, so a back-reference such as `lib.__namespaces` cannot cause a serialization cycle.
+
+Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core namespace bootstrap +
+registry). The intended first provider is `obsidian-dev-utils` exposing its whole library via a flat
+`obsidian-dev-utils/__merged` barrel (see the Current Task hand-off).
 
 ## Known Issues
 

@@ -85,6 +85,19 @@ export interface CommonArgs {
   hoverElement(this: void, params: HoverElementParams): Promise<void>;
 
   /**
+   * The shared library surface injected into every callback — see {@link Lib}.
+   *
+   * Empty (`{}`) unless a provider registered a resolver via
+   * {@link registerLibResolver}. Providers (chiefly `obsidian-dev-utils`) expose
+   * their whole renderer-safe library here as a flat, type-safe bag, so a
+   * serialized closure can call shared helpers (`lib.getFileOrNull({ app, … })`,
+   * `lib.ensureNonNullable(x)`) instead of hand-rolling them or reaching a
+   * `window` global. When a provider offers a grouped/namespaced form it is
+   * reachable through its own back-reference (e.g. `lib.__namespaces.path.normalize`).
+   */
+  lib: Lib;
+
+  /**
    * Moves the mouse pointer to the given web-contents coordinates using a
    * **trusted** Electron pointer move.
    *
@@ -255,6 +268,28 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
  * A plain object with string keys.
  */
 export type GenericObject = Record<string, unknown>;
+
+/**
+ * The shared library surface injected into every {@link evalInObsidian} callback
+ * as {@link CommonArgs.lib}.
+ *
+ * Empty by default — this is an intentionally **augmentable** interface (the
+ * `i18next` `CustomTypeOptions` idiom). A provider package registers a
+ * renderer-side resolver via {@link registerLibResolver} to populate `lib` at
+ * runtime, and augments this interface via
+ * `declare module 'obsidian-integration-testing'` to type it. Multiple providers
+ * compose: their exports merge at runtime (`Object.assign`) and their
+ * augmentations merge in the type system (`interface Lib extends …`).
+ *
+ * @example
+ * ```ts
+ * declare module 'obsidian-integration-testing' {
+ *   interface Lib extends (typeof import('obsidian-dev-utils/__merged')) {}
+ * }
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Intentionally empty; augmented by provider packages via declaration merging (the i18next CustomTypeOptions idiom).
+export interface Lib {}
 
 /**
  * Parameters for {@link CommonArgs.hoverElement}.
