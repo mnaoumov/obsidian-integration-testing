@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 6.1.0
+
+- docs: mark the boot-idle gate done and cold-boot-confirmed
+- feat: gate the Android session on a post-boot idle wait
+- docs: record Android cold-cost root-cause and mark Part 1 done
+- feat: make the Appium server-start timeout configurable
+- chore: fix CHANGELOG typo and add dictionary words
+
 ## 6.0.0
 
 - docs: document the process-visibility flags
