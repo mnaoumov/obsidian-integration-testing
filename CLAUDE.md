@@ -40,8 +40,8 @@ Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` 
 
 ## Current Task
 
-None. The Android `waitForLayoutReady` timeout fix (below) is implemented and gate-green; it
-ships in the repo's next release (user-owned, non-breaking → a minor bump suffices).
+None. The Android setup-timeout profiling + fixes (below) are implemented and gate-green; they
+ship in the repo's next release (user-owned, non-breaking → a minor bump suffices).
 
 ### Post-release follow-ups (user-owned / cross-repo)
 
@@ -56,19 +56,35 @@ version 5.6.0). Two follow-ups remain, neither an implementation task in *this* 
 - **macOS/Linux validation** — the owned-instance installer-extraction and shell-version-detection
   paths are platform-specific and validated only on Windows so far.
 
-### Android `waitForLayoutReady` timeout — DONE (ships next release)
+### Android intermittent setup timeouts — profiled on a real emulator (DONE, ships next release)
 
 The `integration-tests:android` smoke test intermittently failed at setup with `Obsidian layout
-did not become ready within 30000ms` because `registerVault`'s post-`location.reload()` full
-Obsidian re-init (reopen vault + reload all plugins) can exceed 30s on a cold/under-provisioned
-emulator (**L13**), and the layout-ready timeout was hardcoded while the lighter
-`ensureWebViewContext` step was already configurable. Fixed by mirroring
-`webviewTimeoutInMilliseconds` end-to-end: added `layoutReadyTimeoutInMilliseconds`
-(`@default 90000`) to the Appium options type, threaded it through `AppiumTransportFactory` →
-`AppiumTransport` → a `private readonly` field used in `waitForLayoutReady`, raised the default
-`30000` → `90000`, and added per-poll elapsed-time logging. The raise is headroom, not a fix for
-the underlying emulator provisioning. Consuming plugins pick up the headroom via the version bump;
-no per-plugin change needed.
+did not become ready within 30000ms`. **Profiling the real transport against a WHPX-accelerated
+emulator (idle, cold, and under 12-core + disk + memory stress) showed the layout wait was never
+the bottleneck (~0.7s idle, max ~8.4s under stress).** The intermittent failures are driven by
+**WebDriver/UiAutomator2 command latency on a cold or contended emulator**, which inflates *every*
+round-trip; the layout timeout was simply the tightest cliff. Measured per-step costs (cold, idle):
+
+- **Appium session establishment (`remote()`): ~140–200s** — the dominant, most load-variable cost.
+- **`registerVault` marker push via `browser.pushFile`: 9–21s** for a 2-byte file.
+- `getContexts` / `switchContext`: ~17s each (cold).
+- `waitForLayoutReady`: ~1s.
+
+Three landed changes (all gate-green, verified on the real emulator where noted):
+
+1. **`fix:` layout-ready timeout configurable + raised `30000`→`90000`** (`layoutReadyTimeoutInMilliseconds`,
+   `@default 90000`, threaded factory → `AppiumTransport` field → `waitForLayoutReady`, plus per-poll
+   elapsed logging). Kept as harmless headroom for the starved-guest/CI regime, though *not* the root
+   cause.
+2. **`perf:` marker push via `adb` instead of `browser.pushFile`** (`registerVault.pushObsidianMarker`,
+   mirroring `pushFiles`). **Measured cold: marker 9–21s → ~2.5s, total `registerVault` ~10–24s →
+   ~5.6–7.8s (3–4×).**
+3. **`feat:` configurable session-establishment timeout** (`sessionConnectionRetryTimeoutInMilliseconds`,
+   `@default 180000`, resolved via testable `appium-session-config.ts`, threaded into the factory's
+   `remote()` `connectionRetryTimeout`).
+
+The true root cause is environmental (emulator provisioning / host contention — **L13**), which code
+can only be made resilient to, not eliminate. Consuming plugins pick up all three via the version bump.
 
 ## Pending Questions
 
