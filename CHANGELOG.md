@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 7.0.0
+
+- test: expose lib
+
 ## 6.2.0
 
 - chore: republish
