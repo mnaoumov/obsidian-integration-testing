@@ -43,7 +43,10 @@
 import type { Browser } from 'webdriverio';
 
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import {
+  rm,
+  writeFile
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -337,9 +340,7 @@ export class AppiumTransport implements ObsidianTransport {
     const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
 
     // Push a minimal .obsidian directory so Obsidian recognizes it as a vault.
-    const obsidianMarker = `${deviceVaultPath}/.obsidian/app.json`;
-    const base64Content = Buffer.from('{}', 'utf-8').toString('base64');
-    await this.browser.pushFile(obsidianMarker, base64Content);
+    await this.pushObsidianMarker(deviceVaultPath);
 
     // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
@@ -448,6 +449,29 @@ export class AppiumTransport implements ObsidianTransport {
    */
   private getDeviceVaultPath(vaultPath: string): string {
     return `${this.vaultBasePath}${extractVaultName(vaultPath)}`;
+  }
+
+  /**
+   * Pushes the minimal `.obsidian/app.json` vault marker via `adb push`.
+   *
+   * `browser.pushFile` (WebDriver base64) is an order of magnitude slower on a
+   * cold or loaded emulator — measured at 9–21s per call for this 2-byte marker,
+   * versus sub-second over `adb`. This mirrors {@link pushFiles}, which switched
+   * to `adb` for the same reason. `mkdir -p` guarantees the parent directory.
+   *
+   * @param deviceVaultPath - The device-side vault directory path.
+   */
+  private async pushObsidianMarker(deviceVaultPath: string): Promise<void> {
+    const localMarker = join(tmpdir(), `obsidian-marker-${randomUUID()}.json`);
+    const remoteMarker = `${deviceVaultPath}/.obsidian/app.json`;
+
+    try {
+      await writeFile(localMarker, '{}', 'utf-8');
+      await exec(['adb', '-s', this.deviceId, 'shell', 'mkdir', '-p', `${deviceVaultPath}/.obsidian`], { isQuiet: true });
+      await exec(['adb', '-s', this.deviceId, 'push', localMarker, remoteMarker], { isQuiet: true });
+    } finally {
+      await rm(localMarker, { force: true });
+    }
   }
 
   /**

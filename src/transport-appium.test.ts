@@ -21,7 +21,8 @@ vi.mock('./exec.ts', () => ({
 }));
 
 vi.mock('node:fs/promises', () => ({
-  rm: vi.fn().mockResolvedValue(undefined)
+  rm: vi.fn().mockResolvedValue(undefined),
+  writeFile: vi.fn().mockResolvedValue(undefined)
 }));
 
 vi.mock('./log.ts', () => ({
@@ -152,6 +153,7 @@ describe('AppiumTransport.registerVault', () => {
   beforeEach(() => {
     mockBrowser = createMockBrowser();
     mockBrowser.execute.mockResolvedValue(true);
+    mockExec.mockReset().mockResolvedValue('');
     transport = new AppiumTransport({
       browser: strictProxy<Browser>(mockBrowser),
       deviceId: 'emulator-5554',
@@ -159,13 +161,33 @@ describe('AppiumTransport.registerVault', () => {
     });
   });
 
-  it('should push .obsidian/app.json marker to device vault path', async () => {
+  it('should push .obsidian/app.json marker to device vault path via adb', async () => {
     await transport.registerVault('/tmp/my-vault');
 
-    expect(mockBrowser.pushFile).toHaveBeenCalledWith(
-      '/sdcard/Documents/my-vault/.obsidian/app.json',
-      expect.any(String)
-    );
+    const pushCall = mockExec.mock.calls.find((call) => {
+      const cmd = call[0];
+      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('push');
+    });
+
+    expect(pushCall).toBeDefined();
+    const cmd = ensureNonNullable(pushCall)[0] as string[];
+    expect(cmd).toContain('-s');
+    expect(cmd).toContain('emulator-5554');
+    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault/.obsidian/app.json');
+  });
+
+  it('should create the .obsidian directory on the device before pushing the marker', async () => {
+    await transport.registerVault('/tmp/my-vault');
+
+    const mkdirCall = mockExec.mock.calls.find((call) => {
+      const cmd = call[0];
+      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('mkdir');
+    });
+
+    expect(mkdirCall).toBeDefined();
+    const cmd = ensureNonNullable(mkdirCall)[0] as string[];
+    expect(cmd).toContain('-p');
+    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault/.obsidian');
   });
 
   it('should switch to WebView context before configuring localStorage', async () => {
