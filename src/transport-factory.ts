@@ -33,6 +33,7 @@ import type {
 } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { resolveSessionConnectionRetryTimeoutInMilliseconds } from './appium-session-config.ts';
 import { buildEmulatorArgs } from './emulator-args.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
@@ -55,7 +56,6 @@ const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
 const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_CONNECTION_RETRY_COUNT = 3;
-const APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_START_TIMEOUT_IN_MILLISECONDS = 60000;
@@ -269,8 +269,9 @@ class AppiumTransportFactory {
       emulatorProcess = result.emulatorProcess;
       const actualDeviceId = result.actualDeviceId;
 
+      const sessionConnectionRetryTimeout = resolveSessionConnectionRetryTimeoutInMilliseconds(options);
       this.log(
-        `Connecting to Appium (device=${actualDeviceId}, app=${appId}, retryTimeout: ${String(APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS)}ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
+        `Connecting to Appium (device=${actualDeviceId}, app=${appId}, retryTimeout: ${String(sessionConnectionRetryTimeout)}ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
       );
       const browser = await remote({
         capabilities: {
@@ -286,7 +287,7 @@ class AppiumTransportFactory {
           'platformName': 'Android'
         },
         connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
-        connectionRetryTimeout: APPIUM_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
+        connectionRetryTimeout: sessionConnectionRetryTimeout,
         hostname: url.hostname,
         logLevel: 'warn',
         path: url.pathname,

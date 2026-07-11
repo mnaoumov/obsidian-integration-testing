@@ -55,6 +55,18 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly layoutReadyTimeoutInMilliseconds?: number;
 
   /**
+   * Timeout in milliseconds for establishing the Appium session (WebDriverIO
+   * `remote()` — UiAutomator2 server install + app launch).
+   *
+   * This is the largest and most load-sensitive step of the Android setup:
+   * on a cold or contended emulator it dominates startup and can take a few
+   * minutes. Raise it if session establishment times out under load.
+   *
+   * @default `180000`
+   */
+  readonly sessionConnectionRetryTimeoutInMilliseconds?: number;
+
+  /**
    * An existing Appium session ID to reattach to.
    *
    * Populated automatically by the global setup and provided to test workers

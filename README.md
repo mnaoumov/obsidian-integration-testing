@@ -663,13 +663,14 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs (all with sensible defaults):
 
-| Option                             | Purpose                                                                                      | Default                |
-|------------------------------------|----------------------------------------------------------------------------------------------|------------------------|
-| `appId`                            | App package (Android) or bundle ID (iOS).                                                    | `'md.obsidian'`        |
-| `layoutReadyTimeoutInMilliseconds` | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators. | `90000`                |
-| `shouldAutoStartAppium`            | Auto-start the Appium server when it is not already reachable.                               | `true`                 |
-| `vaultBasePath`                    | Base device path where Obsidian stores vaults.                                               | `'/sdcard/Documents/'` |
-| `webviewTimeoutInMilliseconds`     | Max wait for the WebView context after the Appium session starts.                            | `60000`                |
+| Option                                        | Purpose                                                                                                  | Default                |
+|-----------------------------------------------|----------------------------------------------------------------------------------------------------------|------------------------|
+| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                | `'md.obsidian'`        |
+| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.             | `90000`                |
+| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost. | `180000`               |
+| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                           | `true`                 |
+| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                           | `'/sdcard/Documents/'` |
+| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                        | `60000`                |
 
 > [!NOTE]
 >
