@@ -459,3 +459,69 @@ timeout before throwing a generic error.
 - **Not covered by this fast-fail:** on a *hidden* owned dead boot, `moveOwnedWindowOffscreen` still burns
   its full ~20s poll because the Electron remote bridge never comes up — a separate, smaller waste. And
   see L15's honest limit: the launch-time flash is unrelated.
+
+## L19. Android integration performance — cold-cost breakdown & optimization levers (reference)
+
+Durable performance knowledge, **not** a task (migrated 2026-07-12 from a central task entry that was
+really a bundle of profiling findings + future ideas). All the *code* levers here already shipped; the
+remaining levers are provisioning options the user may enable, not pending code work.
+
+### Where the 140–200s cold Android cost goes (profiled 2026-07-11 on the real WHPX emulator)
+
+Measured breakdown (see also the auto-memory `reference_android_appium_cold_cost_breakdown`):
+
+- **Emulator cold boot ≈ 112s** — ~32s start→device-online + ~80s device-online→`sys.boot_completed`.
+  Pure boot cost, entirely avoided by a warm/snapshotted guest.
+- **Session `remote()` — the headline "140–200s" is session-DURING-post-boot-churn, not the session
+  itself.** `sys.boot_completed=1` fires **before** the guest is idle (package optimization / services
+  still churning), so UiAutomator2's ~40 serialized `adb`/instrumentation round-trips each contend and
+  inflate ~25–50× (an `adb cmd package list packages` at boot-complete took ~50s vs ~1–2s idle). Let the
+  guest settle and cold `remote()` drops to ~27–53s (vs ~29s fully warm). The ~40 round-trips live inside
+  the driver and are not harness-controllable per-call — the win is to stop paying the cold/contended
+  multiplier.
+- **Appium server cold-start — real but secondary.** `/status` ready ~13.5s warm, of which ~8.7s is
+  loading the UiAutomator2 driver's node modules; cold disk + release-time memory pressure pushed it past
+  the old 60s cliff. (`npx appium` re-install was **ruled out** — it resolves to the global install, no
+  redownload.)
+- **Per-step (cold, idle):** `registerVault` marker push originally 9–21s for a 2-byte file;
+  `getContexts` / `switchContext` ~17s each; `waitForLayoutReady` ~1s (never the real bottleneck — even
+  under 12-core + disk + memory stress it only reached ~8.4s).
+
+### Landed code mitigations (all shipped)
+
+- **Boot-idle gate** — `src/device-readiness.ts` (`checkDeviceIdle`: idle ⇔ `init.svc.bootanim==stopped`
+  **and** `cmd package list packages` lists ≥1 package; `resolveDeviceIdleTimeoutInMilliseconds`,
+  `@default 60000`). After `sys.boot_completed`, `waitForNewDevice` waits for idle before `remote()` runs,
+  so the session executes against an idle guest. Best-effort (warns + proceeds on timeout; `0` skips).
+  Option `deviceIdleTimeoutInMilliseconds`. Probes return `''` on adb timeout so a slow/partial
+  `package list` can't falsely read as idle.
+- **Configurable timeouts** (all raised/threaded with per-poll elapsed logging, resolved via the testable
+  `appium-session-config.ts`): `appiumStartTimeoutInMilliseconds` (`@default 180000`),
+  `sessionConnectionRetryTimeoutInMilliseconds` (`@default 180000`), `layoutReadyTimeoutInMilliseconds`
+  (`@default 90000`). Headroom for the starved/CI regime — not root causes.
+- **`registerVault` marker push via `adb`** instead of `browser.pushFile` — measured cold marker 9–21s →
+  ~2.5s, total `registerVault` ~10–24s → ~5.6–7.8s (3–4×). The one measured, unconditional win.
+- **Crash/ANR dialog suppression** — see **L13**. **Process visibility (off-screen, never minimize)** —
+  see **L15**.
+
+### Remaining optimization levers (provisioning, user-owned — NOT code)
+
+In descending value:
+
+1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). `emulator-args.ts`
+   passes `-no-snapshot-save`, so a fresh CI AVD full-cold-boots every run. Making snapshot load+save an
+   opt-in option would let a persistent runner warm-boot — but it changes test-isolation/hermeticity, so
+   the default must stay cold; this is a deliberate user tradeoff, not a default change.
+2. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
+   the release environment.
+3. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
+
+### Honest limit
+
+The residual cold cost is dominated by emulator provisioning / host contention (**L13**), which code can
+only be made **resilient** to (the idle-gate), not eliminate. On this fast WHPX host the without-gate
+session isn't as slow as a starved release env sees, so the gate's headline speedup is confidence-based
+for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured. The exact
+`30000ms`→`90000ms` layout trip was never reproduced here — to close it definitively, capture a real
+failing trace during an actual release (the per-poll elapsed logging pinpoints layout-slowdown vs
+command-latency burst vs session establishment).
