@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 8.0.1
+
+- fix: installer urls for old versions
+
 ## 8.0.0
 
 - feat!: update funcs
