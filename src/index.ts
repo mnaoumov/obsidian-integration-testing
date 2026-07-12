@@ -31,6 +31,7 @@ export type {
 export { evalInObsidian } from './eval-in-obsidian.ts';
 export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';
+export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams
