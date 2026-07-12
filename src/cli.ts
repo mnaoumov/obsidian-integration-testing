@@ -31,7 +31,8 @@ interface ParsedCliValues {
 
 /**
  * Parses CLI arguments, opens the connection, prints its endpoint, and blocks
- * until `SIGINT`/`SIGTERM`, disposing the connection on shutdown.
+ * until `SIGINT`/`SIGTERM` or the owned Obsidian window is closed, disposing the
+ * connection on shutdown.
  *
  * @returns A {@link Promise} that resolves once the connection has been disposed.
  */
@@ -59,7 +60,7 @@ export async function main(): Promise<void> {
       + 'Press Ctrl+C to stop.\n'
   );
 
-  await waitForShutdownSignal();
+  await waitForShutdownOrInstanceClose(connection.cdpUrl);
 
   process.stdout.write('\nShutting down…\n');
   await connection.dispose();
@@ -100,18 +101,47 @@ function parseNumber(flag: string, raw: string): number {
 }
 
 /**
- * Resolves once the process receives `SIGINT` or `SIGTERM`.
+ * Resolves once the process receives `SIGINT`/`SIGTERM`, or the CDP endpoint
+ * stops answering (the owned Obsidian window was closed).
  *
- * @returns A {@link Promise} that resolves on the first shutdown signal.
+ * @param cdpUrl - The connection's CDP base URL to poll.
+ * @returns A {@link Promise} that resolves on the first shutdown trigger.
  */
-function waitForShutdownSignal(): Promise<void> {
+function waitForShutdownOrInstanceClose(cdpUrl: string): Promise<void> {
+  const POLL_INTERVAL_IN_MILLISECONDS = 1000;
   return new Promise<void>((resolve) => {
-    process.once('SIGINT', () => {
+    const versionUrl = `${cdpUrl}/json/version`;
+    let isSettled = false;
+
+    const timer = setInterval(() => {
+      checkAlive().catch(() => {
+        // Ignore poll errors.
+      });
+    }, POLL_INTERVAL_IN_MILLISECONDS);
+
+    process.once('SIGINT', settle);
+    process.once('SIGTERM', settle);
+
+    async function checkAlive(): Promise<void> {
+      try {
+        const response = await fetch(versionUrl);
+        if (!response.ok) {
+          settle();
+        }
+      } catch {
+        // The CDP port stopped answering: the Obsidian window was closed.
+        settle();
+      }
+    }
+
+    function settle(): void {
+      if (isSettled) {
+        return;
+      }
+      isSettled = true;
+      clearInterval(timer);
       resolve();
-    });
-    process.once('SIGTERM', () => {
-      resolve();
-    });
+    }
   });
 }
 
