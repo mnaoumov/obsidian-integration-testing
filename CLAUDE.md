@@ -38,184 +38,6 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 
 Consumers must have `obsidian`, `type-fest`, and their test framework (`vitest` or `jest`) installed.
 
-## Current Task
-
-**OPEN (levers 2–4 only — provisioning, user-owned).** Part 1 (release-unblock) shipped; Part 2 is
-root-caused (empirical profiling below) and its top code lever — the **boot-idle gate** — is
-implemented and gate-green (see "Part 2 — boot-idle gate"). The remaining levers (2 warm/snapshot
-reuse, 3 persistent Appium server, 4 pre-provisioned chromedriver) are provisioning concerns, not
-code. The process-visibility flags (**L15**) are implemented and gate-green too; all ship in the next
-release (user-owned, non-breaking → a minor bump).
-
-### Android — Appium SERVER-ready 60s timeout (release blocker) + root-cause the 140–200s cold cost (found 2026-07-11)
-
-**Symptom.** A fleet libs-refresh release (`obsidian-backlink-cache`, `npm run version patch`,
-integration-testing 6.0.0) aborted its `integration-tests:android` preflight with `Error:
-Auto-started Appium server did not become ready within 60000ms`
-(`AppiumTransportFactory.waitForAppiumReady`). It waits for the auto-started Appium **server's
-`/status`** to answer; that one server-ready timeout was left at 60s while its sibling session timeout
-was already raised to 180s — the tightest remaining cliff.
-
-**Part 1 — immediate unblock (DONE, shipped 2026-07-11).** `appiumStartTimeoutInMilliseconds`
-(`@default 180000`, resolved via the testable `appium-session-config.ts`, threaded factory →
-`waitForAppiumReady` with per-poll elapsed logging; the old `APPIUM_START_TIMEOUT_IN_MILLISECONDS`
-constant is gone). Unit-tested (option + default). Commit `feat: make the Appium server-start timeout
-configurable`.
-
-**Part 2 — root-cause the 140–200s cold cost (PROFILED 2026-07-11 on the real WHPX emulator).**
-Ruled out and confirmed empirically (see the auto-memory `reference_android_appium_cold_cost_breakdown`):
-
-- **`npx appium` re-install — RULED OUT.** `npx appium` resolves to the global `appium@3.5.0`
-  (`npx --no-install` succeeds); no re-download. Adds ~1–4s, not minutes. UiAutomator2 `7.6.0` is
-  persistently installed in `~/.appium`; `chromedriver v149` is cached in the driver dir.
-- **Appium server cold-start — real but secondary.** Server `/status` ready in ~13.5s warm, of which
-  **~8.7s is loading the UiAutomator2 driver's node modules**; cold disk + release-time memory pressure
-  pushes that past the old 60s cliff. (Part 1 raised the ceiling; a persistent/reused server removes it.)
-- **Emulator COLD BOOT ≈ 112s** — 32s start→device-online + **80s device-online→`sys.boot_completed`**.
-  Pure boot cost, entirely avoided by a warm/snapshotted guest.
-- **Session `remote()` — the "140–200s" is session-DURING-post-boot-churn, not the session itself.**
-  With the guest allowed to settle ~15s after boot, cold `remote()` was **53.5s** (vs 29s fully warm).
-  The harness proceeds to `remote()` the instant `sys.boot_completed=1` fires — but that flag fires
-  **before** the guest is idle (package optimization / services still churning), so every one of
-  UiAutomator2's ~40 serialized `adb`/instrumentation round-trips contends and inflates. That
-  contention is what turns a 53s cold session into the 140–200s the release saw. The ~40 round-trips
-  themselves are inside the UiAutomator2 driver — not harness-controllable per-call; the fix is to stop
-  paying the cold/contended multiplier.
-
-**Part 2 — boot-idle gate (DONE, implemented + cold-boot-confirmed 2026-07-11).** After
-`sys.boot_completed`, `waitForNewDevice` now calls `waitForDeviceIdle` before the session runs, so
-`remote()` executes against an idle guest (~27–53s) instead of a churning one (~140–200s). Design:
-
-- New pure, unit-tested `src/device-readiness.ts` — `checkDeviceIdle({ bootAnimationProp,
-  packageListOutput })` (idle ⇔ `init.svc.bootanim` == `stopped` **and** `cmd package list packages`
-  lists ≥1 package) + `resolveDeviceIdleTimeoutInMilliseconds` (`@default 60000`). The factory
-  (v8-ignored) polls two `adb` probes and applies `checkDeviceIdle`; best-effort — on timeout it warns
-  and proceeds, and a `0` timeout skips the wait. New option `deviceIdleTimeoutInMilliseconds`.
-- **Robustness (from the confirmation):** the probe helpers return `''` on adb timeout/error, so a
-  churning guest's slow/partial `package list` can't falsely read as idle. This makes "the package
-  list completes within the 5s adb timeout" the effective package-manager-responsive latency signal.
-- **Cold-boot confirmation:** at `sys.boot_completed` an `adb cmd package list packages` took **~50s**
-  to return (vs ~1–2s idle) — direct proof of the ~25–50× round-trip inflation; once idle
-  (`bootanim=stopped`, 261 packages) a session established in **26.7s**. `checkDeviceIdle` read the
-  real signals correctly. **Honest limit:** on this fast WHPX host the without-gate session isn't as
-  slow as the 140–200s a starved release env sees, so the gate's headline speedup is confidence-based
-  for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured.
-
-**Part 2 — remaining levers (provisioning, user-owned).** In descending value:
-
-1. **Warm/snapshot emulator reuse (biggest single chunk — eliminates the ~112s boot).** `emulator-args.ts`
-   passes `-no-snapshot-save`, so on a fresh CI AVD every run is a full cold boot (no quick-boot snapshot
-   is ever persisted). Make snapshot load+save an opt-in option so a persistent runner warm-boots.
-   Changes test-isolation semantics (hermeticity) — a deliberate user tradeoff; default stays cold.
-2. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
-   the release environment.
-3. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
-
-These remaining levers are provisioning, not code; the shipped boot-idle gate is the pure code win. The
-honest limit stands: the residual cold cost is dominated by emulator provisioning/contention, which code
-makes resilient (idle-gate), not zero.
-
-**Release impact (consumer side).** With Part 1 shipped and plugins bumped, the 60s server cliff is
-gone. If a release still aborts on the cold session on a slow runner, interim options: run where the
-emulator is warm, or `version patch -- --no-checks` (skips the integration preflight; the unit gate is
-validated separately per plugin).
-
-### Post-release follow-ups (user-owned / cross-repo)
-
-The hermetic version-pinned desktop transport + CLI retirement shipped in **5.0.0** (current
-version 5.6.0). Two follow-ups remain, neither an implementation task in *this* repo:
-
-- **23-plugin migration** (cross-repo; the user drives each from its own repo). Any plugin
-  explicitly setting `type: 'obsidian-cli'` switches to `obsidian-cdp` (most rely on the default
-  and need nothing). Additionally, every plugin using the owned-CDP desktop default must add
-  `obsidian-integration-testing/vitest-setup` to its integration project's `setupFiles` — best
-  done once in the shared `obsidian-dev-utils` vitest config so the fleet inherits it (see **L9**).
-- **macOS/Linux validation** — the owned-instance installer-extraction and shell-version-detection
-  paths are platform-specific and validated only on Windows so far.
-
-### Android intermittent setup timeouts — profiled on a real emulator (DONE, ships next release)
-
-The `integration-tests:android` smoke test intermittently failed at setup with `Obsidian layout
-did not become ready within 30000ms`. **Profiling the real transport against a WHPX-accelerated
-emulator (idle, cold, and under 12-core + disk + memory stress) showed the layout wait was never
-the bottleneck (~0.7s idle, max ~8.4s under stress).** The intermittent failures are driven by
-**WebDriver/UiAutomator2 command latency on a cold or contended emulator**, which inflates *every*
-round-trip; the layout timeout was simply the tightest cliff. Measured per-step costs (cold, idle):
-
-- **Appium session establishment (`remote()`): ~140–200s** — the dominant, most load-variable cost.
-- **`registerVault` marker push via `browser.pushFile`: 9–21s** for a 2-byte file.
-- `getContexts` / `switchContext`: ~17s each (cold).
-- `waitForLayoutReady`: ~1s.
-
-Three landed changes (all gate-green, verified on the real emulator where noted):
-
-1. **`fix:` layout-ready timeout configurable + raised `30000`→`90000`** (`layoutReadyTimeoutInMilliseconds`,
-   `@default 90000`, threaded factory → `AppiumTransport` field → `waitForLayoutReady`, plus per-poll
-   elapsed logging). Kept as harmless headroom for the starved-guest/CI regime, though *not* the root
-   cause.
-2. **`perf:` marker push via `adb` instead of `browser.pushFile`** (`registerVault.pushObsidianMarker`,
-   mirroring `pushFiles`). **Measured cold: marker 9–21s → ~2.5s, total `registerVault` ~10–24s →
-   ~5.6–7.8s (3–4×).**
-3. **`feat:` configurable session-establishment timeout** (`sessionConnectionRetryTimeoutInMilliseconds`,
-   `@default 180000`, resolved via testable `appium-session-config.ts`, threaded into the factory's
-   `remote()` `connectionRetryTimeout`).
-
-The true root cause is environmental (emulator provisioning / host contention — **L13**), which code
-can only be made resilient to, not eliminate. Consuming plugins pick up all three via the version bump.
-
-**Honest limit:** the exact `30000ms` layout trip was **not** directly reproduced on this
-WHPX-accelerated emulator — even full host stress only slowed the layout wait to ~8.4s, because an
-accelerated guest keeps getting CPU. Reproducing it needs a more-starved guest (no/poor HW accel or
-few vCPUs, i.e. CI). So the "layout" changes are confidence-based mitigation, while the `perf` marker
-push is the one measured, unconditional win. **To close it definitively, capture a real failing trace
-during an actual release** — the per-poll elapsed logging now pinpoints whether the culprit is a
-starved-guest layout slowdown, a command-latency burst, or session establishment.
-
-### Expose the whole `obsidian-dev-utils` library to `evalInObsidian` closures via `lib` (mechanism + base-`lib` DONE 2026-07-11; dev-utils hand-off pending)
-
-**Origin.** Closures are serialized via `toString()` and cannot `import`, so consumers hand-roll null
-guards / casts / poll loops and re-derive `obsidian-dev-utils` logic inline (drift). The initial idea
-(inject `castTo`/`ensureNonNullable` one-by-one) was **superseded** — re-inlining reimplements
-dev-utils. Instead this repo ships a generic, type-safe **`lib` extension point** so a provider exposes
-its *whole real* library at once (see **L16**).
-
-**Done in this repo.** (a) *The mechanism*: `registerLibResolver` (`src/lib-registry.ts`) + augmentable
-`interface Lib` (`src/eval-in-obsidian.ts`) + `lib` on `CommonArgs`, merged into `fullArgs` in
-`evalWrapper` (`src/namespace-bootstrap.ts`) via `Object.assign` of every registered resolver's result,
-with a resolver-fingerprinted bootstrap version. (b) ***BREAKING* base-`lib` refactor**: the six
-renderer-driving helpers (`typeIntoEditor` / `pressKey` / `moveMouse` / `hoverElement` /
-`unhoverElement` / `waitUntil`) moved OUT of top-level `CommonArgs` INTO the harness-seeded **base**
-`lib` (so `lib` is never empty and the harness stays self-contained); closures now destructure them from
-`lib` (`fn({ lib: { typeIntoEditor } })`). `CommonArgs` is now just `app` / `lib` / `obsidianModule`
-(**L16**). Tests + L8/L11/L12/L14 + README migrated. Unit `src/lib-registry.test.ts` (100%) + end-to-end
-`src/lib-injection.integration.test.ts` + the migrated `src/eval-in-obsidian.integration.test.ts`. Barrel
-exports `registerLibResolver`, `Lib`, `LibResolver`. **This is a breaking API change → the next release
-is a MAJOR bump**, and consuming plugins must migrate their closures
-(`{ typeIntoEditor }` → `{ lib: { typeIntoEditor } }`, etc.).
-
-**Pending — dev-utils hand-off (cross-repo, G55).** The runtime already exists there
-(`integration-test-plugin` sets `window.__obsidianDevUtilsModule__`; harness installs it). Remaining:
-
-1. Add a generated flat named-re-export barrel **`obsidian-dev-utils/__merged`** (kebab index →
-   flat), with a `__namespaces` back-reference to the grouped root (camelCase aliases beside the kebab
-   keys). Omit the one genuine cross-module collision (`normalize` — `path.ts` vs `string.ts`) from
-   flat; reach it via `lib.__namespaces.path.normalize`. Make the flat generator fail loud on any other
-   genuine collision.
-2. In `scripts/integration-test-obsidian-setup.ts`, `registerLibResolver(() => window.__obsidianDevUtilsModule__.__merged)`.
-3. Ship a typings augmentation `declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('obsidian-dev-utils/__merged')) {} }`, auto-included via its integration setup.
-4. Migrate the ~13 `src/obsidian/*.obsidian.integration.test.ts` closures from
-   `const lib = window.__obsidianDevUtilsModule__; if (!lib) throw; lib.X` → `fn({ app, lib }) => lib.X`.
-5. Bump the `obsidian-integration-testing` dep to the version shipping `lib`.
-6. **(Duplication, accepted.)** Also add the six harness base helpers to dev-utils' `test-helpers` and
-   expose them via `__merged`, so `lib.typeIntoEditor` etc. resolve to dev-utils' copies (overriding the
-   harness base) when the provider is registered. This deliberately duplicates the harness
-   implementations — the tradeoff for a single dev-utils-owned source of closure helpers.
-   (Full plan: `~/.claude/plans/linked-soaring-nebula.md`.)
-
-## Pending Questions
-
-None.
-
 ## L5. Transport configuration
 
 Transport is configured via the framework adapter's config mechanism. The discriminated union `ObsidianTransportOptions` (`type: 'obsidian-cdp' | 'obsidian-android-appium'`) drives which transport the globalSetup creates; `obsidian-cdp` is the default when omitted. Vitest uses `environmentOptions.obsidianTransport`; Jest uses `globalThis.__obsidianIntegrationTesting.transportOptions`. Other frameworks can register a custom resolver via `setTransportOptionsResolver()`.
@@ -559,8 +381,47 @@ Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core na
 registry). The intended first provider is `obsidian-dev-utils` exposing its whole library via a flat
 `obsidian-dev-utils/__merged` barrel (see the Current Task hand-off).
 
-## Known Issues
+## L17. Helpers Duplicated in `obsidian-dev-utils` — Keep In Sync By Hand
 
-None.
+A set of harness helpers in `namespace-bootstrap.ts` are **intentionally copy-pasted** into
+`obsidian-dev-utils`, which re-exposes them through its `__merged` surface so a closure's `lib` picks
+up dev-utils' copies (they `Object.assign` over the harness base when the provider resolver is
+registered) and so non-closure/production code can `import` them. The synced set (with its dev-utils
+mirror module):
 
-(The historical "CLI eval result polluted by in-flight background async" note was removed: the `DesktopCliTransport` it described has been retired in favour of the owned-instance CDP transport.)
+| Harness member (`namespace-bootstrap.ts`)                                        | dev-utils mirror module     |
+|----------------------------------------------------------------------------------|-----------------------------|
+| `typeIntoEditor`, `pressKey`, `moveMouse`, `hoverElement`, `unhoverElement`      | `desktop-trusted-input.ts`  |
+| `ensureLayoutReady`                                                              | `workspace.ts`              |
+| `errorToString`                                                                  | `error.ts`                  |
+
+Notes on the set:
+
+- **`pressKey` / `moveMouse` are synchronous (`void`)** — their bodies only inject trusted
+  `sendInputEvent` calls, so both copies must keep the `void` signature (a `Promise<void>` on one side
+  would break the `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation).
+- **`moveMouseTo` was folded into `moveMouse`** (rounding + `sendInputEvent` inlined); `hoverElement` /
+  `unhoverElement` call `moveMouse({ x, y })` directly. There is no separate `moveMouseTo` to sync.
+- **`waitUntil` is NOT synced** — dev-utils reuses its own `retryWithTimeout` instead of duplicating a
+  poll loop, and the harness keeps `waitUntil` as its own self-contained base helper (its integration
+  suite depends on it).
+- **`destroyCurrentWindow` / `ipcSendSync` are NOT synced** — they are transport/Electron-only harness
+  primitives (see their `// intentionally not migrated` TSDoc in `namespace-bootstrap.ts`), not
+  general-purpose utilities.
+
+This deliberately reimplements logic that lives here rather than sharing one source — normally the
+workspace never duplicates cross-library code — and is accepted for one reason: **dependency hygiene**.
+Sharing a single source would force either the harness to depend on `obsidian-dev-utils`, or
+`obsidian-dev-utils` to take a **runtime** dependency on this test harness (a utility library depending
+on a test harness — backwards). Since dev-utils re-exports these as **values** through its shipped
+`__merged` surface, that runtime edge is unavoidable under the shared-source approach; duplication keeps
+both dependency graphs clean, at the cost of manual sync.
+
+**Rule:** the implementations in `namespace-bootstrap.ts` (and `error-to-string.ts` for `errorToString`)
+are the **canonical** copy. Any change to the behavior of a synced helper here MUST be mirrored in
+`obsidian-dev-utils` in the same coordinated change, and vice versa. There is **no automated drift
+check** — a deliberately accepted risk (the alternative `.toString()`-equality test was declined); sync
+is by discipline alone. `obsidian-dev-utils` carries the mirror-image local rule (L18) pointing back
+here. When you touch any synced helper, update both copies. (Honest note: for serialized closures this
+duplication yields no functional gain — the harness base already injects the trusted-input helpers; the
+dev-utils copy exists so non-closure/production code can `import` them.)

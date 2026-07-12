@@ -98,14 +98,63 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface IntegrationTestingNamespace extends IntegrationTestingNamespaceState {
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: trivial — reads
+     * `window.app`, which every closure already receives directly as its `app`
+     * arg, so there is nothing general-purpose to share.
+     */
     readonly app: App;
+
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It
+     * owns the harness test window's lifecycle via Electron (`window.electronWindow`),
+     * which is the harness's concern, not a general utility.
+     */
     destroyCurrentWindow(): Promise<void>;
+
+    /**
+     * Synced with `obsidian-dev-utils` (mirror `workspace.ts`) — see L17.
+     */
     ensureLayoutReady(): Promise<void>;
+
+    /**
+     * Synced with `obsidian-dev-utils` (mirror `error.ts`) — see L17.
+     */
+    errorToString(error: unknown): string;
+
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. This
+     * is the harness's own eval plumbing (builds the `lib` bag, resolves the
+     * module, invokes the closure, envelopes the result) — meaningless outside
+     * the harness.
+     */
     evalWrapper(nsParams: EvalWrapperParams): Promise<string>;
+
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is
+     * the harness's one-time bootstrap that resolves the `obsidian` module for
+     * the process; closures obtain it directly via their `obsidianModule` arg.
+     */
     getObsidianModule(): Promise<unknown>;
+
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. Raw
+     * Electron IPC (`window.electron.ipcRenderer.sendSync`) is a harness/transport
+     * primitive, not a general-purpose helper.
+     */
     ipcSendSync(nsParams: IpcSendSyncParams): Promise<void>;
+
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is
+     * part of the harness's vault-path handshake with the Node side, not a
+     * general utility.
+     */
     pollVaultBasePath(): Promise<string>;
-    serializeError(error: unknown, depth?: number): string;
+
+    /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: niche/trivial — a
+     * one-line `localStorage.setItem` wrapper used only by the harness.
+     */
     setLocalStorageItem(nsParams: SetLocalStorageItemParams): Promise<void>;
   }
 
@@ -187,6 +236,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    */
   const WAIT_UNTIL_TIMEOUT_IN_MILLISECONDS = 5000;
 
+  /**
+   * Prefix used by {@link errorToString}'s nested-error separator lines, matching
+   * the `    at` prefix of a V8 stack-trace frame so the separators blend into
+   * the surrounding stack. Kept identical to `obsidian-dev-utils`' `errorToString`.
+   */
+  const STACK_TRACE_PREFIX = '    at';
+
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
   const holder = window as unknown as Partial<IntegrationTestingHolder>;
   const existingContexts = holder.__obsidianIntegrationTesting?.contexts ?? {};
@@ -215,6 +271,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       });
     },
 
+    errorToString(this: IntegrationTestingNamespace, error: unknown): string {
+      return errorToStringImpl(error);
+    },
+
     async evalWrapper(this: IntegrationTestingNamespace, params): Promise<string> {
       if (!this.app.plugins.isEnabled()) {
         await this.app.plugins.setEnable(true);
@@ -238,7 +298,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         }
         return JSON.stringify({ value: result });
       } catch (evalError) {
-        return JSON.stringify({ type: 'error', value: this.serializeError(evalError) });
+        return JSON.stringify({ type: 'error', value: this.errorToString(evalError) });
       }
     },
 
@@ -292,25 +352,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       return JSON.stringify((this.app.vault.adapter as unknown as FileSystemAdapterLike).getBasePath());
     },
 
-    serializeError(this: IntegrationTestingNamespace, error: unknown, depth = 0): string {
-      const CAUSE_INDENT_SIZE = 2;
-      const indent = ' '.repeat(depth * CAUSE_INDENT_SIZE);
-
-      if (!(error instanceof Error)) {
-        return `${indent}${String(error)}`;
-      }
-
-      const stackOrMessage = error.stack ?? `${error.name}: ${error.message}`;
-      let result = stackOrMessage.split('\n').map((line) => `${indent}${line}`).join('\n');
-
-      if (error.cause !== undefined) {
-        result += `\n${indent}[cause]:`;
-        result += `\n${this.serializeError(error.cause, depth + 1)}`;
-      }
-
-      return result;
-    },
-
     async setLocalStorageItem(this: IntegrationTestingNamespace, params): Promise<void> {
       await this.ensureLayoutReady();
       localStorage.setItem(params.key, params.value);
@@ -339,7 +380,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Typing is pressing each character key in turn: `pressKey` injects the same trusted
     // `keyDown` -> `char` -> `keyUp` a real user produces — text lands only if the editor holds focus.
     for (const char of text) {
-      await pressKey({ key: char });
+      pressKey({ key: char });
     }
 
     // Poll until the document reflects the input or the timeout elapses, instead of a fixed settle.
@@ -349,7 +390,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
   }
 
-  function pressKey(pressParams: PressKeyParams): Promise<void> {
+  function pressKey(pressParams: PressKeyParams): void {
     const { key, modifiers = [] } = pressParams;
 
     // 'Mod' is Obsidian's platform-agnostic modifier: Cmd (meta) on macOS, Ctrl elsewhere.
@@ -377,8 +418,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     webContents.sendInputEvent({ keyCode: key, modifiers: electronModifiers, type: 'keyDown' });
     webContents.sendInputEvent({ keyCode: key, modifiers: electronModifiers, type: 'char' });
     webContents.sendInputEvent({ keyCode: key, modifiers: electronModifiers, type: 'keyUp' });
-
-    return Promise.resolve();
   }
 
   async function hoverElement(hoverParams: HoverElementParams): Promise<void> {
@@ -388,7 +427,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`.
     const rect = element.getBoundingClientRect();
-    moveMouseTo(Math.round(rect.left + rect.width / CENTER_DIVISOR), Math.round(rect.top + rect.height / CENTER_DIVISOR));
+    moveMouse({ x: rect.left + rect.width / CENTER_DIVISOR, y: rect.top + rect.height / CENTER_DIVISOR });
 
     // Poll until the real `:hover` state has actually taken, instead of a fixed settle.
     const startTime = Date.now();
@@ -397,15 +436,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
   }
 
-  function moveMouse(moveParams: MoveMouseParams): Promise<void> {
-    moveMouseTo(Math.round(moveParams.x), Math.round(moveParams.y));
-    return Promise.resolve();
-  }
-
-  function moveMouseTo(x: number, y: number): void {
+  function moveMouse(moveParams: MoveMouseParams): void {
     // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) pointer move.
     const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
-    webContents.sendInputEvent({ type: 'mouseMove', x, y });
+    webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(moveParams.x), y: Math.round(moveParams.y) });
   }
 
   async function unhoverElement(unhoverParams: UnhoverElementParams): Promise<void> {
@@ -420,7 +454,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const rect = element.getBoundingClientRect();
     const x = rect.left >= OUTSIDE_OFFSET_IN_PIXELS ? rect.left - OUTSIDE_OFFSET_IN_PIXELS : rect.right + OUTSIDE_OFFSET_IN_PIXELS;
     const y = rect.top + rect.height / CENTER_DIVISOR;
-    moveMouseTo(Math.round(x), Math.round(y));
+    moveMouse({ x, y });
 
     // Poll until the real `:hover` state has actually cleared, instead of a fixed settle.
     const startTime = Date.now();
@@ -445,6 +479,41 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       }
       await sleep(intervalInMilliseconds);
     }
+  }
+
+  function errorToStringImpl(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return String(error);
+    }
+
+    let message = error.stack ?? `${error.name}: ${error.message}`;
+    if (error.cause !== undefined) {
+      message = appendNestedError(message, error.cause, 'Caused by:');
+    }
+    if (error instanceof AggregateError) {
+      const aggregatedErrors: readonly unknown[] = error.errors;
+      for (const [index, aggregatedError] of aggregatedErrors.entries()) {
+        message = appendNestedError(message, aggregatedError, `Aggregated error #${String(index + 1)}:`);
+      }
+    }
+    return message;
+  }
+
+  function appendNestedError(message: string, nestedError: unknown, title: string): string {
+    let result = `${message}\n${generateStackTraceLine(title)}`;
+    for (const line of errorToStringImpl(nestedError).split('\n')) {
+      if (!line.trim()) {
+        continue;
+      }
+      result += line.startsWith(STACK_TRACE_PREFIX)
+        ? `\n${line}`
+        : `\n${generateStackTraceLine(line)}`;
+    }
+    return result;
+  }
+
+  function generateStackTraceLine(title: string): string {
+    return `${STACK_TRACE_PREFIX} --- ${title} --- (0)`;
   }
 }
 

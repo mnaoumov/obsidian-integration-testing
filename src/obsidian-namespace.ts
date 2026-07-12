@@ -61,6 +61,15 @@ export interface ObsidianIntegrationTestingNamespace {
   ensureLayoutReady(): Promise<void>;
 
   /**
+   * Converts an error into a human-readable string with its full stack trace,
+   * recursive `cause` chain, and the aggregated errors of an `AggregateError`.
+   *
+   * @param error - The error to convert to a string.
+   * @returns A formatted error string.
+   */
+  errorToString(error: unknown): string;
+
+  /**
    * The top-level wrapper that sets up context, resolves the obsidian module,
    * calls the user's function, and returns a JSON envelope.
    *
@@ -94,15 +103,6 @@ export interface ObsidianIntegrationTestingNamespace {
    * @returns The JSON-encoded base path.
    */
   pollVaultBasePath(): Promise<string>;
-
-  /**
-   * Serializes an error into a human-readable string with stack trace and cause chain.
-   *
-   * @param error - The error to serialize.
-   * @param depth - The current nesting depth.
-   * @returns A formatted error string.
-   */
-  serializeError(error: unknown, depth?: number): string;
 
   /**
    * Sets a `localStorage` item.

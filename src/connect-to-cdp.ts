@@ -6,7 +6,7 @@
  *
  * A single {@link connectToCdp} call resolves the owned-instance config, opens a
  * vault, and bootstraps `window.__obsidianIntegrationTesting` (so `evalWrapper`,
- * the base `lib` helpers, `serializeError`, `getObsidianModule`, … are available), then
+ * the base `lib` helpers, `errorToString`, `getObsidianModule`, … are available), then
  * hands back a disposable {@link CdpConnection} exposing the chosen CDP port, a
  * raw {@link CdpConnection.invoke} and the rich {@link CdpConnection.evalInObsidian}.
  */

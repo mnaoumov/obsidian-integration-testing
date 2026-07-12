@@ -202,10 +202,12 @@ export interface Lib {
    * element-relative moves; use `moveMouse` directly when an element-relative
    * target does not fit (e.g. an element spanning the full viewport width).
    *
+   * Synchronous: injecting the trusted move does no real awaiting, so the caller
+   * does not need to `await` it.
+   *
    * @param params - The web-contents DIP coordinates to move to.
-   * @returns A {@link Promise} that resolves once the move has been injected.
    */
-  moveMouse(this: void, params: MoveMouseParams): Promise<void>;
+  moveMouse(this: void, params: MoveMouseParams): void;
 
   /**
    * Presses a single key (optionally with modifiers) using **trusted** Electron
@@ -229,11 +231,12 @@ export interface Lib {
    * expected effect via {@link Lib.waitUntil}. It targets the single shared
    * window's **global** focus, so only the DOM-focused element receives the key.
    *
+   * Synchronous: injecting the trusted key press does no real awaiting, so the
+   * caller does not need to `await` it.
+   *
    * @param params - The key to press and any modifiers to hold.
-   * @returns A {@link Promise} that resolves once the key press has been
-   *   injected.
    */
-  pressKey(this: void, params: PressKeyParams): Promise<void>;
+  pressKey(this: void, params: PressKeyParams): void;
 
   /**
    * Types text into a CodeMirror {@link Editor} using **trusted** Electron
