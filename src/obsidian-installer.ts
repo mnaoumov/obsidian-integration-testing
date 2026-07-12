@@ -36,12 +36,34 @@ import {
 } from 'node:path';
 import process from 'node:process';
 
+import {
+  buildInstallerAssetNameCandidates,
+  selectInstallerAssetName
+} from './installer-asset.ts';
 import { log } from './log.ts';
 
 /**
  * Browser User-Agent for downloading release assets (Cloudflare-gated).
  */
 const DOWNLOAD_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36';
+
+/** Base URL for `obsidian-releases` release assets (`.../download/v<ver>/<asset>`). */
+const RELEASE_DOWNLOAD_BASE_URL = 'https://github.com/obsidianmd/obsidian-releases/releases/download';
+
+/** GitHub REST endpoint listing a release's assets by tag (`.../releases/tags/v<ver>`). */
+const RELEASE_API_TAG_URL = 'https://api.github.com/repos/obsidianmd/obsidian-releases/releases/tags';
+
+/** The subset of the GitHub release API response this module reads. */
+interface GitHubRelease {
+  /** The release's downloadable assets. */
+  readonly assets: readonly GitHubReleaseAsset[];
+}
+
+/** The subset of a GitHub release's asset object this module reads. */
+interface GitHubReleaseAsset {
+  /** The asset file name, e.g. `Obsidian.0.14.5.exe`. */
+  readonly name: string;
+}
 
 const CACHE_ROOT = join(tmpdir(), 'obsidian-integration-testing');
 const SHELL_CACHE_DIR = join(CACHE_ROOT, 'shell-cache');
@@ -97,9 +119,8 @@ export async function ensureShellCached(version: string): Promise<string> {
   }
 
   mkdirSync(shellDir, { recursive: true });
-  const assetName = getInstallerAssetName(version);
-  const assetPath = join(shellDir, assetName);
-  await downloadReleaseAsset(version, assetName, assetPath);
+  const assetUrls = await resolveInstallerAssetUrls(version);
+  const assetPath = await downloadInstallerAsset(assetUrls, shellDir, version);
   extractShell(assetPath, shellDir);
   rmSync(assetPath, { force: true });
 
@@ -184,24 +205,47 @@ function detectWindowsFileVersion(exePath: string): string | undefined {
 }
 
 /**
- * Downloads a GitHub release asset for a version to a destination file.
+ * Downloads a single release asset for a version to a destination file.
  *
- * @param version - The release version (tag `v<version>`).
- * @param assetName - The asset file name.
+ * @param url - The asset download URL.
  * @param dest - Destination file path.
- * @throws Error if the download fails (e.g. no public installer for the version).
+ * @throws Error if the request fails.
  */
-async function downloadReleaseAsset(version: string, assetName: string, dest: string): Promise<void> {
-  const url = `https://github.com/obsidianmd/obsidian-releases/releases/download/v${version}/${assetName}`;
-  log(`[installer] Downloading installer ${version} from ${url} ...`);
+async function downloadAsset(url: string, dest: string): Promise<void> {
+  log(`[installer] Downloading installer from ${url} ...`);
   const response = await fetch(url, { headers: { 'User-Agent': DOWNLOAD_USER_AGENT } });
   if (!response.ok) {
-    throw new Error(
-      `Failed to download Obsidian installer ${version}: HTTP ${String(response.status)} from ${url}. `
-        + 'Catalyst/beta versions have no public installer — pin an asar version on a public/installed shell instead.'
-    );
+    throw new Error(`HTTP ${String(response.status)}`);
   }
   writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
+}
+
+/**
+ * Downloads the first reachable installer asset from an ordered list of
+ * candidate URLs, returning the path it was saved to.
+ *
+ * @param urls - Candidate asset URLs, in priority order.
+ * @param shellDir - The destination shell directory.
+ * @param version - The release version (for error messages).
+ * @returns The downloaded asset's path.
+ * @throws Error if none of the candidates can be downloaded.
+ */
+async function downloadInstallerAsset(urls: string[], shellDir: string, version: string): Promise<string> {
+  const errors: string[] = [];
+  for (const url of urls) {
+    const assetPath = join(shellDir, basename(url));
+    try {
+      await downloadAsset(url, assetPath);
+      return assetPath;
+    } catch (error) {
+      errors.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new Error(
+    `Failed to download Obsidian installer ${version}. Attempts: ${errors.join('; ')}. `
+      + 'Catalyst/beta versions have no public installer — pin an asar version on a public/installed shell instead.'
+  );
 }
 
 /**
@@ -255,8 +299,8 @@ function extractShell(assetPath: string, shellDir: string): void {
 /**
  * Extracts a Windows NSIS installer's inner app payload via 7-Zip.
  *
- * The `Obsidian-<v>.exe` NSIS installer contains `$PLUGINSDIR/app-64.7z`, which
- * holds the portable app (mirrors how the scoop manifest installs Obsidian).
+ * The NSIS installer `.exe` contains `$PLUGINSDIR/app-64.7z`, which holds the
+ * portable app (mirrors how the scoop manifest installs Obsidian).
  *
  * @param assetPath - Path to the downloaded `.exe`.
  * @param shellDir - Destination shell directory.
@@ -268,6 +312,29 @@ function extractWindowsShell(assetPath: string, shellDir: string): void {
   const innerArchive = join(nsisExtractDir, '$PLUGINSDIR', 'app-64.7z');
   run('7z', ['x', '-y', `-o${shellDir}`, innerArchive]);
   rmSync(nsisExtractDir, { force: true, recursive: true });
+}
+
+/**
+ * Fetches a release's asset names from the GitHub API.
+ *
+ * @param version - The release version (tag `v<version>`).
+ * @returns The asset names, or `undefined` if the API is unavailable.
+ */
+async function fetchReleaseAssetNames(version: string): Promise<string[] | undefined> {
+  try {
+    const response = await fetch(`${RELEASE_API_TAG_URL}/v${version}`, {
+      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': DOWNLOAD_USER_AGENT }
+    });
+    if (!response.ok) {
+      log(`[installer] Release API for ${version} returned HTTP ${String(response.status)}; falling back to templated asset names.`);
+      return undefined;
+    }
+    const release = await response.json() as GitHubRelease;
+    return release.assets.map((asset) => asset.name);
+  } catch (error) {
+    log(`[installer] Release API for ${version} unavailable (${error instanceof Error ? error.message : String(error)}); falling back to templated asset names.`);
+    return undefined;
+  }
 }
 
 /**
@@ -289,21 +356,27 @@ function getCachedShellExePath(shellDir: string): string {
 }
 
 /**
- * Returns the GitHub release asset name for the current platform.
+ * Resolves the ordered installer asset download URLs to try for a version.
  *
- * @param version - The release version.
- * @returns The asset file name.
+ * The release's real asset list is queried first so the platform-correct asset
+ * is picked regardless of the historical dot-vs-hyphen naming; if that call is
+ * unavailable it falls back to trying both templated separator forms.
+ *
+ * @param version - The concrete `x.y.z` version.
+ * @returns Candidate asset URLs, in priority order.
  */
-function getInstallerAssetName(version: string): string {
-  if (process.platform === 'win32') {
-    return `Obsidian-${version}.exe`;
+async function resolveInstallerAssetUrls(version: string): Promise<string[]> {
+  const assetNames = await fetchReleaseAssetNames(version);
+  if (assetNames) {
+    const selected = selectInstallerAssetName({ assetNames, platform: process.platform, version });
+    if (selected !== undefined) {
+      return [`${RELEASE_DOWNLOAD_BASE_URL}/v${version}/${selected}`];
+    }
+    log(`[installer] No installer asset matched for ${version}; falling back to templated asset names.`);
   }
 
-  if (process.platform === 'darwin') {
-    return `Obsidian-${version}.dmg`;
-  }
-
-  return `obsidian-${version}.tar.gz`;
+  return buildInstallerAssetNameCandidates({ platform: process.platform, version })
+    .map((name) => `${RELEASE_DOWNLOAD_BASE_URL}/v${version}/${name}`);
 }
 
 /**

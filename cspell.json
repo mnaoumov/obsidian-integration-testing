@@ -11,6 +11,7 @@
   "dictionaryDefinitions": [],
   "dictionaries": [],
   "words": [
+    "allusers",
     "appops",
     "asar",
     "asars",
@@ -38,6 +39,7 @@
     "Errno",
     "ESRCH",
     "evals",
+    "funcs",
     "getprop",
     "getwindowname",
     "hermeticity",
