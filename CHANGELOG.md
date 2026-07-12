@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 8.0.0
+
+- feat!: update funcs
+
 ## 7.0.0
 
 - test: expose lib
