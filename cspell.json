@@ -39,6 +39,7 @@
     "Errno",
     "ESRCH",
     "evals",
+    "funcs",
     "getprop",
     "getwindowname",
     "hermeticity",
