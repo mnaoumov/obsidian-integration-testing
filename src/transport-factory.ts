@@ -56,6 +56,7 @@ import {
   resolveConcreteVersion
 } from './obsidian-version-switch.ts';
 import { compareVersions } from './obsidian-version.ts';
+import { resolveDeadBootGraceInMilliseconds } from './renderer-boot-detection.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import {
@@ -906,6 +907,7 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
   return new DesktopCdpTransport({
     ...(options?.host !== undefined && { cdpHost: options.host }),
     ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+    deadBootGraceInMilliseconds: resolveDeadBootGraceInMilliseconds(options),
     ...(options?.isObsidianAppVisible !== undefined && { isObsidianAppVisible: options.isObsidianAppVisible }),
     ownedInstance
   });

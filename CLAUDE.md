@@ -18,7 +18,7 @@ The package exports these entry points:
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
-Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`) are not re-exported.
+Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18.
 
 The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: own vs. attach), with `obsidian-instance.ts` (launch + free port + kill), `obsidian-version*.ts` (asar version resolution/download/cache), and `obsidian-installer.ts` (shell version detect/download/extract — it resolves the installer asset by querying the release's real asset list via the GitHub API and picking the platform-correct name with the pure, unit-tested `installer-asset.ts`, tolerating the historical dot-vs-hyphen separator rename, with a both-separator templated fallback when the API is unavailable). `transport-factory.ts` resolves the owned-instance config (shell exe + asar + temp user-data dir) from the version knobs.
 
@@ -421,7 +421,41 @@ both dependency graphs clean, at the cost of manual sync.
 are the **canonical** copy. Any change to the behavior of a synced helper here MUST be mirrored in
 `obsidian-dev-utils` in the same coordinated change, and vice versa. There is **no automated drift
 check** — a deliberately accepted risk (the alternative `.toString()`-equality test was declined); sync
-is by discipline alone. `obsidian-dev-utils` carries the mirror-image local rule (L18) pointing back
-here. When you touch any synced helper, update both copies. (Honest note: for serialized closures this
+is by discipline alone. `obsidian-dev-utils` carries the mirror-image local rule (its own L18) pointing
+back here. When you touch any synced helper, update both copies. (Honest note: for serialized closures this
 duplication yields no functional gain — the harness base already injects the trusted-input helpers; the
 dev-utils copy exists so non-closure/production code can `import` them.)
+
+## L18. Dead-boot fast-fail (`RendererFailedToInitializeError`)
+
+When a pinned app version cannot run on the launched Electron shell (an `obsidianInstallerVersion` too old
+for the `obsidianVersion` — e.g. the 1.12.7 asar on the 0.14.5 / Electron 18.0.3 shell), the owned
+renderer loads `index.html` (`document.readyState` reaches `complete`) but the app never bootstraps:
+`document.body` stays empty and `window.app` remains `undefined` (a black screen). Without detection,
+`waitForOwnedVaultReady` cannot tell this terminal state from "still loading" and burns the whole readiness
+timeout before throwing a generic error.
+
+- **Pure detector** — `src/renderer-boot-detection.ts` (unit-tested, not re-exported):
+  `checkRendererBootState({ bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete }) →
+  'dead' | 'pending'`. Dead ⇔ the grace has elapsed AND `window.app` is undefined AND the document is
+  `complete` AND `<body>` is empty. This is exactly the confirmed incompatible-shell state and is
+  **unreachable by a healthy boot** (`window.app` is defined early; a slow boot renders a non-empty
+  loading shell), so there is no false-positive path. `resolveDeadBootGraceInMilliseconds` resolves the
+  option (`@default 10000`, `0` disables).
+- **Deliberately DOM-only.** The plan floated an `Runtime.exceptionThrown` heuristic; it was **dropped** —
+  the DOM grace-window signal is deterministic and matches the repro, whereas a live exception monitor
+  risks false-positives (a benign startup exception on a genuinely slow boot) and would ship a
+  perpetually-`false` wired input. Recorded here so the omission is not mistaken for an oversight.
+- **Distinct error** — `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`, **is**
+  exported from the barrel) so callers can `instanceof`-match this specific failure vs a generic readiness
+  timeout.
+- **Wiring** — `DesktopCdpTransport.waitForOwnedVaultReady` (owned path only) probes
+  `probeRendererBootState()` each poll iteration; the grace clock starts when the renderer first reports
+  `complete` (a loop-local `documentCompleteSince`), and it throws `RendererFailedToInitializeError` on a
+  `dead` verdict. The knob rides the existing options channel:
+  `ObsidianCdpTransportOptions.deadBootGraceInMilliseconds` → factory
+  `resolveDeadBootGraceInMilliseconds` → transport config field; also on `ConnectToCdpOptions`. Attach mode
+  is unaffected (it targets an already-alive instance).
+- **Not covered by this fast-fail:** on a *hidden* owned dead boot, `moveOwnedWindowOffscreen` still burns
+  its full ~20s poll because the Electron remote bridge never comes up — a separate, smaller waste. And
+  see L15's honest limit: the launch-time flash is unrelated.

@@ -615,6 +615,24 @@ environmentOptions: {
 - **`obsidianVersion`** pins the app code (asar). When omitted, the owned instance runs the same version your installed Obsidian currently runs.
 - **`obsidianInstallerVersion`** pins the Electron shell (installer build), downloaded and extracted from the matching GitHub release (Windows installers require [7-Zip](https://www.7-zip.org/) on `PATH`). Public releases only — catalyst/beta builds have no public installer, so a catalyst version can only be pinned at the asar level.
 
+##### Dead-boot fast-fail
+
+If you pin an app version that cannot run on the launched Electron shell — an `obsidianInstallerVersion` too old for the `obsidianVersion` — Obsidian loads a black screen: the renderer finishes loading but the app never bootstraps (empty `<body>`, no `window.app`). Rather than waiting out the full readiness timeout, the harness detects this terminal state and throws a **`RendererFailedToInitializeError`** as soon as it has held for a short grace window:
+
+```ts
+import { RendererFailedToInitializeError } from 'obsidian-integration-testing';
+
+try {
+  // ... register a vault against an incompatible version pair
+} catch (error) {
+  if (error instanceof RendererFailedToInitializeError) {
+    // The installer/Electron version is too old for this Obsidian app version.
+  }
+}
+```
+
+- **`deadBootGraceInMilliseconds`** (default `10000`) — how long the renderer must sit in the dead state (document `complete`, empty `<body>`, no `window.app`) before fast-failing. The grace clock starts when the renderer first reports `readyState: 'complete'`, so a slow-but-valid boot is never misjudged. Set `0` to disable the fast-fail and restore the plain wait-out-the-readiness-timeout behavior. Owned mode only (ignored in attach mode).
+
 ##### Window visibility
 
 By default the owned Obsidian window is **hidden** — it never steals focus or pops in front of your other apps. `isObsidianAppVisible` controls this:
@@ -839,6 +857,7 @@ await conn.evalInObsidian({ fn: ({ app }) => app.workspace.getActiveFile()?.path
 - **`vault`** — path to an existing vault to open. When omitted, an empty temporary vault is created.
 - **`isObsidianAppVisible`** — whether the window is shown. Unlike the test transport (hidden by default), `connectToCdp` **defaults to `true`** since it is meant for watching/debugging a real Obsidian. Set `false` to launch it off-screen.
 - **`port`** — attach to an already-running Obsidian on this `CDP` port instead of owning an instance (as in [Attaching to a running Obsidian](#attaching-to-a-running-obsidian)).
+- **`deadBootGraceInMilliseconds`** (default `10000`) — fast-fail with a `RendererFailedToInitializeError` when a pinned version pair produces a [dead boot](#dead-boot-fast-fail); `0` disables it.
 - **`shouldRemoveVaultOnDispose`** — whether `dispose()` removes the vault directory. Defaults to `true` for an implicit temp vault and `false` when a `vault` path is given, so a **real vault is never auto-deleted**. Set it explicitly to override.
 
 > [!WARNING]

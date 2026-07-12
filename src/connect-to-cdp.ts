@@ -100,6 +100,19 @@ export interface ConnectToCdpOptions {
   readonly commandTimeoutInMilliseconds?: number;
 
   /**
+   * Grace window in milliseconds for fast-failing a dead boot of the owned
+   * instance — the renderer loaded but the app never bootstrapped (empty
+   * `<body>`, no `window.app`), the terminal state when the asar cannot run on
+   * the launched Electron shell. Once it has held this long a
+   * `RendererFailedToInitializeError` is thrown instead of waiting out the full
+   * readiness timeout. Ignored in attach mode ({@link port} set). Set `0` to
+   * disable fast-fail.
+   *
+   * @default `10000`
+   */
+  readonly deadBootGraceInMilliseconds?: number;
+
+  /**
    * CDP host.
    *
    * @default `'localhost'`
@@ -181,6 +194,7 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
     isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
     type: 'obsidian-cdp',
     ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+    ...(options?.deadBootGraceInMilliseconds !== undefined && { deadBootGraceInMilliseconds: options.deadBootGraceInMilliseconds }),
     ...(options?.host !== undefined && { host: options.host }),
     ...(options?.obsidianInstallerVersion !== undefined && { obsidianInstallerVersion: options.obsidianInstallerVersion }),
     ...(options?.obsidianVersion !== undefined && { obsidianVersion: options.obsidianVersion }),

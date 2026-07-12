@@ -29,6 +29,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { OwnedObsidianInstance } from './obsidian-instance.ts';
+import type { RendererBootObservation } from './renderer-boot-detection.ts';
 import type {
   ObsidianTransport,
   TransportEvalOptions
@@ -46,6 +47,11 @@ import {
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
+import {
+  checkRendererBootState,
+  DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS
+} from './renderer-boot-detection.ts';
+import { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 import { ensureNonNullable } from './type-guards.ts';
 import {
   resolveOwnedHiddenLaunchArgs,
@@ -73,6 +79,14 @@ export interface DesktopCdpTransportConfig {
    * Defaults to `30000`.
    */
   commandTimeoutInMilliseconds?: number;
+
+  /**
+   * Grace window in milliseconds for fast-failing a dead boot of the owned
+   * instance (empty `<body>` with no `window.app` after the renderer reached
+   * `document.readyState` `'complete'`). Defaults to
+   * {@link DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS}. `0` disables fast-fail.
+   */
+  deadBootGraceInMilliseconds?: number;
 
   /**
    * When attaching (i.e. {@link cdpPort} is set), marks the target as a
@@ -204,6 +218,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private cdpPort: number;
   private cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
+  private readonly deadBootGraceInMilliseconds: number;
   private readonly isHarnessOwnedInstance: boolean;
   private readonly isObsidianAppVisible: boolean;
   private messageId = 0;
@@ -219,6 +234,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   public constructor(config?: DesktopCdpTransportConfig) {
     this.cdpHost = config?.cdpHost ?? 'localhost';
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
+    this.deadBootGraceInMilliseconds = config?.deadBootGraceInMilliseconds ?? DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS;
     this.isHarnessOwnedInstance = config?.isHarnessOwnedInstance ?? false;
     this.isObsidianAppVisible = config?.isObsidianAppVisible ?? false;
     this.ownedConfig = config?.ownedInstance;
@@ -696,6 +712,47 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Samples the vault renderer's bootstrap state — whether the document is
+   * `complete`, whether `window.app` exists, and the `<body>` child count — from
+   * the first page target, for dead-boot detection. This works even when the app
+   * never bootstrapped (the renderer page target still exists), which is exactly
+   * the state it must observe.
+   *
+   * @returns The sampled observation, or `undefined` when no target is reachable
+   *   or the probe failed (so the caller keeps polling rather than fast-failing).
+   */
+  private async probeRendererBootState(): Promise<RendererBootObservation | undefined> {
+    try {
+      const target = (await this.getPageTargets())[0];
+      if (!target) {
+        return undefined;
+      }
+
+      const ws = await this.connectToTarget(target);
+      try {
+        const probeExpr = `JSON.stringify({
+          bodyChildElementCount: document.body ? document.body.childElementCount : 0,
+          hasWindowApp: typeof window.app !== 'undefined',
+          isDocumentComplete: document.readyState === 'complete'
+        })`;
+        const response = await this.sendCommand(ws, 'Runtime.evaluate', {
+          expression: probeExpr,
+          returnByValue: true
+        });
+        const value = response.result?.result?.value;
+        if (typeof value !== 'string') {
+          return undefined;
+        }
+        return JSON.parse(value) as RendererBootObservation;
+      } finally {
+        ws.close();
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Probes a target to discover which vault path it has open.
    *
    * Creates a temporary WebSocket connection, evaluates `getBasePath()`,
@@ -852,11 +909,21 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * Polls the owned instance until the vault target exists, layout is ready, and
    * the trust dialog (if any) has been dismissed.
    *
+   * Between readiness attempts it also checks for a **dead boot** — the renderer
+   * loaded (`document.readyState` `'complete'`) but the app never bootstrapped
+   * (empty `<body>`, no `window.app`), the terminal state when the asar cannot
+   * run on the launched Electron shell. Once that state has held for the
+   * configured grace window it throws a {@link RendererFailedToInitializeError}
+   * immediately instead of waiting out the full readiness timeout. A grace of
+   * `0` disables the fast-fail. The grace clock starts when the renderer first
+   * reports `complete`, so a slow load before then is never counted against it.
+   *
    * @param vaultPath - The absolute path to the vault folder.
    */
   private async waitForOwnedVaultReady(vaultPath: string): Promise<void> {
     log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    let documentCompleteSince: null | number = null;
     while (Date.now() < deadline) {
       try {
         await this.findTargetForVault(vaultPath);
@@ -867,6 +934,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
       } catch {
         // Vault target not ready yet.
       }
+
+      if (this.deadBootGraceInMilliseconds > 0) {
+        const observation = await this.probeRendererBootState();
+        if (observation) {
+          if (observation.isDocumentComplete && documentCompleteSince === null) {
+            documentCompleteSince = Date.now();
+          }
+          const hasGraceElapsed = documentCompleteSince !== null
+            && Date.now() - documentCompleteSince >= this.deadBootGraceInMilliseconds;
+          if (checkRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
+            log('[cdp-transport] Owned renderer failed to initialize (dead boot); failing fast.');
+            throw new RendererFailedToInitializeError(vaultPath);
+          }
+        }
+      }
+
       await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
     }
     throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);

@@ -184,6 +184,25 @@ export interface ObsidianCdpTransportOptions {
   readonly commandTimeoutInMilliseconds?: number;
 
   /**
+   * Grace window in milliseconds for fast-failing a **dead boot** of the owned
+   * instance.
+   *
+   * When an asar cannot run on the launched Electron shell (the installer
+   * version is too old for the app version), the renderer loads but never
+   * bootstraps: `document.body` stays empty and `window.app` remains
+   * `undefined` — a black screen. Rather than waiting out the full readiness
+   * timeout, the owned-vault readiness poll concludes the boot is dead once the
+   * renderer has been `document.readyState` `'complete'` for this long with no
+   * `window.app` and an empty `<body>`, and throws a
+   * `RendererFailedToInitializeError`. Only applies to an owned instance
+   * (ignored in attach mode, {@link port} set). Set `0` to disable fast-fail and
+   * restore the plain wait-out-the-readiness-timeout behavior.
+   *
+   * @default `10000`
+   */
+  readonly deadBootGraceInMilliseconds?: number;
+
+  /**
    * CDP host.
    * Defaults to `'localhost'`
    */
