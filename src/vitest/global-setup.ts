@@ -21,12 +21,12 @@ import {
   setTransportOptionsResolver,
   setVaultPathResolver
 } from '../context-provider.ts';
+import { errorToString } from '../error-to-string.ts';
 import {
   coreSetup,
   coreTeardown
 } from '../global-setup-core.ts';
 import { log } from '../log.ts';
-import { serializeError } from '../serialize-error.ts';
 import { TempVault } from '../temp-vault.ts';
 
 setTransportOptionsResolver(() => inject('obsidianTransport'));
@@ -77,8 +77,8 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
       // Catch setup errors so that other projects' tests can still run.
       // Individual tests in this project will fail with the stored error
       // When they try to inject the temp vault path.
-      log(`[integration-setup:${label}] Setup failed (tests for this project will be skipped): ${serializeError(error)}`);
-      project.provide('setupError', serializeError(error));
+      log(`[integration-setup:${label}] Setup failed (tests for this project will be skipped): ${errorToString(error)}`);
+      project.provide('setupError', errorToString(error));
       return;
     }
 

@@ -43,12 +43,12 @@ export interface EnablePluginResult {
   readonly isLoaded: boolean;
 }
 
-interface IntegrationTestingHolder {
-  __obsidianIntegrationTesting: IntegrationTestingSerializeError;
+interface IntegrationTestingErrorToString {
+  errorToString(error: unknown): string;
 }
 
-interface IntegrationTestingSerializeError {
-  serializeError(error: unknown): string;
+interface IntegrationTestingHolder {
+  __obsidianIntegrationTesting: IntegrationTestingErrorToString;
 }
 
 /**
@@ -81,7 +81,7 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
     } catch (error) {
       // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
       const holder = window as unknown as Partial<IntegrationTestingHolder>;
-      errorMessage = holder.__obsidianIntegrationTesting?.serializeError(error) ?? String(error);
+      errorMessage = holder.__obsidianIntegrationTesting?.errorToString(error) ?? String(error);
       throw error;
     }
   };

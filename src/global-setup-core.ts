@@ -30,9 +30,9 @@ import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
+import { errorToString } from './error-to-string.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
-import { serializeError } from './serialize-error.ts';
 import { acquireSetupLock } from './setup-lock.ts';
 import { TempVault } from './temp-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
@@ -204,12 +204,12 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
         await tempVault.dispose(transport);
       }
     } catch (cleanupError: unknown) {
-      log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${serializeError(cleanupError)}`);
+      log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${errorToString(cleanupError)}`);
     }
     try {
       await transport?.dispose?.();
     } catch (cleanupError: unknown) {
-      log(`[integration-setup:${label}] Transport cleanup error (non-fatal): ${serializeError(cleanupError)}`);
+      log(`[integration-setup:${label}] Transport cleanup error (non-fatal): ${errorToString(cleanupError)}`);
     }
 
     // Release the lock so a waiting run can proceed even though this run failed.
@@ -238,7 +238,7 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   try {
     await teardownAsync(result);
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${serializeError(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Cleanup error (non-fatal): ${errorToString(error)}`);
   } finally {
     activeSetups.delete(result);
     releaseSetupLock(result);
@@ -362,7 +362,7 @@ function registerProcessCleanupHandler(): void {
 
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
-        log(`[integration-teardown:${result.transportLabel}] Process cleanup error (non-fatal): ${serializeError(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Process cleanup error (non-fatal): ${errorToString(error)}`);
       });
     }
   });
@@ -375,7 +375,7 @@ function registerProcessCleanupHandler(): void {
     log(`[integration-teardown] Unhandled rejection detected. Tearing down ${String(activeSetups.size)} active setup(s)...`);
     for (const result of [...activeSetups]) {
       coreTeardown(result).catch((error: unknown) => {
-        log(`[integration-teardown:${result.transportLabel}] Rejection cleanup error (non-fatal): ${serializeError(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Rejection cleanup error (non-fatal): ${errorToString(error)}`);
       });
     }
   });
@@ -390,12 +390,12 @@ function registerProcessCleanupHandler(): void {
       try {
         result.transport.disposeSync?.();
       } catch (error: unknown) {
-        log(`[integration-teardown:${result.transportLabel}] Sync transport cleanup error (non-fatal): ${serializeError(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Sync transport cleanup error (non-fatal): ${errorToString(error)}`);
       }
       try {
         rmSync(result.tempVault.path, { force: true, recursive: true });
       } catch (error: unknown) {
-        log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${serializeError(error)}`);
+        log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${errorToString(error)}`);
       }
       releaseSetupLock(result);
     }
@@ -457,12 +457,12 @@ async function teardownAsync(result: CoreSetupResult): Promise<void> {
   try {
     await result.tempVault.dispose(result.transport);
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${serializeError(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${errorToString(error)}`);
   }
 
   try {
     await result.transport.dispose?.();
   } catch (error: unknown) {
-    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${serializeError(error)}`);
+    log(`[integration-teardown:${result.transportLabel}] Transport cleanup error (non-fatal): ${errorToString(error)}`);
   }
 }
