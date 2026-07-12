@@ -138,7 +138,6 @@
     "tmp": "0.2.5",
     "type-fest": "$type-fest",
     "typescript": "$typescript",
-    "urlpattern-polyfill": "npm:dry-uninstall",
     "vite": "$vite"
   },
   "dependencies": {
