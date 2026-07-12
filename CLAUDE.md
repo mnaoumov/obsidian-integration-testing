@@ -206,10 +206,13 @@ is a MAJOR bump**, and consuming plugins must migrate their closures
 4. Migrate the ~13 `src/obsidian/*.obsidian.integration.test.ts` closures from
    `const lib = window.__obsidianDevUtilsModule__; if (!lib) throw; lib.X` → `fn({ app, lib }) => lib.X`.
 5. Bump the `obsidian-integration-testing` dep to the version shipping `lib`.
-6. **(Duplication, accepted.)** Also add the six harness base helpers to dev-utils' `test-helpers` and
-   expose them via `__merged`, so `lib.typeIntoEditor` etc. resolve to dev-utils' copies (overriding the
-   harness base) when the provider is registered. This deliberately duplicates the harness
-   implementations — the tradeoff for a single dev-utils-owned source of closure helpers.
+6. **(Duplication, accepted — user decision 2026-07-11.)** Also add the six harness base helpers to
+   dev-utils' `test-helpers` and expose them via `__merged`, so `lib.typeIntoEditor` etc. resolve to
+   dev-utils' copies (overriding the harness base) when the provider is registered. This deliberately
+   duplicates the harness implementations — accepted to keep both dependency graphs clean (avoids the
+   backwards runtime dep that harness→dev-utils re-export would create). The two copies are kept in sync
+   **by hand**, governed by a prose local rule in **both** repos (**L17** here, canonical; dev-utils
+   carries the mirror rule) — there is **no** automated drift check.
    (Full plan: `~/.claude/plans/linked-soaring-nebula.md`.)
 
 ## Pending Questions
@@ -558,6 +561,30 @@ exactly like `app`, so a back-reference such as `lib.__namespaces` cannot cause 
 Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core namespace bootstrap +
 registry). The intended first provider is `obsidian-dev-utils` exposing its whole library via a flat
 `obsidian-dev-utils/__merged` barrel (see the Current Task hand-off).
+
+## L17. The Six Base `lib` Helpers Are Intentionally Duplicated in `obsidian-dev-utils` — Keep In Sync By Hand
+
+The six base `lib` helpers the harness seeds in `namespace-bootstrap.ts` — `typeIntoEditor`,
+`pressKey`, `moveMouse`, `hoverElement`, `unhoverElement`, `waitUntil` (see **L16**, and L8 / L11 /
+L12 / L14) — are **intentionally copy-pasted** into `obsidian-dev-utils`, which re-exposes them
+through its `__merged` surface so a closure's `lib` picks up dev-utils' copies (they `Object.assign`
+over the harness base when the provider resolver is registered). This deliberately reimplements logic
+that lives here rather than sharing one source — normally the workspace never duplicates cross-library
+code — and is accepted for one reason: **dependency hygiene**. Sharing a single source would force
+either the harness to depend on `obsidian-dev-utils`, or `obsidian-dev-utils` to take a **runtime**
+dependency on this test harness (a utility library depending on a test harness — backwards). Since
+dev-utils re-exports these as **values** through its shipped `__merged` surface, that runtime edge is
+unavoidable under the shared-source approach; duplication keeps both dependency graphs clean, at the
+cost of manual sync.
+
+**Rule:** the implementations in `namespace-bootstrap.ts` are the **canonical** copy. Any change to the
+behavior of these six helpers here MUST be mirrored in `obsidian-dev-utils` in the same coordinated
+change, and vice versa. There is **no automated drift check** — a deliberately accepted risk (the
+alternative `.toString()`-equality test was declined); sync is by discipline alone. `obsidian-dev-utils`
+carries the mirror-image local rule pointing back here. When you touch any of the six, update both
+copies. (Honest note: for serialized closures this duplication yields no functional gain — the harness
+base already injects all six; the dev-utils copy exists so non-closure/production code can `import`
+them.)
 
 ## Known Issues
 
