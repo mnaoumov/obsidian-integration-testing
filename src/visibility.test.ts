@@ -5,8 +5,10 @@ import {
 } from 'vitest';
 
 import {
+  NO_SANDBOX_LAUNCH_FLAG,
   OWNED_HIDDEN_LAUNCH_FLAGS,
   resolveOwnedHiddenLaunchArgs,
+  resolveSandboxLaunchArgs,
   shouldHideAppiumConsole,
   shouldHideEmulatorWindow,
   shouldHideObsidianApp
@@ -81,5 +83,24 @@ describe('resolveOwnedHiddenLaunchArgs', () => {
     expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-background-timer-throttling');
     expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-backgrounding-occluded-windows');
     expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-renderer-backgrounding');
+  });
+});
+
+describe('resolveSandboxLaunchArgs', () => {
+  it('should return no extra args by default when the option is omitted', () => {
+    expect(resolveSandboxLaunchArgs()).toStrictEqual([]);
+    expect(resolveSandboxLaunchArgs(undefined)).toStrictEqual([]);
+  });
+
+  it('should return no extra args when the sandbox is kept', () => {
+    expect(resolveSandboxLaunchArgs(false)).toStrictEqual([]);
+  });
+
+  it('should return the no-sandbox flag when the sandbox is disabled', () => {
+    expect(resolveSandboxLaunchArgs(true)).toStrictEqual([NO_SANDBOX_LAUNCH_FLAG]);
+  });
+
+  it('should use the standard no-sandbox switch', () => {
+    expect(NO_SANDBOX_LAUNCH_FLAG).toBe('--no-sandbox');
   });
 });

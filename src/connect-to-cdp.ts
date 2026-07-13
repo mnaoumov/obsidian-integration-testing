@@ -156,6 +156,19 @@ export interface ConnectToCdpOptions {
   readonly port?: number;
 
   /**
+   * Whether to launch the owned instance with Chromium's sandbox disabled
+   * (`--no-sandbox`).
+   *
+   * Needed to boot on Linux without a correctly-configured setuid
+   * `chrome-sandbox` helper (e.g. an installer-extracted portable shell, or CI
+   * running as a non-root user); harmless on Windows/macOS. Ignored in attach
+   * mode ({@link port} set).
+   *
+   * @default `false`
+   */
+  readonly shouldDisableSandbox?: boolean;
+
+  /**
    * Whether to remove the vault directory on {@link CdpConnection.dispose}.
    *
    * When omitted, defaults to `true` for an implicit throw-away temp vault
@@ -198,7 +211,8 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
     ...(options?.host !== undefined && { host: options.host }),
     ...(options?.obsidianInstallerVersion !== undefined && { obsidianInstallerVersion: options.obsidianInstallerVersion }),
     ...(options?.obsidianVersion !== undefined && { obsidianVersion: options.obsidianVersion }),
-    ...(options?.port !== undefined && { port: options.port })
+    ...(options?.port !== undefined && { port: options.port }),
+    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox })
   };
 
   const transport = await createTransportFromOptions(transportOptions);

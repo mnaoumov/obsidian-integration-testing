@@ -278,6 +278,21 @@ export interface ObsidianCdpTransportOptions {
   readonly port?: number;
 
   /**
+   * Whether to launch the owned instance with Chromium's sandbox disabled
+   * (`--no-sandbox`).
+   *
+   * Needed to boot an owned instance on Linux when there is no
+   * correctly-configured setuid `chrome-sandbox` helper — e.g. a portable shell
+   * extracted from an installer, or a CI runner launching as a non-root user, in
+   * which case the renderer otherwise refuses to start. Harmless on
+   * Windows/macOS. Ignored in attach mode ({@link port} set) — the harness never
+   * relaunches the user's running instance.
+   *
+   * @default `false`
+   */
+  readonly shouldDisableSandbox?: boolean;
+
+  /**
    * Discriminant for the transport type.
    */
   readonly type: 'obsidian-cdp';

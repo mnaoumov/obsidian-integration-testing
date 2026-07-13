@@ -36,6 +36,19 @@ export const OWNED_HIDDEN_LAUNCH_FLAGS = [
 ];
 
 /**
+ * Chromium switch that disables the setuid sandbox for an owned instance.
+ *
+ * Electron's Linux sandbox needs a correctly-configured (root-owned, setuid)
+ * `chrome-sandbox` helper. A portable shell extracted from an installer — and a
+ * CI runner launching it as a non-root user — has no such helper, so the
+ * renderer refuses to start ("The SUID sandbox helper binary was found, but is
+ * not configured correctly"). Passing `--no-sandbox` disables it. It is harmless
+ * on Windows/macOS (their sandbox is unaffected by extraction), so an owned test
+ * instance can pass it uniformly across platforms.
+ */
+export const NO_SANDBOX_LAUNCH_FLAG = '--no-sandbox';
+
+/**
  * Resolves the extra Chromium launch args for an owned desktop instance: the
  * {@link OWNED_HIDDEN_LAUNCH_FLAGS} when the window is hidden (the default), or
  * an empty list when it is visible.
@@ -45,6 +58,16 @@ export const OWNED_HIDDEN_LAUNCH_FLAGS = [
  */
 export function resolveOwnedHiddenLaunchArgs(isObsidianAppVisible?: boolean): string[] {
   return shouldHideObsidianApp(isObsidianAppVisible) ? [...OWNED_HIDDEN_LAUNCH_FLAGS] : [];
+}
+
+/**
+ * Resolves the extra Chromium launch args for disabling the sandbox.
+ *
+ * @param shouldDisableSandbox - The resolved option value (omitted → sandbox kept).
+ * @returns `[{@link NO_SANDBOX_LAUNCH_FLAG}]` when the sandbox should be disabled, else `[]`.
+ */
+export function resolveSandboxLaunchArgs(shouldDisableSandbox?: boolean): string[] {
+  return (shouldDisableSandbox ?? false) ? [NO_SANDBOX_LAUNCH_FLAG] : [];
 }
 
 /**
