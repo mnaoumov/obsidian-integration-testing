@@ -61,3 +61,22 @@ jobs:
           else
             $CMD
           fi
+
+      # Reproduces the Linux asar-swap version-pin bug: symlink the newer shell
+      # The boot step just cached, under a *versionless* directory (so
+      # detectInstalledShellVersion returns undefined), and put it on PATH BEFORE
+      # vitest starts (exec.ts snapshots process.env at import). The test then
+      # pins an OLDER obsidianVersion and asserts the running app is that version.
+      - name: Validate Linux asar-swap version pin
+        if: runner.os == 'Linux'
+        env:
+          OBSIDIAN_TEST_ASAR_SWAP: '1'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          SHELL_EXE=$(ls /tmp/obsidian-integration-testing/shell-cache/*/obsidian | head -1)
+          echo "Using cached shell on PATH: $SHELL_EXE"
+          BIN_DIR=$(mktemp -d)
+          ln -s "$SHELL_EXE" "$BIN_DIR/obsidian"
+          export PATH="$BIN_DIR:$PATH"
+          xvfb-run -a npx vitest run --project integration-tests src/obsidian-asar-swap.integration.test.ts

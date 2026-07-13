@@ -234,8 +234,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly isObsidianAppVisible: boolean;
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
-  private readonly shouldDisableSandbox: boolean;
   private ownedInstance: OwnedObsidianInstance | undefined;
+  private readonly shouldDisableSandbox: boolean;
   private ws: null | WebSocket = null;
 
   /**
