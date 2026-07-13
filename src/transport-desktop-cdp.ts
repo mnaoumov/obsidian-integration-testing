@@ -55,6 +55,7 @@ import { RendererFailedToInitializeError } from './renderer-failed-to-initialize
 import { ensureNonNullable } from './type-guards.ts';
 import {
   resolveOwnedHiddenLaunchArgs,
+  resolveSandboxLaunchArgs,
   shouldHideObsidianApp
 } from './visibility.ts';
 
@@ -111,6 +112,16 @@ export interface DesktopCdpTransportConfig {
    * instead of attaching to a running one. This is the default desktop mode.
    */
   ownedInstance?: OwnedInstanceConfig;
+
+  /**
+   * Whether to launch the owned instance with Chromium's sandbox disabled
+   * (`--no-sandbox`). Needed to boot on Linux without a correctly-configured
+   * setuid `chrome-sandbox` helper (e.g. an extracted portable shell, or CI as a
+   * non-root user); harmless on Windows/macOS. Only meaningful in owned mode.
+   *
+   * @default `false`
+   */
+  shouldDisableSandbox?: boolean;
 }
 
 /**
@@ -223,6 +234,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly isObsidianAppVisible: boolean;
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
+  private readonly shouldDisableSandbox: boolean;
   private ownedInstance: OwnedObsidianInstance | undefined;
   private ws: null | WebSocket = null;
 
@@ -238,6 +250,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     this.isHarnessOwnedInstance = config?.isHarnessOwnedInstance ?? false;
     this.isObsidianAppVisible = config?.isObsidianAppVisible ?? false;
     this.ownedConfig = config?.ownedInstance;
+    this.shouldDisableSandbox = config?.shouldDisableSandbox ?? false;
     // Owned mode picks a free port at launch (assigned in registerVault).
     // Attach mode connects to the configured port; no port is hardcoded.
     this.cdpPort = config?.cdpPort ?? 0;
@@ -819,7 +832,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const instance = await launchOwnedObsidianInstance({
       cdpHost: this.cdpHost,
       exePath: config.exePath,
-      extraArgs: resolveOwnedHiddenLaunchArgs(this.isObsidianAppVisible),
+      extraArgs: [
+        ...resolveOwnedHiddenLaunchArgs(this.isObsidianAppVisible),
+        ...resolveSandboxLaunchArgs(this.shouldDisableSandbox)
+      ],
       userDataDir: config.userDataDir
     });
     this.ownedInstance = instance;
