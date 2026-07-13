@@ -203,19 +203,7 @@ interface ResolvedEndpoint {
  * @returns A {@link Promise} that resolves to the live {@link CdpConnection}.
  */
 export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpConnection> {
-  const transportOptions: ObsidianCdpTransportOptions = {
-    isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
-    type: 'obsidian-cdp',
-    ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
-    ...(options?.deadBootGraceInMilliseconds !== undefined && { deadBootGraceInMilliseconds: options.deadBootGraceInMilliseconds }),
-    ...(options?.host !== undefined && { host: options.host }),
-    ...(options?.obsidianInstallerVersion !== undefined && { obsidianInstallerVersion: options.obsidianInstallerVersion }),
-    ...(options?.obsidianVersion !== undefined && { obsidianVersion: options.obsidianVersion }),
-    ...(options?.port !== undefined && { port: options.port }),
-    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox })
-  };
-
-  const transport = await createTransportFromOptions(transportOptions);
+  const transport = await createTransportFromOptions(buildCdpTransportOptions(options));
   const vault = new TempVault(options?.vault);
   const shouldRemoveVaultOnDispose = options?.shouldRemoveVaultOnDispose ?? (options?.vault === undefined);
 
@@ -262,6 +250,28 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   };
 
   return connection;
+}
+
+/**
+ * Builds the {@link ObsidianCdpTransportOptions} for a connection, threading only
+ * the provided {@link ConnectToCdpOptions} through (owned-visible defaults to
+ * `true`, unlike the hidden-by-default test transports).
+ *
+ * @param options - The connection options.
+ * @returns The transport options to create the connection's transport from.
+ */
+function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTransportOptions {
+  return {
+    isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
+    type: 'obsidian-cdp',
+    ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+    ...(options?.deadBootGraceInMilliseconds !== undefined && { deadBootGraceInMilliseconds: options.deadBootGraceInMilliseconds }),
+    ...(options?.host !== undefined && { host: options.host }),
+    ...(options?.obsidianInstallerVersion !== undefined && { obsidianInstallerVersion: options.obsidianInstallerVersion }),
+    ...(options?.obsidianVersion !== undefined && { obsidianVersion: options.obsidianVersion }),
+    ...(options?.port !== undefined && { port: options.port }),
+    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox })
+  };
 }
 
 /**

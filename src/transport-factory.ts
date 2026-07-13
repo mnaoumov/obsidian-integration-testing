@@ -142,6 +142,17 @@ interface EnsureDeviceConnectedResult {
 }
 
 /**
+ * The locally-installed Obsidian shell resolved by {@link resolveInstalledShellOrNull}.
+ */
+interface InstalledShell {
+  /** Absolute path to the installed shell executable. */
+  readonly exePath: string;
+
+  /** The detected shell version, or `undefined` when it cannot be determined. */
+  readonly shellVersion: string | undefined;
+}
+
+/**
  * Parameters for {@link AppiumTransportFactory.startAppiumAndEmulator}.
  */
 interface StartAppiumAndEmulatorParams {
@@ -926,6 +937,26 @@ function createOwnedUserDataDir(): string {
 }
 
 /**
+ * Resolves the locally-installed Obsidian shell, tolerating its absence.
+ *
+ * Unlike {@link resolveObsidianExecutable} (which throws when Obsidian is not
+ * installed), this returns `undefined` in that case, so a caller pinning an
+ * installer version can fall back to downloading the pinned shell instead of
+ * failing on a host with no Obsidian installed (e.g. CI).
+ *
+ * @returns The installed shell's path and detected version, or `undefined` when
+ *   no Obsidian is installed.
+ */
+async function resolveInstalledShellOrNull(): Promise<InstalledShell | undefined> {
+  try {
+    const exePath = await resolveObsidianExecutable();
+    return { exePath, shellVersion: detectInstalledShellVersion(exePath) };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Resolves the shell executable, asar provisioning, and isolated user-data dir
  * for a harness-owned instance from the requested version knobs.
  *
@@ -943,18 +974,18 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   let exePath: string;
   let shellVersion: string | undefined;
 
-  if (options?.obsidianInstallerVersion !== undefined) {
+  if (options?.obsidianInstallerVersion === undefined) {
+    exePath = await resolveObsidianExecutable();
+    shellVersion = detectInstalledShellVersion(exePath);
+  } else {
     // A pinned installer version fully determines the shell, so resolve it from
-    // the pin — this must NOT require a locally-installed Obsidian (a CI runner
-    // has none). Reuse the installed shell only when it already matches the pin
+    // The pin without requiring a locally-installed Obsidian (a CI runner has
+    // None). Reuse the installed shell only when it already matches the pin
     // (saves the download); otherwise download and extract the pinned installer.
     const installerVersion = await resolveConcreteVersion(options.obsidianInstallerVersion);
     const installed = await resolveInstalledShellOrNull();
     exePath = installed?.shellVersion === installerVersion ? installed.exePath : await ensureShellCached(installerVersion);
     shellVersion = installerVersion;
-  } else {
-    exePath = await resolveObsidianExecutable();
-    shellVersion = detectInstalledShellVersion(exePath);
   }
 
   let asar: OwnedInstanceConfig['asar'];
@@ -976,26 +1007,6 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   }
 
   return { ...(asar && { asar }), exePath, userDataDir: createOwnedUserDataDir() };
-}
-
-/**
- * Resolves the locally-installed Obsidian shell, tolerating its absence.
- *
- * Unlike {@link resolveObsidianExecutable} (which throws when Obsidian is not
- * installed), this returns `undefined` in that case, so a caller pinning an
- * installer version can fall back to downloading the pinned shell instead of
- * failing on a host with no Obsidian installed (e.g. CI).
- *
- * @returns The installed shell's path and detected version, or `undefined` when
- *   no Obsidian is installed.
- */
-async function resolveInstalledShellOrNull(): Promise<{ exePath: string; shellVersion: string | undefined } | undefined> {
-  try {
-    const exePath = await resolveObsidianExecutable();
-    return { exePath, shellVersion: detectInstalledShellVersion(exePath) };
-  } catch {
-    return undefined;
-  }
 }
 
 /**
