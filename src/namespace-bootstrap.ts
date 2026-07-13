@@ -178,9 +178,11 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly value: string;
   }
 
-  interface ElectronWebContentsWithSendInputEvent {
-    sendInputEvent(inputEvent: SendInputEventKeyboardInput | SendInputEventMouseInput): void;
-  }
+  type CurrentWebContents = ReturnType<Window['electron']['remote']['getCurrentWebContents']>;
+
+  // The Electron modifier-key names `sendInputEvent` accepts (e.g. 'meta', 'control', 'shift', 'alt').
+  // Derived from the web-contents type so it stays in sync with the Electron typings.
+  type ElectronModifier = NonNullable<Parameters<CurrentWebContents['sendInputEvent']>[0]['modifiers']>[number];
 
   interface ObsidianModuleWithPlatform {
     Platform: ObsidianPlatform;
@@ -188,18 +190,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   interface ObsidianPlatform {
     isMacOS: boolean;
-  }
-
-  interface SendInputEventKeyboardInput {
-    keyCode: string;
-    modifiers?: string[];
-    type: 'char' | 'keyDown' | 'keyUp';
-  }
-
-  interface SendInputEventMouseInput {
-    type: 'mouseMove';
-    x: number;
-    y: number;
   }
 
   /**
@@ -400,18 +390,27 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     // Map Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
     // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
-    const electronModifiers = modifiers.map((modifier): string => {
-      if (modifier === 'Mod') {
-        return isMacOS ? 'meta' : 'control';
+    const electronModifiers = modifiers.map((modifier): ElectronModifier => {
+      switch (modifier) {
+        case 'Alt':
+          return 'alt';
+        case 'Ctrl':
+          return 'control';
+        case 'Meta':
+          return 'meta';
+        case 'Mod':
+          return isMacOS ? 'meta' : 'control';
+        case 'Shift':
+          return 'shift';
+        default: {
+          // Exhaustiveness guard: adding a `Modifier` member without a case above becomes a compile error.
+          const unknownModifier: never = modifier;
+          throw new Error(`Unknown modifier: ${String(unknownModifier)}`);
+        }
       }
-      if (modifier === 'Ctrl') {
-        return 'control';
-      }
-      return modifier.toLowerCase();
     });
 
-    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) key press.
-    const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
+    const webContents = window.electron.remote.getCurrentWebContents();
 
     // A trusted key press is keyDown -> char -> keyUp: keyDown fires `keydown`, char fires
     // `keypress`/`beforeinput`/`input`, keyUp fires `keyup` — the full real key pipeline.
@@ -437,8 +436,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   function moveMouse(moveParams: MoveMouseParams): void {
-    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: obsidian-typings' `ElectronWebContents` omits the stable `sendInputEvent`, which is what injects a trusted (real) pointer move.
-    const webContents = window.electron.remote.getCurrentWebContents() as unknown as ElectronWebContentsWithSendInputEvent;
+    const webContents = window.electron.remote.getCurrentWebContents();
     webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(moveParams.x), y: Math.round(moveParams.y) });
   }
 

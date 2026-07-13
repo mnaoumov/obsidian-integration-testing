@@ -75,6 +75,7 @@
     "prepatch",
     "Promisable",
     "sdcard",
+    "setuid",
     "Sidedock",
     "sideload",
     "spyable",
