@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 8.1.0
+
+- feat: add GitHub test for Linux/macOS installer-shell path
+- feat(cli): exit on owned-instance window close
+- docs: capture Android integration performance reference (L19)
+- build: drop urlpattern-polyfill dry-uninstall override
+- feat: detect dead combination of obsidian version and installer version
+
 ## 8.0.1
 
 - fix: installer urls for old versions
