@@ -991,12 +991,15 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   let asar: OwnedInstanceConfig['asar'];
   if (options?.obsidianVersion !== undefined) {
     const asarVersion = await resolveConcreteVersion(options.obsidianVersion);
-    if (shellVersion === undefined || compareVersions(asarVersion, shellVersion) >= 0) {
+    if (shellVersion !== undefined && compareVersions(asarVersion, shellVersion) >= 0) {
       asar = { path: await ensureAsarCached(asarVersion), version: asarVersion };
     } else {
-      // Downgrade vs. the shell: asar-swap is upgrade-only, so use the matching
-      // Installer shell instead (its bundled asar is this version).
-      log(`[transport-factory:obsidian-cdp] ${asarVersion} is older than shell ${shellVersion}; using its installer shell.`);
+      // Asar-swap is upgrade-only, so it cannot apply a version older than the
+      // Shell's bundled one — and when the shell version is unknown (a Linux
+      // Path-parse miss) we cannot prove the swap would apply at all. In both
+      // Cases use the requested version's own installer shell, whose bundled
+      // Asar is exactly this version, so the pin is always honored.
+      log(`[transport-factory:obsidian-cdp] Using the ${asarVersion} installer shell (shell version ${shellVersion ?? 'unknown'}; asar-swap is upgrade-only).`);
       exePath = await ensureShellCached(asarVersion);
     }
   } else if (options?.obsidianInstallerVersion === undefined) {
