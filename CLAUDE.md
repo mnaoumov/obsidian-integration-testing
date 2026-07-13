@@ -547,3 +547,21 @@ build/test gate (format/lint/spellcheck still apply). Two installer-floor fields
   agreement (its two disagreements are its own un-measured defaults for the newest versions).
 - **`minRecommendedInstallerVersion`** — the tier-2 recommended min (Obsidian's own guidance); equals
   `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement).
+
+Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is
+filled from `obsidian-versions.json` for completeness — it matches our recorded values 52/52). `—` = not
+determined (no asar in the source folder, or not recorded upstream):
+
+| App-version range | `minRunnableInstallerVersion` | `minRecommendedInstallerVersion` |
+| --- | --- | --- |
+| `0.0.1`–`0.6.3` | — | — |
+| `0.6.4`–`0.7.3` | `0.6.4` | `0.6.4` |
+| `0.7.4`–`0.13.3` | `0.6.4` | `0.7.4` |
+| `0.13.4`–`0.15.6` | `0.6.4` | `0.11.0` |
+| `0.15.7`–`1.2.8` | `0.6.4` | `0.14.5` |
+| `1.3.0`–`1.4.12` | `0.14.5` | `1.1.9` |
+| `1.4.13`–`1.4.14` | `0.14.5` | `1.4.5` |
+| `1.4.15`–`1.5.2` | `0.14.5` | `1.4.13` |
+| `1.5.3`–`1.8.1` | `1.1.9` | `1.4.13` |
+| `1.8.2`–`1.12.7` | `1.1.9` | `1.5.8` |
+| `1.13.0`–`1.13.1` | `1.1.9` | `1.6.5` |
