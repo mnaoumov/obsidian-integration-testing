@@ -317,14 +317,24 @@ function extractWindowsShell(assetPath: string, shellDir: string): void {
 /**
  * Fetches a release's asset names from the GitHub API.
  *
+ * Reads a `GITHUB_TOKEN` (or `GH_TOKEN`) from the environment and sends it as a
+ * bearer token when present, to lift the anonymous rate limit that otherwise
+ * returns HTTP 403 on shared CI runner IPs.
+ *
  * @param version - The release version (tag `v<version>`).
  * @returns The asset names, or `undefined` if the API is unavailable.
  */
 async function fetchReleaseAssetNames(version: string): Promise<string[] | undefined> {
   try {
-    const response = await fetch(`${RELEASE_API_TAG_URL}/v${version}`, {
-      headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': DOWNLOAD_USER_AGENT }
-    });
+    const headers = new Headers({ 'Accept': 'application/vnd.github+json', 'User-Agent': DOWNLOAD_USER_AGENT });
+    // Send a bearer token when one is available (e.g. GITHUB_TOKEN on CI).
+    // Without it the asset-list API is limited to the anonymous quota.
+    // That quota returns HTTP 403 on shared CI runner IPs and forces the fallback.
+    const token = process.env['GITHUB_TOKEN'] ?? process.env['GH_TOKEN'];
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    const response = await fetch(`${RELEASE_API_TAG_URL}/v${version}`, { headers });
     if (!response.ok) {
       log(`[installer] Release API for ${version} returned HTTP ${String(response.status)}; falling back to templated asset names.`);
       return undefined;

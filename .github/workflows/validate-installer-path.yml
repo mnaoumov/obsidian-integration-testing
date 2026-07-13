@@ -42,4 +42,8 @@ jobs:
       - name: Validate installer download and extract
         env:
           OBSIDIAN_TEST_INSTALLER_DOWNLOAD: '1'
+          # Authenticate the release-asset API call so the primary asset-list path
+          # runs on every OS instead of hitting the anonymous 403 rate limit (which
+          # forces the templated-name fallback, as seen on the macOS runner).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx vitest run --project integration-tests src/obsidian-installer.integration.test.ts
