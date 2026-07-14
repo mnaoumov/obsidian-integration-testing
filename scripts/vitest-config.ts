@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
@@ -10,6 +11,19 @@ const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Integration suite registers in-worker), so it needs the harness-owned global
 // Setup plus the per-worker `vitest-setup` resolvers.
 const OWNED_ATTACH_TEST_FILE = 'src/owned-instance-worker-attach.integration.test.ts';
+
+// Inject the per-version compatibility table into `obsidian-metadata.ts` under
+// Test, the same way the esbuild build does via `define`. Two mechanisms are
+// Needed because Vitest's per-project `define` reaches the unit-test project but
+// Not the integration-test projects (a known quirk): the unit-test project uses
+// `define` (a string value is substituted as a raw expression, so the JSON text
+// Becomes an object literal replacing the `OBSIDIAN_METADATA` global — keeping the
+// Unit project filesystem-free), while the integration-test projects publish the
+// Same table as a global via `METADATA_SETUP_FILE`.
+const DEFINE = {
+  OBSIDIAN_METADATA: readFileSync('metadata.json', 'utf-8')
+};
+const METADATA_SETUP_FILE = './scripts/vitest-metadata-setup.ts';
 
 export const config = defineConfig({
   test: {
@@ -26,6 +40,7 @@ export const config = defineConfig({
     globals: false,
     projects: [
       {
+        define: DEFINE,
         test: {
           environment: 'node',
           exclude: [...SHARED_EXCLUDE, INTEGRATION_TEST_FILES, JEST_TEST_FILES],
@@ -44,6 +59,7 @@ export const config = defineConfig({
           exclude: [...SHARED_EXCLUDE, OWNED_ATTACH_TEST_FILE],
           include: [INTEGRATION_TEST_FILES],
           name: 'integration-tests',
+          setupFiles: [METADATA_SETUP_FILE],
           testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }
       },
@@ -56,7 +72,7 @@ export const config = defineConfig({
           include: [OWNED_ATTACH_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:owned-attach',
-          setupFiles: ['./src/vitest/setup.ts'],
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
           testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }
       }

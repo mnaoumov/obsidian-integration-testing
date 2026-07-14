@@ -25,6 +25,7 @@ import {
   remote
 } from 'webdriverio';
 
+import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { OwnedInstanceConfig } from './transport-desktop-cdp.ts';
 import type {
   ObsidianAndroidAppiumTransportOptions,
@@ -42,6 +43,8 @@ import {
   resolveDeviceIdleTimeoutInMilliseconds
 } from './device-readiness.ts';
 import { buildEmulatorArgs } from './emulator-args.ts';
+import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
+import { checkInstallerCompatibility } from './installer-compatibility.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
 import { getObsidianConfigDir } from './obsidian-config.ts';
@@ -50,6 +53,7 @@ import {
   detectInstalledShellVersion,
   ensureShellCached
 } from './obsidian-installer.ts';
+import { getVersionMetadata } from './obsidian-metadata.ts';
 import {
   ensureAsarCached,
   findNewestAsar,
@@ -59,6 +63,7 @@ import { compareVersions } from './obsidian-version.ts';
 import { resolveDeadBootGraceInMilliseconds } from './renderer-boot-detection.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
+import { ensureNonNullable } from './type-guards.ts';
 import {
   shouldHideAppiumConsole,
   shouldHideEmulatorWindow
@@ -86,6 +91,21 @@ const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120000;
+
+/**
+ * How the requested app (asar) version will be applied to an owned instance; at
+ * most one field is set (see {@link resolveAsarPlan}).
+ */
+interface AsarPlan {
+  /** The user's newest installed asar to provision as-is (no download). */
+  readonly asar?: OwnedInstanceConfig['asar'];
+
+  /** The app version to download and asar-swap onto the shell. */
+  readonly asarVersionToSwap?: string | undefined;
+
+  /** The app version whose own installer shell to download (a downgrade). */
+  readonly downgradeInstallerVersion?: string | undefined;
+}
 
 /**
  * Details of an emulator process that has exited.
@@ -894,6 +914,46 @@ function buildEmulatorExitMessage(exitInfo: EmulatorExitInfo, output: string): s
 }
 
 /**
+ * Runs the proactive installer↔app compatibility check for an asar-swap and acts
+ * on the verdict: throws {@link IncompatibleInstallerVersionError} for an
+ * installer below the app's run floor, and logs a warning for a
+ * runnable-but-below-recommended installer.
+ *
+ * @param appVersion - The app (asar) version that will be swapped onto the shell,
+ *   or `undefined` when no asar-swap will happen (nothing is checked then).
+ * @param installerVersion - The resolved installer/shell version, or `undefined`.
+ * @returns The verdict, or `undefined` when there is no asar-swap to check.
+ */
+function checkAndReportCompatibility(
+  appVersion: string | undefined,
+  installerVersion: string | undefined
+): InstallerCompatibility | undefined {
+  if (appVersion === undefined) {
+    return undefined;
+  }
+
+  const compatibility = checkInstallerCompatibility({
+    appVersion,
+    installerVersion,
+    metadata: getVersionMetadata(appVersion)
+  });
+
+  if (compatibility.tier === 'unrunnable') {
+    throw new IncompatibleInstallerVersionError({
+      appVersion: compatibility.appVersion,
+      installerVersion: ensureNonNullable(compatibility.installerVersion),
+      minRunnableInstallerVersion: ensureNonNullable(compatibility.minRunnableInstallerVersion)
+    });
+  }
+
+  if (compatibility.tier === 'nagged') {
+    log(`[transport-factory:obsidian-cdp] ${ensureNonNullable(compatibility.message)}`);
+  }
+
+  return compatibility;
+}
+
+/**
  * Creates a desktop CDP transport. When an explicit `port` is given the
  * transport attaches to an already-running Obsidian on that port; otherwise it
  * launches and owns an isolated instance (the default, hermetic mode).
@@ -937,6 +997,45 @@ function createOwnedUserDataDir(): string {
 }
 
 /**
+ * Decides how the requested app (asar) version will be applied to an owned
+ * instance, without downloading anything yet: an upgrade-only asar-swap onto the
+ * shell, a downgrade to the app's own installer shell, or the user's newest
+ * installed asar when neither version is pinned.
+ *
+ * @param options - CDP transport options.
+ * @param shellVersion - The resolved installer/shell version, or `undefined`.
+ * @returns The asar plan (at most one of its fields is set).
+ */
+async function resolveAsarPlan(
+  options: ObsidianCdpTransportOptions | undefined,
+  shellVersion: string | undefined
+): Promise<AsarPlan> {
+  if (options?.obsidianVersion !== undefined) {
+    const asarVersion = await resolveConcreteVersion(options.obsidianVersion);
+    if (shellVersion !== undefined && compareVersions(asarVersion, shellVersion) >= 0) {
+      return { asarVersionToSwap: asarVersion };
+    }
+
+    // Asar-swap is upgrade-only, so it cannot apply a version older than the
+    // Shell's bundled one — and when the shell version is unknown (a Linux
+    // Path-parse miss) we cannot prove the swap would apply at all. In both
+    // Cases use the requested version's own installer shell, whose bundled asar
+    // Is exactly this version, so the pin is always honored.
+    log(`[transport-factory:obsidian-cdp] Using the ${asarVersion} installer shell (shell version ${shellVersion ?? 'unknown'}; asar-swap is upgrade-only).`);
+    return { downgradeInstallerVersion: asarVersion };
+  }
+
+  if (options?.obsidianInstallerVersion === undefined) {
+    const newest = findNewestAsar(getObsidianConfigDir());
+    if (newest && (shellVersion === undefined || compareVersions(newest.version, shellVersion) >= 0)) {
+      return { asar: { path: newest.path, version: newest.version } };
+    }
+  }
+
+  return {};
+}
+
+/**
  * Resolves the locally-installed Obsidian shell, tolerating its absence.
  *
  * Unlike {@link resolveObsidianExecutable} (which throws when Obsidian is not
@@ -967,49 +1066,67 @@ async function resolveInstalledShellOrNull(): Promise<InstalledShell | undefined
  * - When neither is set, the user's newest installed asar is copied in (so the
  *   owned instance matches the version the user currently runs) with zero network.
  *
+ * The concrete (app, installer) version pair is resolved *before* any shell/asar
+ * download, so a proactive installer↔app compatibility check
+ * ({@link checkInstallerCompatibility}) can fail fast: an installer below the
+ * app's run floor throws {@link IncompatibleInstallerVersionError} before
+ * anything is downloaded or launched (superseding the reactive dead-boot
+ * fast-fail for table-known combos), and a runnable-but-below-recommended
+ * installer logs a warning. The verdict is threaded onto the returned config so
+ * the transport can surface it as data.
+ *
  * @param options - CDP transport options.
  * @returns The resolved owned-instance config.
  */
 async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions): Promise<OwnedInstanceConfig> {
-  let exePath: string;
+  // Resolve the concrete shell (installer) version first, but for a pinned
+  // Installer DEFER resolving/downloading the actual shell until after the
+  // Proactive compatibility check, so an unrunnable pin fails fast — before the
+  // (possibly slow) installed-shell detection and any download.
+  let exePath: string | undefined;
   let shellVersion: string | undefined;
+  let pinnedInstallerVersion: string | undefined;
 
   if (options?.obsidianInstallerVersion === undefined) {
     exePath = await resolveObsidianExecutable();
     shellVersion = detectInstalledShellVersion(exePath);
   } else {
-    // A pinned installer version fully determines the shell, so resolve it from
-    // The pin without requiring a locally-installed Obsidian (a CI runner has
-    // None). Reuse the installed shell only when it already matches the pin
-    // (saves the download); otherwise download and extract the pinned installer.
-    const installerVersion = await resolveConcreteVersion(options.obsidianInstallerVersion);
+    // A pinned installer version fully determines the shell version up front,
+    // Without requiring a locally-installed Obsidian (a CI runner has none).
+    pinnedInstallerVersion = await resolveConcreteVersion(options.obsidianInstallerVersion);
+    shellVersion = pinnedInstallerVersion;
+  }
+
+  // Decide how the app (asar) version will be applied, still WITHOUT downloading.
+  const plan = await resolveAsarPlan(options, shellVersion);
+
+  // The app version that will run as an asar-swap onto `shellVersion` — the only
+  // Combination that can dead-boot. The downgrade / own-installer paths run the
+  // App's own installer shell, so they always boot and are not checked.
+  const swapAppVersion = plan.asarVersionToSwap ?? plan.asar?.version;
+  const compatibility = checkAndReportCompatibility(swapAppVersion, shellVersion);
+
+  // The pin is known runnable — resolve/download the deferred shell + asar now.
+  // Reuse the installed shell only when it already matches the pin (saves the
+  // Download); otherwise download and extract the pinned installer.
+  if (pinnedInstallerVersion !== undefined) {
     const installed = await resolveInstalledShellOrNull();
-    exePath = installed?.shellVersion === installerVersion ? installed.exePath : await ensureShellCached(installerVersion);
-    shellVersion = installerVersion;
+    exePath = installed?.shellVersion === pinnedInstallerVersion ? installed.exePath : await ensureShellCached(pinnedInstallerVersion);
+  }
+  if (plan.downgradeInstallerVersion !== undefined) {
+    exePath = await ensureShellCached(plan.downgradeInstallerVersion);
   }
 
-  let asar: OwnedInstanceConfig['asar'];
-  if (options?.obsidianVersion !== undefined) {
-    const asarVersion = await resolveConcreteVersion(options.obsidianVersion);
-    if (shellVersion !== undefined && compareVersions(asarVersion, shellVersion) >= 0) {
-      asar = { path: await ensureAsarCached(asarVersion), version: asarVersion };
-    } else {
-      // Asar-swap is upgrade-only, so it cannot apply a version older than the
-      // Shell's bundled one — and when the shell version is unknown (a Linux
-      // Path-parse miss) we cannot prove the swap would apply at all. In both
-      // Cases use the requested version's own installer shell, whose bundled
-      // Asar is exactly this version, so the pin is always honored.
-      log(`[transport-factory:obsidian-cdp] Using the ${asarVersion} installer shell (shell version ${shellVersion ?? 'unknown'}; asar-swap is upgrade-only).`);
-      exePath = await ensureShellCached(asarVersion);
-    }
-  } else if (options?.obsidianInstallerVersion === undefined) {
-    const newest = findNewestAsar(getObsidianConfigDir());
-    if (newest && (shellVersion === undefined || compareVersions(newest.version, shellVersion) >= 0)) {
-      asar = { path: newest.path, version: newest.version };
-    }
-  }
+  const asar = plan.asarVersionToSwap === undefined
+    ? plan.asar
+    : { path: await ensureAsarCached(plan.asarVersionToSwap), version: plan.asarVersionToSwap };
 
-  return { ...(asar && { asar }), exePath, userDataDir: createOwnedUserDataDir() };
+  return {
+    ...(asar && { asar }),
+    ...(compatibility && { compatibility }),
+    exePath: ensureNonNullable(exePath),
+    userDataDir: createOwnedUserDataDir()
+  };
 }
 
 /**

@@ -450,6 +450,13 @@ timeout before throwing a generic error.
 - **Distinct error** — `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`, **is**
   exported from the barrel) so callers can `instanceof`-match this specific failure vs a generic readiness
   timeout.
+- **Largely superseded proactively (see L21).** For a *table-known* below-floor combo, L21's proactive
+  compatibility check now throws `IncompatibleInstallerVersionError` from `resolveOwnedInstanceConfig`
+  **before** launch, so this reactive dead-boot fast-fail remains only the **safety net** for combos the
+  table cannot preempt (an undetectable Linux shell version → `'unknown'`, or an app version absent from
+  `metadata.json`). Its pure `checkRendererBootState` keeps its unit coverage; there is no longer a
+  dead-boot *integration* test (no clean out-of-table combo triggers it without the proactive throw firing
+  first).
 - **Wiring** — `DesktopCdpTransport.waitForOwnedVaultReady` (owned path only) probes
   `probeRendererBootState()` each poll iteration; the grace clock starts when the renderer first reports
   `complete` (a loop-local `documentCompleteSince`), and it throws `RendererFailedToInitializeError` on a
@@ -530,23 +537,40 @@ command-latency burst vs session establishment).
 ## L20. `metadata.json` — per-version installer-floor table (`minRunnableInstallerVersion`)
 
 Repo-root `metadata.json` is a per-Obsidian-desktop-version data table (one `"x.y.z"` key per release):
-`channel`, optional `available`, `changelogUrl`, and installer/Electron compatibility knobs. It is
-**data, not code** — not imported by any `src` module or `package.json`, so it does not affect the
-build/test gate (format/lint/spellcheck still apply). Two installer-floor fields:
+`channel`, optional `available`, `changelogUrl`, and installer/Electron compatibility knobs. It is a
+**data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is
+injected as the `OBSIDIAN_METADATA` global — esbuild's `define` inlines it into the build (the built
+library stays self-contained, no runtime file read), the unit-test project uses Vitest's `define`, and the
+integration-test projects set it via the `scripts/vitest-metadata-setup.ts` setup-file global. The usual
+format/lint/spellcheck gates apply. Two installer-floor fields:
 
 - **`minRunnableInstallerVersion`** — the tier-1 **boot floor**: the oldest installer (Electron shell) on
   which that app version's asar actually runs (renders a real UI — a loaded vault, or the first-run vault
   picker when old Obsidian ignores the pre-seeded `obsidian.json` auto-open); below it the renderer
-  dead-boots (see L18). It is **empirically measured** (boot the (asar, installer) pairs and detect
-  boot-vs-dead) and is much lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell
-  (Electron 18), far below its recommended `1.5.8`. Distinct floors measured 2026-07-13: `0.6.4` for apps
-  `0.6.4`–`1.2.8`, `0.14.5` for `1.3.0`–`1.5.2`, `1.1.9` for `1.5.3`–`1.13.1` (a real non-`x.y.0`
-  mid-minor breakpoint at `1.5.3`); apps older than `0.6.4` are left unset (no older installer exists to
-  run them — asar-swap is upgrade-only, so an app needs an installer ≤ itself). Cross-validated against
-  `wdio-obsidian-service`'s `obsidian-versions.json` (which uses the same field name): 287/289 exact
-  agreement (its two disagreements are its own un-measured defaults for the newest versions).
+  dead-boots (see L18) **or silently falls back to the installer's bundled asar** (see the caveat below).
+  It is **empirically measured** (boot the (asar, installer) pairs and detect boot-vs-dead) and is much
+  lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell (Electron 18), far below its
+  recommended `1.6.5`. Distinct floors: `0.6.4` for apps `0.6.4`–`1.2.8`, `0.14.5` for `1.3.0`–`1.5.2`,
+  `1.1.9` for `1.5.3`–`1.12.7` **and** `1.13.1`, but **`1.6.5` for `1.13.0`** (a genuine non-monotonic
+  exception — see the caveat); apps older than `0.6.4` are left unset (no older installer exists to run
+  them — asar-swap is upgrade-only, so an app needs an installer ≤ itself).
 - **`minRecommendedInstallerVersion`** — the tier-2 recommended min (Obsidian's own guidance); equals
   `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement).
+
+**Silent-fallback caveat (`1.13.0`; corrected 2026-07-13 via CDP —
+[wdio-obsidian-service#78](https://github.com/jesse-r-s-hines/wdio-obsidian-service/issues/78)).** The
+boot-floor measurement detects only *"a UI rendered"*, **not** *"the requested asar version is running"* —
+and on an installer below the floor, some app versions **silently fall back to the installer's own bundled
+asar** (Obsidian loads the newer asar, it fails to run, and it reverts to the bundled one) instead of
+dead-booting. That renders a healthy UI of the *older* app, which the detector reads as a false-positive
+"runnable". `1.13.0` on installer `1.1.9` does exactly this — verified over CDP that `obsidianModule.apiVersion`
+reports `1.1.9`, not `1.13.0` (whereas on installer `1.6.5` it reports `1.13.0`), so `1.13.0`'s real floor is
+`1.6.5`, not the `1.1.9` first recorded (now fixed in `metadata.json`). `1.13.1` genuinely runs on `1.1.9`
+(`apiVersion` `1.13.1`) — a real non-monotonic breakpoint, which the maintainer's independent bisect also
+found. **Discriminators:** `obsidianModule.apiVersion` = the running asar (app) version;
+`window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the boot-floor measurement
+to assert the running `apiVersion` matches the requested version (so silent fallbacks are caught, not just
+dead boots) is a tracked follow-up.
 
 Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is
 filled from `obsidian-versions.json` for completeness — it matches our recorded values 52/52). `—` = not
@@ -564,4 +588,39 @@ determined (no asar in the source folder, or not recorded upstream):
 | `1.4.15`–`1.5.2` | `0.14.5` | `1.4.13` |
 | `1.5.3`–`1.8.1` | `1.1.9` | `1.4.13` |
 | `1.8.2`–`1.12.7` | `1.1.9` | `1.5.8` |
-| `1.13.0`–`1.13.1` | `1.1.9` | `1.6.5` |
+| `1.13.0` | `1.6.5` | `1.6.5` |
+| `1.13.1` | `1.1.9` | `1.6.5` |
+
+## L21. Proactive installer↔app compatibility (`IncompatibleInstallerVersionError` + verdict-as-data)
+
+`resolveOwnedInstanceConfig` (`transport-factory.ts`, owned path only) resolves the concrete (app asar,
+installer shell) version pair and runs a **proactive** compatibility check from `metadata.json` (L20)
+*before* any download or launch — an actionable error for an unrunnable pin, a warning for a
+below-recommended one, and a machine-readable verdict on the result. It supersedes L18's reactive
+dead-boot for table-known combos (see the L18 cross-reference).
+
+- **Pure verdict** — `src/installer-compatibility.ts` (unit-tested; mirrors the `renderer-boot-detection`
+  pure/glue split): `checkInstallerCompatibility({ appVersion, installerVersion, metadata }) →
+  InstallerCompatibility` with `tier: 'ok' | 'nagged' | 'unrunnable' | 'unknown'`. `unrunnable` ⇔ installer
+  `<` `minRunnableInstallerVersion`; `nagged` ⇔ `≥` run floor but `<` `minRecommendedInstallerVersion` (old
+  versions only); `unknown` ⇔ installer version undefined (undetectable Linux shell) or app absent from the
+  table. Pure `x.y.z` compares (reuses `compareVersions`) — no I/O.
+- **Distinct error** — `IncompatibleInstallerVersionError`
+  (`incompatible-installer-version-error.ts`, exported from the barrel) carries `appVersion` /
+  `installerVersion` / `minRunnableInstallerVersion` and a message naming the installer that would work.
+  Thrown from `resolveOwnedInstanceConfig` via the `checkAndReportCompatibility` helper on `'unrunnable'`;
+  `'nagged'` logs a warning via the warn-don't-throw `log()` channel; `'ok'`/`'unknown'` are silent.
+- **Fail-fast ordering** — the check runs only for the asar-swap-onto-shell case (the only dead-boot risk;
+  the downgrade / own-installer paths run the app's own installer, so they always boot and are not checked).
+  Concrete versions are resolved and the pinned shell's installed-shell detection is **deferred** so an
+  `'unrunnable'` pin throws before `ensureShellCached`/`ensureAsarCached` — no download, no launch (the
+  `installer-compatibility.integration.test.ts` proactive test asserts exactly this, in milliseconds).
+- **Verdict as data** — a non-throwing verdict rides on `OwnedInstanceConfig.compatibility`, surfaced by
+  `DesktopCdpTransport.getCompatibility()` and on `CdpConnection.compatibility` (populated in
+  `connectToCdp`). An `'unrunnable'` verdict never reaches the data surface — it throws first.
+- **Table access** — `src/obsidian-metadata.ts` is the sole reader of `metadata.json` (see L20 for how the
+  `OBSIDIAN_METADATA` global is injected), exposing `getVersionMetadata(version)` / `ObsidianVersionMetadata`.
+- **Deferred (follow-up tasks):** (a) the tier-2 **runtime** nag — reading live `process.versions.electron`
+  post-boot vs `minRecommendedElectronVersion` (an *Electron* version with no installer→Electron table, so
+  only a live read can check it); (b) an **option knob** to silence/tune the warnings (and optionally
+  disable the proactive throw, which would let L18's dead-boot path be integration-tested again).
