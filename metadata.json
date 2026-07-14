@@ -1768,7 +1768,7 @@
     "channel": "catalyst",
     "changelogUrl": "https://obsidian.md/changelog/2026-05-28-desktop-v1.13.0/",
     "minRecommendedElectronVersion": "28.2.3",
-    "minRunnableInstallerVersion": "1.1.9"
+    "minRunnableInstallerVersion": "1.6.5"
   },
   "1.13.1": {
     "channel": "catalyst",

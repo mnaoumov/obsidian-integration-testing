@@ -453,7 +453,7 @@ timeout before throwing a generic error.
 - **Largely superseded proactively (see L21).** For a *table-known* below-floor combo, L21's proactive
   compatibility check now throws `IncompatibleInstallerVersionError` from `resolveOwnedInstanceConfig`
   **before** launch, so this reactive dead-boot fast-fail remains only the **safety net** for combos the
-  table cannot pre-empt (an undetectable Linux shell version → `'unknown'`, or an app version absent from
+  table cannot preempt (an undetectable Linux shell version → `'unknown'`, or an app version absent from
   `metadata.json`). Its pure `checkRendererBootState` keeps its unit coverage; there is no longer a
   dead-boot *integration* test (no clean out-of-table combo triggers it without the proactive throw firing
   first).
@@ -547,16 +547,30 @@ format/lint/spellcheck gates apply. Two installer-floor fields:
 - **`minRunnableInstallerVersion`** — the tier-1 **boot floor**: the oldest installer (Electron shell) on
   which that app version's asar actually runs (renders a real UI — a loaded vault, or the first-run vault
   picker when old Obsidian ignores the pre-seeded `obsidian.json` auto-open); below it the renderer
-  dead-boots (see L18). It is **empirically measured** (boot the (asar, installer) pairs and detect
-  boot-vs-dead) and is much lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell
-  (Electron 18), far below its recommended `1.5.8`. Distinct floors measured 2026-07-13: `0.6.4` for apps
-  `0.6.4`–`1.2.8`, `0.14.5` for `1.3.0`–`1.5.2`, `1.1.9` for `1.5.3`–`1.13.1` (a real non-`x.y.0`
-  mid-minor breakpoint at `1.5.3`); apps older than `0.6.4` are left unset (no older installer exists to
-  run them — asar-swap is upgrade-only, so an app needs an installer ≤ itself). Cross-validated against
-  `wdio-obsidian-service`'s `obsidian-versions.json` (which uses the same field name): 287/289 exact
-  agreement (its two disagreements are its own un-measured defaults for the newest versions).
+  dead-boots (see L18) **or silently falls back to the installer's bundled asar** (see the caveat below).
+  It is **empirically measured** (boot the (asar, installer) pairs and detect boot-vs-dead) and is much
+  lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell (Electron 18), far below its
+  recommended `1.6.5`. Distinct floors: `0.6.4` for apps `0.6.4`–`1.2.8`, `0.14.5` for `1.3.0`–`1.5.2`,
+  `1.1.9` for `1.5.3`–`1.12.7` **and** `1.13.1`, but **`1.6.5` for `1.13.0`** (a genuine non-monotonic
+  exception — see the caveat); apps older than `0.6.4` are left unset (no older installer exists to run
+  them — asar-swap is upgrade-only, so an app needs an installer ≤ itself).
 - **`minRecommendedInstallerVersion`** — the tier-2 recommended min (Obsidian's own guidance); equals
   `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement).
+
+**Silent-fallback caveat (`1.13.0`; corrected 2026-07-13 via CDP —
+[wdio-obsidian-service#78](https://github.com/jesse-r-s-hines/wdio-obsidian-service/issues/78)).** The
+boot-floor measurement detects only *"a UI rendered"*, **not** *"the requested asar version is running"* —
+and on an installer below the floor, some app versions **silently fall back to the installer's own bundled
+asar** (Obsidian loads the newer asar, it fails to run, and it reverts to the bundled one) instead of
+dead-booting. That renders a healthy UI of the *older* app, which the detector reads as a false-positive
+"runnable". `1.13.0` on installer `1.1.9` does exactly this — verified over CDP that `obsidianModule.apiVersion`
+reports `1.1.9`, not `1.13.0` (whereas on installer `1.6.5` it reports `1.13.0`), so `1.13.0`'s real floor is
+`1.6.5`, not the `1.1.9` first recorded (now fixed in `metadata.json`). `1.13.1` genuinely runs on `1.1.9`
+(`apiVersion` `1.13.1`) — a real non-monotonic breakpoint, which the maintainer's independent bisect also
+found. **Discriminators:** `obsidianModule.apiVersion` = the running asar (app) version;
+`window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the boot-floor measurement
+to assert the running `apiVersion` matches the requested version (so silent fallbacks are caught, not just
+dead boots) is a tracked follow-up.
 
 Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is
 filled from `obsidian-versions.json` for completeness — it matches our recorded values 52/52). `—` = not
@@ -574,7 +588,8 @@ determined (no asar in the source folder, or not recorded upstream):
 | `1.4.15`–`1.5.2` | `0.14.5` | `1.4.13` |
 | `1.5.3`–`1.8.1` | `1.1.9` | `1.4.13` |
 | `1.8.2`–`1.12.7` | `1.1.9` | `1.5.8` |
-| `1.13.0`–`1.13.1` | `1.1.9` | `1.6.5` |
+| `1.13.0` | `1.6.5` | `1.6.5` |
+| `1.13.1` | `1.1.9` | `1.6.5` |
 
 ## L21. Proactive installer↔app compatibility (`IncompatibleInstallerVersionError` + verdict-as-data)
 
