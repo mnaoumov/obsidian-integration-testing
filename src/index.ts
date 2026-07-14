@@ -29,8 +29,18 @@ export type {
   WaitUntilParams
 } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
+export type { IncompatibleInstallerVersionErrorConstructorParams } from './incompatible-installer-version-error.ts';
+export { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
+export type {
+  CheckInstallerCompatibilityParams,
+  InstallerCompatibility,
+  InstallerCompatibilityTier
+} from './installer-compatibility.ts';
+export { checkInstallerCompatibility } from './installer-compatibility.ts';
 export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';
+export type { ObsidianVersionMetadata } from './obsidian-metadata.ts';
+export { getVersionMetadata } from './obsidian-metadata.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 export type {
   PopulateFileContent,

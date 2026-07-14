@@ -28,6 +28,7 @@ import {
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { OwnedObsidianInstance } from './obsidian-instance.ts';
 import type { RendererBootObservation } from './renderer-boot-detection.ts';
 import type {
@@ -144,6 +145,13 @@ export interface OwnedInstanceAsar {
 export interface OwnedInstanceConfig {
   /** Optional asar to provision into {@link userDataDir} before launch. */
   readonly asar?: OwnedInstanceAsar | undefined;
+
+  /**
+   * The resolved installer↔app compatibility verdict, when it could be determined
+   * (an asar-swap onto a known shell version). Surfaced by
+   * {@link DesktopCdpTransport.getCompatibility}.
+   */
+  readonly compatibility?: InstallerCompatibility | undefined;
 
   /** Absolute path to the Obsidian shell executable to launch. */
   readonly exePath: string;
@@ -328,6 +336,18 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     return String(resultObj.value);
+  }
+
+  /**
+   * Returns the resolved installer↔app compatibility verdict for this owned
+   * instance, so callers can assert on it. Returns `undefined` when this is not
+   * an owned instance, or the verdict could not be determined (e.g. an
+   * undetectable shell version, or the app version is absent from the table).
+   *
+   * @returns The compatibility verdict, or `undefined`.
+   */
+  public getCompatibility(): InstallerCompatibility | undefined {
+    return this.ownedConfig?.compatibility;
   }
 
   /**

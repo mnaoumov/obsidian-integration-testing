@@ -20,6 +20,7 @@ import type {
   EvalInObsidianParams,
   GenericObject
 } from './eval-in-obsidian.ts';
+import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ObsidianCdpTransportOptions } from './transport-options.ts';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
@@ -42,6 +43,15 @@ export interface CdpConnection extends AsyncDisposable {
    * The base CDP URL, e.g. `http://localhost:51888`.
    */
   readonly cdpUrl: string;
+
+  /**
+   * The resolved installer↔app compatibility verdict for an owned instance, when
+   * it could be determined. `undefined` in attach mode, or when the verdict is
+   * unknown (undetectable shell version, or the app version is absent from the
+   * table). An `'unrunnable'` verdict never reaches here — it throws
+   * `IncompatibleInstallerVersionError` before the connection is created.
+   */
+  readonly compatibility?: InstallerCompatibility | undefined;
 
   /**
    * Disposes the connection: kills an owned instance and removes its isolated
@@ -214,9 +224,11 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 
   const { host, port } = resolveEndpoint(transport, options);
   const cdpUrl = `http://${host}:${String(port)}`;
+  const compatibility = transport instanceof DesktopCdpTransport ? transport.getCompatibility() : undefined;
 
   const connection: CdpConnection = {
     cdpUrl,
+    ...(compatibility && { compatibility }),
 
     async dispose(): Promise<void> {
       try {
