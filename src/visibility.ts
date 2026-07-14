@@ -3,9 +3,9 @@
  *
  * Pure resolution of the process-visibility options — whether the launched
  * desktop Obsidian window, Android emulator window, and Appium server console
- * are shown on screen. All three surfaces are **hidden by default** (`is*Visible`
- * is `false` when omitted) so an integration run never steals focus or pops
- * windows in front of the user.
+ * are shown on screen. The desktop application is visible by default; integration
+ * setup explicitly requests an off-screen instance so test runs do not steal
+ * focus. Android surfaces are hidden by default.
  *
  * Kept separate from the integration-only launch/spawn code (`transport-factory`,
  * `transport-desktop-cdp`, `obsidian-instance`, all excluded from unit tests) so
@@ -50,10 +50,10 @@ export const NO_SANDBOX_LAUNCH_FLAG = '--no-sandbox';
 
 /**
  * Resolves the extra Chromium launch args for an owned desktop instance: the
- * {@link OWNED_HIDDEN_LAUNCH_FLAGS} when the window is hidden (the default), or
- * an empty list when it is visible.
+ * {@link OWNED_HIDDEN_LAUNCH_FLAGS} when the window is hidden, or an empty list
+ * when it is visible (the default).
  *
- * @param isObsidianAppVisible - The resolved option value (omitted → hidden).
+ * @param isObsidianAppVisible - The resolved option value (omitted → visible).
  * @returns The extra launch args (possibly empty).
  */
 export function resolveOwnedHiddenLaunchArgs(isObsidianAppVisible?: boolean): string[] {
@@ -94,9 +94,9 @@ export function shouldHideEmulatorWindow(isEmulatorVisible?: boolean): boolean {
 /**
  * Whether the owned desktop Obsidian window should be hidden (moved off-screen).
  *
- * @param isObsidianAppVisible - The resolved option value (omitted → hidden).
- * @returns `true` when the window should be hidden (the default).
+ * @param isObsidianAppVisible - The resolved option value (omitted → visible).
+ * @returns `true` when the window should be hidden.
  */
 export function shouldHideObsidianApp(isObsidianAppVisible?: boolean): boolean {
-  return !(isObsidianAppVisible ?? false);
+  return !(isObsidianAppVisible ?? true);
 }

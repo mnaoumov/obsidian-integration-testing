@@ -130,9 +130,8 @@ export interface ConnectToCdpOptions {
   readonly host?: string;
 
   /**
-   * Whether the Obsidian window is shown on screen. Unlike the test transports
-   * (hidden by default), `connectToCdp` **defaults to `true`** — it is meant for
-   * watching/debugging a real Obsidian. Set `false` to launch it off-screen.
+   * Whether the Obsidian window is shown on screen. Defaults to `true`; set
+   * `false` to launch it off-screen.
    * Ignored in attach mode ({@link port} set).
    *
    * @default `true`

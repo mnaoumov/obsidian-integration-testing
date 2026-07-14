@@ -635,18 +635,18 @@ try {
 
 ##### Window visibility
 
-By default the owned Obsidian window is **hidden** — it never steals focus or pops in front of your other apps. `isObsidianAppVisible` controls this:
+By default the owned Obsidian window is shown. Integration setup explicitly hides its owned window so test runs do not steal focus. `isObsidianAppVisible` controls this:
 
 ```ts
 environmentOptions: {
   obsidianTransport: {
     type: 'obsidian-cdp',
-    isObsidianAppVisible: true, // show the window (default: false)
+    isObsidianAppVisible: false, // hide the window for this run
   },
 }
 ```
 
-- **`isObsidianAppVisible`** (default `false`) — when hidden, the harness launches the owned instance with keep-alive Chromium flags and moves its window **off-screen** once Electron's remote bridge is up. Off-screen (not minimized) keeps the renderer fully live, so `setTimeout`, `requestAnimationFrame`, `:hover`, and trusted keyboard/pointer input behave exactly as they would for a visible window — tests are unaffected. Set `true` to watch the window (e.g. when debugging). Ignored in attach mode — the harness never moves your own running Obsidian.
+- **`isObsidianAppVisible`** (default `true`) — when `false`, the harness launches the owned instance with keep-alive Chromium flags and moves its window **off-screen** once Electron's remote bridge is up. Off-screen (not minimized) keeps the renderer fully live, so `setTimeout`, `requestAnimationFrame`, `:hover`, and trusted keyboard/pointer input behave exactly as they would for a visible window — tests are unaffected. Integration setup sets this to `false`; set it explicitly to `false` in other automated runs that should not show a window. Ignored in attach mode — the harness never moves your own running Obsidian.
 
 > [!NOTE]
 >
@@ -855,7 +855,7 @@ await conn.evalInObsidian({ fn: ({ app }) => app.workspace.getActiveFile()?.path
 `connectToCdp` accepts the same version knobs as the transport (`obsidianVersion`, `obsidianInstallerVersion`, `host`, `commandTimeoutInMilliseconds`, both defaulting to your installed Obsidian), plus:
 
 - **`vault`** — path to an existing vault to open. When omitted, an empty temporary vault is created.
-- **`isObsidianAppVisible`** — whether the window is shown. Unlike the test transport (hidden by default), `connectToCdp` **defaults to `true`** since it is meant for watching/debugging a real Obsidian. Set `false` to launch it off-screen.
+- **`isObsidianAppVisible`** — whether the window is shown (default `true`). Set `false` to launch it off-screen.
 - **`port`** — attach to an already-running Obsidian on this `CDP` port instead of owning an instance (as in [Attaching to a running Obsidian](#attaching-to-a-running-obsidian)).
 - **`deadBootGraceInMilliseconds`** (default `10000`) — fast-fail with a `RendererFailedToInitializeError` when a pinned version pair produces a [dead boot](#dead-boot-fast-fail); `0` disables it.
 - **`shouldRemoveVaultOnDispose`** — whether `dispose()` removes the vault directory. Defaults to `true` for an implicit temp vault and `false` when a `vault` path is given, so a **real vault is never auto-deleted**. Set it explicitly to override.

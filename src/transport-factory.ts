@@ -859,7 +859,7 @@ class AppiumTransportFactory {
 /**
  * Creates a new transport instance from the given options.
  *
- * @param options - Transport configuration. Defaults to CLI transport.
+ * @param options - Transport configuration. Defaults to an owned desktop CDP transport.
  * @returns A new transport instance.
  */
 export async function createTransportFromOptions(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {

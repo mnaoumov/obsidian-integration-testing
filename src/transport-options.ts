@@ -228,16 +228,17 @@ export interface ObsidianCdpTransportOptions {
   /**
    * Whether the owned desktop Obsidian window is shown on screen.
    *
-   * When `false` (the default), the harness launches the owned instance with
+   * When `false`, the harness launches the owned instance with
    * keep-alive Chromium flags and moves its window **off-screen** once Electron's
    * remote bridge is available, so the run never steals focus or pops a window in
    * front of you. Off-screen (not minimized) keeps the renderer live, so
    * `setTimeout`, `requestAnimationFrame`, `:hover`, and trusted input behave
-   * identically to a visible window. Set `true` to watch the window (e.g. when
-   * debugging). Ignored in attach mode ({@link port} set) — the harness never
+   * identically to a visible window. Defaults to `true`; integration setup
+   * explicitly passes `false` to avoid stealing focus. Ignored in attach mode
+   * ({@link port} set) — the harness never
    * moves the user's own running window.
    *
-   * @default `false`
+   * @default `true`
    */
   readonly isObsidianAppVisible?: boolean;
 

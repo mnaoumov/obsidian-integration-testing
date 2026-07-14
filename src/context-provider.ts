@@ -27,7 +27,7 @@ let vaultPathResolver: undefined | VaultPathResolver;
 /**
  * Returns the transport options resolved by the registered framework adapter.
  *
- * @returns The transport options, or `undefined` if not configured (defaults to CLI transport).
+ * @returns The transport options, or `undefined` if not configured.
  */
 export function getTransportOptions(): ObsidianTransportOptions | undefined {
   return transportOptionsResolver?.();
