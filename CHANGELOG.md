@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 8.1.2
+
+- fix: hide appium console
+
 ## 8.1.1
 
 - fix: visibility
