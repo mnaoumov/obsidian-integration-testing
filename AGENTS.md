@@ -45,7 +45,7 @@ Transport is configured via the framework adapter's config mechanism. The discri
 
 Desktop (`obsidian-cdp`) defaults to a **harness-owned, isolated instance** (temp `--user-data-dir` + free CDP port; never touches user-scope Obsidian). Set `port` to **attach** to a running Obsidian instead. `obsidianVersion` (asar) and `obsidianInstallerVersion` (shell) pin the version — each accepts `x.y.z` / `public-latest` / `catalyst-latest`; asar swap is upgrade-only vs. the shell, so older versions auto-use the matching installer (downloads/extracts via 7-Zip on Windows). Version resolution is **install-free when `obsidianInstallerVersion` is pinned** (the shell comes from the pin, so no locally-installed Obsidian is required — e.g. CI); an `obsidianVersion` is applied by **asar-swap only when the shell version is known AND the asar is ≥ it**, otherwise (older asar, or an undetectable shell version — the Linux `detectInstalledShellVersion` path-parse miss) the pinned version's own installer shell is used so the pin is always honored. `shouldDisableSandbox` (default `false`) appends `--no-sandbox` to boot an owned instance on Linux without a configured setuid `chrome-sandbox` helper (CI, or an extracted portable shell); harmless on Windows/macOS. All these knobs ride the existing `transportOptions` channel, so all three consumption paths get them with no adapter change.
 
-**Process visibility (see L15):** owned desktop Obsidian defaults to visible (`isObsidianAppVisible: true`), while integration setup explicitly passes `false` so test runs do not steal focus. Android surfaces remain hidden by default: `isEmulatorVisible` (emulator `-no-window`) and `isAppiumConsoleVisible` (Appium spawn `windowsHide`). Like the version knobs they ride the `transportOptions` channel (no adapter change).
+**Process visibility (see L15):** owned desktop Obsidian defaults to visible (`isObsidianAppVisible: true`), while integration setup explicitly passes `false` so test runs do not steal focus. Android surfaces remain hidden by default: `isEmulatorVisible` (emulator `-no-window`) and `isAppiumConsoleVisible` (Appium spawn `windowsHide` with discarded output). Like the version knobs they ride the `transportOptions` channel (no adapter change).
 
 ## L6. Framework parity (Vitest / Jest / Manual)
 
@@ -316,7 +316,7 @@ glue, so the `@default false` resolution is extracted there to stay testable, mi
   `window.electron.remote.getCurrentWindow().setPosition(...)`. Best-effort (warn, don't throw).
   Attach mode never moves the user's window.
 - **`isEmulatorVisible`** → `buildEmulatorArgs({ isHidden })` appends `-no-window` (headless emulator).
-- **`isAppiumConsoleVisible`** → `startAppiumServer` spawns with `windowsHide`.
+- **`isAppiumConsoleVisible`** → `startAppiumServer` spawns with `windowsHide` and discards output; set it to `true` to surface both the console and live logs for debugging.
 
 **Off-screen, NOT minimize — this is the crux (empirically established, see the auto-memory
 `reference_obsidian_background_window_throttling`).** A *minimized* Chromium renderer freezes

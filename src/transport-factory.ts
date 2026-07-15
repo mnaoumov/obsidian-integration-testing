@@ -597,11 +597,12 @@ class AppiumTransportFactory {
   }
 
   private startAppiumServer(port: number, isAppiumConsoleVisible?: boolean): ChildProcess {
+    const isConsoleHidden = shouldHideAppiumConsole(isAppiumConsoleVisible);
     const child = spawn(`npx appium --log-timestamp --port ${String(port)} --allow-insecure=${CHROMEDRIVER_AUTODOWNLOAD_FEATURE}`, {
       detached: true,
       shell: true,
-      stdio: ['ignore', 'inherit', 'inherit'],
-      windowsHide: shouldHideAppiumConsole(isAppiumConsoleVisible)
+      stdio: isConsoleHidden ? 'ignore' : ['ignore', 'inherit', 'inherit'],
+      windowsHide: isConsoleHidden
     });
 
     child.unref();

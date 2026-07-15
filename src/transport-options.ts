@@ -75,9 +75,11 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * Whether the auto-started Appium server console window is shown.
    *
    * When `false` (the default), the `npx appium` server process is spawned with
-   * its console window hidden (`windowsHide`), so it never steals focus. Ignored
-   * when attaching to an already-running Appium server ({@link shouldAutoStartAppium}
-   * `false`, or the server already reachable). Set `true` to see the server log window.
+   * its console window hidden (`windowsHide`) and its output discarded, so it
+   * neither steals focus nor writes to the invoking terminal. Ignored when
+   * attaching to an already-running Appium server ({@link shouldAutoStartAppium}
+   * `false`, or the server already reachable). Set `true` to see the server log window
+   * and its live output.
    *
    * @default `false`
    */
