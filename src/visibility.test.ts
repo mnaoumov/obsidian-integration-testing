@@ -15,9 +15,9 @@ import {
 } from './visibility.ts';
 
 describe('shouldHideObsidianApp', () => {
-  it('should hide by default when the option is omitted', () => {
-    expect(shouldHideObsidianApp()).toBe(true);
-    expect(shouldHideObsidianApp(undefined)).toBe(true);
+  it('should be visible by default when the option is omitted', () => {
+    expect(shouldHideObsidianApp()).toBe(false);
+    expect(shouldHideObsidianApp(undefined)).toBe(false);
   });
 
   it('should hide when explicitly not visible', () => {
@@ -60,9 +60,9 @@ describe('shouldHideAppiumConsole', () => {
 });
 
 describe('resolveOwnedHiddenLaunchArgs', () => {
-  it('should return the keep-alive flags by default when the option is omitted', () => {
-    expect(resolveOwnedHiddenLaunchArgs()).toStrictEqual(OWNED_HIDDEN_LAUNCH_FLAGS);
-    expect(resolveOwnedHiddenLaunchArgs(undefined)).toStrictEqual(OWNED_HIDDEN_LAUNCH_FLAGS);
+  it('should return no extra args by default when the option is omitted', () => {
+    expect(resolveOwnedHiddenLaunchArgs()).toStrictEqual([]);
+    expect(resolveOwnedHiddenLaunchArgs(undefined)).toStrictEqual([]);
   });
 
   it('should return the keep-alive flags when explicitly not visible', () => {

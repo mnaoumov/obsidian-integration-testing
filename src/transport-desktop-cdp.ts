@@ -104,7 +104,7 @@ export interface DesktopCdpTransportConfig {
    * its window is moved off-screen after launch. Only meaningful in owned mode;
    * attach mode never touches the (user's) window.
    *
-   * @default `false`
+   * @default `true`
    */
   isObsidianAppVisible?: boolean;
 
@@ -256,7 +256,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
     this.deadBootGraceInMilliseconds = config?.deadBootGraceInMilliseconds ?? DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS;
     this.isHarnessOwnedInstance = config?.isHarnessOwnedInstance ?? false;
-    this.isObsidianAppVisible = config?.isObsidianAppVisible ?? false;
+    this.isObsidianAppVisible = config?.isObsidianAppVisible ?? true;
     this.ownedConfig = config?.ownedInstance;
     this.shouldDisableSandbox = config?.shouldDisableSandbox ?? false;
     // Owned mode picks a free port at launch (assigned in registerVault).

@@ -78,7 +78,7 @@ export interface CoreSetupParams {
    */
   readonly populate?: PopulateFilesParams | undefined;
 
-  /** Transport options. When omitted, defaults to the CLI transport. */
+  /** Transport options. When omitted, uses an off-screen owned desktop instance. */
   readonly transportOptions?: ObsidianTransportOptions | undefined;
 }
 
@@ -117,8 +117,8 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     loadEnvFile(envFilePath);
   }
 
-  const transportOptions = params?.transportOptions;
-  const label = transportOptions?.type ?? DEFAULT_TRANSPORT_TYPE;
+  const transportOptions = resolveIntegrationTransportOptions(params?.transportOptions);
+  const label = transportOptions.type;
   const lockScope = getLockScope(transportOptions);
 
   let lock: SetupLock | undefined;
@@ -243,6 +243,27 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
     activeSetups.delete(result);
     releaseSetupLock(result);
   }
+}
+
+/**
+ * Resolves transport options for an integration run.
+ *
+ * Desktop launches are normally visible, but test setup explicitly keeps its
+ * owned instance off-screen so it does not interrupt the developer.
+ *
+ * @param options - Consumer-provided transport options.
+ * @returns Options with the desktop integration visibility default applied.
+ */
+export function resolveIntegrationTransportOptions(options?: ObsidianTransportOptions): ObsidianTransportOptions {
+  if (options?.type === 'obsidian-android-appium') {
+    return options;
+  }
+
+  return {
+    ...options,
+    isObsidianAppVisible: options?.isObsidianAppVisible ?? false,
+    type: 'obsidian-cdp'
+  };
 }
 
 /**
