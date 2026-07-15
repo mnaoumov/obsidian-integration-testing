@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 8.1.1
+
+- fix: visibility
+- docs: migrate to AGENTS.md
+- feat: static version compatibility check
+- feat: precalculate minInstallerVersions
+- refactor: sync functions
+- feat: cross-platform boot validation + asar-swap fix
+- feat: cross-platform validation
+
 ## 8.1.0
 
 - feat: add GitHub test for Linux/macOS installer-shell path
