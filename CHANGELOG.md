@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 8.2.0
+
+- feat: autoinstall appium
+- build: pin the dev Node version to 26 and make CI follow .nvmrc
+
 ## 8.1.2
 
 - fix: hide appium console
