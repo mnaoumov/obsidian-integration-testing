@@ -133,6 +133,23 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly sessionId?: string;
 
   /**
+   * Whether to automatically install missing Appium dependencies (the
+   * `uiautomator2` driver, and Appium itself) before auto-starting the server.
+   *
+   * When `true` (the default) and the harness is about to auto-start the Appium
+   * server ({@link shouldAutoStartAppium}), the factory first ensures Appium is
+   * installed (globally, via `npm install -g appium`) and that the
+   * `uiautomator2` driver is installed (`appium driver install uiautomator2`),
+   * installing whichever is missing. Ignored when attaching to an
+   * already-running server (nothing is auto-started, so nothing is installed) or
+   * when {@link shouldAutoStartAppium} is `false`. Set it to `false` to manage
+   * the Appium toolchain yourself and skip the machine-mutating global install.
+   *
+   * @default `true`
+   */
+  readonly shouldAutoInstallAppiumDependencies?: boolean;
+
+  /**
    * Whether to automatically start the Appium server if it is not reachable.
    *
    * When `true` (the default), the transport factory spawns `npx appium`

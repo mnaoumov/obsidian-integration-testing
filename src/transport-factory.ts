@@ -35,6 +35,11 @@ import type {
 import type { ObsidianTransport } from './transport.ts';
 
 import {
+  checkIsAppiumDriverInstalled,
+  resolveShouldAutoInstallAppiumDependencies,
+  UIAUTOMATOR2_DRIVER_NAME
+} from './appium-dependencies.ts';
+import {
   resolveAppiumStartTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
@@ -43,6 +48,7 @@ import {
   resolveDeviceIdleTimeoutInMilliseconds
 } from './device-readiness.ts';
 import { buildEmulatorArgs } from './emulator-args.ts';
+import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { checkInstallerCompatibility } from './installer-compatibility.ts';
 import { killProcessTree } from './kill-process-tree.ts';
@@ -197,6 +203,9 @@ interface StartAppiumAndEmulatorParams {
   /** The Appium server port. */
   readonly port: number;
 
+  /** Whether missing Appium dependencies may be auto-installed before the server is auto-started. */
+  readonly shouldAutoInstallAppiumDependencies: boolean;
+
   /** Whether Appium auto-start is allowed. */
   readonly shouldAutoStartAppium?: boolean | undefined;
 }
@@ -335,6 +344,7 @@ class AppiumTransportFactory {
         isAppiumConsoleVisible: options.isAppiumConsoleVisible,
         isEmulatorVisible: options.isEmulatorVisible,
         port,
+        shouldAutoInstallAppiumDependencies: resolveShouldAutoInstallAppiumDependencies(options),
         shouldAutoStartAppium: options.shouldAutoStartAppium
       });
 
@@ -419,6 +429,41 @@ class AppiumTransportFactory {
     }
   }
 
+  /**
+   * Ensures the Appium toolchain is present before the server is auto-started:
+   * Appium itself, then the `uiautomator2` driver. Each is checked first and
+   * installed only when missing, so a fully-provisioned machine incurs just two
+   * fast version/list probes.
+   *
+   * Only invoked when the harness is about to auto-start the server and
+   * {@link ObsidianAndroidAppiumTransportOptions.shouldAutoInstallAppiumDependencies}
+   * is enabled. Commands are passed as strings so `exec` runs them through the
+   * shell, which resolves the `npm`/`npx` `.cmd` shims on Windows (the array
+   * path spawns without a shell and cannot).
+   */
+  private async ensureAppiumDependencies(): Promise<void> {
+    await this.ensureAppiumInstalled();
+    await this.ensureUiautomator2DriverInstalled();
+  }
+
+  private async ensureAppiumInstalled(): Promise<void> {
+    this.log('Checking whether Appium is installed...');
+    const result = await exec('npx --no-install appium --version', {
+      isQuiet: true,
+      shouldIgnoreExitCode: true,
+      shouldIncludeDetails: true
+    });
+
+    if (result.exitCode === 0) {
+      this.log(`Appium is installed (version ${result.stdout.trim() || 'unknown'}).`);
+      return;
+    }
+
+    this.log('Appium is not installed. Installing globally via `npm install -g appium`...');
+    await exec('npm install -g appium');
+    this.log('Appium installed.');
+  }
+
   private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
     const { avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible } = params;
     const deviceIdsBefore = await this.getConnectedDeviceIds();
@@ -445,6 +490,23 @@ class AppiumTransportFactory {
     this.log(`Emulator "${avdName}" started, device ${actualDeviceId} is connected.`);
     await this.suppressErrorDialogs(actualDeviceId);
     return { actualDeviceId, emulatorProcess: emulator.process };
+  }
+
+  private async ensureUiautomator2DriverInstalled(): Promise<void> {
+    this.log(`Checking whether the ${UIAUTOMATOR2_DRIVER_NAME} driver is installed...`);
+    const driverListJson = await exec('npx --no-install appium driver list --installed --json', {
+      isQuiet: true,
+      shouldIgnoreExitCode: true
+    });
+
+    if (checkIsAppiumDriverInstalled({ driverListJson, driverName: UIAUTOMATOR2_DRIVER_NAME })) {
+      this.log(`The ${UIAUTOMATOR2_DRIVER_NAME} driver is installed.`);
+      return;
+    }
+
+    this.log(`The ${UIAUTOMATOR2_DRIVER_NAME} driver is not installed. Installing via \`appium driver install ${UIAUTOMATOR2_DRIVER_NAME}\`...`);
+    await exec(`npx --no-install appium driver install ${UIAUTOMATOR2_DRIVER_NAME}`);
+    this.log(`The ${UIAUTOMATOR2_DRIVER_NAME} driver installed.`);
   }
 
   private async findDeviceByAvdName(avdName: string, deviceIds: string[]): Promise<string | undefined> {
@@ -550,7 +612,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoStartAppium } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
 
@@ -568,6 +630,9 @@ class AppiumTransportFactory {
     let appiumProcess: ChildProcess | undefined;
 
     if (needsAppiumStart) {
+      if (shouldAutoInstallAppiumDependencies) {
+        await this.ensureAppiumDependencies();
+      }
       this.log(`Appium not reachable, auto-starting on port ${String(port)}...`);
       appiumProcess = this.startAppiumServer(port, isAppiumConsoleVisible);
     }

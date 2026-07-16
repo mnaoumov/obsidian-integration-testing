@@ -703,7 +703,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
    ```
 
-4. Install [Appium](https://appium.io/) and the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
+4. (Optional) Install [Appium](https://appium.io/) and the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
 
    ```bash
    npm install -g appium
@@ -712,7 +712,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
    > [!NOTE]
    >
-   > You do not need to start the Appium server manually — the test framework auto-starts it if it is not already running.
+   > This step is optional. You do not need to start the Appium server manually — the test framework auto-starts it if it is not already running, and by default it also **auto-installs** Appium (globally) and the UiAutomator2 driver when they are missing. Set `shouldAutoInstallAppiumDependencies: false` to manage the Appium toolchain yourself and skip the global install.
 
 5. Configure vitest:
 
@@ -735,18 +735,19 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs (all with sensible defaults):
 
-| Option                                        | Purpose                                                                                                         | Default                |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                       | `'md.obsidian'`        |
-| `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to become ready; only when the harness auto-starts it.              | `180000`               |
-| `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for a started emulator to go idle before the session; avoids inflated cold setup. 0 skips.  | `60000`                |
-| `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window and live output. Hidden and quiet by default.                | `false`                |
-| `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.     | `false`                |
-| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.                    | `90000`                |
-| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.        | `180000`               |
-| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                  | `true`                 |
-| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                  | `'/sdcard/Documents/'` |
-| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                               | `60000`                |
+| Option                                        | Purpose                                                                                                          | Default                |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                        | `'md.obsidian'`        |
+| `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to become ready; only when the harness auto-starts it.               | `180000`               |
+| `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for a started emulator to go idle before the session; avoids inflated cold setup. 0 skips.   | `60000`                |
+| `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window and live output. Hidden and quiet by default.                 | `false`                |
+| `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.      | `false`                |
+| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.                     | `90000`                |
+| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.         | `180000`               |
+| `shouldAutoInstallAppiumDependencies`         | Auto-install missing Appium + the UiAutomator2 driver before auto-starting the server (global `npm install -g`). | `true`                 |
+| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                   | `true`                 |
+| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                   | `'/sdcard/Documents/'` |
+| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                                | `60000`                |
 
 > [!NOTE]
 >

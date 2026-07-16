@@ -623,3 +623,32 @@ dead-boot for table-known combos (see the L18 cross-reference).
   post-boot vs `minRecommendedElectronVersion` (an *Electron* version with no installer→Electron table, so
   only a live read can check it); (b) an **option knob** to silence/tune the warnings (and optionally
   disable the proactive throw, which would let L18's dead-boot path be integration-tested again).
+
+## L22. Auto-install Appium dependencies before auto-starting the server
+
+The harness auto-starts the Appium server via `npx appium`, which assumes both Appium **and** the
+`uiautomator2` driver are already installed — a missing driver was a common first-run failure (the exact
+scenario that motivated this: `npx --no-install appium --version` exits non-zero on a machine with no
+global Appium). `startAppiumAndEmulator` now closes that gap: when it is about to auto-start the server
+(`needsAppiumStart`) **and** `shouldAutoInstallAppiumDependencies` (`@default true`) is set, it runs
+`AppiumTransportFactory.ensureAppiumDependencies` first — check-then-install for each of Appium
+(`npm install -g appium`, global, matching the `npx appium` resolution — see the auto-memory
+`reference_android_appium_cold_cost_breakdown`) and the driver (`appium driver install uiautomator2`).
+
+- **Gated on auto-start only.** If the server is already reachable, or `shouldAutoStartAppium: false`
+  (user manages their own server), nothing is checked or installed — the machine-mutating global install
+  never fires behind the user's back. `shouldAutoInstallAppiumDependencies: false` is the explicit opt-out
+  even when the harness does auto-start.
+- **Check-then-install, so a provisioned machine pays only two fast probes** — `npx --no-install appium
+  --version` and `npx --no-install appium driver list --installed --json`. `--no-install` prevents the
+  detection probes from themselves triggering an npx download.
+- **Pure/testable split** mirrors `device-readiness.ts` / `appium-session-config.ts`: `src/appium-dependencies.ts`
+  holds `checkIsAppiumDriverInstalled` (parses the `--json` driver list; key-presence ⇔ installed, malformed
+  output ⇒ not-installed so the caller installs) and `resolveShouldAutoInstallAppiumDependencies`
+  (`@default true`), both unit-tested in `appium-dependencies.test.ts`. The `exec` orchestration stays in the
+  `v8 ignore` factory.
+- **Windows:** the install/probe commands are passed to `exec` as **strings**, not arrays, so `exec` routes
+  them through the shell — required to resolve the `npm`/`npx` `.cmd` shims (the array path spawns without a
+  shell and would `ENOENT`). This differs from the `adb`/`tar` calls, which are real `.exe` on PATH.
+- Supersedes L19 lever #3 ("pre-provision … driver") for the local/first-run case — provisioning it into a
+  CI image is still the faster path when you control the image, but the harness no longer *requires* it.
