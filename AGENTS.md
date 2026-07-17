@@ -587,9 +587,12 @@ reports `1.1.9`, not `1.13.0` (whereas on installer `1.6.5` it reports `1.13.0`)
 `1.6.5`, not the `1.1.9` first recorded (now fixed in `metadata.json`). `1.13.1` genuinely runs on `1.1.9`
 (`apiVersion` `1.13.1`) — a real non-monotonic breakpoint, which the maintainer's independent bisect also
 found. **Discriminators:** `obsidianModule.apiVersion` = the running asar (app) version;
-`window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the boot-floor measurement
-to assert the running `apiVersion` matches the requested version (so silent fallbacks are caught, not just
-dead boots) is a tracked follow-up.
+`window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the harness to assert the
+running `apiVersion` matches the requested version (so silent fallbacks are caught, not just dead boots) is
+**now done** as a post-boot runtime verify — see **L25** (`checkAsarFallback` + `SilentAsarFallbackError`).
+This did **not** trigger a boot re-audit of the table: with L25's default-on throw a mis-measured floor now
+fails loudly the moment anyone boots that pair, so the empirically-measured `min*` values stand and the
+catalog keeps flowing from `obsidian-versions.json` via `refresh:metadata`.
 
 Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is
 filled from `obsidian-versions.json` for completeness — it matches our recorded values 52/52). `—` = not
@@ -720,7 +723,9 @@ never blocks (an old Electron runs but nags) — there is no error tier here, un
 
 Two flat, independent booleans on the transport-options channel let a consumer silence/tune the compatibility
 checks of L21 (installer↔app) and L23 (runtime Electron). Deferred item (b) of L21; both default to `true`
-(today's behavior), so existing consumers are unaffected. They ride the existing `ObsidianCdpTransportOptions`
+(today's behavior), so existing consumers are unaffected. (A third sibling knob,
+`shouldThrowOnSilentAsarFallback`, was later added by **L25** on the same channel with the same `@default true`,
+and it reuses this section's `shouldWarnOnCompatibilityIssues` for its warn path rather than adding a fourth.) They ride the existing `ObsidianCdpTransportOptions`
 channel (and `ConnectToCdpOptions`), so — like the version/visibility/sandbox knobs (L5) — all three
 consumption paths (Vitest / Jest / Manual, L6) inherit them with **no adapter change**. Owned path only; attach
 mode runs neither check.
@@ -750,3 +755,64 @@ mode runs neither check.
   integration test for the throw-disable path**: disabling the throw removes the pre-download fast stop, so the
   only faithful end-to-end proof is the heavy opt-in dead-boot suite L18 now unblocks (tracked as a follow-up,
   not bundled here).
+
+## L25. Post-boot silent-asar-fallback verify (`SilentAsarFallbackError` + verdict-as-data)
+
+`DesktopCdpTransport` verifies, **after every owned boot**, that the app (asar) version actually running
+matches the swapped-in pin — catching a **silent asar fallback**. When an asar is swapped onto an installer
+shell below its real boot floor the renderer does not always dead-boot (the black screen L18 catches); some app
+versions instead **silently revert to the installer's own bundled asar** and render a healthy UI of the *wrong
+(older)* version. L18's dead-boot detector reads that healthy UI as a false-positive "runnable" — exactly how
+`1.13.0` on installer `1.1.9` was first mis-measured (it reports `apiVersion` `1.1.9`, not `1.13.0`; see L20's
+silent-fallback caveat). L25 is the **healthy-UI companion** to L18's black-screen fast-fail: L18 catches an
+empty `<body>`, L25 catches a full UI running the wrong version. It also closes the gap L24 left open — with
+`shouldThrowOnIncompatibleInstaller: false` an `'unrunnable'` pin proceeds to launch, and if it silently falls
+back (rather than dead-boots) L18 never fires; L25 is what catches it.
+
+- **Pure verdict** — `src/asar-fallback-detection.ts` (unit-tested; mirrors the `renderer-boot-detection` /
+  `installer-compatibility` / `electron-compatibility` pure/glue split):
+  `checkAsarFallback({ requestedVersion, runningApiVersion }) → AsarFallback` with
+  `tier: 'match' | 'fallback' | 'unknown'`. `'match'` ⇔ the running version equals the pin; `'fallback'` ⇔ they
+  differ (the pin was not honored); `'unknown'` ⇔ no asar was swapped (nothing to verify) or the live version
+  was unreadable. Pure `x.y.z` compare (`compareVersions`) — no I/O and **no metadata** (a pin-vs-running
+  comparison, not a table lookup).
+- **Distinct error** — `SilentAsarFallbackError` (`silent-asar-fallback-error.ts`, **exported from the barrel**)
+  carries `requestedVersion` / `runningApiVersion` and names the too-old installer, so callers can
+  `instanceof`-match it (like `RendererFailedToInitializeError`).
+- **Post-boot glue** — `DesktopCdpTransport.checkRuntimeCompatibility` (owned path only) reads the live running
+  app version **once** (`ipcRenderer.sendSync('version')` — the same read L23 uses, truthful even under a silent
+  fallback) and shares it with both the asar-fallback check (`checkRuntimeAsarFallback`, may throw) and L23's
+  runtime-Electron nag (`applyElectronCompatibility`, best-effort). It runs in the ready branch of
+  `waitForOwnedVaultReady`, **outside** the readiness poll's try/catch, so the throw fails fast instead of being
+  swallowed as "not ready yet" and looping until timeout. The requested version is `ownedConfig.asar?.version`
+  — present only for the **asar-swap** case (the sole fallback risk); the downgrade / own-installer paths run
+  the app's own installer, so the running version always matches and the verdict is `'unknown'` (skipped).
+- **Verdict-as-data** — the verdict rides on `DesktopCdpTransport.getAsarFallback()` and
+  `CdpConnection.asarFallback` (populated in `connectToCdp`), so a consumer / integration test asserts on it
+  rather than spying on a throw. A `'fallback'` verdict reaches the data surface only when the throw is disabled
+  (below); with the default throw it fails first (same data-surface caveat L24 records for `'unrunnable'`).
+- **Knob** — `shouldThrowOnSilentAsarFallback` (`@default true`) is the **third** member of the L24
+  compatibility-knob family, on `ObsidianCdpTransportOptions` + `ConnectToCdpOptions`, resolved by the pure,
+  unit-tested `resolveShouldThrowOnSilentAsarFallback` + `resolveAsarFallbackAction({ tier, shouldThrow,
+  shouldWarn }) → 'throw' | 'warn' | 'silent'` in `compatibility-options.ts`. When `false`, a fallback no longer
+  throws; it warns (gated by the **existing** `shouldWarnOnCompatibilityIssues`, not a new warn knob) and
+  surfaces the verdict as data. Owned path only; it rides the existing options channel, so all three consumption
+  paths (Vitest / Jest / Manual, L6) inherit it with no adapter change (L5).
+- **Integration test** — `src/asar-fallback.integration.test.ts` boots the real fallback pair (`1.13.0` on
+  `1.1.9`, throw disabled → `'fallback'`, running `1.1.9`), asserts the default throw, and a no-false-positive
+  `'match'` pair (`1.13.1` on `1.1.9`, which genuinely runs — its run floor IS `1.1.9`). Opt-in via
+  `OBSIDIAN_TEST_ASAR_FALLBACK=1` (heavy download-and-boot). Because `1.13.0`/`1.1.9` is below the run floor, the
+  boot-based cases also set `shouldThrowOnIncompatibleInstaller: false` to get past L21's proactive throw and
+  reach the boot. CDP-confirmed on Windows (2026-07-17): `1.13.0`/`1.1.9` really runs `apiVersion` `1.1.9`.
+- **Option-bag plumbing uses a local `normalizeOptionalProperties`** — `src/normalize-optional-properties.ts`
+  (ported from `obsidian-dev-utils/object-utils`, **not** depended on — same dependency-hygiene reason as the
+  L17 duplicated helpers; it needs only `type-fest`, already a dep). It replaces the per-key
+  `...(x !== undefined && { k: x })` conditional-spread when building the transport-options / config bags
+  (`connect-to-cdp` `buildCdpTransportOptions`, `transport-factory` `createCdpTransport`). Cast-only (keeps
+  `undefined`-valued keys at runtime), which is safe because every consumer reads each field with a
+  `?? default` / `!== undefined` guard.
+- **`metadata.json` was deliberately NOT re-audited** by a boot campaign (a scoping decision): with the
+  default-on runtime throw a mis-measured floor now fails loudly the moment anyone boots that pair (including the
+  CI boot suites), so the empirically-measured `min*` values stand as-is and the catalog data keeps flowing from
+  `obsidian-versions.json` via `refresh:metadata` (L20). This resolves the "harden the boot-floor measurement"
+  follow-up L20 tracked.

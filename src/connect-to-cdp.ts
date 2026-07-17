@@ -15,6 +15,7 @@
 
 import type { Except } from 'type-fest';
 
+import type { AsarFallback } from './asar-fallback-detection.ts';
 import type { ContextId } from './context-id.ts';
 import type { ElectronCompatibility } from './electron-compatibility.ts';
 import type {
@@ -25,6 +26,7 @@ import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ObsidianCdpTransportOptions } from './transport-options.ts';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 import { TempVault } from './temp-vault.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
@@ -40,6 +42,17 @@ const DEFAULT_CDP_HOST = 'localhost';
  * removing its directory) automatically.
  */
 export interface CdpConnection extends AsyncDisposable {
+  /**
+   * The silent-asar-fallback verdict for an owned instance, read live after boot:
+   * whether the app version it is actually running matches the swapped-in pin, or
+   * the installer silently reverted to its own bundled asar. `undefined` in attach
+   * mode, when no asar was swapped, or when the running version was unreadable. A
+   * `'fallback'` verdict reaches here only when the throw is disabled
+   * ({@link ConnectToCdpOptions.shouldThrowOnSilentAsarFallback} `false`);
+   * otherwise it throws `SilentAsarFallbackError` before the connection is created.
+   */
+  readonly asarFallback?: AsarFallback | undefined;
+
   /**
    * The base CDP URL, e.g. `http://localhost:51888`.
    */
@@ -214,6 +227,21 @@ export interface ConnectToCdpOptions {
   readonly shouldThrowOnIncompatibleInstaller?: boolean;
 
   /**
+   * Whether a post-boot **silent asar fallback** fails fast.
+   *
+   * When an asar is swapped onto an installer shell too old for it, the instance
+   * may silently revert to the installer's own bundled asar and run the **wrong
+   * (older)** version behind a healthy UI. When `true` (the default), the running
+   * app version is verified against the pin post-boot and a mismatch throws
+   * `SilentAsarFallbackError`. Set `false` to let the boot proceed — the mismatch
+   * is then surfaced on {@link CdpConnection.asarFallback} rather than thrown.
+   * Ignored in attach mode ({@link port} set) and when no asar is swapped.
+   *
+   * @default `true`
+   */
+  readonly shouldThrowOnSilentAsarFallback?: boolean;
+
+  /**
    * Whether the owned-instance compatibility **nag warnings** are emitted.
    *
    * Covers both the offline installer↔app warning and the post-boot
@@ -263,11 +291,13 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 
   const { host, port } = resolveEndpoint(transport, options);
   const cdpUrl = `http://${host}:${String(port)}`;
+  const asarFallback = transport instanceof DesktopCdpTransport ? transport.getAsarFallback() : undefined;
   const compatibility = transport instanceof DesktopCdpTransport ? transport.getCompatibility() : undefined;
   const electronCompatibility = transport instanceof DesktopCdpTransport ? transport.getElectronCompatibility() : undefined;
 
   const connection: CdpConnection = {
     cdpUrl,
+    ...(asarFallback && { asarFallback }),
     ...(compatibility && { compatibility }),
     ...(electronCompatibility && { electronCompatibility }),
 
@@ -308,40 +338,28 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 /**
  * Builds the {@link ObsidianCdpTransportOptions} for a connection, threading only
  * the provided {@link ConnectToCdpOptions} through (owned-visible defaults to
- * `true`, unlike the hidden-by-default test transports).
+ * `true`, unlike the hidden-by-default test transports). Unset knobs pass through
+ * as `undefined` and are read with `?? default` / `!== undefined` guards
+ * downstream, so an explicit `undefined` is indistinguishable from an absent key.
  *
  * @param options - The connection options.
  * @returns The transport options to create the connection's transport from.
  */
 function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTransportOptions {
-  return {
+  return normalizeOptionalProperties<ObsidianCdpTransportOptions>({
+    commandTimeoutInMilliseconds: options?.commandTimeoutInMilliseconds,
+    deadBootGraceInMilliseconds: options?.deadBootGraceInMilliseconds,
+    host: options?.host,
     isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
-    type: 'obsidian-cdp',
-    ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
-    ...(options?.deadBootGraceInMilliseconds !== undefined && { deadBootGraceInMilliseconds: options.deadBootGraceInMilliseconds }),
-    ...(options?.host !== undefined && { host: options.host }),
-    ...(options?.obsidianInstallerVersion !== undefined && { obsidianInstallerVersion: options.obsidianInstallerVersion }),
-    ...(options?.obsidianVersion !== undefined && { obsidianVersion: options.obsidianVersion }),
-    ...(options?.port !== undefined && { port: options.port }),
-    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox }),
-    ...buildCompatibilityTransportOptions(options)
-  };
-}
-
-/**
- * Builds the compatibility-knob passthrough options ({@link ObsidianCdpTransportOptions.shouldThrowOnIncompatibleInstaller}
- * / {@link ObsidianCdpTransportOptions.shouldWarnOnCompatibilityIssues}) for a
- * connection, split out of {@link buildCdpTransportOptions} to keep its
- * complexity in bounds. Only forwards knobs the caller actually set.
- *
- * @param options - The connection options.
- * @returns The compatibility passthrough options (possibly empty).
- */
-function buildCompatibilityTransportOptions(options?: ConnectToCdpOptions): Partial<ObsidianCdpTransportOptions> {
-  return {
-    ...(options?.shouldThrowOnIncompatibleInstaller !== undefined && { shouldThrowOnIncompatibleInstaller: options.shouldThrowOnIncompatibleInstaller }),
-    ...(options?.shouldWarnOnCompatibilityIssues !== undefined && { shouldWarnOnCompatibilityIssues: options.shouldWarnOnCompatibilityIssues })
-  };
+    obsidianInstallerVersion: options?.obsidianInstallerVersion,
+    obsidianVersion: options?.obsidianVersion,
+    port: options?.port,
+    shouldDisableSandbox: options?.shouldDisableSandbox,
+    shouldThrowOnIncompatibleInstaller: options?.shouldThrowOnIncompatibleInstaller,
+    shouldThrowOnSilentAsarFallback: options?.shouldThrowOnSilentAsarFallback,
+    shouldWarnOnCompatibilityIssues: options?.shouldWarnOnCompatibilityIssues,
+    type: 'obsidian-cdp'
+  });
 }
 
 /**

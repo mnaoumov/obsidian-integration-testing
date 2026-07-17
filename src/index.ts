@@ -5,6 +5,12 @@
  */
 
 export type {
+  AsarFallback,
+  AsarFallbackTier,
+  CheckAsarFallbackParams
+} from './asar-fallback-detection.ts';
+export { checkAsarFallback } from './asar-fallback-detection.ts';
+export type {
   CdpConnection,
   ConnectToCdpOptions
 } from './connect-to-cdp.ts';
@@ -51,6 +57,8 @@ export type {
 } from './obsidian-metadata.ts';
 export { getVersionMetadata } from './obsidian-metadata.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
+export type { SilentAsarFallbackErrorConstructorParams } from './silent-asar-fallback-error.ts';
+export { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams

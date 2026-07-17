@@ -330,6 +330,23 @@ export interface ObsidianCdpTransportOptions {
   readonly shouldThrowOnIncompatibleInstaller?: boolean;
 
   /**
+   * Whether a **silent asar fallback** fails fast after boot.
+   *
+   * When an asar is swapped onto an installer shell too old for it, the instance
+   * may not dead-boot — it can silently revert to the installer's own bundled
+   * asar and run the **wrong (older)** version behind a healthy UI. When `true`
+   * (the default), the transport verifies the running app version against the pin
+   * post-boot and throws `SilentAsarFallbackError` on a mismatch. Set `false` to
+   * let the boot proceed — the mismatch is then surfaced as data (the fallback
+   * verdict) rather than thrown. Only applies to an owned instance running a
+   * swapped-in asar (ignored in attach mode, {@link port} set, and when no asar is
+   * swapped — there is nothing to verify).
+   *
+   * @default `true`
+   */
+  readonly shouldThrowOnSilentAsarFallback?: boolean;
+
+  /**
    * Whether the owned-instance compatibility **nag warnings** are emitted.
    *
    * Covers **both** compatibility nags: the offline installer↔app warning (a

@@ -19,7 +19,21 @@
  * `appium-session-config.ts` pure-resolver split.
  */
 
+import type { AsarFallbackTier } from './asar-fallback-detection.ts';
 import type { InstallerCompatibilityTier } from './installer-compatibility.ts';
+
+/**
+ * The action to take for a resolved silent-asar-fallback verdict, given the
+ * throw/warn knobs.
+ *
+ * - `'throw'` — the verdict is `'fallback'` and the throw is enabled; the caller
+ *   throws `SilentAsarFallbackError`.
+ * - `'warn'` — the verdict is `'fallback'` but the throw is disabled and warnings
+ *   are on; the caller logs the fallback warning and lets the boot proceed (the
+ *   verdict is still surfaced as data).
+ * - `'silent'` — nothing to do (`'match'` / `'unknown'`, or a suppressed fallback).
+ */
+export type AsarFallbackAction = 'silent' | 'throw' | 'warn';
 
 /**
  * The action to take for a resolved installer↔app compatibility verdict, given
@@ -37,6 +51,20 @@ import type { InstallerCompatibilityTier } from './installer-compatibility.ts';
 export type InstallerCompatibilityAction = 'silent' | 'throw' | 'warn-nagged' | 'warn-unrunnable';
 
 /**
+ * Parameters for {@link resolveAsarFallbackAction}.
+ */
+export interface ResolveAsarFallbackActionParams {
+  /** Whether a `'fallback'` verdict throws (vs. proceeds with a warning). */
+  readonly shouldThrowOnSilentAsarFallback: boolean;
+
+  /** Whether a non-throwing fallback verdict is logged. */
+  readonly shouldWarnOnCompatibilityIssues: boolean;
+
+  /** The resolved silent-asar-fallback tier. */
+  readonly tier: AsarFallbackTier;
+}
+
+/**
  * Parameters for {@link resolveInstallerCompatibilityAction}.
  */
 export interface ResolveInstallerCompatibilityActionParams {
@@ -48,6 +76,27 @@ export interface ResolveInstallerCompatibilityActionParams {
 
   /** The resolved installer↔app compatibility tier. */
   readonly tier: InstallerCompatibilityTier;
+}
+
+/**
+ * Resolves what to do for a silent-asar-fallback verdict, given the throw/warn
+ * knobs. Pure — the caller performs the throw/log side effects.
+ *
+ * @param params - The verdict tier and the resolved throw/warn knobs.
+ * @returns The action the caller should take.
+ */
+export function resolveAsarFallbackAction(params: ResolveAsarFallbackActionParams): AsarFallbackAction {
+  const { shouldThrowOnSilentAsarFallback, shouldWarnOnCompatibilityIssues, tier } = params;
+
+  if (tier !== 'fallback') {
+    return 'silent';
+  }
+
+  if (shouldThrowOnSilentAsarFallback) {
+    return 'throw';
+  }
+
+  return shouldWarnOnCompatibilityIssues ? 'warn' : 'silent';
 }
 
 /**
@@ -84,6 +133,18 @@ export function resolveInstallerCompatibilityAction(params: ResolveInstallerComp
  */
 export function resolveShouldThrowOnIncompatibleInstaller(shouldThrowOnIncompatibleInstaller?: boolean): boolean {
   return shouldThrowOnIncompatibleInstaller ?? true;
+}
+
+/**
+ * Whether a booted owned instance running a different app (asar) version than the
+ * pin — a silent fallback to the installer's own bundled asar — should fail fast
+ * with {@link SilentAsarFallbackError}.
+ *
+ * @param shouldThrowOnSilentAsarFallback - The resolved option value (omitted → throw).
+ * @returns `true` when a silent fallback should throw (the default).
+ */
+export function resolveShouldThrowOnSilentAsarFallback(shouldThrowOnSilentAsarFallback?: boolean): boolean {
+  return shouldThrowOnSilentAsarFallback ?? true;
 }
 
 /**
