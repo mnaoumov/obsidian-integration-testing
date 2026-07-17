@@ -620,9 +620,9 @@ dead-boot for table-known combos (see the L18 cross-reference).
 - **Table access** — `src/obsidian-metadata.ts` is the sole reader of `metadata.json` (see L20 for how the
   `OBSIDIAN_METADATA` global is injected), exposing `getVersionMetadata(version)` / `ObsidianVersionMetadata`.
 - **Deferred (follow-up tasks):** (a) the tier-2 **runtime** nag — reading live `process.versions.electron`
-  post-boot vs `minRecommendedElectronVersion` (an *Electron* version with no installer→Electron table, so
-  only a live read can check it); (b) an **option knob** to silence/tune the warnings (and optionally
-  disable the proactive throw, which would let L18's dead-boot path be integration-tested again).
+  post-boot vs `minRecommendedElectronVersion` — **now landed, see L23**; (b) an **option knob** to
+  silence/tune the warnings (and optionally disable the proactive throw, which would let L18's dead-boot path
+  be integration-tested again).
 
 ## L22. Auto-install Appium dependencies before auto-starting the server
 
@@ -652,3 +652,45 @@ global Appium). `startAppiumAndEmulator` now closes that gap: when it is about t
   shell and would `ENOENT`). This differs from the `adb`/`tar` calls, which are real `.exe` on PATH.
 - Supersedes L19 lever #3 ("pre-provision … driver") for the local/first-run case — provisioning it into a
   CI image is still the faster path when you control the image, but the harness no longer *requires* it.
+
+## L23. Tier-2 runtime Electron nag (`checkElectronCompatibility` + verdict-as-data)
+
+The runtime companion to L21's offline installer check — deferred item (a) from that section (the parent task
+that shipped L20/L21). L21 compares the resolved **installer** version against installer-version thresholds
+entirely offline. But the app's real requirement is a **minimum Electron version** hardcoded inside `app.js`
+(e.g. `1.13.1` needs Electron `28.2.3`), and the installer's bundled Electron is not derivable offline (see
+`ObsidianVersionMetadata.minRecommendedElectronVersion`, L20). So this tier reads the **live** Electron the
+owned instance is actually running, post-boot, and warns when it is below the app's recommended minimum. It
+never blocks (an old Electron runs but nags) — there is no error tier here, unlike L21's `'unrunnable'`.
+
+- **Pure verdict** — `src/electron-compatibility.ts` (unit-tested; mirrors `installer-compatibility.ts`):
+  `checkElectronCompatibility({ appVersion, actualElectronVersion, metadata }) → ElectronCompatibility` with
+  `tier: 'nagged' | 'ok' | 'unknown'`. `nagged` ⇔ `actualElectronVersion < minRecommendedElectronVersion`;
+  `unknown` ⇔ the live version was unreadable or the app version carries no recommended Electron in the table.
+  Pure `x.y.z` compares (reuses `compareVersions`) — no I/O. `minRecommendedElectronVersion` is keyed by **app**
+  version and is already fully populated in `metadata.json` (L20); this tier consumes it, nothing new is added.
+- **Post-boot glue** — `DesktopCdpTransport.checkRuntimeElectronCompatibility` runs in the success branch of
+  `waitForOwnedVaultReady` (**owned path only** — attach mode targets the user's own live instance). It reads
+  two values from the booted renderer via raw `evaluate`: the running **app** version from the main process via
+  `window.electron.ipcRenderer.sendSync('version')` (the same IPC channel `namespace-bootstrap`'s `ipcSendSync`
+  uses), and the live Electron via `process.versions.electron`. Both are top-level reads. **Do NOT use
+  `require('obsidian').apiVersion`** (only resolves inside a plugin-load context — needs CodeScript Toolkit)
+  **nor `getObsidianModule()`** (its plugin-load `require('obsidian')` trick returns "Failed to load obsidian
+  module" in a plain owned instance) — both were confirmed to fail there; `ipcRenderer.sendSync('version')`
+  returns the correct app version (and tracks the swapped asar version, not the shell — verified: local asar
+  `1.13.2` on shell `1.12.7` returns `1.13.2`). The read is **best-effort** (own try/catch, warn-don't-throw):
+  a failure logs and leaves the verdict `undefined`, never breaking an otherwise-ready boot. On `'nagged'` it
+  logs via the same `log()` channel as L21's installer nag.
+- **Verdict as data** (mirrors L21 item D) — the verdict rides on `DesktopCdpTransport.getElectronCompatibility()`
+  and `CdpConnection.electronCompatibility` (populated in `connectToCdp`), so a consumer / integration test can
+  assert on it rather than spying on `console.warn` (the repo has no warn-spy precedent). It is a **separate**
+  accessor from L21's `getCompatibility()` because it is only known post-boot, whereas the installer verdict is
+  resolved pre-launch and rides on the immutable `OwnedInstanceConfig`.
+- **Barrel** — `checkElectronCompatibility` + `CheckElectronCompatibilityParams` / `ElectronCompatibility` /
+  `ElectronCompatibilityTier` are exported from the main entry.
+- **No option knob here** — silencing/tuning the warning is L21's deferred item (b), a separate task; like the
+  installer `'nagged'` warning, this one always warns until that lands.
+- **Integration test** — `src/electron-compatibility.integration.test.ts` boots a real nag-band pair
+  (app `1.13.1` on the `1.1.9` installer shell → live Electron 18 `< 28.2.3` → `'nagged'`) and asserts the
+  surfaced `electronCompatibility`. Like the other download-and-boot suites it is opt-in via
+  `OBSIDIAN_TEST_ELECTRON_NAG=1`.

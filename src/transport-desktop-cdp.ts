@@ -28,6 +28,7 @@ import {
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { ElectronCompatibility } from './electron-compatibility.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { OwnedObsidianInstance } from './obsidian-instance.ts';
 import type { RendererBootObservation } from './renderer-boot-detection.ts';
@@ -37,6 +38,7 @@ import type {
 } from './transport.ts';
 
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
+import { checkElectronCompatibility } from './electron-compatibility.ts';
 import { exec } from './exec.ts';
 import { log } from './log.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
@@ -47,6 +49,7 @@ import {
 } from './obsidian-config.ts';
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
+import { getVersionMetadata } from './obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
 import {
   checkRendererBootState,
@@ -238,6 +241,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
   private readonly deadBootGraceInMilliseconds: number;
+  private electronCompatibility: ElectronCompatibility | undefined;
   private readonly isHarnessOwnedInstance: boolean;
   private readonly isObsidianAppVisible: boolean;
   private messageId = 0;
@@ -348,6 +352,20 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public getCompatibility(): InstallerCompatibility | undefined {
     return this.ownedConfig?.compatibility;
+  }
+
+  /**
+   * Returns the runtime Electron compatibility verdict for this owned instance —
+   * whether the Electron version it is actually running is new enough for the
+   * running app version (read live post-boot; see {@link ObsidianVersionMetadata.minRecommendedElectronVersion}).
+   * Returns `undefined` when this is not an owned instance, the instance has not
+   * booted yet, or the verdict could not be determined (the live version was
+   * unreadable, or the app version carries no recommended Electron version).
+   *
+   * @returns The runtime Electron compatibility verdict, or `undefined`.
+   */
+  public getElectronCompatibility(): ElectronCompatibility | undefined {
+    return this.electronCompatibility;
   }
 
   /**
@@ -470,6 +488,42 @@ export class DesktopCdpTransport implements ObsidianTransport {
     } else {
       log('[cdp-transport] No CDP targets for removal IPC — removing directly from obsidian.json.');
       removeVaultFromConfig(vaultPath);
+    }
+  }
+
+  /**
+   * Best-effort tier-2 runtime nag: reads the live Electron version and running
+   * app version from the booted owned renderer and warns when the Electron the
+   * instance is actually running is older than the app's recommended minimum.
+   * Stores the verdict on {@link getElectronCompatibility}.
+   *
+   * The app version is read **live** — the running app version from the main
+   * process (`ipcRenderer.sendSync('version')`, the same IPC channel the namespace
+   * bootstrap uses) rather than from the resolved config — so the nag reflects the
+   * version genuinely running across every owned sub-path (asar-swap / downgrade /
+   * own-installer) and stays truthful even under a silent asar fallback.
+   * `process.versions.electron` gives the shell's live Electron. Both are read at
+   * the renderer top level (no `require('obsidian')`, which resolves only inside a
+   * plugin-load context). Never throws — a read failure is logged and ignored, so
+   * it cannot break an otherwise-ready boot.
+   *
+   * @param vaultPath - The vault path to evaluate in.
+   */
+  private async checkRuntimeElectronCompatibility(vaultPath: string): Promise<void> {
+    try {
+      const appVersion = await this.evaluate('String(window.electron.ipcRenderer.sendSync(\'version\'))', { cwd: vaultPath });
+      const actualElectronVersion = await this.evaluate('String(process.versions.electron)', { cwd: vaultPath });
+      const verdict = checkElectronCompatibility({
+        actualElectronVersion,
+        appVersion,
+        metadata: getVersionMetadata(appVersion)
+      });
+      this.electronCompatibility = verdict;
+      if (verdict.tier === 'nagged') {
+        log(`[cdp-transport] ${ensureNonNullable(verdict.message)}`);
+      }
+    } catch (error) {
+      log(`[cdp-transport] Could not check runtime Electron compatibility (non-fatal): ${String(error)}`);
     }
   }
 
@@ -965,6 +1019,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         await this.findTargetForVault(vaultPath);
         await this.waitForLayoutReady(vaultPath);
         await this.dismissTrustDialog(vaultPath);
+        await this.checkRuntimeElectronCompatibility(vaultPath);
         log('[cdp-transport] Owned vault is ready.');
         return;
       } catch {

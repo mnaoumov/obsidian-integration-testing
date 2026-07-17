@@ -19,6 +19,12 @@ export {
   setVaultPathResolver
 } from './context-provider.ts';
 export type {
+  CheckElectronCompatibilityParams,
+  ElectronCompatibility,
+  ElectronCompatibilityTier
+} from './electron-compatibility.ts';
+export { checkElectronCompatibility } from './electron-compatibility.ts';
+export type {
   EvalInObsidianParams,
   HoverElementParams,
   Lib,
