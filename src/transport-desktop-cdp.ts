@@ -28,6 +28,7 @@ import {
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { AsarFallback } from './asar-fallback-detection.ts';
 import type { ElectronCompatibility } from './electron-compatibility.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { OwnedObsidianInstance } from './obsidian-instance.ts';
@@ -37,6 +38,8 @@ import type {
   TransportEvalOptions
 } from './transport.ts';
 
+import { checkAsarFallback } from './asar-fallback-detection.ts';
+import { resolveAsarFallbackAction } from './compatibility-options.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { checkElectronCompatibility } from './electron-compatibility.ts';
 import { exec } from './exec.ts';
@@ -56,6 +59,7 @@ import {
   DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS
 } from './renderer-boot-detection.ts';
 import { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
+import { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 import { ensureNonNullable } from './type-guards.ts';
 import {
   resolveOwnedHiddenLaunchArgs,
@@ -126,6 +130,17 @@ export interface DesktopCdpTransportConfig {
    * @default `false`
    */
   shouldDisableSandbox?: boolean;
+
+  /**
+   * Whether a post-boot **silent asar fallback** (the running app version differs
+   * from the swapped-in pin) fails fast with {@link SilentAsarFallbackError}. The
+   * verdict is always computed and surfaced via
+   * {@link DesktopCdpTransport.getAsarFallback}; this gates only the throw. Only
+   * meaningful in owned mode running a swapped-in asar.
+   *
+   * @default `true`
+   */
+  shouldThrowOnSilentAsarFallback?: boolean;
 
   /**
    * Whether the post-boot runtime-Electron compatibility nag warning is emitted
@@ -249,6 +264,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public readonly isMobile = false;
   private activeVaultPath: null | string = null;
+  private asarFallback: AsarFallback | undefined;
   private readonly cdpHost: string;
   private cdpPort: number;
   private cdpUrl: string;
@@ -261,6 +277,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
   private readonly shouldDisableSandbox: boolean;
+  private readonly shouldThrowOnSilentAsarFallback: boolean;
   private readonly shouldWarnOnCompatibilityIssues: boolean;
   private ws: null | WebSocket = null;
 
@@ -270,18 +287,34 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param config - CDP connection configuration.
    */
   public constructor(config?: DesktopCdpTransportConfig) {
-    this.cdpHost = config?.cdpHost ?? 'localhost';
-    this.commandTimeoutInMilliseconds = config?.commandTimeoutInMilliseconds ?? COMMAND_TIMEOUT_IN_MILLISECONDS;
-    this.deadBootGraceInMilliseconds = config?.deadBootGraceInMilliseconds ?? DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS;
-    this.isHarnessOwnedInstance = config?.isHarnessOwnedInstance ?? false;
-    this.isObsidianAppVisible = config?.isObsidianAppVisible ?? true;
-    this.ownedConfig = config?.ownedInstance;
-    this.shouldDisableSandbox = config?.shouldDisableSandbox ?? false;
-    this.shouldWarnOnCompatibilityIssues = config?.shouldWarnOnCompatibilityIssues ?? true;
+    // Destructure with per-field defaults (each applies when the field is omitted,
+    // Exactly like the former `config?.x ?? default`) so the constructor stays
+    // Under the cyclomatic-complexity limit as fields are added.
+    const {
+      cdpHost = 'localhost',
+      cdpPort,
+      commandTimeoutInMilliseconds = COMMAND_TIMEOUT_IN_MILLISECONDS,
+      deadBootGraceInMilliseconds = DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS,
+      isHarnessOwnedInstance = false,
+      isObsidianAppVisible = true,
+      ownedInstance,
+      shouldDisableSandbox = false,
+      shouldThrowOnSilentAsarFallback = true,
+      shouldWarnOnCompatibilityIssues = true
+    } = config ?? {};
+    this.cdpHost = cdpHost;
+    this.commandTimeoutInMilliseconds = commandTimeoutInMilliseconds;
+    this.deadBootGraceInMilliseconds = deadBootGraceInMilliseconds;
+    this.isHarnessOwnedInstance = isHarnessOwnedInstance;
+    this.isObsidianAppVisible = isObsidianAppVisible;
+    this.ownedConfig = ownedInstance;
+    this.shouldDisableSandbox = shouldDisableSandbox;
+    this.shouldThrowOnSilentAsarFallback = shouldThrowOnSilentAsarFallback;
+    this.shouldWarnOnCompatibilityIssues = shouldWarnOnCompatibilityIssues;
     // Owned mode picks a free port at launch (assigned in registerVault).
     // Attach mode connects to the configured port; no port is hardcoded.
-    this.cdpPort = config?.cdpPort ?? 0;
-    this.cdpUrl = config?.cdpPort === undefined ? '' : `http://${this.cdpHost}:${String(config.cdpPort)}`;
+    this.cdpPort = cdpPort ?? 0;
+    this.cdpUrl = cdpPort === undefined ? '' : `http://${cdpHost}:${String(cdpPort)}`;
   }
 
   /**
@@ -355,6 +388,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     return String(resultObj.value);
+  }
+
+  /**
+   * Returns the silent-asar-fallback verdict for this owned instance — whether the
+   * app version it is actually running matches the swapped-in pin, or the installer
+   * silently reverted to its own bundled asar (read live post-boot). Returns
+   * `undefined` when this is not an owned instance, the instance has not booted
+   * yet, or the verdict could not be determined (no asar was swapped, or the live
+   * version was unreadable). A `'fallback'` verdict reaches this surface only when
+   * the throw is disabled ({@link DesktopCdpTransportConfig.shouldThrowOnSilentAsarFallback}
+   * `false`); otherwise it throws `SilentAsarFallbackError`.
+   *
+   * @returns The silent-asar-fallback verdict, or `undefined`.
+   */
+  public getAsarFallback(): AsarFallback | undefined {
+    return this.asarFallback;
   }
 
   /**
@@ -507,39 +556,97 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
-   * Best-effort tier-2 runtime nag: reads the live Electron version and running
-   * app version from the booted owned renderer and warns when the Electron the
-   * instance is actually running is older than the app's recommended minimum.
-   * Stores the verdict on {@link getElectronCompatibility}.
+   * Computes and stores the runtime-Electron compatibility verdict (on
+   * {@link getElectronCompatibility}) from an already-read version pair, warning
+   * when the live Electron is below the app's recommended minimum. Never throws; a
+   * boot whose running app version was unreadable is skipped (nothing to judge).
    *
-   * The app version is read **live** — the running app version from the main
-   * process (`ipcRenderer.sendSync('version')`, the same IPC channel the namespace
-   * bootstrap uses) rather than from the resolved config — so the nag reflects the
-   * version genuinely running across every owned sub-path (asar-swap / downgrade /
-   * own-installer) and stays truthful even under a silent asar fallback.
-   * `process.versions.electron` gives the shell's live Electron. Both are read at
-   * the renderer top level (no `require('obsidian')`, which resolves only inside a
-   * plugin-load context). Never throws — a read failure is logged and ignored, so
-   * it cannot break an otherwise-ready boot.
+   * @param appVersion - The live running app version, or `undefined` when unreadable.
+   * @param actualElectronVersion - The live Electron version, or `undefined` when unreadable.
+   */
+  private applyElectronCompatibility(appVersion: string | undefined, actualElectronVersion: string | undefined): void {
+    if (appVersion === undefined) {
+      return;
+    }
+
+    const verdict = checkElectronCompatibility({
+      actualElectronVersion,
+      appVersion,
+      metadata: getVersionMetadata(appVersion)
+    });
+    this.electronCompatibility = verdict;
+    if (verdict.tier === 'nagged' && this.shouldWarnOnCompatibilityIssues) {
+      log(`[cdp-transport] ${ensureNonNullable(verdict.message)}`);
+    }
+  }
+
+  /**
+   * Verifies the running app (asar) version matches the swapped-in pin, storing the
+   * verdict on {@link getAsarFallback}. On a **silent fallback** (the installer ran
+   * its own bundled asar instead of the pin) it throws {@link SilentAsarFallbackError}
+   * when the throw is enabled, otherwise warns (when warnings are on) and lets the
+   * boot proceed. A boot with no swapped-in asar, or an unreadable running version,
+   * is `'unknown'` — nothing is thrown or warned. This is the healthy-UI companion to
+   * the black-screen {@link RendererFailedToInitializeError} dead-boot fast-fail.
+   *
+   * @param runningApiVersion - The live running app version, or `undefined` when unreadable.
+   */
+  private checkRuntimeAsarFallback(runningApiVersion: string | undefined): void {
+    const verdict = checkAsarFallback({
+      requestedVersion: this.ownedConfig?.asar?.version,
+      runningApiVersion
+    });
+    this.asarFallback = verdict;
+
+    const action = resolveAsarFallbackAction({
+      shouldThrowOnSilentAsarFallback: this.shouldThrowOnSilentAsarFallback,
+      shouldWarnOnCompatibilityIssues: this.shouldWarnOnCompatibilityIssues,
+      tier: verdict.tier
+    });
+    if (action === 'throw') {
+      throw new SilentAsarFallbackError({
+        requestedVersion: ensureNonNullable(verdict.requestedVersion),
+        runningApiVersion: ensureNonNullable(verdict.runningApiVersion)
+      });
+    }
+    if (action === 'warn') {
+      log(`[cdp-transport] ${ensureNonNullable(verdict.message)}`);
+    }
+  }
+
+  /**
+   * Runs the post-boot runtime compatibility checks for an owned instance, once the
+   * vault is ready. Reads the live running app version and Electron version **once**
+   * from the booted renderer's main process, then: (1) verifies the running app
+   * version matches the swapped-in pin — throwing {@link SilentAsarFallbackError} on
+   * a silent fallback (when enabled); and (2) runs the best-effort runtime-Electron
+   * nag. Only the asar-fallback check can throw, so this must run outside the
+   * readiness poll's try/catch (a swallowed throw would loop until timeout).
+   *
+   * Both are read at the renderer top level: `ipcRenderer.sendSync('version')` (the
+   * running app version, truthful even under a silent asar fallback) and
+   * `process.versions.electron` (the live shell Electron); neither uses
+   * `require('obsidian')`, which resolves only inside a plugin-load context. A read
+   * failure leaves both unknown (logged, non-fatal) — an unreadable running version
+   * cannot be judged a fallback, so the boot is not broken by a flaky read.
    *
    * @param vaultPath - The vault path to evaluate in.
    */
-  private async checkRuntimeElectronCompatibility(vaultPath: string): Promise<void> {
+  private async checkRuntimeCompatibility(vaultPath: string): Promise<void> {
+    let appVersion: string | undefined;
+    let actualElectronVersion: string | undefined;
     try {
-      const appVersion = await this.evaluate('String(window.electron.ipcRenderer.sendSync(\'version\'))', { cwd: vaultPath });
-      const actualElectronVersion = await this.evaluate('String(process.versions.electron)', { cwd: vaultPath });
-      const verdict = checkElectronCompatibility({
-        actualElectronVersion,
-        appVersion,
-        metadata: getVersionMetadata(appVersion)
-      });
-      this.electronCompatibility = verdict;
-      if (verdict.tier === 'nagged' && this.shouldWarnOnCompatibilityIssues) {
-        log(`[cdp-transport] ${ensureNonNullable(verdict.message)}`);
-      }
+      const rawAppVersion = await this.evaluate('String(window.electron.ipcRenderer.sendSync(\'version\'))', { cwd: vaultPath });
+      appVersion = rawAppVersion === '' || rawAppVersion === 'undefined' ? undefined : rawAppVersion;
+      actualElectronVersion = await this.evaluate('String(process.versions.electron)', { cwd: vaultPath });
     } catch (error) {
-      log(`[cdp-transport] Could not check runtime Electron compatibility (non-fatal): ${String(error)}`);
+      log(`[cdp-transport] Could not read runtime versions (non-fatal): ${String(error)}`);
     }
+
+    // Fails fast (when enabled) on a silent asar fallback — MUST run before the
+    // Best-effort nag and outside any try/catch so the throw escapes the poll.
+    this.checkRuntimeAsarFallback(appVersion);
+    this.applyElectronCompatibility(appVersion, actualElectronVersion);
   }
 
   /**
@@ -1029,14 +1136,14 @@ export class DesktopCdpTransport implements ObsidianTransport {
     log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     let documentCompleteSince: null | number = null;
+    let isReady = false;
     while (Date.now() < deadline) {
       try {
         await this.findTargetForVault(vaultPath);
         await this.waitForLayoutReady(vaultPath);
         await this.dismissTrustDialog(vaultPath);
-        await this.checkRuntimeElectronCompatibility(vaultPath);
-        log('[cdp-transport] Owned vault is ready.');
-        return;
+        isReady = true;
+        break;
       } catch {
         // Vault target not ready yet.
       }
@@ -1058,7 +1165,16 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
       await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
     }
-    throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+
+    if (!isReady) {
+      throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+    }
+
+    // The vault is ready. Run the post-boot compatibility checks here — OUTSIDE the
+    // Poll's try/catch — so a SilentAsarFallbackError fails fast instead of being
+    // Swallowed as "not ready yet" and looping until the readiness timeout.
+    await this.checkRuntimeCompatibility(vaultPath);
+    log('[cdp-transport] Owned vault is ready.');
   }
 }
 

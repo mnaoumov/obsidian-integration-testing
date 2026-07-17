@@ -26,7 +26,10 @@ import {
 } from 'webdriverio';
 
 import type { InstallerCompatibility } from './installer-compatibility.ts';
-import type { OwnedInstanceConfig } from './transport-desktop-cdp.ts';
+import type {
+  DesktopCdpTransportConfig,
+  OwnedInstanceConfig
+} from './transport-desktop-cdp.ts';
 import type {
   ObsidianAndroidAppiumTransportOptions,
   ObsidianCdpTransportOptions,
@@ -46,6 +49,7 @@ import {
 import {
   resolveInstallerCompatibilityAction,
   resolveShouldThrowOnIncompatibleInstaller,
+  resolveShouldThrowOnSilentAsarFallback,
   resolveShouldWarnOnCompatibilityIssues
 } from './compatibility-options.ts';
 import {
@@ -58,6 +62,7 @@ import { IncompatibleInstallerVersionError } from './incompatible-installer-vers
 import { checkInstallerCompatibility } from './installer-compatibility.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
+import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 import { getObsidianConfigDir } from './obsidian-config.ts';
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import {
@@ -1081,25 +1086,26 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
   if (options?.port !== undefined) {
     const ownedSuffix = options.isHarnessOwnedInstance ? ' (harness-owned)' : '';
     log(`[transport-factory:obsidian-cdp] Attaching to running Obsidian${ownedSuffix} (host=${options.host ?? 'localhost'}, port=${String(options.port)})`);
-    return new DesktopCdpTransport({
-      ...(options.host !== undefined && { cdpHost: options.host }),
+    return new DesktopCdpTransport(normalizeOptionalProperties<DesktopCdpTransportConfig>({
+      cdpHost: options.host,
       cdpPort: options.port,
-      ...(options.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
-      ...(options.isHarnessOwnedInstance !== undefined && { isHarnessOwnedInstance: options.isHarnessOwnedInstance })
-    });
+      commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds,
+      isHarnessOwnedInstance: options.isHarnessOwnedInstance
+    }));
   }
 
   log('[transport-factory:obsidian-cdp] Creating owned isolated Obsidian instance');
   const ownedInstance = await resolveOwnedInstanceConfig(options);
-  return new DesktopCdpTransport({
-    ...(options?.host !== undefined && { cdpHost: options.host }),
-    ...(options?.commandTimeoutInMilliseconds !== undefined && { commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds }),
+  return new DesktopCdpTransport(normalizeOptionalProperties<DesktopCdpTransportConfig>({
+    cdpHost: options?.host,
+    commandTimeoutInMilliseconds: options?.commandTimeoutInMilliseconds,
     deadBootGraceInMilliseconds: resolveDeadBootGraceInMilliseconds(options),
-    ...(options?.isObsidianAppVisible !== undefined && { isObsidianAppVisible: options.isObsidianAppVisible }),
+    isObsidianAppVisible: options?.isObsidianAppVisible,
     ownedInstance,
-    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox }),
+    shouldDisableSandbox: options?.shouldDisableSandbox,
+    shouldThrowOnSilentAsarFallback: resolveShouldThrowOnSilentAsarFallback(options?.shouldThrowOnSilentAsarFallback),
     shouldWarnOnCompatibilityIssues: resolveShouldWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
-  });
+  }));
 }
 
 /**
