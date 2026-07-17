@@ -12,7 +12,10 @@
  *
  * - `minRunnableInstallerVersion` — the run floor. Below it the app cannot boot
  *   (`'unrunnable'`); the caller turns this into a proactive
- *   `IncompatibleInstallerVersionError` before any download/launch.
+ *   `IncompatibleInstallerVersionError` before any download/launch — unless the
+ *   caller has disabled the proactive throw (`shouldThrowOnIncompatibleInstaller`
+ *   `false`), in which case the boot proceeds and the reactive dead-boot fast-fail
+ *   catches it.
  * - `minRecommendedInstallerVersion` — the recommended floor (older versions
  *   only). At/above the run floor but below this, the app runs but is below
  *   Obsidian's recommendation (`'nagged'`), surfaced as a warning.

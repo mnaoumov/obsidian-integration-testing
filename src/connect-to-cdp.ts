@@ -49,8 +49,10 @@ export interface CdpConnection extends AsyncDisposable {
    * The resolved installer↔app compatibility verdict for an owned instance, when
    * it could be determined. `undefined` in attach mode, or when the verdict is
    * unknown (undetectable shell version, or the app version is absent from the
-   * table). An `'unrunnable'` verdict never reaches here — it throws
-   * `IncompatibleInstallerVersionError` before the connection is created.
+   * table). An `'unrunnable'` verdict reaches here only when the proactive throw
+   * is disabled ({@link ConnectToCdpOptions.shouldThrowOnIncompatibleInstaller}
+   * `false`); otherwise it throws `IncompatibleInstallerVersionError` before the
+   * connection is created.
    */
   readonly compatibility?: InstallerCompatibility | undefined;
 
@@ -198,6 +200,33 @@ export interface ConnectToCdpOptions {
   readonly shouldRemoveVaultOnDispose?: boolean;
 
   /**
+   * Whether an **unrunnable** installer↔app version pair fails fast before launch.
+   *
+   * When `true` (the default), an installer below the app's run floor throws
+   * `IncompatibleInstallerVersionError` from version resolution before anything is
+   * downloaded or launched. Set `false` to let the pin proceed to launch — where
+   * the reactive dead-boot fast-fail still catches the black-screen boot, and the
+   * `'unrunnable'` verdict is surfaced on {@link CdpConnection.compatibility}
+   * rather than thrown. Ignored in attach mode ({@link port} set).
+   *
+   * @default `true`
+   */
+  readonly shouldThrowOnIncompatibleInstaller?: boolean;
+
+  /**
+   * Whether the owned-instance compatibility **nag warnings** are emitted.
+   *
+   * Covers both the offline installer↔app warning and the post-boot
+   * runtime-Electron warning. When `true` (the default) each fires via the harness
+   * log; set `false` to silence both — the verdicts are still surfaced on
+   * {@link CdpConnection.compatibility} / {@link CdpConnection.electronCompatibility},
+   * only the log is suppressed. Ignored in attach mode ({@link port} set).
+   *
+   * @default `true`
+   */
+  readonly shouldWarnOnCompatibilityIssues?: boolean;
+
+  /**
    * Absolute path to an existing vault to open. When omitted, an empty temporary
    * vault is created (and removed on dispose unless
    * {@link shouldRemoveVaultOnDispose} says otherwise).
@@ -294,7 +323,24 @@ function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTra
     ...(options?.obsidianInstallerVersion !== undefined && { obsidianInstallerVersion: options.obsidianInstallerVersion }),
     ...(options?.obsidianVersion !== undefined && { obsidianVersion: options.obsidianVersion }),
     ...(options?.port !== undefined && { port: options.port }),
-    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox })
+    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox }),
+    ...buildCompatibilityTransportOptions(options)
+  };
+}
+
+/**
+ * Builds the compatibility-knob passthrough options ({@link ObsidianCdpTransportOptions.shouldThrowOnIncompatibleInstaller}
+ * / {@link ObsidianCdpTransportOptions.shouldWarnOnCompatibilityIssues}) for a
+ * connection, split out of {@link buildCdpTransportOptions} to keep its
+ * complexity in bounds. Only forwards knobs the caller actually set.
+ *
+ * @param options - The connection options.
+ * @returns The compatibility passthrough options (possibly empty).
+ */
+function buildCompatibilityTransportOptions(options?: ConnectToCdpOptions): Partial<ObsidianCdpTransportOptions> {
+  return {
+    ...(options?.shouldThrowOnIncompatibleInstaller !== undefined && { shouldThrowOnIncompatibleInstaller: options.shouldThrowOnIncompatibleInstaller }),
+    ...(options?.shouldWarnOnCompatibilityIssues !== undefined && { shouldWarnOnCompatibilityIssues: options.shouldWarnOnCompatibilityIssues })
   };
 }
 

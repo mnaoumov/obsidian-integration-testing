@@ -18,7 +18,7 @@ The package exports these entry points:
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
-Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18.
+Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18.
 
 The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: own vs. attach), with `obsidian-instance.ts` (launch + free port + kill), `obsidian-version*.ts` (asar version resolution/download/cache), and `obsidian-installer.ts` (shell version detect/download/extract — it resolves the installer asset by querying the release's real asset list via the GitHub API and picking the platform-correct name with the pure, unit-tested `installer-asset.ts`, tolerating the historical dot-vs-hyphen separator rename, with a both-separator templated fallback when the API is unavailable). `transport-factory.ts` resolves the owned-instance config (shell exe + asar + temp user-data dir) from the version knobs.
 
@@ -453,9 +453,11 @@ timeout before throwing a generic error.
   compatibility check now throws `IncompatibleInstallerVersionError` from `resolveOwnedInstanceConfig`
   **before** launch, so this reactive dead-boot fast-fail remains only the **safety net** for combos the
   table cannot preempt (an undetectable Linux shell version → `'unknown'`, or an app version absent from
-  `metadata.json`). Its pure `checkRendererBootState` keeps its unit coverage; there is no longer a
-  dead-boot *integration* test (no clean out-of-table combo triggers it without the proactive throw firing
-  first).
+  `metadata.json`). Its pure `checkRendererBootState` keeps its unit coverage. There was no dead-boot
+  *integration* test because the proactive throw always fired first — but **T68 unblocked one**: setting
+  `shouldThrowOnIncompatibleInstaller: false` (see L21/L24) makes an `'unrunnable'` pin proceed to launch
+  instead of throwing, so a dead-boot integration test can now drive this reactive path and assert
+  `RendererFailedToInitializeError` (still a heavy download-and-boot suite, so opt-in-gated like the others).
 - **Wiring** — `DesktopCdpTransport.waitForOwnedVaultReady` (owned path only) probes
   `probeRendererBootState()` each poll iteration; the grace clock starts when the renderer first reports
   `complete` (a loop-local `documentCompleteSince`), and it throws `RendererFailedToInitializeError` on a
@@ -622,7 +624,7 @@ dead-boot for table-known combos (see the L18 cross-reference).
 - **Deferred (follow-up tasks):** (a) the tier-2 **runtime** nag — reading live `process.versions.electron`
   post-boot vs `minRecommendedElectronVersion` — **now landed, see L23**; (b) an **option knob** to
   silence/tune the warnings (and optionally disable the proactive throw, which would let L18's dead-boot path
-  be integration-tested again).
+  be integration-tested again) — **now landed, see L24**.
 
 ## L22. Auto-install Appium dependencies before auto-starting the server
 
@@ -688,9 +690,45 @@ never blocks (an old Electron runs but nags) — there is no error tier here, un
   resolved pre-launch and rides on the immutable `OwnedInstanceConfig`.
 - **Barrel** — `checkElectronCompatibility` + `CheckElectronCompatibilityParams` / `ElectronCompatibility` /
   `ElectronCompatibilityTier` are exported from the main entry.
-- **No option knob here** — silencing/tuning the warning is L21's deferred item (b), a separate task; like the
-  installer `'nagged'` warning, this one always warns until that lands.
+- **Silencing/tuning is via L24's knob** — `shouldWarnOnCompatibilityIssues: false` suppresses this
+  runtime-Electron nag alongside the installer nag (the verdict still rides on `getElectronCompatibility()`).
+  Landed by T68 (was L21's deferred item (b)); the warning is on by default.
 - **Integration test** — `src/electron-compatibility.integration.test.ts` boots a real nag-band pair
   (app `1.13.1` on the `1.1.9` installer shell → live Electron 18 `< 28.2.3` → `'nagged'`) and asserts the
   surfaced `electronCompatibility`. Like the other download-and-boot suites it is opt-in via
   `OBSIDIAN_TEST_ELECTRON_NAG=1`.
+
+## L24. Compatibility-warning knobs (`shouldWarnOnCompatibilityIssues` / `shouldThrowOnIncompatibleInstaller`)
+
+Two flat, independent booleans on the transport-options channel let a consumer silence/tune the compatibility
+checks of L21 (installer↔app) and L23 (runtime Electron). Deferred item (b) of L21; both default to `true`
+(today's behavior), so existing consumers are unaffected. They ride the existing `ObsidianCdpTransportOptions`
+channel (and `ConnectToCdpOptions`), so — like the version/visibility/sandbox knobs (L5) — all three
+consumption paths (Vitest / Jest / Manual, L6) inherit them with **no adapter change**. Owned path only; attach
+mode runs neither check.
+
+- **`shouldWarnOnCompatibilityIssues`** (`@default true`) — when `false`, suppresses **both** nag warnings:
+  the offline installer↔app `'nagged'` warning (L21, logged from `transport-factory`) and the post-boot
+  runtime-Electron `'nagged'` warning (L23, logged from `transport-desktop-cdp`). The verdicts are still
+  computed and surfaced as data (`getCompatibility()` / `getElectronCompatibility()`,
+  `CdpConnection.compatibility` / `.electronCompatibility`) — only the `log()` is gated.
+- **`shouldThrowOnIncompatibleInstaller`** (`@default true`) — when `false`, an `'unrunnable'` installer↔app
+  pair no longer throws `IncompatibleInstallerVersionError` at version-resolution time; it proceeds to launch
+  (a "proceeding to launch" warning is logged unless warnings are also off), where L18's reactive dead-boot
+  fast-fail catches the black-screen boot. Consequently an `'unrunnable'` verdict now **can** reach the data
+  surface (`compatibility.tier === 'unrunnable'`) — the L18/L21/connect-to-cdp TSDoc that said "unrunnable
+  never reaches the data surface, it throws first" is qualified accordingly.
+
+- **Pure/testable split** (mirrors `visibility.ts` / `renderer-boot-detection.ts`): `src/compatibility-options.ts`
+  (internal, **not** re-exported) holds `resolveShouldWarnOnCompatibilityIssues` /
+  `resolveShouldThrowOnIncompatibleInstaller` (the `@default true` resolvers, G10q-tested) and
+  `resolveInstallerCompatibilityAction({ tier, shouldThrow, shouldWarn }) → 'throw' | 'warn-unrunnable' |
+  'warn-nagged' | 'silent'` — the pure decision the v8-ignored `transport-factory.checkAndReportCompatibility`
+  glue executes (throw / `log` / return the verdict). All branches are unit-tested in
+  `compatibility-options.test.ts`.
+- **Coverage honesty** — the `log()` suppression itself lives in v8-ignored glue and is not asserted (the repo
+  has no console-warn-spy precedent — L23 asserts on the surfaced *verdict*, not on `console.warn`). The
+  resolver + action unit tests plus the verdict-as-data surface carry the coverage. There is **no cheap
+  integration test for the throw-disable path**: disabling the throw removes the pre-download fast stop, so the
+  only faithful end-to-end proof is the heavy opt-in dead-boot suite L18 now unblocks (tracked as a follow-up,
+  not bundled here).
