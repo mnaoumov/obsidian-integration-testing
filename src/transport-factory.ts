@@ -67,6 +67,10 @@ import {
 } from './obsidian-version-switch.ts';
 import { compareVersions } from './obsidian-version.ts';
 import { resolveDeadBootGraceInMilliseconds } from './renderer-boot-detection.ts';
+import {
+  resolveAppiumSpawnFlags,
+  resolveEmulatorSpawnFlags
+} from './spawn-options.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { ensureNonNullable } from './type-guards.ts';
@@ -663,11 +667,12 @@ class AppiumTransportFactory {
 
   private startAppiumServer(port: number, isAppiumConsoleVisible?: boolean): ChildProcess {
     const isConsoleHidden = shouldHideAppiumConsole(isAppiumConsoleVisible);
+    const { detached, windowsHide } = resolveAppiumSpawnFlags(isConsoleHidden);
     const child = spawn(`npx appium --log-timestamp --port ${String(port)} --allow-insecure=${CHROMEDRIVER_AUTODOWNLOAD_FEATURE}`, {
-      detached: true,
+      detached,
       shell: true,
       stdio: isConsoleHidden ? 'ignore' : ['ignore', 'inherit', 'inherit'],
-      windowsHide: isConsoleHidden
+      windowsHide
     });
 
     child.unref();
@@ -676,7 +681,9 @@ class AppiumTransportFactory {
 
   private startEmulator(avdName: string, isEmulatorVisible?: boolean): EmulatorLaunch {
     const emulatorBinary = this.resolveEmulatorBinary();
-    const args = buildEmulatorArgs({ avdName, isHidden: shouldHideEmulatorWindow(isEmulatorVisible) });
+    const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
+    const args = buildEmulatorArgs({ avdName, isHidden: isWindowHidden });
+    const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);
     this.log(`Running: ${emulatorBinary} ${args.join(' ')}`);
     /*
      * Pipe (rather than ignore) stdout/stderr so an early failure such as
@@ -684,8 +691,9 @@ class AppiumTransportFactory {
      * surfaced immediately instead of waiting out the full boot timeout.
      */
     const child = spawn(emulatorBinary, args, {
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
+      detached,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide
     });
 
     let capturedOutput = '';
