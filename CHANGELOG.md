@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 8.3.0
+
+- feat: allow to bypass version checks
+- feat: check for electron version
+
 ## 8.2.1
 
 - chore: spellcheck
