@@ -6,8 +6,22 @@ import {
 
 import {
   buildInstallerAssetNameCandidates,
-  selectInstallerAssetName
+  selectInstallerAssetName,
+  selectInstallerDownloadUrl
 } from './installer-asset.ts';
+
+// A fully-populated public-release catalog entry (all three desktop installers).
+const DOWNLOADS_PUBLIC = {
+  asar: 'https://example.test/obsidian-1.6.7.asar.gz',
+  dmg: 'https://example.test/Obsidian-1.6.7.dmg',
+  exe: 'https://example.test/Obsidian-1.6.7.exe',
+  tar: 'https://example.test/obsidian-1.6.7.tar.gz'
+};
+
+// A catalyst-release entry: only the asar is published, no desktop installer.
+const DOWNLOADS_CATALYST_ONLY_ASAR = {
+  asar: 'https://releases.obsidian.md/release/obsidian-1.13.2.asar.gz'
+};
 
 // Real GitHub release asset name lists, captured from the
 // `obsidianmd/obsidian-releases` release API. They span the historical rename
@@ -123,6 +137,28 @@ describe('selectInstallerAssetName', () => {
     expect(
       selectInstallerAssetName({ assetNames: [], platform: 'win32', version: '1.6.7' })
     ).toBeUndefined();
+  });
+});
+
+describe('selectInstallerDownloadUrl', () => {
+  it('should select the platform-correct installer URL', () => {
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_PUBLIC, platform: 'win32' })).toBe(DOWNLOADS_PUBLIC.exe);
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_PUBLIC, platform: 'darwin' })).toBe(DOWNLOADS_PUBLIC.dmg);
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_PUBLIC, platform: 'linux' })).toBe(DOWNLOADS_PUBLIC.tar);
+  });
+
+  it('should treat any non-Windows/macOS platform as Linux (tar)', () => {
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_PUBLIC, platform: 'freebsd' })).toBe(DOWNLOADS_PUBLIC.tar);
+  });
+
+  it('should return undefined when the version has no catalog entry', () => {
+    expect(selectInstallerDownloadUrl({ downloads: undefined, platform: 'win32' })).toBeUndefined();
+  });
+
+  it('should return undefined when the entry ships no installer for the platform (catalyst asar-only)', () => {
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'win32' })).toBeUndefined();
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'darwin' })).toBeUndefined();
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'linux' })).toBeUndefined();
   });
 });
 

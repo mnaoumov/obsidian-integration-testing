@@ -28,6 +28,7 @@ import { gunzipSync } from 'node:zlib';
 import type { DesktopReleasesManifest } from './obsidian-version.ts';
 
 import { log } from './log.ts';
+import { getVersionMetadata } from './obsidian-metadata.ts';
 import {
   compareVersions,
   DESKTOP_RELEASES_MANIFEST_URL,
@@ -212,18 +213,25 @@ async function downloadAndDecompressAsar(url: string): Promise<Buffer> {
 }
 
 /**
- * Returns the candidate `.asar.gz` download URLs for a concrete version, public
- * (GitHub) first, then catalyst (CDN).
+ * Returns the candidate `.asar.gz` download URLs for a concrete version.
+ *
+ * The version's exact URL baked into the `metadata.json` catalog (from upstream
+ * `obsidian-versions.json`) is tried first when present; the hand-rolled public
+ * (GitHub) and catalyst (CDN) guesses follow as a fallback for versions absent
+ * from the catalog (or a stale catalog).
  *
  * @param version - A concrete `x.y.z` version.
  * @returns The URLs to try, in order.
  */
 function getAsarDownloadUrls(version: string): string[] {
   const asarGzFileName = `${getVersionAsarFileName(version)}.gz`;
-  return [
+  const fallbackUrls = [
     `${PUBLIC_ASAR_RELEASE_BASE_URL}/v${version}/${asarGzFileName}`,
     `${CATALYST_ASAR_RELEASE_BASE_URL}/${asarGzFileName}`
   ];
+
+  const bakedUrl = getVersionMetadata(version)?.downloads?.asar;
+  return bakedUrl ? [bakedUrl, ...fallbackUrls] : fallbackUrls;
 }
 
 /* v8 ignore stop */

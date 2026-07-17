@@ -38,9 +38,11 @@ import process from 'node:process';
 
 import {
   buildInstallerAssetNameCandidates,
-  selectInstallerAssetName
+  selectInstallerAssetName,
+  selectInstallerDownloadUrl
 } from './installer-asset.ts';
 import { log } from './log.ts';
+import { getVersionMetadata } from './obsidian-metadata.ts';
 
 /**
  * Browser User-Agent for downloading release assets (Cloudflare-gated).
@@ -368,14 +370,22 @@ function getCachedShellExePath(shellDir: string): string {
 /**
  * Resolves the ordered installer asset download URLs to try for a version.
  *
- * The release's real asset list is queried first so the platform-correct asset
- * is picked regardless of the historical dot-vs-hyphen naming; if that call is
- * unavailable it falls back to trying both templated separator forms.
+ * The version's exact installer URL baked into the `metadata.json` catalog
+ * (from upstream `obsidian-versions.json`) is used directly when present,
+ * avoiding any network lookup. Otherwise the release's real asset list is
+ * queried so the platform-correct asset is picked regardless of the historical
+ * dot-vs-hyphen naming; if that call too is unavailable it falls back to trying
+ * both templated separator forms.
  *
  * @param version - The concrete `x.y.z` version.
  * @returns Candidate asset URLs, in priority order.
  */
 async function resolveInstallerAssetUrls(version: string): Promise<string[]> {
+  const bakedUrl = selectInstallerDownloadUrl({ downloads: getVersionMetadata(version)?.downloads, platform: process.platform });
+  if (bakedUrl !== undefined) {
+    return [bakedUrl];
+  }
+
   const assetNames = await fetchReleaseAssetNames(version);
   if (assetNames) {
     const selected = selectInstallerAssetName({ assetNames, platform: process.platform, version });

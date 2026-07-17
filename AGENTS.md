@@ -538,12 +538,30 @@ command-latency burst vs session establishment).
 ## L20. `metadata.json` — per-version installer-floor table (`minRunnableInstallerVersion`)
 
 Repo-root `metadata.json` is a per-Obsidian-desktop-version data table (one `"x.y.z"` key per release):
-`channel`, optional `available`, `changelogUrl`, and installer/Electron compatibility knobs. It is a
+`channel`, optional `available`, `changelogUrl`, per-version `downloads` (baked asset URLs — see below),
+and installer/Electron compatibility knobs. It is a
 **data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is
 injected as the `OBSIDIAN_METADATA` global — esbuild's `define` inlines it into the build (the built
 library stays self-contained, no runtime file read), the unit-test project uses Vitest's `define`, and the
 integration-test projects set it via the `scripts/vitest-metadata-setup.ts` setup-file global. The usual
-format/lint/spellcheck gates apply. Two installer-floor fields:
+format/lint/spellcheck gates apply.
+
+**`downloads` — baked asset URLs (superset from upstream `obsidian-versions.json`).** Each version carries
+an optional `downloads` object with the *exact* published URLs for the assets this harness downloads:
+`asar` (the `obsidian-<ver>.asar.gz`), and the x64 desktop installers `exe` (Windows) / `dmg` (macOS
+universal) / `tar` (Linux). `asar` is present for every catalogued version; the installer keys are present
+only for versions that ship a public desktop installer (catalyst builds are `asar`-only). The asar and
+installer download paths (`obsidian-version-switch.ts` `getAsarDownloadUrls`, `obsidian-installer.ts`
+`resolveInstallerAssetUrls`) try the baked URL **first**, so the common path needs no GitHub release-API
+call and no dot-vs-hyphen asset-name guessing — the hand-rolled URL guesses (`installer-asset.ts`) remain
+the fallback for versions absent from the catalog. `src/installer-asset.ts` `selectInstallerDownloadUrl`
+picks the platform-correct URL (pure, unit-tested). The catalog is refreshed by
+`scripts/refresh-metadata.ts` (`npm run refresh:metadata`): it downloads the upstream
+`obsidian-versions.json` (`jesse-r-s-hines/wdio-obsidian-service`) and **additively** merges its download
+URLs in — never overwriting our own empirically-measured `channel`/`changelogUrl*`/`min*` fields — then
+writes the table back byte-stably (rerun ⇒ no diff). Commit the result.
+
+Two installer-floor fields:
 
 - **`minRunnableInstallerVersion`** — the tier-1 **boot floor**: the oldest installer (Electron shell) on
   which that app version's asar actually runs (renders a real UI — a loaded vault, or the first-run vault
