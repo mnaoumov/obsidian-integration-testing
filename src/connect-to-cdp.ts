@@ -16,6 +16,7 @@
 import type { Except } from 'type-fest';
 
 import type { ContextId } from './context-id.ts';
+import type { ElectronCompatibility } from './electron-compatibility.ts';
 import type {
   EvalInObsidianParams,
   GenericObject
@@ -62,6 +63,16 @@ export interface CdpConnection extends AsyncDisposable {
    * @returns A {@link Promise} that resolves once disposal completes.
    */
   dispose(): Promise<void>;
+
+  /**
+   * The runtime Electron compatibility verdict for an owned instance, read live
+   * after boot: whether the Electron version it is actually running is new enough
+   * for the running app version. `undefined` in attach mode, or when the verdict
+   * is unknown (the live version was unreadable, or the app version carries no
+   * recommended Electron version). An old Electron never blocks — it only warns —
+   * so unlike {@link compatibility} there is no throwing tier.
+   */
+  readonly electronCompatibility?: ElectronCompatibility | undefined;
 
   /**
    * Evaluates a self-contained function inside Obsidian via the rich helper
@@ -224,10 +235,12 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   const { host, port } = resolveEndpoint(transport, options);
   const cdpUrl = `http://${host}:${String(port)}`;
   const compatibility = transport instanceof DesktopCdpTransport ? transport.getCompatibility() : undefined;
+  const electronCompatibility = transport instanceof DesktopCdpTransport ? transport.getElectronCompatibility() : undefined;
 
   const connection: CdpConnection = {
     cdpUrl,
     ...(compatibility && { compatibility }),
+    ...(electronCompatibility && { electronCompatibility }),
 
     async dispose(): Promise<void> {
       try {
