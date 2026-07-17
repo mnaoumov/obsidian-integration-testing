@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 8.2.1
+
+- chore: spellcheck
+- fix: hide windows
+- chore: update libs
+
 ## 8.2.0
 
 - feat: autoinstall appium
