@@ -126,6 +126,16 @@ export interface DesktopCdpTransportConfig {
    * @default `false`
    */
   shouldDisableSandbox?: boolean;
+
+  /**
+   * Whether the post-boot runtime-Electron compatibility nag warning is emitted
+   * when the live Electron is below the app's recommended minimum. The verdict is
+   * always computed and surfaced via {@link DesktopCdpTransport.getElectronCompatibility};
+   * this only gates the log. Only meaningful in owned mode.
+   *
+   * @default `true`
+   */
+  shouldWarnOnCompatibilityIssues?: boolean;
 }
 
 /**
@@ -152,7 +162,10 @@ export interface OwnedInstanceConfig {
   /**
    * The resolved installer↔app compatibility verdict, when it could be determined
    * (an asar-swap onto a known shell version). Surfaced by
-   * {@link DesktopCdpTransport.getCompatibility}.
+   * {@link DesktopCdpTransport.getCompatibility}. An `'unrunnable'` verdict reaches
+   * this surface only when the proactive throw is disabled
+   * (`shouldThrowOnIncompatibleInstaller: false`); otherwise it throws
+   * `IncompatibleInstallerVersionError` before the config is built.
    */
   readonly compatibility?: InstallerCompatibility | undefined;
 
@@ -248,6 +261,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
   private readonly shouldDisableSandbox: boolean;
+  private readonly shouldWarnOnCompatibilityIssues: boolean;
   private ws: null | WebSocket = null;
 
   /**
@@ -263,6 +277,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     this.isObsidianAppVisible = config?.isObsidianAppVisible ?? true;
     this.ownedConfig = config?.ownedInstance;
     this.shouldDisableSandbox = config?.shouldDisableSandbox ?? false;
+    this.shouldWarnOnCompatibilityIssues = config?.shouldWarnOnCompatibilityIssues ?? true;
     // Owned mode picks a free port at launch (assigned in registerVault).
     // Attach mode connects to the configured port; no port is hardcoded.
     this.cdpPort = config?.cdpPort ?? 0;
@@ -519,7 +534,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         metadata: getVersionMetadata(appVersion)
       });
       this.electronCompatibility = verdict;
-      if (verdict.tier === 'nagged') {
+      if (verdict.tier === 'nagged' && this.shouldWarnOnCompatibilityIssues) {
         log(`[cdp-transport] ${ensureNonNullable(verdict.message)}`);
       }
     } catch (error) {

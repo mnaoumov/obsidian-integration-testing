@@ -313,6 +313,40 @@ export interface ObsidianCdpTransportOptions {
   readonly shouldDisableSandbox?: boolean;
 
   /**
+   * Whether an **unrunnable** installer↔app version pair fails fast before launch.
+   *
+   * When `true` (the default), an installer below the app's run floor (the
+   * oldest installer the app's asar can boot on) throws
+   * `IncompatibleInstallerVersionError` from version resolution, before anything
+   * is downloaded or launched. Set `false` to let the pin proceed to launch
+   * instead — where the reactive dead-boot fast-fail
+   * (`RendererFailedToInitializeError`, see {@link deadBootGraceInMilliseconds})
+   * still catches the black-screen boot, and the `'unrunnable'` verdict is
+   * surfaced as data rather than thrown. Only applies to an owned instance
+   * (ignored in attach mode, {@link port} set).
+   *
+   * @default `true`
+   */
+  readonly shouldThrowOnIncompatibleInstaller?: boolean;
+
+  /**
+   * Whether the owned-instance compatibility **nag warnings** are emitted.
+   *
+   * Covers **both** compatibility nags: the offline installer↔app warning (a
+   * runnable installer below the recommended floor) and the post-boot
+   * runtime-Electron warning (a live Electron below the app's recommended
+   * minimum). When `true` (the default) each fires via the harness log; set
+   * `false` to silence both — the verdicts are still computed and surfaced as
+   * data (`compatibility` / `electronCompatibility`), only the log is suppressed.
+   * Does not affect the `'unrunnable'` throw (see
+   * {@link shouldThrowOnIncompatibleInstaller}). Only applies to an owned
+   * instance (ignored in attach mode, {@link port} set).
+   *
+   * @default `true`
+   */
+  readonly shouldWarnOnCompatibilityIssues?: boolean;
+
+  /**
    * Discriminant for the transport type.
    */
   readonly type: 'obsidian-cdp';

@@ -44,6 +44,11 @@ import {
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
 import {
+  resolveInstallerCompatibilityAction,
+  resolveShouldThrowOnIncompatibleInstaller,
+  resolveShouldWarnOnCompatibilityIssues
+} from './compatibility-options.ts';
+import {
   checkDeviceIdle,
   resolveDeviceIdleTimeoutInMilliseconds
 } from './device-readiness.ts';
@@ -229,6 +234,29 @@ interface StartAppiumAndEmulatorResult {
 }
 
 let cachedTransport: ObsidianTransport | undefined;
+
+/**
+ * Parameters for {@link checkAndReportCompatibility}.
+ */
+interface CheckAndReportCompatibilityParams {
+  /**
+   * The app (asar) version that will be swapped onto the shell, or `undefined`
+   * when no asar-swap will happen (nothing is checked then).
+   */
+  readonly appVersion: string | undefined;
+
+  /** The resolved installer/shell version, or `undefined`. */
+  readonly installerVersion: string | undefined;
+
+  /**
+   * Whether an `'unrunnable'` verdict throws {@link IncompatibleInstallerVersionError}
+   * (`true`) or proceeds to launch with the verdict surfaced as data (`false`).
+   */
+  readonly shouldThrowOnIncompatibleInstaller: boolean;
+
+  /** Whether a `'nagged'` (or proceeding-`'unrunnable'`) verdict is logged. */
+  readonly shouldWarnOnCompatibilityIssues: boolean;
+}
 
 /**
  * Encapsulates all Appium transport creation logic, including Appium server
@@ -989,19 +1017,19 @@ function buildEmulatorExitMessage(exitInfo: EmulatorExitInfo, output: string): s
 
 /**
  * Runs the proactive installer↔app compatibility check for an asar-swap and acts
- * on the verdict: throws {@link IncompatibleInstallerVersionError} for an
- * installer below the app's run floor, and logs a warning for a
- * runnable-but-below-recommended installer.
+ * on the verdict: for an installer below the app's run floor either throws
+ * {@link IncompatibleInstallerVersionError} (when
+ * {@link CheckAndReportCompatibilityParams.shouldThrowOnIncompatibleInstaller})
+ * or proceeds to launch with a warning; for a runnable-but-below-recommended
+ * installer logs a warning. Both warnings are suppressed when
+ * {@link CheckAndReportCompatibilityParams.shouldWarnOnCompatibilityIssues} is
+ * `false`.
  *
- * @param appVersion - The app (asar) version that will be swapped onto the shell,
- *   or `undefined` when no asar-swap will happen (nothing is checked then).
- * @param installerVersion - The resolved installer/shell version, or `undefined`.
+ * @param params - The resolved versions and the warn/throw knobs.
  * @returns The verdict, or `undefined` when there is no asar-swap to check.
  */
-function checkAndReportCompatibility(
-  appVersion: string | undefined,
-  installerVersion: string | undefined
-): InstallerCompatibility | undefined {
+function checkAndReportCompatibility(params: CheckAndReportCompatibilityParams): InstallerCompatibility | undefined {
+  const { appVersion, installerVersion, shouldThrowOnIncompatibleInstaller, shouldWarnOnCompatibilityIssues } = params;
   if (appVersion === undefined) {
     return undefined;
   }
@@ -1012,7 +1040,13 @@ function checkAndReportCompatibility(
     metadata: getVersionMetadata(appVersion)
   });
 
-  if (compatibility.tier === 'unrunnable') {
+  const action = resolveInstallerCompatibilityAction({
+    shouldThrowOnIncompatibleInstaller,
+    shouldWarnOnCompatibilityIssues,
+    tier: compatibility.tier
+  });
+
+  if (action === 'throw') {
     throw new IncompatibleInstallerVersionError({
       appVersion: compatibility.appVersion,
       installerVersion: ensureNonNullable(compatibility.installerVersion),
@@ -1020,7 +1054,15 @@ function checkAndReportCompatibility(
     });
   }
 
-  if (compatibility.tier === 'nagged') {
+  if (action === 'warn-unrunnable') {
+    log(
+      `[transport-factory:obsidian-cdp] Obsidian installer ${ensureNonNullable(compatibility.installerVersion)} is below the `
+        + `run floor ${ensureNonNullable(compatibility.minRunnableInstallerVersion)} for Obsidian ${compatibility.appVersion}; `
+        + 'proceeding to launch (shouldThrowOnIncompatibleInstaller is false) — the boot will likely dead-boot.'
+    );
+  }
+
+  if (action === 'warn-nagged') {
     log(`[transport-factory:obsidian-cdp] ${ensureNonNullable(compatibility.message)}`);
   }
 
@@ -1055,7 +1097,8 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
     deadBootGraceInMilliseconds: resolveDeadBootGraceInMilliseconds(options),
     ...(options?.isObsidianAppVisible !== undefined && { isObsidianAppVisible: options.isObsidianAppVisible }),
     ownedInstance,
-    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox })
+    ...(options?.shouldDisableSandbox !== undefined && { shouldDisableSandbox: options.shouldDisableSandbox }),
+    shouldWarnOnCompatibilityIssues: resolveShouldWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
   });
 }
 
@@ -1178,7 +1221,12 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   // Combination that can dead-boot. The downgrade / own-installer paths run the
   // App's own installer shell, so they always boot and are not checked.
   const swapAppVersion = plan.asarVersionToSwap ?? plan.asar?.version;
-  const compatibility = checkAndReportCompatibility(swapAppVersion, shellVersion);
+  const compatibility = checkAndReportCompatibility({
+    appVersion: swapAppVersion,
+    installerVersion: shellVersion,
+    shouldThrowOnIncompatibleInstaller: resolveShouldThrowOnIncompatibleInstaller(options?.shouldThrowOnIncompatibleInstaller),
+    shouldWarnOnCompatibilityIssues: resolveShouldWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
+  });
 
   // The pin is known runnable — resolve/download the deferred shell + asar now.
   // Reuse the installed shell only when it already matches the pin (saves the
