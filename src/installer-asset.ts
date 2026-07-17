@@ -23,7 +23,15 @@
  *
  * Only the x64 installer is resolved — the extraction path is x64-only — so the
  * 32-bit / arm64 / all-users sibling assets are deliberately rejected.
+ *
+ * When the version is present in the baked `metadata.json` catalog (from
+ * upstream `obsidian-versions.json`), its exact installer URL is already known;
+ * {@link selectInstallerDownloadUrl} picks the platform-correct one and the
+ * downloader uses it directly, skipping the release-API lookup and the
+ * name-templating fallback entirely.
  */
+
+import type { ObsidianVersionDownloads } from './obsidian-metadata.ts';
 
 /**
  * The platform-specific shape of an Obsidian installer asset name.
@@ -90,6 +98,17 @@ export interface SelectInstallerAssetNameParams {
 }
 
 /**
+ * Parameters for {@link selectInstallerDownloadUrl}.
+ */
+export interface SelectInstallerDownloadUrlParams {
+  /** The version's baked download URLs, or `undefined` when it is absent from the catalog. */
+  readonly downloads: ObsidianVersionDownloads | undefined;
+
+  /** The platform whose installer URL to select. */
+  readonly platform: NodeJS.Platform;
+}
+
+/**
  * Builds the fallback list of installer asset names to try when the release's
  * real asset list cannot be fetched, covering both separator forms (and, on
  * macOS, the `-universal` infix).
@@ -121,6 +140,32 @@ export function buildInstallerAssetNameCandidates(params: BuildInstallerAssetNam
 export function selectInstallerAssetName(params: SelectInstallerAssetNameParams): string | undefined {
   const pattern = buildAssetNamePattern(getPlatformAssetShape(params.platform), params.version);
   return params.assetNames.find((name) => pattern.test(name));
+}
+
+/**
+ * Selects the platform-correct x64 installer download URL from a version's
+ * baked catalog entry.
+ *
+ * @param params - The baked download URLs and the platform.
+ * @returns The installer URL for the platform, or `undefined` when the version
+ *   has no catalog entry or ships no desktop installer for it (e.g. a catalyst
+ *   build, or a Linux `.tar.gz` that was never published).
+ */
+export function selectInstallerDownloadUrl(params: SelectInstallerDownloadUrlParams): string | undefined {
+  const { downloads } = params;
+  if (!downloads) {
+    return undefined;
+  }
+
+  if (params.platform === 'win32') {
+    return downloads.exe;
+  }
+
+  if (params.platform === 'darwin') {
+    return downloads.dmg;
+  }
+
+  return downloads.tar;
 }
 
 /**

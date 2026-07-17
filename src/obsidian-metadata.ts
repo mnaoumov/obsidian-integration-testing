@@ -18,6 +18,33 @@
  */
 
 /**
+ * The pre-resolved asset download URLs for a version, baked into `metadata.json`
+ * from the upstream `obsidian-versions.json` catalog (see the `metadata.json`
+ * section in `CLAUDE.md`).
+ *
+ * These are the exact URLs the version's assets are published at, so the
+ * integration-time download paths can skip the GitHub release-API lookup and the
+ * historical dot-vs-hyphen asset-name guessing. Only the assets this library
+ * actually downloads are carried: the app `asar` and the x64 desktop installers.
+ * A field is absent when the version publishes no such asset (e.g. a catalyst
+ * build ships only the `asar`), in which case the caller falls back to its
+ * hand-rolled resolution.
+ */
+export interface ObsidianVersionDownloads {
+  /** The `obsidian-<version>.asar.gz` package URL. */
+  readonly asar?: string;
+
+  /** The macOS (universal) `.dmg` installer URL. */
+  readonly dmg?: string;
+
+  /** The Windows x64 `.exe` installer URL. */
+  readonly exe?: string;
+
+  /** The Linux x64 `.tar.gz` portable-build URL. */
+  readonly tar?: string;
+}
+
+/**
  * The subset of a `metadata.json` per-version entry this library reads.
  *
  * Every field is optional — an entry carries only the thresholds that apply to
@@ -32,6 +59,13 @@ export interface ObsidianVersionMetadata {
 
   /** The release channel: `'public'`, `'catalyst'`, or `'public+catalyst'`. */
   readonly channel?: string;
+
+  /**
+   * The pre-resolved asset download URLs for the version, baked from the
+   * upstream `obsidian-versions.json` catalog. Absent for versions not present
+   * in the catalog (the caller then falls back to hand-rolled resolution).
+   */
+  readonly downloads?: ObsidianVersionDownloads;
 
   /**
    * The app's hardcoded required-minimum Electron version (e.g. `'28.2.3'`). An

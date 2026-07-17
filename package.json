@@ -118,6 +118,7 @@
     "lint:md": "jiti scripts/lint-md.ts",
     "lint:md:fix": "jiti scripts/lint-md-fix.ts",
     "prepare": "jiti scripts/prepare.ts",
+    "refresh:metadata": "jiti scripts/refresh-metadata.ts",
     "spellcheck": "jiti scripts/spellcheck.ts",
     "test": "jiti scripts/test.ts",
     "test:coverage": "jiti scripts/test-coverage.ts",

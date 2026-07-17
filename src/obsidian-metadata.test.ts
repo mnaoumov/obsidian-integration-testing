@@ -29,6 +29,22 @@ describe('getVersionMetadata', () => {
     expect(metadata?.channel).toBe('public');
   });
 
+  it('exposes the baked asar + desktop-installer download URLs for a public version', () => {
+    const downloads = getVersionMetadata('1.12.7')?.downloads;
+    expect(downloads?.asar).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian-1.12.7.asar.gz');
+    expect(downloads?.exe).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.exe');
+    expect(downloads?.dmg).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.dmg');
+    expect(downloads?.tar).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian-1.12.7.tar.gz');
+  });
+
+  it('carries only the asar URL for a catalyst version (no public desktop installer)', () => {
+    const downloads = getVersionMetadata('1.13.1')?.downloads;
+    expect(downloads?.asar).toBe('https://releases.obsidian.md/release/obsidian-1.13.1.asar.gz');
+    expect(downloads?.exe).toBeUndefined();
+    expect(downloads?.dmg).toBeUndefined();
+    expect(downloads?.tar).toBeUndefined();
+  });
+
   it('returns `undefined` for a version absent from the table', () => {
     expect(getVersionMetadata('999.999.999')).toBeUndefined();
   });
