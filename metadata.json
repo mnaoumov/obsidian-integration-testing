@@ -698,7 +698,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.0/Obsidian-0.11.0-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.0/Obsidian.0.11.0.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.0/obsidian-0.11.0.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "87.0.4280.141",
+      "electron": "11.2.3",
+      "node": "12.18.3",
+      "v8": "8.7.220.31-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.11.1": {
     "channel": "public",
@@ -725,7 +732,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.3/Obsidian-0.11.3-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.3/Obsidian.0.11.3.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.3/obsidian-0.11.3.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "87.0.4280.141",
+      "electron": "11.3.0",
+      "node": "12.18.3",
+      "v8": "8.7.220.31-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.11.4": {
     "channel": "public",
@@ -849,7 +863,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.3/Obsidian-0.12.3-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.3/Obsidian.0.12.3.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.3/obsidian-0.12.3.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "89.0.4389.128",
+      "electron": "12.0.6",
+      "node": "14.16.0",
+      "v8": "8.9.255.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.12.4": {
     "channel": "public",
@@ -860,7 +881,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.4/Obsidian-0.12.4-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.4/Obsidian.0.12.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.4/obsidian-0.12.4.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "89.0.4389.128",
+      "electron": "12.0.6",
+      "node": "14.16.0",
+      "v8": "8.9.255.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.12.5": {
     "channel": "public",
@@ -871,7 +899,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.5/Obsidian-0.12.5-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.5/Obsidian.0.12.5.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.5/obsidian-0.12.5.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "89.0.4389.128",
+      "electron": "12.0.11",
+      "node": "14.16.0",
+      "v8": "8.9.255.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.12.6": {
     "channel": "public",
@@ -914,7 +949,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.10/Obsidian-0.12.10-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.10/Obsidian.0.12.10.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.10/obsidian-0.12.10.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "89.0.4389.128",
+      "electron": "12.0.14",
+      "node": "14.16.0",
+      "v8": "8.9.255.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.12.11": {
     "channel": "public",
@@ -933,7 +975,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.12/Obsidian-0.12.12-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.12/Obsidian.0.12.12.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.12/obsidian-0.12.12.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "89.0.4389.128",
+      "electron": "12.0.14",
+      "node": "14.16.0",
+      "v8": "8.9.255.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.12.13": {
     "channel": "public",
@@ -960,7 +1009,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.15/Obsidian-0.12.15-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.15/Obsidian.0.12.15.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.15/obsidian-0.12.15.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "89.0.4389.128",
+      "electron": "12.0.18",
+      "node": "14.16.0",
+      "v8": "8.9.255.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.12.16": {
     "channel": "public",
@@ -991,7 +1047,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.19/Obsidian-0.12.19-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.19/Obsidian.0.12.19.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.19/obsidian-0.12.19.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "91.0.4472.164",
+      "electron": "13.5.2",
+      "node": "14.16.0",
+      "v8": "9.1.269.39-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.13.0": {
     "channel": "catalyst",
@@ -1123,7 +1186,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.14/Obsidian-0.13.14-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.14/Obsidian.0.13.14.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.14/obsidian-0.13.14.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "91.0.4472.164",
+      "electron": "13.6.2",
+      "node": "14.16.0",
+      "v8": "9.1.269.39-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.13.15": {
     "channel": "catalyst",
@@ -1171,7 +1241,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.19/Obsidian-0.13.19-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.19/Obsidian.0.13.19.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.19/obsidian-0.13.19.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "91.0.4472.164",
+      "electron": "13.6.2",
+      "node": "14.16.0",
+      "v8": "9.1.269.39-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.13.20": {
     "channel": "catalyst",
@@ -1210,7 +1287,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.23/Obsidian-0.13.23-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.23/Obsidian.0.13.23.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.23/obsidian-0.13.23.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "91.0.4472.164",
+      "electron": "13.6.2",
+      "node": "14.16.0",
+      "v8": "9.1.269.39-electron.0"
+    },
+    "ecmaScriptVersion": "ES2021"
   },
   "0.13.24": {
     "channel": "public",
@@ -1222,7 +1306,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.24/Obsidian-0.13.24-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.24/Obsidian.0.13.24.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.24/obsidian-0.13.24.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "96.0.4664.110",
+      "electron": "16.0.8",
+      "node": "16.9.1",
+      "v8": "9.6.180.21-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.13.25": {
     "channel": "catalyst",
@@ -1279,7 +1370,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.30/Obsidian-0.13.30-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.30/Obsidian.0.13.30.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.30/obsidian-0.13.30.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "96.0.4664.174",
+      "electron": "16.0.10",
+      "node": "16.9.1",
+      "v8": "9.6.180.23-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.13.31": {
     "channel": "public",
@@ -1291,7 +1389,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.31/Obsidian-0.13.31-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.31/Obsidian.0.13.31.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.31/obsidian-0.13.31.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "98.0.4758.109",
+      "electron": "17.1.1",
+      "node": "16.13.0",
+      "v8": "9.8.177.11-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.13.32": {
     "channel": "catalyst",
@@ -1339,7 +1444,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.2/Obsidian-0.14.2-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.2/Obsidian.0.14.2.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.2/obsidian-0.14.2.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "98.0.4758.109",
+      "electron": "17.1.1",
+      "node": "16.13.0",
+      "v8": "9.8.177.11-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.14.3": {
     "channel": "catalyst",
@@ -1369,7 +1481,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.5/Obsidian-0.14.5-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.5/Obsidian.0.14.5.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.5/obsidian-0.14.5.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.75",
+      "electron": "18.0.3",
+      "node": "16.13.2",
+      "v8": "10.0.139.9-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.14.6": {
     "channel": "public",
@@ -1381,7 +1500,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.6/Obsidian-0.14.6-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.6/Obsidian.0.14.6.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.6/obsidian-0.14.6.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.75",
+      "electron": "18.0.4",
+      "node": "16.13.2",
+      "v8": "10.0.139.9-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.14.7": {
     "channel": "catalyst",
@@ -1465,7 +1591,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.15/Obsidian-0.14.15-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.15/Obsidian.0.14.15.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.15/obsidian-0.14.15.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.0",
+      "node": "16.13.2",
+      "v8": "10.0.139.17-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.15.0": {
     "channel": "catalyst",
@@ -1535,7 +1668,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.6/Obsidian-0.15.6-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.6/Obsidian.0.15.6.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.6/obsidian-0.15.6.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.5",
+      "node": "16.13.2",
+      "v8": "10.0.139.17-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.15.7": {
     "channel": "catalyst",
@@ -1556,7 +1696,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.8/Obsidian-0.15.8-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.8/Obsidian.0.15.8.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.8/obsidian-0.15.8.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.5",
+      "node": "16.13.2",
+      "v8": "10.0.139.17-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.15.9": {
     "channel": "public",
@@ -1568,7 +1715,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.9/Obsidian-0.15.9-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.9/Obsidian.0.15.9.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.9/obsidian-0.15.9.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.5",
+      "node": "16.13.2",
+      "v8": "10.0.139.17-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "0.16.0": {
     "channel": "catalyst",
@@ -1634,7 +1788,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.0/Obsidian-1.0.0-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.0/Obsidian.1.0.0.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.0/obsidian-1.0.0.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.5",
+      "node": "16.13.2",
+      "v8": "10.0.139.17-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "1.0.1": {
     "channel": "catalyst",
@@ -1661,7 +1822,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.3/Obsidian-1.0.3-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.3/Obsidian.1.0.3.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.3/obsidian-1.0.3.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.5",
+      "node": "16.13.2",
+      "v8": "10.0.139.17-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "1.1.0": {
     "channel": "catalyst",
@@ -1745,7 +1913,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.8/Obsidian-1.1.8-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.8/Obsidian.1.1.8.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.8/obsidian-1.1.8.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "100.0.4896.160",
+      "electron": "18.3.15",
+      "node": "16.13.2",
+      "v8": "10.0.139.18-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "1.1.8-E21": {
     "channel": "public",
@@ -1761,7 +1936,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.9/Obsidian-1.1.9-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.9/Obsidian.1.1.9.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.9/obsidian-1.1.9.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "106.0.5249.199",
+      "electron": "21.3.3",
+      "node": "16.16.0",
+      "v8": "10.6.194.26-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "1.1.10": {
     "channel": "catalyst",
@@ -1818,7 +2000,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.15/Obsidian-1.1.15-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.15/Obsidian.1.1.15.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.15/obsidian-1.1.15.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "106.0.5249.199",
+      "electron": "21.4.1",
+      "node": "16.16.0",
+      "v8": "10.6.194.27-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "1.1.16": {
     "channel": "public",
@@ -1830,7 +2019,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.16/Obsidian-1.1.16-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.16/Obsidian.1.1.16.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.16/obsidian-1.1.16.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "106.0.5249.199",
+      "electron": "21.4.1",
+      "node": "16.16.0",
+      "v8": "10.6.194.27-electron.0"
+    },
+    "ecmaScriptVersion": "ES2022"
   },
   "1.2": {
     "channel": "public",
@@ -1907,7 +2103,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.7/Obsidian-1.2.7-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.7/Obsidian.1.2.7.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.7/obsidian-1.2.7.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "112.0.5615.87",
+      "electron": "24.1.2",
+      "node": "18.14.0",
+      "v8": "11.2.214.9-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.2.8": {
     "channel": "public",
@@ -1919,7 +2122,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.8/Obsidian-1.2.8-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.8/Obsidian.1.2.8.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.8/obsidian-1.2.8.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "112.0.5615.87",
+      "electron": "24.1.2",
+      "node": "18.14.0",
+      "v8": "11.2.214.9-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.3.0": {
     "channel": "catalyst",
@@ -1958,7 +2168,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.3/Obsidian-1.3.3-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.3/Obsidian.1.3.3.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.3/obsidian-1.3.3.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "112.0.5615.183",
+      "electron": "24.3.1",
+      "node": "18.14.0",
+      "v8": "11.2.214.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.3.4": {
     "channel": "public",
@@ -1970,7 +2187,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.4/Obsidian-1.3.4-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.4/Obsidian.1.3.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.4/obsidian-1.3.4.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "112.0.5615.183",
+      "electron": "24.3.1",
+      "node": "18.14.0",
+      "v8": "11.2.214.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.3.5": {
     "channel": "public",
@@ -1982,7 +2206,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.5/Obsidian-1.3.5-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.5/Obsidian.1.3.5.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.5/obsidian-1.3.5.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "112.0.5615.183",
+      "electron": "24.3.1",
+      "node": "18.14.0",
+      "v8": "11.2.214.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.3.6": {
     "channel": "catalyst",
@@ -2003,7 +2234,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.7/Obsidian-1.3.7-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.7/Obsidian.1.3.7.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.7/obsidian-1.3.7.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "112.0.5615.183",
+      "electron": "24.3.1",
+      "node": "18.14.0",
+      "v8": "11.2.214.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4": {
     "channel": "public",
@@ -2065,7 +2303,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.5/Obsidian-1.4.5-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.5/Obsidian.1.4.5.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.5/obsidian-1.4.5.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.0",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4.6": {
     "channel": "catalyst",
@@ -2101,7 +2346,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.10/Obsidian-1.4.10-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.10/Obsidian.1.4.10.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.10/obsidian-1.4.10.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.0",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4.11": {
     "channel": "public",
@@ -2113,7 +2365,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.11/Obsidian-1.4.11-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.11/Obsidian.1.4.11.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.11/obsidian-1.4.11.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.0",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4.12": {
     "channel": "public",
@@ -2125,7 +2384,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.12/Obsidian-1.4.12-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.12/Obsidian.1.4.12.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.12/obsidian-1.4.12.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.0",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4.13": {
     "channel": "public",
@@ -2137,7 +2403,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.13/Obsidian-1.4.13-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.13/Obsidian.1.4.13.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.13/obsidian-1.4.13.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.1",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4.14": {
     "channel": "public",
@@ -2149,7 +2422,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.14/Obsidian-1.4.14-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.14/Obsidian.1.4.14.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.14/obsidian-1.4.14.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.1",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.4.15": {
     "channel": "catalyst",
@@ -2170,7 +2450,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.16/Obsidian-1.4.16-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.16/Obsidian.1.4.16.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.16/obsidian-1.4.16.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "114.0.5735.289",
+      "electron": "25.8.1",
+      "node": "18.15.0",
+      "v8": "11.4.183.29-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.5": {
     "channel": "public",
@@ -2269,7 +2556,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian-1.5.8-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian.1.5.8.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/obsidian-1.5.8.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "120.0.6099.283",
+      "electron": "28.2.3",
+      "node": "18.18.2",
+      "v8": "12.0.267.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.5.9": {
     "channel": "catalyst",
@@ -2299,7 +2593,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/Obsidian-1.5.11-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/Obsidian.1.5.11.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/obsidian-1.5.11.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "120.0.6099.283",
+      "electron": "28.2.3",
+      "node": "18.18.2",
+      "v8": "12.0.267.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.5.12": {
     "channel": "public",
@@ -2311,7 +2612,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/Obsidian-1.5.12-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/Obsidian.1.5.12.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/obsidian-1.5.12.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "120.0.6099.283",
+      "electron": "28.2.3",
+      "node": "18.18.2",
+      "v8": "12.0.267.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.6.0": {
     "channel": "catalyst",
@@ -2341,7 +2649,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/Obsidian-1.6.2-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/Obsidian.1.6.2.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/obsidian-1.6.2.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "120.0.6099.291",
+      "electron": "28.3.3",
+      "node": "18.18.2",
+      "v8": "12.0.267.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.6.3": {
     "channel": "public",
@@ -2353,7 +2668,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/Obsidian-1.6.3-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/Obsidian.1.6.3.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/obsidian-1.6.3.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "120.0.6099.291",
+      "electron": "28.3.3",
+      "node": "18.18.2",
+      "v8": "12.0.267.19-electron.0"
+    },
+    "ecmaScriptVersion": "ES2023"
   },
   "1.6.3-e30": {
     "channel": "public",
@@ -2378,7 +2700,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/Obsidian-1.6.5.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/Obsidian-1.6.5.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/obsidian-1.6.5.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "124.0.6367.243",
+      "electron": "30.1.2",
+      "node": "20.14.0",
+      "v8": "12.4.254.20-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.6.6": {
     "channel": "catalyst",
@@ -2399,7 +2728,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/Obsidian-1.6.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/Obsidian-1.6.7.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/obsidian-1.6.7.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "124.0.6367.243",
+      "electron": "30.1.2",
+      "node": "20.14.0",
+      "v8": "12.4.254.20-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.7.0": {
     "channel": "catalyst",
@@ -2443,7 +2779,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/Obsidian-1.7.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/Obsidian-1.7.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/obsidian-1.7.4.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "126.0.6478.234",
+      "electron": "31.6.0",
+      "node": "20.17.0",
+      "v8": "12.6.228.30-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.7.5": {
     "channel": "public",
@@ -2455,7 +2798,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/Obsidian-1.7.5.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/Obsidian-1.7.5.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/obsidian-1.7.5.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "128.0.6613.186",
+      "electron": "32.2.2",
+      "node": "20.18.0",
+      "v8": "12.8.374.38-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.7.6": {
     "channel": "public",
@@ -2467,7 +2817,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/Obsidian-1.7.6.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/Obsidian-1.7.6.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/obsidian-1.7.6.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "128.0.6613.186",
+      "electron": "32.2.3",
+      "node": "20.18.0",
+      "v8": "12.8.374.38-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.7.7": {
     "channel": "public",
@@ -2479,7 +2836,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/Obsidian-1.7.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/Obsidian-1.7.7.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/obsidian-1.7.7.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "128.0.6613.186",
+      "electron": "32.2.5",
+      "node": "20.18.0",
+      "v8": "12.8.374.38-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.8.0": {
     "channel": "catalyst",
@@ -2518,7 +2882,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/Obsidian-1.8.3.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/Obsidian-1.8.3.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/obsidian-1.8.3.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "130.0.6723.191",
+      "electron": "33.3.2",
+      "node": "20.18.1",
+      "v8": "13.0.245.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.8.4": {
     "channel": "public",
@@ -2530,7 +2901,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/Obsidian-1.8.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/Obsidian-1.8.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/obsidian-1.8.4.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "130.0.6723.191",
+      "electron": "33.3.2",
+      "node": "20.18.1",
+      "v8": "13.0.245.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.8.5": {
     "channel": "catalyst",
@@ -2560,7 +2938,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/Obsidian-1.8.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/Obsidian-1.8.7.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/obsidian-1.8.7.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "130.0.6723.191",
+      "electron": "33.3.2",
+      "node": "20.18.1",
+      "v8": "13.0.245.25-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.8.8": {
     "channel": "catalyst",
@@ -2582,7 +2967,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/Obsidian-1.8.9.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/Obsidian-1.8.9.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/obsidian-1.8.9.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "132.0.6834.210",
+      "electron": "34.3.0",
+      "node": "20.18.3",
+      "v8": "13.2.152.41-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.8.10": {
     "channel": "public+catalyst",
@@ -2705,7 +3097,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/Obsidian-1.9.10.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/Obsidian-1.9.10.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/obsidian-1.9.10.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "138.0.7204.224",
+      "electron": "37.3.0",
+      "node": "22.18.0",
+      "v8": "13.8.258.30-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.9.11": {
     "channel": "catalyst",
@@ -2727,7 +3126,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/Obsidian-1.9.12.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/Obsidian-1.9.12.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/obsidian-1.9.12.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "138.0.7204.235",
+      "electron": "37.3.1",
+      "node": "22.18.0",
+      "v8": "13.8.258.31-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.9.13": {
     "channel": "catalyst",
@@ -2749,7 +3155,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/Obsidian-1.9.14.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/Obsidian-1.9.14.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/obsidian-1.9.14.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "138.0.7204.251",
+      "electron": "37.6.0",
+      "node": "22.19.0",
+      "v8": "13.8.258.32-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.10.0": {
     "channel": "catalyst",
@@ -2881,7 +3294,14 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/Obsidian-1.11.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/Obsidian-1.11.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/obsidian-1.11.4.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "chrome": "142.0.7444.235",
+      "electron": "39.2.7",
+      "node": "22.21.1",
+      "v8": "14.2.231.21-electron.0"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.11.5": {
     "channel": "public+catalyst",
