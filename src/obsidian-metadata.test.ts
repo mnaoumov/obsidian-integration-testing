@@ -45,6 +45,15 @@ describe('getVersionMetadata', () => {
     expect(downloads?.tar).toBeUndefined();
   });
 
+  it('exposes the empirically-collected runtime versions and derived ECMAScript edition', () => {
+    const metadata = getVersionMetadata('1.5.3');
+    expect(metadata?.runtimeVersions?.electron).toBe('25.8.1');
+    expect(metadata?.runtimeVersions?.chrome).toBe('114.0.5735.289');
+    expect(metadata?.runtimeVersions?.node).toBe('18.15.0');
+    expect(metadata?.runtimeVersions?.v8).toBe('11.4.183.29-electron.0');
+    expect(metadata?.ecmaScriptVersion).toBe('ES2023');
+  });
+
   it('returns `undefined` for a version absent from the table', () => {
     expect(getVersionMetadata('999.999.999')).toBeUndefined();
   });

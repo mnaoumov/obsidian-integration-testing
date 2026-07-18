@@ -15,20 +15,12 @@
  * diff, so it doubles as a "is our catalog current?" check.
  */
 
+import type { ObsidianVersionDownloads } from '../src/obsidian-metadata.ts';
+
 import {
-  readFile,
-  writeFile
-} from 'node:fs/promises';
-
-import type {
-  ObsidianVersionDownloads,
-  ObsidianVersionMetadata
-} from '../src/obsidian-metadata.ts';
-
-import { compareVersions } from '../src/obsidian-version.ts';
-
-/** Our repo-root catalog: version → metadata (mutable while merging). */
-type MetadataTable = Record<string, ObsidianVersionMetadata>;
+  readMetadataTable,
+  writeMetadataTable
+} from './helpers/metadata-io.ts';
 
 /** The subset of the upstream `obsidian-versions.json` document we read. */
 interface UpstreamCatalog {
@@ -51,9 +43,7 @@ interface UpstreamVersionEntry {
   readonly version: string;
 }
 
-const METADATA_PATH = 'metadata.json';
 const UPSTREAM_CATALOG_URL = 'https://raw.githubusercontent.com/jesse-r-s-hines/wdio-obsidian-service/HEAD/obsidian-versions.json';
-const JSON_INDENT = 2;
 
 /**
  * Picks only the asset URLs this library downloads (app asar + x64 desktop
@@ -94,7 +84,7 @@ async function fetchUpstreamCatalog(): Promise<UpstreamCatalog> {
 
 async function main(): Promise<void> {
   const upstream = await fetchUpstreamCatalog();
-  const table = JSON.parse(await readFile(METADATA_PATH, 'utf-8')) as MetadataTable;
+  const table = await readMetadataTable();
 
   let enriched = 0;
   let added = 0;
@@ -118,24 +108,9 @@ async function main(): Promise<void> {
     }
   }
 
-  await writeFile(METADATA_PATH, serializeTable(table));
+  await writeMetadataTable(table);
 
-  console.log(`Refreshed ${METADATA_PATH}: enriched ${String(enriched)} existing versions, added ${String(added)} new ones.`);
-}
-
-/**
- * Serializes the catalog to the repo's on-disk format: version keys sorted
- * numerically, two-space indented, trailing newline (matching what the format
- * gate produces, so the output is byte-stable across runs).
- *
- * @param table - The merged catalog.
- * @returns The JSON text to write.
- */
-function serializeTable(table: MetadataTable): string {
-  const sorted = Object.fromEntries(
-    Object.entries(table).sort(([aVersion], [bVersion]) => compareVersions(aVersion, bVersion))
-  );
-  return `${JSON.stringify(sorted, null, JSON_INDENT)}\n`;
+  console.log(`Refreshed metadata.json: enriched ${String(enriched)} existing versions, added ${String(added)} new ones.`);
 }
 
 await main();
