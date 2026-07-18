@@ -52,6 +52,7 @@ export { checkInstallerCompatibility } from './installer-compatibility.ts';
 export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';
 export type {
+  ObsidianRuntimeVersions,
   ObsidianVersionDownloads,
   ObsidianVersionMetadata
 } from './obsidian-metadata.ts';

@@ -539,7 +539,8 @@ command-latency burst vs session establishment).
 
 Repo-root `metadata.json` is a per-Obsidian-desktop-version data table (one `"x.y.z"` key per release):
 `channel`, optional `available`, `changelogUrl`, per-version `downloads` (baked asset URLs — see below),
-and installer/Electron compatibility knobs. It is a
+per-version `runtimeVersions` + `ecmaScriptVersion` (empirically-collected shell runtime — see below), and
+installer/Electron compatibility knobs. It is a
 **data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is
 injected as the `OBSIDIAN_METADATA` global — esbuild's `define` inlines it into the build (the built
 library stays self-contained, no runtime file read), the unit-test project uses Vitest's `define`, and the
@@ -559,7 +560,29 @@ picks the platform-correct URL (pure, unit-tested). The catalog is refreshed by
 `scripts/refresh-metadata.ts` (`npm run refresh:metadata`): it downloads the upstream
 `obsidian-versions.json` (`jesse-r-s-hines/wdio-obsidian-service`) and **additively** merges its download
 URLs in — never overwriting our own empirically-measured `channel`/`changelogUrl*`/`min*` fields — then
-writes the table back byte-stably (rerun ⇒ no diff). Commit the result.
+writes the table back byte-stably (rerun ⇒ no diff). Commit the result. The byte-stable read/write
+(`readMetadataTable` / `writeMetadataTable` / `serializeTable`, sorted via `compareVersions`, 2-space,
+trailing newline) lives in `scripts/helpers/metadata-io.ts`, shared by both catalog scripts so their
+output stays byte-identical.
+
+**`runtimeVersions` + `ecmaScriptVersion` — empirically-collected shell runtime (per installer version).**
+Each version carries an optional `runtimeVersions` object — the concrete `{ node, chrome, v8, electron }`
+its Electron shell ships — read from a real `process.versions` by booting that version's own installer,
+plus a derived `ecmaScriptVersion` string (e.g. `'ES2022'`). Unlike `minRecommendedElectronVersion` (the
+app's hardcoded *minimum*, not the bundled version), these are the *actual* bundled versions, so a consumer
+pinning an installer knows offline which ES level a serialized `evalInObsidian` closure may safely use.
+Collected by `scripts/collect-runtime-versions.ts` (`npm run collect:runtime-versions`): opt-in and heavy
+(each version is a multi-hundred-MB installer download + boot over CDP via `connectToCdp`), so it is a
+manual script, run incrementally (`--only` / `--from` / `--to` / `--force`) and **additive** (never
+overwrites `channel` / `downloads` / `min*`; writes after each version so a long run is resumable). It boots
+each version pinning both the asar and the installer to that version (matched pair → clean boot), reads
+`JSON.stringify(process.versions)`, and derives the ES edition from the Chromium major via the pure,
+unit-tested `src/ecmascript-version.ts` `deriveEcmaScriptVersion` (a curated Chromium-major → ES-year
+breakpoint table). Electron bundles the same Node/V8/Chromium on every OS for a given Electron version, so a
+single-platform run is authoritative for all platforms — no per-OS matrix. Versions that dead-boot (an
+installer too old to render) are logged and skipped. It runs under jiti, which lacks the `OBSIDIAN_METADATA`
+`define` global, so the script shims that global from `metadata.json` (like `vitest-metadata-setup.ts`)
+before dynamically importing `connectToCdp`.
 
 Two installer-floor fields:
 

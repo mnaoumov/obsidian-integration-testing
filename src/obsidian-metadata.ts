@@ -18,6 +18,27 @@
  */
 
 /**
+ * The concrete JS runtime versions an installer's Electron shell ships, read
+ * empirically from `process.versions` by booting that installer over CDP (see
+ * `scripts/collect-runtime-versions.ts`). Absent for versions not yet collected
+ * (or that could not be booted). Electron bundles the same Node/V8/Chromium on
+ * every OS for a given Electron version, so these are platform-invariant.
+ */
+export interface ObsidianRuntimeVersions {
+  /** The bundled Chromium version, e.g. `'114.0.5735.289'`. */
+  readonly chrome?: string;
+
+  /** The bundled Electron version, e.g. `'25.8.1'`. */
+  readonly electron?: string;
+
+  /** The bundled Node.js version, e.g. `'18.15.0'`. */
+  readonly node?: string;
+
+  /** The bundled V8 version, e.g. `'11.4.183.23'`. */
+  readonly v8?: string;
+}
+
+/**
  * The pre-resolved asset download URLs for a version, baked into `metadata.json`
  * from the upstream `obsidian-versions.json` catalog (see the `metadata.json`
  * section in `CLAUDE.md`).
@@ -68,6 +89,16 @@ export interface ObsidianVersionMetadata {
   readonly downloads?: ObsidianVersionDownloads;
 
   /**
+   * The highest ECMAScript edition (e.g. `'ES2022'`) fully supported by this
+   * version's bundled Chromium, derived from {@link ObsidianRuntimeVersions.chrome}
+   * (see `deriveEcmaScriptVersion`). Baked alongside {@link runtimeVersions}, so a
+   * consumer pinning this installer knows offline which ES level a serialized
+   * `evalInObsidian` closure may safely use. Absent when the version has no
+   * collected runtime versions.
+   */
+  readonly ecmaScriptVersion?: string;
+
+  /**
    * The app's hardcoded required-minimum Electron version (e.g. `'28.2.3'`). An
    * Electron version, not an installer version — comparing against it needs the
    * installer's bundled Electron, which is not derivable offline.
@@ -86,6 +117,13 @@ export interface ObsidianVersionMetadata {
    * renderer dead-boots.
    */
   readonly minRunnableInstallerVersion?: string;
+
+  /**
+   * The concrete JS runtime versions this version's Electron shell ships, read
+   * empirically from `process.versions`. Absent until collected (see
+   * {@link ObsidianRuntimeVersions} and `scripts/collect-runtime-versions.ts`).
+   */
+  readonly runtimeVersions?: ObsidianRuntimeVersions;
 }
 
 /**

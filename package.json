@@ -110,6 +110,7 @@
     "build:compile:typescript": "jiti scripts/build-compile-typescript.ts",
     "build:lib": "jiti scripts/build-lib.ts",
     "build:types": "jiti scripts/build-types.ts",
+    "collect:runtime-versions": "jiti scripts/collect-runtime-versions.ts",
     "commit": "jiti scripts/commit.ts",
     "format": "jiti scripts/format.ts",
     "format:check": "jiti scripts/format-check.ts",
