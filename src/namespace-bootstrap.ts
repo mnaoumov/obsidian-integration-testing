@@ -182,6 +182,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     isEnabled?: () => boolean;
     loadPlugin?: (id: string) => Promise<void>;
     manifests?: unknown;
+    uninstallPlugin?: (id: string) => Promise<void>;
   }
 
   interface SetLocalStorageItemParams {
@@ -387,7 +388,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
 
       await this.app.plugins.loadPlugin(tempModuleName);
-      await this.app.plugins.uninstallPlugin(tempModuleName);
+      // `uninstallPlugin` arrived after the plugin API itself, so it is absent on
+      // 0.9.7 - the FIRST version to expose `loadPlugin`/`manifests` (0.9.6 and below
+      // Have neither, and return `undefined` above). The module is already captured by
+      // The plugin's `main.js` at this point, so only uninstall when the method exists;
+      // On 0.9.7 the temp plugin lingers harmlessly in the ephemeral owned vault.
+      // eslint-disable-next-line no-restricted-syntax -- uninstallPlugin is runtime-optional on old versions.
+      const pluginsForCleanup = this.app.plugins as unknown as PluginsLike;
+      if (pluginsForCleanup.uninstallPlugin) {
+        await this.app.plugins.uninstallPlugin(tempModuleName);
+      }
 
       if (this.obsidianModule) {
         return this.obsidianModule;
