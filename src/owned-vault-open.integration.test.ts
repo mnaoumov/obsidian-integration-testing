@@ -18,13 +18,13 @@
  *    property fallback).
  * 4. **Closure path** — 0.6.4 predates the community-plugin API (`plugins.isEnabled`
  *    / the `manifests` registry), so `evalWrapper` must skip plugin-enable and
- *    resolve `obsidianModule` to `undefined` while still running app-only closures.
+ *    resolve `obsidianModule` to `null` while still running app-only closures.
  * 5. **Off-screen hiding** — 0.6.4 (Electron 8) has no `window.electron`, but the
  *    built-in `require('electron').remote` still moves the window off-screen, which
  *    is also what stops the boot-time CDP hammering that would otherwise wedge
  *    Electron-10-era boots.
  *
- * `obsidianModule` is `undefined` on 0.6.4 (a genuine platform limit — no plugin
+ * `obsidianModule` is `null` on 0.6.4 (a genuine platform limit — no plugin
  * API, and `require('obsidian')` fails there), so the closure uses only `app`.
  *
  * Pinning `obsidianInstallerVersion` downloads/extracts a multi-hundred-MB shell

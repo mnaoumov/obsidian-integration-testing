@@ -182,6 +182,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     isEnabled?: () => boolean;
     loadPlugin?: (id: string) => Promise<void>;
     manifests?: unknown;
+    uninstallPlugin?: (id: string) => Promise<void>;
   }
 
   interface SetLocalStorageItemParams {
@@ -195,6 +196,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // Unnecessary condition.
   interface VaultLike {
     configDir?: string;
+  }
+
+  // `window.app` / `app.workspace` are declared always-present, but are transiently
+  // Undefined during boot and after an owned-window reload. Probe through these
+  // Optional-member views so the readiness check can guard them without a false
+  // `no-unnecessary-condition`.
+  interface WorkspaceLike {
+    layoutReady?: boolean;
+  }
+
+  interface AppLike {
+    workspace?: WorkspaceLike;
   }
 
   type CurrentWebContents = ReturnType<Window['electron']['remote']['getCurrentWebContents']>;
@@ -256,6 +269,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const holder = window as unknown as Partial<IntegrationTestingHolder>;
   const existingContexts = holder.__obsidianIntegrationTesting?.contexts ?? {};
   const existingObsidianModule = holder.__obsidianIntegrationTesting?.obsidianModule;
+  // Warn at most once per bootstrap that `obsidianModule` is `null` on this version.
+  let hasWarnedMissingObsidianModule = false;
 
   const ns: IntegrationTestingNamespace = {
     get app() {
@@ -331,13 +346,17 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
       // The temp-plugin trick below resolves `require('obsidian')`, which only
       // Works inside a plugin-load context. It needs the community-plugin registry
-      // (`loadPlugin` + `manifests`); versions that lack it entirely (e.g. 0.6.x has
-      // No `manifests`) cannot run it, so return `undefined` — app-only closures
-      // Still run.
+      // (`loadPlugin` + `manifests`), which FIRST appears in Obsidian 0.9.7; the
+      // 0.6.4-0.9.6 band has no registry and cannot run it, so return `null` (not
+      // `undefined`) - app-only closures (`fn({ app })`) still run.
       // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
       const plugins = this.app.plugins as unknown as PluginsLike;
       if (!plugins.loadPlugin || !plugins.manifests) {
-        return undefined;
+        if (!hasWarnedMissingObsidianModule) {
+          hasWarnedMissingObsidianModule = true;
+          console.warn('[obsidian-integration-testing] `obsidianModule` is `null`: this Obsidian version predates the community-plugin API (added in 0.9.7), so the `obsidian` module cannot be resolved. App-only closures (`fn({ app })`) still work.');
+        }
+        return null;
       }
 
       const SLICE_START = 2;
@@ -375,7 +394,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
 
       await this.app.plugins.loadPlugin(tempModuleName);
-      await this.app.plugins.uninstallPlugin(tempModuleName);
+      // `uninstallPlugin` arrived after the plugin API itself, so it is absent on
+      // 0.9.7 - the FIRST version to expose `loadPlugin`/`manifests` (0.9.6 and below
+      // Have neither, and return `undefined` above). The module is already captured by
+      // The plugin's `main.js` at this point, so only uninstall when the method exists;
+      // On 0.9.7 the temp plugin lingers harmlessly in the ephemeral owned vault.
+      // eslint-disable-next-line no-restricted-syntax -- uninstallPlugin is runtime-optional on old versions.
+      const pluginsForCleanup = this.app.plugins as unknown as PluginsLike;
+      if (pluginsForCleanup.uninstallPlugin) {
+        await this.app.plugins.uninstallPlugin(tempModuleName);
+      }
 
       if (this.obsidianModule) {
         return this.obsidianModule;
@@ -394,12 +422,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     obsidianModule: existingObsidianModule,
 
     async pollVaultBasePath(this: IntegrationTestingNamespace): Promise<string> {
-      // Old Obsidian versions (e.g. 0.9.x) predate `Workspace.onLayoutReady`.
-      // `ensureLayoutReady` calls it unconditionally, so it throws there — but those
-      // Versions already expose the `layoutReady` flag, which is `true` by the time
-      // An owned vault window is up. Only wait when layout is not yet ready, so the
-      // Missing method is never invoked on old versions.
-      if (!this.app.workspace.layoutReady) {
+      // `window.app`, its `workspace`, and layout can all be transiently
+      // Unavailable during boot or right after an owned-window reload, and old
+      // Obsidian predates `Workspace.onLayoutReady`. This runs inside the transport's
+      // Readiness poll, which retries on throw, so check `window.app` FIRST and bail
+      // Cleanly until it, its workspace, and layout are all ready — never dereference
+      // An undefined `window.app`.
+      // eslint-disable-next-line no-restricted-syntax -- window.app/workspace are runtime-optional during boot.
+      const app = this.app as unknown as AppLike | undefined;
+      if (!app?.workspace) {
+        throw new Error('Owned vault is not ready yet (window.app/workspace not initialized).');
+      }
+      // Old Obsidian predates `Workspace.onLayoutReady` but has `layoutReady === true`
+      // By the time a window is up; only wait via `ensureLayoutReady` when it is not
+      // Yet ready (modern versions early in boot), so the missing method is never hit.
+      if (!app.workspace.layoutReady) {
         await this.ensureLayoutReady();
       }
 
