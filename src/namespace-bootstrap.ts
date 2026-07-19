@@ -189,6 +189,14 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly value: string;
   }
 
+  // `Vault.configDir` is declared always-present by `obsidian-typings`, but old
+  // Obsidian versions (e.g. 0.9.10) leave it undefined at runtime. Probe through
+  // This optional-member view so a `?? '.obsidian'` default is not flagged as an
+  // Unnecessary condition.
+  interface VaultLike {
+    configDir?: string;
+  }
+
   type CurrentWebContents = ReturnType<Window['electron']['remote']['getCurrentWebContents']>;
 
   // The Electron modifier-key names `sendInputEvent` accepts (e.g. 'meta', 'control', 'shift', 'alt').
@@ -321,11 +329,11 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         return this.obsidianModule;
       }
 
-      // The temp-plugin trick below needs the community-plugin API (`loadPlugin`
-      // Plus the `manifests` registry). Old Obsidian versions (e.g. 0.6.x) only
-      // Partially expose it — `loadPlugin` exists but `manifests` does not — and
-      // `require('obsidian')` also fails there, so there is no way to resolve the
-      // Module; return `undefined` (best-effort) so app-only closures still run.
+      // The temp-plugin trick below resolves `require('obsidian')`, which only
+      // Works inside a plugin-load context. It needs the community-plugin registry
+      // (`loadPlugin` + `manifests`); versions that lack it entirely (e.g. 0.6.x has
+      // No `manifests`) cannot run it, so return `undefined` — app-only closures
+      // Still run.
       // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
       const plugins = this.app.plugins as unknown as PluginsLike;
       if (!plugins.loadPlugin || !plugins.manifests) {
@@ -335,32 +343,39 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const SLICE_START = 2;
       const randomSuffix = String(Math.random()).slice(SLICE_START);
       const tempModuleName = `get-obsidian-module-${randomSuffix}`;
-      try {
-        const dir = `${this.app.vault.configDir}/plugins/${tempModuleName}`;
-        this.app.plugins.manifests[tempModuleName] = {
-          author: '',
-          description: '',
-          dir,
-          id: tempModuleName,
-          isDesktopOnly: false,
-          minAppVersion: '',
-          name: tempModuleName,
-          version: ''
-        };
-        await this.app.vault.adapter.mkdir(dir);
-
-        const pluginFnBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
-        await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
-
-        await this.app.plugins.loadPlugin(tempModuleName);
-        await this.app.plugins.uninstallPlugin(tempModuleName);
-      } catch {
-        // Old Obsidian versions with a PARTIAL community-plugin API (e.g. 0.9.10,
-        // Which has `manifests`/`loadPlugin` but an undefined `vault.configDir`, so
-        // The temp-plugin directory path cannot be built) cannot run the trick;
-        // Degrade to `undefined` so app-only closures still run.
-        return undefined;
+      // Old versions (e.g. 0.9.10) leave `vault.configDir` undefined; fall back to
+      // Obsidian's default config dir so the temp plugin still gets a valid path,
+      // Loads, and its `require('obsidian')` resolves the module.
+      // eslint-disable-next-line no-restricted-syntax -- configDir is runtime-optional on old versions.
+      const configDir = (this.app.vault as unknown as VaultLike).configDir ?? '.obsidian';
+      const pluginsDir = `${configDir}/plugins`;
+      const dir = `${pluginsDir}/${tempModuleName}`;
+      this.app.plugins.manifests[tempModuleName] = {
+        author: '',
+        description: '',
+        dir,
+        id: tempModuleName,
+        isDesktopOnly: false,
+        minAppVersion: '',
+        name: tempModuleName,
+        version: ''
+      };
+      // `adapter.mkdir` is not recursive, and an old version on a fresh vault may not
+      // Have the config/plugins dirs yet — create the chain so `loadPlugin` finds the
+      // Temp plugin at `<configDir>/plugins/<id>`.
+      if (!(await this.app.vault.adapter.exists(configDir))) {
+        await this.app.vault.adapter.mkdir(configDir);
       }
+      if (!(await this.app.vault.adapter.exists(pluginsDir))) {
+        await this.app.vault.adapter.mkdir(pluginsDir);
+      }
+      await this.app.vault.adapter.mkdir(dir);
+
+      const pluginFnBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
+      await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
+
+      await this.app.plugins.loadPlugin(tempModuleName);
+      await this.app.plugins.uninstallPlugin(tempModuleName);
 
       if (this.obsidianModule) {
         return this.obsidianModule;

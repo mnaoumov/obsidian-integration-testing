@@ -845,11 +845,11 @@ back (rather than dead-boots) L18 never fires; L25 is what catches it.
 
 The owned-instance path is usable end-to-end (vault auto-opens, readiness completes, `evalInObsidian`
 runs) on **every installer from 0.6.4 up** — the oldest the harness supports. Getting there took a stack of
-old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-17/18). The remaining hard
-limit is **`obsidianModule`**: it is `undefined` on the pre-community-plugin-API band (~0.6.x–0.9.x) because
-those versions have no `plugins.manifests` registry and `require('obsidian')` fails there — a genuine
-platform limit, not a harness gap. App-only closures (`fn({ app })`) work on the whole range;
-`obsidianModule` works from ~0.10–0.11 onward.
+old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-17/18). App-only closures
+(`fn({ app })`) work on the whole range. **`obsidianModule`** resolves wherever the community-plugin registry
+exists (`plugins.manifests` + `loadPlugin`) — confirmed **down to 0.9.10** (its undefined `configDir` is
+worked around, see L26). It is `undefined` only on versions with no registry at all (the earliest band, e.g.
+0.6.x, which predates community plugins) — a genuine platform limit there, not a harness gap.
 
 The owned instance opens its vault by pre-seeding `obsidian.json` into the temp `--user-data-dir` (no CLI
 arg exists for it). The auto-open marker **changed across Obsidian's history**, and the harness had baked in
@@ -893,10 +893,11 @@ The old-version fixes, each CDP-diagnosed:
   absent or partial on the pre-plugin-API band (0.6.x–0.9.x: `plugins` exists but has no `isEnabled`, and
   `loadPlugin` exists without a `manifests` registry). Both now probe a local `PluginsLike` optional-member
   view (casting past `obsidian-typings`' always-present declarations avoids a false `no-unnecessary-condition`)
-  and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `undefined` when
-  `loadPlugin`/`manifests` are missing so **app-only closures still run**. Hence `obsidianModule` is
-  `undefined` on ~0.6.x–0.9.x (no resolution path — `require('obsidian')` fails there too) and `object` from
-  ~0.10–0.11 onward.
+  and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `undefined` only
+  when the registry is absent entirely (`loadPlugin`/`manifests` missing — e.g. 0.6.x, which predates
+  community plugins, so there is genuinely no way to resolve the module; `require('obsidian')` fails outside a
+  plugin-load context too). Where the registry exists, it MAKES the trick work (next bullet), so
+  `obsidianModule` resolves **down to 0.9.10**.
 - **Off-screen hiding — `require('electron').remote` fallback (fixes an Electron-10 boot wedge).**
   `moveOwnedWindowOffscreen` polled `window.electron.remote` every 250 ms for 20 s; old versions have no
   `window.electron`, so it hammered the renderer with CDP round-trips through the **whole boot**, which on
@@ -914,11 +915,16 @@ The old-version fixes, each CDP-diagnosed:
   builds intermittently boot with `window.app` present but the workspace never initializing, so a fresh
   instance is an independent chance. Deterministic failures (dead boot, silent asar fallback) are re-thrown
   at once, never retried.
-- **`getObsidianModule` degrades on a PARTIAL plugin API.** Some old versions expose `manifests`/`loadPlugin`
-  but not everything the temp-plugin trick needs (e.g. **0.9.10** has an undefined `vault.configDir`, so the
-  temp-plugin directory path cannot be built → `mkdir` `ENOENT`). The trick is wrapped in try/catch and returns
-  `undefined` on any such failure, so app-only closures still run. `obsidianModule` is therefore `undefined`
-  below ~0.9.20 (no or partial plugin API) and an object from **0.9.20** onward.
+- **`getObsidianModule` MAKES the temp-plugin trick work on a partial plugin API (does not give up).** The
+  trick resolves `require('obsidian')` — which only works inside a plugin-load context — by writing a temp
+  plugin at `<vault.configDir>/plugins/<id>` and `loadPlugin`-ing it. Some old versions (e.g. **0.9.10**) have
+  `manifests`/`loadPlugin` but leave `vault.configDir` undefined and, on a fresh vault, lack the
+  `.obsidian/plugins` dir — and `adapter.mkdir` is not recursive, so the original `mkdir` `ENOENT`'d. Fix:
+  default `configDir` to `.obsidian` (via a `VaultLike` optional-member cast) AND create the config/plugins
+  dir chain (each guarded by `adapter.exists`) before writing the temp plugin, so it loads and
+  `require('obsidian')` resolves. CDP-confirmed: **0.9.10 / 0.9.11 now return an `obsidianModule` object**
+  (previously `undefined`). The earlier "wrap in try/catch → return `undefined`" was a give-up hack and was
+  replaced. `undefined` remains only for the no-registry band (0.6.x).
 - **Test** — pure unit test (`owned-vault-seed.test.ts`) for the seed shape; opt-in heavy integration test
   `src/owned-vault-open.integration.test.ts` (`OBSIDIAN_TEST_OLD_VAULT_OPEN=1`) pins **0.6.4** (the oldest
   supported installer), which exercises the whole old-version stack at once — auto-open (`last_open`), the
