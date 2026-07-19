@@ -54,6 +54,17 @@ describe('getVersionMetadata', () => {
     expect(metadata?.ecmaScriptVersion).toBe('ES2023');
   });
 
+  it('captures the entire `process.versions`, not just the four well-known keys', () => {
+    const runtimeVersions = getVersionMetadata('1.5.3')?.runtimeVersions;
+    // Guard against a regression to picking only chrome/electron/node/v8.
+    // Every key the Electron build exposes must be captured.
+    expect(runtimeVersions?.['uv']).toBe('1.44.2');
+    expect(runtimeVersions?.['openssl']).toBe('1.1.1');
+    expect(runtimeVersions?.['zlib']).toBe('1.2.13');
+    expect(runtimeVersions?.['icu']).toBe('72.1');
+    expect(Object.keys(runtimeVersions ?? {}).length).toBeGreaterThan(4);
+  });
+
   it('returns `undefined` for a version absent from the table', () => {
     expect(getVersionMetadata('999.999.999')).toBeUndefined();
   });

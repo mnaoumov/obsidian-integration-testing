@@ -18,24 +18,35 @@
  */
 
 /**
- * The concrete JS runtime versions an installer's Electron shell ships, read
- * empirically from `process.versions` by booting that installer over CDP (see
- * `scripts/collect-runtime-versions.ts`). Absent for versions not yet collected
- * (or that could not be booted). Electron bundles the same Node/V8/Chromium on
- * every OS for a given Electron version, so these are platform-invariant.
+ * The concrete JS runtime versions an installer's Electron shell ships — the
+ * **entire** `process.versions` object, read empirically by booting that
+ * installer over CDP (see `scripts/collect-runtime-versions.ts`). Absent for
+ * versions not yet collected (or that could not be booted). Electron bundles the
+ * same runtime on every OS for a given Electron version, so these are
+ * platform-invariant.
+ *
+ * The index signature carries every key `process.versions` exposes for that
+ * Electron build — beyond the four well-known ones below, that typically includes
+ * `ares`, `brotli`, `cldr`, `icu`, `llhttp`, `modules`, `napi`, `nghttp2`,
+ * `openssl`, `tz`, `unicode`, `uv`, `zlib` (and, on newer Electron, `ada`,
+ * `simdjson`, …). The exact set varies by Electron version, which is why it is
+ * captured wholesale rather than as a fixed field list.
  */
 export interface ObsidianRuntimeVersions {
   /** The bundled Chromium version, e.g. `'114.0.5735.289'`. */
-  readonly chrome?: string;
+  readonly chrome: string;
 
   /** The bundled Electron version, e.g. `'25.8.1'`. */
-  readonly electron?: string;
+  readonly electron: string;
 
   /** The bundled Node.js version, e.g. `'18.15.0'`. */
-  readonly node?: string;
+  readonly node: string;
+
+  /** Every `process.versions` key the Electron build exposes. */
+  readonly [key: string]: string;
 
   /** The bundled V8 version, e.g. `'11.4.183.23'`. */
-  readonly v8?: string;
+  readonly v8: string;
 }
 
 /**

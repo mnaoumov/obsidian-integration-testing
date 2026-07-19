@@ -566,8 +566,10 @@ trailing newline) lives in `scripts/helpers/metadata-io.ts`, shared by both cata
 output stays byte-identical.
 
 **`runtimeVersions` + `ecmaScriptVersion` — empirically-collected shell runtime (per installer version).**
-Each version carries an optional `runtimeVersions` object — the concrete `{ node, chrome, v8, electron }`
-its Electron shell ships — read from a real `process.versions` by booting that version's own installer,
+Each version carries an optional `runtimeVersions` object — the **entire** `process.versions` its Electron
+shell ships (the four well-known `node` / `chrome` / `v8` / `electron` plus every other key that build
+exposes: `uv` / `zlib` / `brotli` / `openssl` / `icu` / `modules` / `napi` / `llhttp` / … — the exact set
+varies by Electron version) — read from a real `process.versions` by booting that version's own installer,
 plus a derived `ecmaScriptVersion` string (e.g. `'ES2022'`). Unlike `minRecommendedElectronVersion` (the
 app's hardcoded *minimum*, not the bundled version), these are the *actual* bundled versions, so a consumer
 pinning an installer knows offline which ES level a serialized `evalInObsidian` closure may safely use.

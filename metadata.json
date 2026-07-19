@@ -105,10 +105,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.4/Obsidian.0.6.4.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -122,10 +134,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.5/Obsidian.0.6.5.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -147,10 +171,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.7/Obsidian.0.6.7.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -188,10 +224,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.3/Obsidian.0.7.3.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -205,10 +253,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.4/Obsidian.0.7.4.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -230,10 +290,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.6/Obsidian.0.7.6.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -247,10 +319,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.0/Obsidian.0.8.0.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -264,10 +348,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.1/Obsidian.0.8.1.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -281,10 +377,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.2/Obsidian.0.8.2.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -306,10 +414,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.4/Obsidian.0.8.4.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -355,10 +475,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.9/Obsidian.0.8.9.exe"
     },
     "runtimeVersions": {
-      "chrome": "80.0.3987.165",
-      "electron": "8.2.5",
       "node": "12.13.0",
-      "v8": "8.0.426.27-electron.0"
+      "v8": "8.0.426.27-electron.0",
+      "uv": "1.32.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.15.0",
+      "modules": "76",
+      "nghttp2": "1.39.2",
+      "napi": "5",
+      "llhttp": "1.1.4",
+      "http_parser": "2.8.0",
+      "openssl": "1.1.0",
+      "icu": "65.1",
+      "unicode": "12.1",
+      "electron": "8.2.5",
+      "chrome": "80.0.3987.165"
     },
     "ecmaScriptVersion": "ES2020"
   },
@@ -388,10 +520,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.12/Obsidian.0.8.12.exe"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -413,10 +557,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.14/Obsidian.0.8.14.exe"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -430,10 +586,22 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.15/Obsidian.0.8.15.exe"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -456,10 +624,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.1/obsidian-0.9.1.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -474,10 +654,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.2/obsidian-0.9.2.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -492,10 +684,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.3/obsidian-0.9.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -510,10 +714,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.4/obsidian-0.9.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -536,10 +752,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.6/obsidian-0.9.6.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.93",
-      "electron": "10.1.1",
       "node": "12.16.3",
-      "v8": "8.5.210.20-electron.0"
+      "v8": "8.5.210.20-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.1",
+      "chrome": "85.0.4183.93"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -578,10 +806,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.10/obsidian-0.9.10.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.121",
-      "electron": "10.1.5",
       "node": "12.16.3",
-      "v8": "8.5.210.26-electron.0"
+      "v8": "8.5.210.26-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.5",
+      "chrome": "85.0.4183.121"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -596,10 +836,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.11/obsidian-0.9.11.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.121",
-      "electron": "10.1.5",
       "node": "12.16.3",
-      "v8": "8.5.210.26-electron.0"
+      "v8": "8.5.210.26-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.5",
+      "chrome": "85.0.4183.121"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -638,10 +890,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.15/obsidian-0.9.15.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "85.0.4183.121",
-      "electron": "10.1.5",
       "node": "12.16.3",
-      "v8": "8.5.210.26-electron.0"
+      "v8": "8.5.210.26-electron.0",
+      "uv": "1.34.2",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "82",
+      "nghttp2": "1.41.0",
+      "napi": "5",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.0",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "10.1.5",
+      "chrome": "85.0.4183.121"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -664,10 +928,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.17/obsidian-0.9.17.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.67",
-      "electron": "11.0.3",
       "node": "12.18.3",
-      "v8": "8.7.220.25-electron.0"
+      "v8": "8.7.220.25-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.0.3",
+      "chrome": "87.0.4280.67"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -698,10 +974,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.20/obsidian-0.9.20.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.67",
-      "electron": "11.0.3",
       "node": "12.18.3",
-      "v8": "8.7.220.25-electron.0"
+      "v8": "8.7.220.25-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.0.3",
+      "chrome": "87.0.4280.67"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -724,10 +1012,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.22/obsidian-0.9.22.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.88",
-      "electron": "11.1.0",
       "node": "12.18.3",
-      "v8": "8.7.220.29-electron.0"
+      "v8": "8.7.220.29-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.1.0",
+      "chrome": "87.0.4280.88"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -750,10 +1050,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.1/obsidian-0.10.1.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.88",
-      "electron": "11.1.0",
       "node": "12.18.3",
-      "v8": "8.7.220.29-electron.0"
+      "v8": "8.7.220.29-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.1.0",
+      "chrome": "87.0.4280.88"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -800,10 +1112,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.6/obsidian-0.10.6.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.88",
-      "electron": "11.1.0",
       "node": "12.18.3",
-      "v8": "8.7.220.29-electron.0"
+      "v8": "8.7.220.29-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.1.0",
+      "chrome": "87.0.4280.88"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -818,10 +1142,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.7/obsidian-0.10.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.88",
-      "electron": "11.1.0",
       "node": "12.18.3",
-      "v8": "8.7.220.29-electron.0"
+      "v8": "8.7.220.29-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.1.0",
+      "chrome": "87.0.4280.88"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -836,10 +1172,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.8/obsidian-0.10.8.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.88",
-      "electron": "11.1.0",
       "node": "12.18.3",
-      "v8": "8.7.220.29-electron.0"
+      "v8": "8.7.220.29-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.1.0",
+      "chrome": "87.0.4280.88"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -854,10 +1202,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.9/obsidian-0.10.9.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.88",
-      "electron": "11.1.0",
       "node": "12.18.3",
-      "v8": "8.7.220.29-electron.0"
+      "v8": "8.7.220.29-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.1.0",
+      "chrome": "87.0.4280.88"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -880,10 +1240,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.11/obsidian-0.10.11.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.2.1",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.2.1",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -906,10 +1278,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.13/obsidian-0.10.13.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.2.1",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.2.1",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -924,10 +1308,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.0/obsidian-0.11.0.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.2.3",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.2.3",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -958,10 +1354,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.3/obsidian-0.11.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.3.0",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.3.0",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -984,10 +1392,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.5/obsidian-0.11.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.3.0",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.3.0",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1026,10 +1446,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.9/obsidian-0.11.9.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.3.0",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.3.0",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1068,10 +1500,22 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.13/obsidian-0.11.13.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "87.0.4280.141",
-      "electron": "11.3.0",
       "node": "12.18.3",
-      "v8": "8.7.220.31-electron.0"
+      "v8": "8.7.220.31-electron.0",
+      "uv": "1.38.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.7",
+      "ares": "1.16.0",
+      "modules": "85",
+      "nghttp2": "1.41.0",
+      "napi": "6",
+      "llhttp": "2.0.4",
+      "http_parser": "2.9.3",
+      "openssl": "1.1.1",
+      "icu": "67.1",
+      "unicode": "13.0",
+      "electron": "11.3.0",
+      "chrome": "87.0.4280.141"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1110,10 +1554,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.3/obsidian-0.12.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "89.0.4389.128",
-      "electron": "12.0.6",
       "node": "14.16.0",
-      "v8": "8.9.255.25-electron.0"
+      "v8": "8.9.255.25-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "87",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "12.0.6",
+      "chrome": "89.0.4389.128"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1128,10 +1583,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.4/obsidian-0.12.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "89.0.4389.128",
-      "electron": "12.0.6",
       "node": "14.16.0",
-      "v8": "8.9.255.25-electron.0"
+      "v8": "8.9.255.25-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "87",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "12.0.6",
+      "chrome": "89.0.4389.128"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1146,10 +1612,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.5/obsidian-0.12.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "89.0.4389.128",
-      "electron": "12.0.11",
       "node": "14.16.0",
-      "v8": "8.9.255.25-electron.0"
+      "v8": "8.9.255.25-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "87",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "12.0.11",
+      "chrome": "89.0.4389.128"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1196,10 +1673,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.10/obsidian-0.12.10.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "89.0.4389.128",
-      "electron": "12.0.14",
       "node": "14.16.0",
-      "v8": "8.9.255.25-electron.0"
+      "v8": "8.9.255.25-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "87",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "12.0.14",
+      "chrome": "89.0.4389.128"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1222,10 +1710,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.12/obsidian-0.12.12.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "89.0.4389.128",
-      "electron": "12.0.14",
       "node": "14.16.0",
-      "v8": "8.9.255.25-electron.0"
+      "v8": "8.9.255.25-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "87",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "12.0.14",
+      "chrome": "89.0.4389.128"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1256,10 +1755,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.15/obsidian-0.12.15.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "89.0.4389.128",
-      "electron": "12.0.18",
       "node": "14.16.0",
-      "v8": "8.9.255.25-electron.0"
+      "v8": "8.9.255.25-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "87",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "12.0.18",
+      "chrome": "89.0.4389.128"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1294,10 +1804,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.19/obsidian-0.12.19.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "91.0.4472.164",
-      "electron": "13.5.2",
       "node": "14.16.0",
-      "v8": "9.1.269.39-electron.0"
+      "v8": "9.1.269.39-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "89",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "13.5.2",
+      "chrome": "91.0.4472.164"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1433,10 +1954,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.14/obsidian-0.13.14.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "91.0.4472.164",
-      "electron": "13.6.2",
       "node": "14.16.0",
-      "v8": "9.1.269.39-electron.0"
+      "v8": "9.1.269.39-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "89",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "13.6.2",
+      "chrome": "91.0.4472.164"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1488,10 +2020,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.19/obsidian-0.13.19.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "91.0.4472.164",
-      "electron": "13.6.2",
       "node": "14.16.0",
-      "v8": "9.1.269.39-electron.0"
+      "v8": "9.1.269.39-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "89",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "13.6.2",
+      "chrome": "91.0.4472.164"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1534,10 +2077,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.23/obsidian-0.13.23.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "91.0.4472.164",
-      "electron": "13.6.2",
       "node": "14.16.0",
-      "v8": "9.1.269.39-electron.0"
+      "v8": "9.1.269.39-electron.0",
+      "uv": "1.40.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.16.1",
+      "modules": "89",
+      "nghttp2": "1.41.0",
+      "napi": "7",
+      "llhttp": "2.1.3",
+      "openssl": "1.1.1",
+      "icu": "68.1",
+      "unicode": "13.0",
+      "electron": "13.6.2",
+      "chrome": "91.0.4472.164"
     },
     "ecmaScriptVersion": "ES2021"
   },
@@ -1553,10 +2107,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.24/obsidian-0.13.24.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "96.0.4664.110",
-      "electron": "16.0.8",
       "node": "16.9.1",
-      "v8": "9.6.180.21-electron.0"
+      "v8": "9.6.180.21-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.17.2",
+      "modules": "99",
+      "nghttp2": "1.42.0",
+      "napi": "8",
+      "llhttp": "6.0.2",
+      "openssl": "1.1.1",
+      "icu": "69.1",
+      "unicode": "13.0",
+      "electron": "16.0.8",
+      "chrome": "96.0.4664.110"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1617,10 +2182,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.30/obsidian-0.13.30.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "96.0.4664.174",
-      "electron": "16.0.10",
       "node": "16.9.1",
-      "v8": "9.6.180.23-electron.0"
+      "v8": "9.6.180.23-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.17.2",
+      "modules": "99",
+      "nghttp2": "1.42.0",
+      "napi": "8",
+      "llhttp": "6.0.2",
+      "openssl": "1.1.1",
+      "icu": "69.1",
+      "unicode": "13.0",
+      "electron": "16.0.10",
+      "chrome": "96.0.4664.174"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1636,10 +2212,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.31/obsidian-0.13.31.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "98.0.4758.109",
-      "electron": "17.1.1",
       "node": "16.13.0",
-      "v8": "9.8.177.11-electron.0"
+      "v8": "9.8.177.11-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.17.2",
+      "modules": "101",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "17.1.1",
+      "chrome": "98.0.4758.109"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1691,10 +2278,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.2/obsidian-0.14.2.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "98.0.4758.109",
-      "electron": "17.1.1",
       "node": "16.13.0",
-      "v8": "9.8.177.11-electron.0"
+      "v8": "9.8.177.11-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.17.2",
+      "modules": "101",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "17.1.1",
+      "chrome": "98.0.4758.109"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1728,10 +2326,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.5/obsidian-0.14.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.75",
-      "electron": "18.0.3",
       "node": "16.13.2",
-      "v8": "10.0.139.9-electron.0"
+      "v8": "10.0.139.9-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.0.3",
+      "chrome": "100.0.4896.75"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1747,10 +2356,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.6/obsidian-0.14.6.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.75",
-      "electron": "18.0.4",
       "node": "16.13.2",
-      "v8": "10.0.139.9-electron.0"
+      "v8": "10.0.139.9-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.0.4",
+      "chrome": "100.0.4896.75"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1838,10 +2458,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.14.15/obsidian-0.14.15.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.0",
       "node": "16.13.2",
-      "v8": "10.0.139.17-electron.0"
+      "v8": "10.0.139.17-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.0",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1915,10 +2546,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.6/obsidian-0.15.6.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.5",
       "node": "16.13.2",
-      "v8": "10.0.139.17-electron.0"
+      "v8": "10.0.139.17-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.5",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1943,10 +2585,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.8/obsidian-0.15.8.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.5",
       "node": "16.13.2",
-      "v8": "10.0.139.17-electron.0"
+      "v8": "10.0.139.17-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.5",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -1962,10 +2615,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.15.9/obsidian-0.15.9.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.5",
       "node": "16.13.2",
-      "v8": "10.0.139.17-electron.0"
+      "v8": "10.0.139.17-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.5",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2035,10 +2699,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.0/obsidian-1.0.0.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.5",
       "node": "16.13.2",
-      "v8": "10.0.139.17-electron.0"
+      "v8": "10.0.139.17-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.5",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2069,10 +2744,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.0.3/obsidian-1.0.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.5",
       "node": "16.13.2",
-      "v8": "10.0.139.17-electron.0"
+      "v8": "10.0.139.17-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.5",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2160,10 +2846,21 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.8/obsidian-1.1.8.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "100.0.4896.160",
-      "electron": "18.3.15",
       "node": "16.13.2",
-      "v8": "10.0.139.18-electron.0"
+      "v8": "10.0.139.18-electron.0",
+      "uv": "1.42.0",
+      "zlib": "1.2.11",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "103",
+      "nghttp2": "1.45.1",
+      "napi": "8",
+      "llhttp": "6.0.4",
+      "openssl": "1.1.1",
+      "icu": "70.1",
+      "unicode": "14.0",
+      "electron": "18.3.15",
+      "chrome": "100.0.4896.160"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2183,10 +2880,23 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.9/obsidian-1.1.9.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "106.0.5249.199",
-      "electron": "21.3.3",
       "node": "16.16.0",
-      "v8": "10.6.194.26-electron.0"
+      "v8": "10.6.194.26-electron.0",
+      "uv": "1.43.0",
+      "zlib": "1.2.12.1-motley",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "109",
+      "nghttp2": "1.47.0",
+      "napi": "8",
+      "llhttp": "6.0.7",
+      "openssl": "1.1.1",
+      "cldr": "41.0",
+      "icu": "71.1",
+      "tz": "2022e",
+      "unicode": "14.0",
+      "electron": "21.3.3",
+      "chrome": "106.0.5249.199"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2247,10 +2957,23 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.15/obsidian-1.1.15.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "106.0.5249.199",
-      "electron": "21.4.1",
       "node": "16.16.0",
-      "v8": "10.6.194.27-electron.0"
+      "v8": "10.6.194.27-electron.0",
+      "uv": "1.43.0",
+      "zlib": "1.2.12.1-motley",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "109",
+      "nghttp2": "1.47.0",
+      "napi": "8",
+      "llhttp": "6.0.7",
+      "openssl": "1.1.1",
+      "cldr": "41.0",
+      "icu": "71.1",
+      "tz": "2022e",
+      "unicode": "14.0",
+      "electron": "21.4.1",
+      "chrome": "106.0.5249.199"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2266,10 +2989,23 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.1.16/obsidian-1.1.16.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "106.0.5249.199",
-      "electron": "21.4.1",
       "node": "16.16.0",
-      "v8": "10.6.194.27-electron.0"
+      "v8": "10.6.194.27-electron.0",
+      "uv": "1.43.0",
+      "zlib": "1.2.12.1-motley",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "109",
+      "nghttp2": "1.47.0",
+      "napi": "8",
+      "llhttp": "6.0.7",
+      "openssl": "1.1.1",
+      "cldr": "41.0",
+      "icu": "71.1",
+      "tz": "2022e",
+      "unicode": "14.0",
+      "electron": "21.4.1",
+      "chrome": "106.0.5249.199"
     },
     "ecmaScriptVersion": "ES2022"
   },
@@ -2350,10 +3086,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.7/obsidian-1.2.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "112.0.5615.87",
-      "electron": "24.1.2",
       "node": "18.14.0",
-      "v8": "11.2.214.9-electron.0"
+      "v8": "11.2.214.9-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "114",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.14",
+      "acorn": "8.8.1",
+      "simdutf": "3.1.0",
+      "undici": "5.14.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2022g",
+      "unicode": "15.0",
+      "electron": "24.1.2",
+      "chrome": "112.0.5615.87"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2369,10 +3122,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.2.8/obsidian-1.2.8.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "112.0.5615.87",
-      "electron": "24.1.2",
       "node": "18.14.0",
-      "v8": "11.2.214.9-electron.0"
+      "v8": "11.2.214.9-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "114",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.14",
+      "acorn": "8.8.1",
+      "simdutf": "3.1.0",
+      "undici": "5.14.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2022g",
+      "unicode": "15.0",
+      "electron": "24.1.2",
+      "chrome": "112.0.5615.87"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2415,10 +3185,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.3/obsidian-1.3.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "112.0.5615.183",
-      "electron": "24.3.1",
       "node": "18.14.0",
-      "v8": "11.2.214.19-electron.0"
+      "v8": "11.2.214.19-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "114",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.14",
+      "acorn": "8.8.1",
+      "simdutf": "3.1.0",
+      "undici": "5.14.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "24.3.1",
+      "chrome": "112.0.5615.183"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2434,10 +3221,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.4/obsidian-1.3.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "112.0.5615.183",
-      "electron": "24.3.1",
       "node": "18.14.0",
-      "v8": "11.2.214.19-electron.0"
+      "v8": "11.2.214.19-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "114",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.14",
+      "acorn": "8.8.1",
+      "simdutf": "3.1.0",
+      "undici": "5.14.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "24.3.1",
+      "chrome": "112.0.5615.183"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2453,10 +3257,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.5/obsidian-1.3.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "112.0.5615.183",
-      "electron": "24.3.1",
       "node": "18.14.0",
-      "v8": "11.2.214.19-electron.0"
+      "v8": "11.2.214.19-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "114",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.14",
+      "acorn": "8.8.1",
+      "simdutf": "3.1.0",
+      "undici": "5.14.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "24.3.1",
+      "chrome": "112.0.5615.183"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2481,10 +3302,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.3.7/obsidian-1.3.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "112.0.5615.183",
-      "electron": "24.3.1",
       "node": "18.14.0",
-      "v8": "11.2.214.19-electron.0"
+      "v8": "11.2.214.19-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "114",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.14",
+      "acorn": "8.8.1",
+      "simdutf": "3.1.0",
+      "undici": "5.14.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "24.3.1",
+      "chrome": "112.0.5615.183"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2550,10 +3388,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.5/obsidian-1.4.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.0",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.0",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2593,10 +3448,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.10/obsidian-1.4.10.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.0",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.0",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2612,10 +3484,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.11/obsidian-1.4.11.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.0",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.0",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2631,10 +3520,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.12/obsidian-1.4.12.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.0",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.0",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2650,10 +3556,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.13/obsidian-1.4.13.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.1",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.1",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2669,10 +3592,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.14/obsidian-1.4.14.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.1",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.1",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2697,10 +3637,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.4.16/obsidian-1.4.16.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.1",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.1",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2748,10 +3705,27 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.3/obsidian-1.5.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "114.0.5735.289",
-      "electron": "25.8.1",
       "node": "18.15.0",
-      "v8": "11.4.183.29-electron.0"
+      "v8": "11.4.183.29-electron.0",
+      "uv": "1.44.2",
+      "zlib": "1.2.13",
+      "brotli": "1.0.9",
+      "ares": "1.18.1",
+      "modules": "116",
+      "nghttp2": "1.51.0",
+      "napi": "8",
+      "llhttp": "6.0.10",
+      "uvwasi": "0.0.15",
+      "acorn": "8.8.2",
+      "simdutf": "3.1.0",
+      "undici": "5.20.0",
+      "openssl": "1.1.1",
+      "cldr": "42.0",
+      "icu": "72.1",
+      "tz": "2023a",
+      "unicode": "15.0",
+      "electron": "25.8.1",
+      "chrome": "114.0.5735.289"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2803,10 +3777,28 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/obsidian-1.5.8.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "120.0.6099.283",
-      "electron": "28.2.3",
       "node": "18.18.2",
-      "v8": "12.0.267.19-electron.0"
+      "acorn": "8.10.0",
+      "ada": "2.6.0",
+      "ares": "1.19.1",
+      "brotli": "1.0.9",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "6.0.11",
+      "modules": "119",
+      "napi": "9",
+      "nghttp2": "1.57.0",
+      "openssl": "1.1.1",
+      "simdutf": "3.2.14",
+      "tz": "2023c",
+      "undici": "5.26.3",
+      "unicode": "15.0",
+      "uv": "1.44.2",
+      "uvwasi": "0.0.18",
+      "v8": "12.0.267.19-electron.0",
+      "zlib": "1.2.13.1-motley",
+      "electron": "28.2.3",
+      "chrome": "120.0.6099.283"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2840,10 +3832,28 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/obsidian-1.5.11.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "120.0.6099.283",
-      "electron": "28.2.3",
       "node": "18.18.2",
-      "v8": "12.0.267.19-electron.0"
+      "acorn": "8.10.0",
+      "ada": "2.6.0",
+      "ares": "1.19.1",
+      "brotli": "1.0.9",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "6.0.11",
+      "modules": "119",
+      "napi": "9",
+      "nghttp2": "1.57.0",
+      "openssl": "1.1.1",
+      "simdutf": "3.2.14",
+      "tz": "2023c",
+      "undici": "5.26.3",
+      "unicode": "15.0",
+      "uv": "1.44.2",
+      "uvwasi": "0.0.18",
+      "v8": "12.0.267.19-electron.0",
+      "zlib": "1.2.13.1-motley",
+      "electron": "28.2.3",
+      "chrome": "120.0.6099.283"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2859,10 +3869,28 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/obsidian-1.5.12.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "120.0.6099.283",
-      "electron": "28.2.3",
       "node": "18.18.2",
-      "v8": "12.0.267.19-electron.0"
+      "acorn": "8.10.0",
+      "ada": "2.6.0",
+      "ares": "1.19.1",
+      "brotli": "1.0.9",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "6.0.11",
+      "modules": "119",
+      "napi": "9",
+      "nghttp2": "1.57.0",
+      "openssl": "1.1.1",
+      "simdutf": "3.2.14",
+      "tz": "2023c",
+      "undici": "5.26.3",
+      "unicode": "15.0",
+      "uv": "1.44.2",
+      "uvwasi": "0.0.18",
+      "v8": "12.0.267.19-electron.0",
+      "zlib": "1.2.13.1-motley",
+      "electron": "28.2.3",
+      "chrome": "120.0.6099.283"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2896,10 +3924,28 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/obsidian-1.6.2.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "120.0.6099.291",
-      "electron": "28.3.3",
       "node": "18.18.2",
-      "v8": "12.0.267.19-electron.0"
+      "acorn": "8.10.0",
+      "ada": "2.6.0",
+      "ares": "1.19.1",
+      "brotli": "1.0.9",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "6.0.11",
+      "modules": "119",
+      "napi": "9",
+      "nghttp2": "1.57.0",
+      "openssl": "1.1.1",
+      "simdutf": "3.2.14",
+      "tz": "2023c",
+      "undici": "5.26.3",
+      "unicode": "15.0",
+      "uv": "1.44.2",
+      "uvwasi": "0.0.18",
+      "v8": "12.0.267.19-electron.0",
+      "zlib": "1.2.13.1-motley",
+      "electron": "28.3.3",
+      "chrome": "120.0.6099.291"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2915,10 +3961,28 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/obsidian-1.6.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "120.0.6099.291",
-      "electron": "28.3.3",
       "node": "18.18.2",
-      "v8": "12.0.267.19-electron.0"
+      "acorn": "8.10.0",
+      "ada": "2.6.0",
+      "ares": "1.19.1",
+      "brotli": "1.0.9",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "6.0.11",
+      "modules": "119",
+      "napi": "9",
+      "nghttp2": "1.57.0",
+      "openssl": "1.1.1",
+      "simdutf": "3.2.14",
+      "tz": "2023c",
+      "undici": "5.26.3",
+      "unicode": "15.0",
+      "uv": "1.44.2",
+      "uvwasi": "0.0.18",
+      "v8": "12.0.267.19-electron.0",
+      "zlib": "1.2.13.1-motley",
+      "electron": "28.3.3",
+      "chrome": "120.0.6099.291"
     },
     "ecmaScriptVersion": "ES2023"
   },
@@ -2947,10 +4011,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/obsidian-1.6.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "124.0.6367.243",
-      "electron": "30.1.2",
       "node": "20.14.0",
-      "v8": "12.4.254.20-electron.0"
+      "acorn": "8.11.3",
+      "ada": "2.7.8",
+      "ares": "1.28.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.2.2",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "8.1.2",
+      "modules": "123",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "1.1.1",
+      "simdutf": "5.2.8",
+      "tz": "2024a",
+      "undici": "6.13.0",
+      "unicode": "15.0",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "12.4.254.20-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "30.1.2",
+      "chrome": "124.0.6367.243"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -2975,10 +4059,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/obsidian-1.6.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "124.0.6367.243",
-      "electron": "30.1.2",
       "node": "20.14.0",
-      "v8": "12.4.254.20-electron.0"
+      "acorn": "8.11.3",
+      "ada": "2.7.8",
+      "ares": "1.28.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.2.2",
+      "cldr": "43.0",
+      "icu": "73.1",
+      "llhttp": "8.1.2",
+      "modules": "123",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "1.1.1",
+      "simdutf": "5.2.8",
+      "tz": "2024a",
+      "undici": "6.13.0",
+      "unicode": "15.0",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "12.4.254.20-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "30.1.2",
+      "chrome": "124.0.6367.243"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3026,10 +4130,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/obsidian-1.7.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "126.0.6478.234",
-      "electron": "31.6.0",
       "node": "20.17.0",
-      "v8": "12.6.228.30-electron.0"
+      "acorn": "8.11.3",
+      "ada": "2.9.0",
+      "ares": "1.32.3",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.2.2",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "125",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.3.0",
+      "tz": "2024a",
+      "undici": "6.19.2",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "12.6.228.30-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "31.6.0",
+      "chrome": "126.0.6478.234"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3045,10 +4169,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/obsidian-1.7.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "128.0.6613.186",
-      "electron": "32.2.2",
       "node": "20.18.0",
-      "v8": "12.8.374.38-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "128",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024a",
+      "undici": "6.19.8",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "12.8.374.38-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "32.2.2",
+      "chrome": "128.0.6613.186"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3064,10 +4208,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/obsidian-1.7.6.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "128.0.6613.186",
-      "electron": "32.2.3",
       "node": "20.18.0",
-      "v8": "12.8.374.38-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "128",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024a",
+      "undici": "6.19.8",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "12.8.374.38-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "32.2.3",
+      "chrome": "128.0.6613.186"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3083,10 +4247,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/obsidian-1.7.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "128.0.6613.186",
-      "electron": "32.2.5",
       "node": "20.18.0",
-      "v8": "12.8.374.38-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "128",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024a",
+      "undici": "6.19.8",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "12.8.374.38-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "32.2.5",
+      "chrome": "128.0.6613.186"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3129,10 +4313,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/obsidian-1.8.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "130.0.6723.191",
-      "electron": "33.3.2",
       "node": "20.18.1",
-      "v8": "13.0.245.25-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "130",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024a",
+      "undici": "6.20.0",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.0.245.25-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "33.3.2",
+      "chrome": "130.0.6723.191"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3148,10 +4352,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/obsidian-1.8.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "130.0.6723.191",
-      "electron": "33.3.2",
       "node": "20.18.1",
-      "v8": "13.0.245.25-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "130",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024a",
+      "undici": "6.20.0",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.0.245.25-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "33.3.2",
+      "chrome": "130.0.6723.191"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3185,10 +4409,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/obsidian-1.8.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "130.0.6723.191",
-      "electron": "33.3.2",
       "node": "20.18.1",
-      "v8": "13.0.245.25-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "130",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024a",
+      "undici": "6.20.0",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.0.245.25-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "33.3.2",
+      "chrome": "130.0.6723.191"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3214,10 +4458,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/obsidian-1.8.9.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "132.0.6834.210",
-      "electron": "34.3.0",
       "node": "20.18.3",
-      "v8": "13.2.152.41-electron.0"
+      "acorn": "8.14.0",
+      "ada": "2.9.2",
+      "ares": "1.34.4",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "132",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.6.4",
+      "tz": "2024b",
+      "undici": "6.21.1",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.2.152.41-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "34.3.0",
+      "chrome": "132.0.6834.210"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3234,10 +4498,30 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.10/obsidian-1.8.10.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "132.0.6834.196",
-      "electron": "34.2.0",
       "node": "20.18.2",
-      "v8": "13.2.152.36-electron.0"
+      "acorn": "8.12.1",
+      "ada": "2.9.0",
+      "ares": "1.33.1",
+      "base64": "0.5.2",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "1.4.1",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "8.1.2",
+      "modules": "132",
+      "napi": "9",
+      "nghttp2": "1.61.0",
+      "openssl": "0.0.0",
+      "simdutf": "5.5.0",
+      "tz": "2024b",
+      "undici": "6.21.1",
+      "unicode": "15.1",
+      "uv": "1.46.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.2.152.36-electron.0",
+      "zlib": "1.3.0.1-motley",
+      "electron": "34.2.0",
+      "chrome": "132.0.6834.196"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3344,10 +4628,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/obsidian-1.9.10.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "138.0.7204.224",
-      "electron": "37.3.0",
       "node": "22.18.0",
-      "v8": "13.8.258.30-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.0",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "136",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.0.0",
+      "sqlite": "3.50.2",
+      "tz": "2025b",
+      "undici": "6.21.2",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.8.258.30-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "37.3.0",
+      "chrome": "138.0.7204.224"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3373,10 +4682,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/obsidian-1.9.12.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "138.0.7204.235",
-      "electron": "37.3.1",
       "node": "22.18.0",
-      "v8": "13.8.258.31-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.0",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "136",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.0.0",
+      "sqlite": "3.50.2",
+      "tz": "2025b",
+      "undici": "6.21.2",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.8.258.31-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "37.3.1",
+      "chrome": "138.0.7204.235"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3402,10 +4736,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/obsidian-1.9.14.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "138.0.7204.251",
-      "electron": "37.6.0",
       "node": "22.19.0",
-      "v8": "13.8.258.32-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.0",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "136",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.0.0",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.21.2",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.21",
+      "v8": "13.8.258.32-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "37.6.0",
+      "chrome": "138.0.7204.251"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3448,10 +4807,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.3/obsidian-1.10.3.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "138.0.7204.251",
-      "electron": "37.9.0",
       "node": "22.21.1",
-      "v8": "13.8.258.32-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.4",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "136",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.0.0",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.22.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "13.8.258.32-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "37.9.0",
+      "chrome": "138.0.7204.251"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3485,10 +4869,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.6/obsidian-1.10.6.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "138.0.7204.251",
-      "electron": "37.10.2",
       "node": "22.21.1",
-      "v8": "13.8.258.32-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.4",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "136",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.0.0",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.22.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "13.8.258.32-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "37.10.2",
+      "chrome": "138.0.7204.251"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3541,10 +4950,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/obsidian-1.11.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "142.0.7444.235",
-      "electron": "39.2.7",
       "node": "22.21.1",
-      "v8": "14.2.231.21-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.4",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.3.3",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.22.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.21-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.2.7",
+      "chrome": "142.0.7444.235"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3561,10 +4995,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.5/obsidian-1.11.5.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "142.0.7444.226",
-      "electron": "39.2.6",
       "node": "22.21.1",
-      "v8": "14.2.231.21-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.4",
+      "ares": "1.34.5",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.3.3",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.22.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.21-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.2.6",
+      "chrome": "142.0.7444.226"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3590,10 +5049,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.7/obsidian-1.11.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "142.0.7444.265",
-      "electron": "39.5.1",
       "node": "22.22.0",
-      "v8": "14.2.231.22-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.4",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.3.3",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.23.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.22-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.5.1",
+      "chrome": "142.0.7444.265"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3646,10 +5130,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.4/obsidian-1.12.4.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "142.0.7444.265",
-      "electron": "39.6.0",
       "node": "22.22.0",
-      "v8": "14.2.231.22-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.4",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.1.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "3.13.0",
+      "simdutf": "7.3.3",
+      "sqlite": "3.50.4",
+      "tz": "2025b",
+      "undici": "6.23.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.22-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.6.0",
+      "chrome": "142.0.7444.265"
     },
     "ecmaScriptVersion": "ES2024"
   },
@@ -3683,10 +5192,35 @@
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian-1.12.7.tar.gz"
     },
     "runtimeVersions": {
-      "chrome": "142.0.7444.265",
-      "electron": "39.8.3",
       "node": "22.22.1",
-      "v8": "14.2.231.22-electron.0"
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.5",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.2.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "4.2.4",
+      "simdutf": "7.3.3",
+      "sqlite": "3.51.2",
+      "tz": "2025b",
+      "undici": "6.23.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.22-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.8.3",
+      "chrome": "142.0.7444.265"
     },
     "ecmaScriptVersion": "ES2024"
   },

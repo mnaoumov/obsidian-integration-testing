@@ -48,20 +48,12 @@ Object.defineProperty(globalThis, 'OBSIDIAN_METADATA', {
 /** The desktop-installer download key for the current host platform. */
 type PlatformInstallerKey = 'dmg' | 'exe' | 'tar';
 
-/** The subset of `process.versions` we record. */
-interface ProcessVersions {
-  readonly chrome: string;
-  readonly electron: string;
-  readonly node: string;
-  readonly v8: string;
-}
-
 /**
- * Reads `process.versions` from a freshly-booted owned instance pinned to a
- * version's own installer + asar.
+ * Reads the **entire** `process.versions` from a freshly-booted owned instance
+ * pinned to a version's own installer + asar.
  *
  * @param version - The concrete `x.y.z` version to boot.
- * @returns The recorded runtime versions.
+ * @returns The recorded runtime versions — every key `process.versions` exposes.
  */
 async function collectRuntimeVersions(version: string): Promise<ObsidianRuntimeVersions> {
   // Dynamic import so the OBSIDIAN_METADATA shim (top of file) is applied before
@@ -75,13 +67,8 @@ async function collectRuntimeVersions(version: string): Promise<ObsidianRuntimeV
   });
 
   const raw = await connection.invoke('JSON.stringify(process.versions)');
-  const versions = JSON.parse(raw) as ProcessVersions;
-  return {
-    chrome: versions.chrome,
-    electron: versions.electron,
-    node: versions.node,
-    v8: versions.v8
-  };
+  // Record the whole object; the exact key set varies by Electron version.
+  return JSON.parse(raw) as ObsidianRuntimeVersions;
 }
 
 /**
@@ -135,7 +122,7 @@ async function main(): Promise<void> {
   for (const version of versions) {
     try {
       const runtimeVersions = await collectRuntimeVersions(version);
-      const ecmaScriptVersion = deriveEcmaScriptVersion(runtimeVersions.chrome ?? '');
+      const ecmaScriptVersion = deriveEcmaScriptVersion(runtimeVersions.chrome);
       table[version] = {
         ...table[version],
         runtimeVersions,
