@@ -165,12 +165,23 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface FileSystemAdapterLike {
-    getBasePath(): string;
+    basePath?: string;
+    getBasePath?: () => string;
   }
 
   interface IpcSendSyncParams {
     readonly args: unknown[];
     readonly channel: string;
+  }
+
+  // Community-plugin API members that old Obsidian versions (e.g. 0.6.x) lack.
+  // `obsidian-typings` declares them as always-present, so probe through this
+  // Optional-member view to detect their runtime absence without a false
+  // `no-unnecessary-condition`.
+  interface PluginsLike {
+    isEnabled?: () => boolean;
+    loadPlugin?: (id: string) => Promise<void>;
+    manifests?: unknown;
   }
 
   interface SetLocalStorageItemParams {
@@ -266,13 +277,26 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     },
 
     async evalWrapper(this: IntegrationTestingNamespace, params): Promise<string> {
-      if (!this.app.plugins.isEnabled()) {
+      // Old Obsidian (e.g. 0.6.x) predates the community-plugin API: `plugins`
+      // Exists but has no `isEnabled`/`setEnable`, and there are no third-party
+      // Plugins to enable, so skip this step when the API is absent.
+      // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
+      const plugins = this.app.plugins as unknown as PluginsLike;
+      if (plugins.isEnabled && !plugins.isEnabled()) {
         await this.app.plugins.setEnable(true);
       }
       const obsidianModule = await this.getObsidianModule();
-      const context = params.contextId
-        ? (this.contexts[params.contextId] ??= {})
-        : {};
+      // Avoid `??=`: old Obsidian's Chromium (e.g. 0.6.x on Chromium 80) predates
+      // ES2021 logical-assignment and cannot parse it in this serialized bootstrap.
+      let context: Record<string, unknown> = {};
+      if (params.contextId) {
+        const existingContext = this.contexts[params.contextId];
+        if (existingContext) {
+          context = existingContext;
+        } else {
+          this.contexts[params.contextId] = context;
+        }
+      }
       // The injected `lib` bag: base helpers from the harness, then providers on top.
       // Resolvers run in-renderer (they read renderer globals a provider published).
       // Rebuilding per eval keeps `lib` fresh and tolerant of a late-loaded provider.
@@ -297,27 +321,46 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         return this.obsidianModule;
       }
 
+      // The temp-plugin trick below needs the community-plugin API (`loadPlugin`
+      // Plus the `manifests` registry). Old Obsidian versions (e.g. 0.6.x) only
+      // Partially expose it — `loadPlugin` exists but `manifests` does not — and
+      // `require('obsidian')` also fails there, so there is no way to resolve the
+      // Module; return `undefined` (best-effort) so app-only closures still run.
+      // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
+      const plugins = this.app.plugins as unknown as PluginsLike;
+      if (!plugins.loadPlugin || !plugins.manifests) {
+        return undefined;
+      }
+
       const SLICE_START = 2;
       const randomSuffix = String(Math.random()).slice(SLICE_START);
       const tempModuleName = `get-obsidian-module-${randomSuffix}`;
-      const dir = `${this.app.vault.configDir}/plugins/${tempModuleName}`;
-      this.app.plugins.manifests[tempModuleName] = {
-        author: '',
-        description: '',
-        dir,
-        id: tempModuleName,
-        isDesktopOnly: false,
-        minAppVersion: '',
-        name: tempModuleName,
-        version: ''
-      };
-      await this.app.vault.adapter.mkdir(dir);
+      try {
+        const dir = `${this.app.vault.configDir}/plugins/${tempModuleName}`;
+        this.app.plugins.manifests[tempModuleName] = {
+          author: '',
+          description: '',
+          dir,
+          id: tempModuleName,
+          isDesktopOnly: false,
+          minAppVersion: '',
+          name: tempModuleName,
+          version: ''
+        };
+        await this.app.vault.adapter.mkdir(dir);
 
-      const pluginFnBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
-      await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
+        const pluginFnBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
+        await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
 
-      await this.app.plugins.loadPlugin(tempModuleName);
-      await this.app.plugins.uninstallPlugin(tempModuleName);
+        await this.app.plugins.loadPlugin(tempModuleName);
+        await this.app.plugins.uninstallPlugin(tempModuleName);
+      } catch {
+        // Old Obsidian versions with a PARTIAL community-plugin API (e.g. 0.9.10,
+        // Which has `manifests`/`loadPlugin` but an undefined `vault.configDir`, so
+        // The temp-plugin directory path cannot be built) cannot run the trick;
+        // Degrade to `undefined` so app-only closures still run.
+        return undefined;
+      }
 
       if (this.obsidianModule) {
         return this.obsidianModule;
@@ -336,10 +379,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     obsidianModule: existingObsidianModule,
 
     async pollVaultBasePath(this: IntegrationTestingNamespace): Promise<string> {
-      await this.ensureLayoutReady();
+      // Old Obsidian versions (e.g. 0.9.x) predate `Workspace.onLayoutReady`.
+      // `ensureLayoutReady` calls it unconditionally, so it throws there — but those
+      // Versions already expose the `layoutReady` flag, which is `true` by the time
+      // An owned vault window is up. Only wait when layout is not yet ready, so the
+      // Missing method is never invoked on old versions.
+      if (!this.app.workspace.layoutReady) {
+        await this.ensureLayoutReady();
+      }
 
       // eslint-disable-next-line no-restricted-syntax -- DataAdapter is actually FileSystemAdapter at runtime on desktop.
-      return JSON.stringify((this.app.vault.adapter as unknown as FileSystemAdapterLike).getBasePath());
+      const adapter = this.app.vault.adapter as unknown as FileSystemAdapterLike;
+      // Old Obsidian versions (e.g. 0.6.x) predate the `getBasePath()` method but
+      // Expose the `basePath` property; the method exists from ~0.9.20 onward.
+      const basePath = adapter.getBasePath ? adapter.getBasePath() : (adapter.basePath ?? '');
+      return JSON.stringify(basePath);
     },
 
     async setLocalStorageItem(this: IntegrationTestingNamespace, params): Promise<void> {

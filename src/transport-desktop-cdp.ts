@@ -54,6 +54,7 @@ import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
 import { getVersionMetadata } from './obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
+import { buildOwnedObsidianJson } from './owned-vault-seed.ts';
 import {
   checkRendererBootState,
   DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS
@@ -244,6 +245,13 @@ const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
 const NO_OUTPUT = '(no output)';
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+// Old (Electron 10-era) Obsidian occasionally boots without the workspace ever
+// Initializing, so the vault never becomes ready. A fresh instance is an
+// Independent chance; relaunch up to this many times before giving up.
+const OWNED_LAUNCH_MAX_ATTEMPTS = 3;
+// Brief settle before a relaunch so the killed instance's memory/handles are
+// Reclaimed before the next boot — improves the odds on a loaded machine.
+const OWNED_RELAUNCH_SETTLE_IN_MILLISECONDS = 3000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
@@ -819,6 +827,28 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Kills the currently-running owned instance (if any) and waits for it to exit,
+   * so the next launch gets a pristine single-window instance.
+   *
+   * Relaunching over a live instance is forwarded by Electron's single-instance
+   * lock on the shared user-data dir and surfaces the vault picker, and opening a
+   * second window via IPC leaves stale windows that break vault-target routing —
+   * hence a full kill + wait-for-exit (releasing the lock) between launches. A
+   * no-op on the first attempt, when no instance is running yet.
+   */
+  private async killRunningOwnedInstance(): Promise<void> {
+    if (!this.ownedInstance) {
+      return;
+    }
+    log('[cdp-transport] Killing running owned instance before (re)launch.');
+    this.disconnect();
+    const previousCdpUrl = this.cdpUrl;
+    this.ownedInstance.kill();
+    this.ownedInstance = undefined;
+    await this.waitForInstanceExit(previousCdpUrl);
+  }
+
+  /**
    * Moves the owned instance's window off-screen so a hidden run never steals
    * focus. Uses Electron's remote bridge (`window.electron.remote`) — the only
    * cross-platform way to reposition the window — placing it just beyond the
@@ -832,9 +862,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * proceeds (worst case the window is briefly visible).
    */
   private async moveOwnedWindowOffscreen(): Promise<void> {
+    // Resolve the Electron remote bridge two ways so BOTH modern and old Obsidian
+    // Can be moved off-screen: modern injects `window.electron.remote`; old
+    // Versions (no `window.electron`) still expose the built-in `remote` module via
+    // `require('electron')` in the node-integrated renderer (removed from Electron
+    // 14+, but present on the Electron 8-13 shells old Obsidian ships). Returning
+    // `moved` on the first success is important on Electron 10-era builds: polling
+    // On without a resolvable bridge hammers the renderer with CDP round-trips
+    // During boot and intermittently prevents the workspace from initializing.
     const moveExpr = `(() => {
-      const remote = window.electron && window.electron.remote;
-      if (!remote || typeof remote.getCurrentWindow !== 'function') { return 'no-bridge'; }
+      let remote = (window.electron && window.electron.remote) || null;
+      if (!remote) {
+        try { remote = require('electron').remote || null; } catch (requireError) { remote = null; }
+      }
+      if (!remote || typeof remote.getCurrentWindow !== 'function') {
+        return (typeof window.app === 'undefined') ? 'not-ready' : 'no-bridge';
+      }
       const win = remote.getCurrentWindow();
       const displays = remote.screen.getAllDisplays();
       const maxRight = Math.max(...displays.map((display) => display.bounds.x + display.bounds.width));
@@ -974,7 +1017,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const ws = await this.connectToTarget(target);
     try {
       const response = await this.sendCommand(ws, 'Runtime.evaluate', {
-        expression: 'app.vault.adapter.getBasePath()',
+        // Old Obsidian versions (e.g. 0.6.x) predate the `getBasePath()` method but
+        // Expose the `basePath` property; the method exists from ~0.9.20 onward.
+        expression: 'app.vault.adapter.getBasePath ? app.vault.adapter.getBasePath() : app.vault.adapter.basePath',
         returnByValue: true
       });
       return String(response.result?.result?.value);
@@ -994,55 +1039,56 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async registerVaultInOwnedInstance(vaultPath: string): Promise<void> {
     const config = ensureNonNullable(this.ownedConfig);
 
-    if (this.ownedInstance) {
-      // A prior vault's instance is still running in this (per-worker cached)
-      // Transport. Relaunch fresh for the new vault: relaunching over the live
-      // Instance is forwarded by Electron's single-instance lock on the shared
-      // User-data dir and surfaces the vault picker, and opening a second window
-      // Via IPC leaves stale windows that break vault-target routing. So kill the
-      // Running instance, wait for it to exit (releasing the lock), then launch
-      // Again below with the new vault pre-seeded — each vault gets a pristine
-      // Single-window instance opened directly, never the selector.
-      log(`[cdp-transport] Relaunching owned instance for new vault: ${vaultPath}`);
-      this.disconnect();
-      const previousCdpUrl = this.cdpUrl;
-      this.ownedInstance.kill();
-      this.ownedInstance = undefined;
-      await this.waitForInstanceExit(previousCdpUrl);
-    } else {
-      log(`[cdp-transport] Launching owned Obsidian instance for vault: ${vaultPath}`);
-    }
-
     mkdirSync(config.userDataDir, { recursive: true });
     if (config.asar) {
       copyAsarIntoUserData(config.asar.path, config.asar.version, config.userDataDir);
     }
 
     const vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
-    const obsidianJson = {
-      updateDisabled: true,
-      vaults: { [vaultId]: { open: true, path: vaultPath, ts: Date.now() } }
-    };
+    const obsidianJson = buildOwnedObsidianJson({ ts: Date.now(), vaultId, vaultPath });
     writeFileSync(join(config.userDataDir, 'obsidian.json'), JSON.stringify(obsidianJson));
 
-    const instance = await launchOwnedObsidianInstance({
-      cdpHost: this.cdpHost,
-      exePath: config.exePath,
-      extraArgs: [
-        ...resolveOwnedHiddenLaunchArgs(this.isObsidianAppVisible),
-        ...resolveSandboxLaunchArgs(this.shouldDisableSandbox)
-      ],
-      userDataDir: config.userDataDir
-    });
-    this.ownedInstance = instance;
-    this.cdpPort = instance.port;
-    this.cdpUrl = instance.cdpUrl;
+    // Relaunch-retry: some old (Electron 10-era) Obsidian builds intermittently
+    // Boot with `window.app` present but the workspace never initializing, so the
+    // Vault never becomes ready. A fresh instance is an independent chance. A
+    // Deterministic failure (dead boot, silent asar fallback) is re-thrown at once —
+    // Retrying it only wastes the readiness timeout.
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= OWNED_LAUNCH_MAX_ATTEMPTS; attempt++) {
+      await this.killRunningOwnedInstance();
+      if (attempt > 1) {
+        await delay(OWNED_RELAUNCH_SETTLE_IN_MILLISECONDS);
+      }
 
-    if (shouldHideObsidianApp(this.isObsidianAppVisible)) {
-      await this.moveOwnedWindowOffscreen();
+      const instance = await launchOwnedObsidianInstance({
+        cdpHost: this.cdpHost,
+        exePath: config.exePath,
+        extraArgs: [
+          ...resolveOwnedHiddenLaunchArgs(this.isObsidianAppVisible),
+          ...resolveSandboxLaunchArgs(this.shouldDisableSandbox)
+        ],
+        userDataDir: config.userDataDir
+      });
+      this.ownedInstance = instance;
+      this.cdpPort = instance.port;
+      this.cdpUrl = instance.cdpUrl;
+
+      if (shouldHideObsidianApp(this.isObsidianAppVisible)) {
+        await this.moveOwnedWindowOffscreen();
+      }
+
+      try {
+        await this.waitForOwnedVaultReady(vaultPath);
+        return;
+      } catch (error: unknown) {
+        if (error instanceof RendererFailedToInitializeError || error instanceof SilentAsarFallbackError) {
+          throw error;
+        }
+        lastError = error;
+        log(`[cdp-transport] Owned vault not ready (attempt ${String(attempt)}/${String(OWNED_LAUNCH_MAX_ATTEMPTS)}): ${String(error)}`);
+      }
     }
-
-    await this.waitForOwnedVaultReady(vaultPath);
+    throw lastError instanceof Error ? lastError : new Error(`Owned vault at ${vaultPath} did not become ready`);
   }
 
   /**
@@ -1145,7 +1191,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
         isReady = true;
         break;
       } catch {
-        // Vault target not ready yet.
+        // The vault is not ready yet — also drop the cached CDP connection before
+        // Retrying. Old (Electron 10-era) Obsidian reloads the owned window during
+        // Boot, which can leave the cached WebSocket pinned to a stale execution
+        // Context; reconnecting each attempt re-binds to the live context.
+        this.disconnect();
       }
 
       if (this.deadBootGraceInMilliseconds > 0) {
