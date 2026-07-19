@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 8.4.0
+
+- chore: collect metadata
+- feat: ensure every version loaded
+- fix: resolve obsidianModule on old versions with an undefined configDir
+- fix: ensure all installer versions are supported
+- feat: populate runtime versions for 68 installer versions
+- feat: extract process.versions
+- feat: asar fallback detection
+- feat: reuse obsidian-versions.json
+
 ## 8.3.0
 
 - feat: allow to bypass version checks
