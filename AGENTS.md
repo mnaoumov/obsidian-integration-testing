@@ -588,7 +588,8 @@ Two installer-floor fields:
 
 - **`minRunnableInstallerVersion`** — the tier-1 **boot floor**: the oldest installer (Electron shell) on
   which that app version's asar actually runs (renders a real UI — a loaded vault, or the first-run vault
-  picker when old Obsidian ignores the pre-seeded `obsidian.json` auto-open); below it the renderer
+  picker when old Obsidian ignores the pre-seeded `obsidian.json` auto-open — now forced open via the
+  dual-marker seed, see L26); below it the renderer
   dead-boots (see L18) **or silently falls back to the installer's bundled asar** (see the caveat below).
   It is **empirically measured** (boot the (asar, installer) pairs and detect boot-vs-dead) and is much
   lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell (Electron 18), far below its
@@ -839,3 +840,94 @@ back (rather than dead-boots) L18 never fires; L25 is what catches it.
   CI boot suites), so the empirically-measured `min*` values stand as-is and the catalog data keeps flowing from
   `obsidian-versions.json` via `refresh:metadata` (L20). This resolves the "harden the boot-floor measurement"
   follow-up L20 tracked.
+
+## L26. Full usability of old Obsidian versions down to 0.6.4 (auto-open + readiness + closures)
+
+The owned-instance path is usable end-to-end (vault auto-opens, readiness completes, `evalInObsidian`
+runs) on **every installer from 0.6.4 up** — the oldest the harness supports. Getting there took a stack of
+old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-17/18). The remaining hard
+limit is **`obsidianModule`**: it is `undefined` on the pre-community-plugin-API band (~0.6.x–0.9.x) because
+those versions have no `plugins.manifests` registry and `require('obsidian')` fails there — a genuine
+platform limit, not a harness gap. App-only closures (`fn({ app })`) work on the whole range;
+`obsidianModule` works from ~0.10–0.11 onward.
+
+The owned instance opens its vault by pre-seeding `obsidian.json` into the temp `--user-data-dir` (no CLI
+arg exists for it). The auto-open marker **changed across Obsidian's history**, and the harness had baked in
+only the modern one — so old versions ignored the seed and stuck on the first-run vault-selector
+(`starter-screen`), and `waitForOwnedVaultReady` burned its full timeout (no matching `getBasePath()`
+target; the selector is not a dead boot, so L18 never fired).
+
+- **Root cause (confirmed by reading old `main.js` + real boots, 2026-07-17).** Old Obsidian's main process
+  auto-opens from a **top-level `settings.last_open`** holding the vault **id**
+  (`if (id && vaults.hasOwnProperty(id)) createWindow(id); else openStarter();`), and stores each vault
+  entry as just `{ path, ts }` — no `open`. Newer versions dropped `last_open` and auto-open from the
+  **per-entry `open: true`** flag. The seed only set `open: true`, never `last_open`, so old versions fell
+  through to `openStarter()`.
+- **Fix — one version-agnostic dual-marker seed, always-on (no knob).** `src/owned-vault-seed.ts`
+  `buildOwnedObsidianJson({ vaultId, vaultPath, ts })` returns `{ last_open: vaultId, updateDisabled: true,
+  vaults: { [vaultId]: { open: true, path, ts } } }` — BOTH markers. Each version reads the one it
+  understands and ignores the other unknown key, so **no per-version branching and no `metadata.json` field**
+  are needed. `DesktopCdpTransport.registerVaultInOwnedInstance` calls it in place of the old inline literal.
+  Confirmed to open the vault directly (no selector) on 0.6.4, 0.9.20, 0.11.13, 0.12.19, 0.13.19, 0.14.5,
+  1.12.7. The marker transition: **≤~0.11 require `last_open`**; **~0.12 reads both**; **≥0.13 uses per-entry
+  `open`** only. The pure builder is unit-tested (`owned-vault-seed.test.ts`).
+The old-version fixes, each CDP-diagnosed:
+
+- **Readiness — `onLayoutReady` guard (`namespace-bootstrap.ts` `pollVaultBasePath`).** Readiness ran
+  `pollVaultBasePath` → `ensureLayoutReady()` → `Workspace.onLayoutReady(cb)`, a method **absent before
+  ~0.11** — it threw `onLayoutReady is not a function`, the poll swallowed it, and the 30 s timeout burned.
+  Fix: guard the wait behind the long-standing `workspace.layoutReady` flag (already `true` by the time an
+  owned window is up): `if (!this.app.workspace.layoutReady) { await this.ensureLayoutReady(); }`. The guard
+  lives in the **harness-only** `pollVaultBasePath`, deliberately NOT the L17-synced `ensureLayoutReady`, so
+  no `obsidian-dev-utils` mirror is needed.
+- **Bootstrap syntax — `??=` removed (Chromium 80 on 0.6.x).** The serialized `bootstrapNamespace` used the
+  ES2021 logical-assignment `this.contexts[id] ??= {}`; Chromium 80 (Obsidian 0.6.x, Electron 8) cannot
+  parse it → `SyntaxError`, so the namespace never bootstrapped. Rewritten to a plain guard. **Keep the
+  serialized bootstrap ES2020-safe** — no logical-assignment (`??=`/`||=`/`&&=`), `.at()`, `Object.hasOwn`,
+  etc. — so it parses on the oldest supported Chromium.
+- **Base-path — `getBasePath()` → `.basePath` fallback.** `FileSystemAdapter.getBasePath()` is absent on
+  0.6.x (the `.basePath` property holds the path; the method exists from ~0.9.20). Both readers —
+  `pollVaultBasePath` and the transport's `probeVaultPath` — fall back to the property.
+- **Closure path — community-plugin API guards (`evalWrapper` / `getObsidianModule`).** `evalWrapper` called
+  `plugins.isEnabled()` and `getObsidianModule` used the temp-plugin `loadPlugin` + `manifests` trick — all
+  absent or partial on the pre-plugin-API band (0.6.x–0.9.x: `plugins` exists but has no `isEnabled`, and
+  `loadPlugin` exists without a `manifests` registry). Both now probe a local `PluginsLike` optional-member
+  view (casting past `obsidian-typings`' always-present declarations avoids a false `no-unnecessary-condition`)
+  and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `undefined` when
+  `loadPlugin`/`manifests` are missing so **app-only closures still run**. Hence `obsidianModule` is
+  `undefined` on ~0.6.x–0.9.x (no resolution path — `require('obsidian')` fails there too) and `object` from
+  ~0.10–0.11 onward.
+- **Off-screen hiding — `require('electron').remote` fallback (fixes an Electron-10 boot wedge).**
+  `moveOwnedWindowOffscreen` polled `window.electron.remote` every 250 ms for 20 s; old versions have no
+  `window.electron`, so it hammered the renderer with CDP round-trips through the **whole boot**, which on
+  **Electron-10-era builds (~0.8.0–0.9.19) intermittently prevented the workspace from initializing** →
+  flaky readiness timeouts. Fix: resolve the bridge via `window.electron.remote` OR the built-in
+  `require('electron').remote` (the node-integrated renderer exposes it on the Electron 8-13 shells old
+  Obsidian ships; removed in Electron 14+). The move now **succeeds on the first eval** on old versions too —
+  ending the boot hammering (reliable readiness) AND actually hiding old windows. Modern is unchanged
+  (`window.electron.remote` wins; the `require` fallback is never reached). *(Credit: the `require('electron')`
+  approach was the user's suggestion.)*
+- **Readiness reconnect-on-retry + relaunch-retry.** Old (Electron-10) Obsidian reloads the owned window
+  during boot; the readiness poll `disconnect()`s on each failed attempt so it re-binds to the live
+  post-reload context. On top of that, `registerVaultInOwnedInstance` wraps launch → move-offscreen →
+  readiness in a **relaunch loop** (`OWNED_LAUNCH_MAX_ATTEMPTS = 3`, with a settle between): the Electron-10
+  builds intermittently boot with `window.app` present but the workspace never initializing, so a fresh
+  instance is an independent chance. Deterministic failures (dead boot, silent asar fallback) are re-thrown
+  at once, never retried.
+- **`getObsidianModule` degrades on a PARTIAL plugin API.** Some old versions expose `manifests`/`loadPlugin`
+  but not everything the temp-plugin trick needs (e.g. **0.9.10** has an undefined `vault.configDir`, so the
+  temp-plugin directory path cannot be built → `mkdir` `ENOENT`). The trick is wrapped in try/catch and returns
+  `undefined` on any such failure, so app-only closures still run. `obsidianModule` is therefore `undefined`
+  below ~0.9.20 (no or partial plugin API) and an object from **0.9.20** onward.
+- **Test** — pure unit test (`owned-vault-seed.test.ts`) for the seed shape; opt-in heavy integration test
+  `src/owned-vault-open.integration.test.ts` (`OBSIDIAN_TEST_OLD_VAULT_OPEN=1`) pins **0.6.4** (the oldest
+  supported installer), which exercises the whole old-version stack at once — auto-open (`last_open`), the
+  `??=` bootstrap, `onLayoutReady`, `getBasePath`, the plugin-API guards, and the `require('electron')` hide —
+  asserting readiness plus an app-only `evalInObsidian` closure sees the seeded vault.
+- **All 103 catalogued installer versions were validated one-by-one** (readiness + app-only closure), and
+  each version's `process.versions` collected into `metadata.json` `runtimeVersions` (+ `ecmaScriptVersion`)
+  in the same pass. **Operational caveat:** the Electron-10 band (0.8.12–0.9.17, cr85) has flaky
+  workspace-init under **rapid** boot/kill churn — a batch of many back-to-back owned boots degrades the
+  host's GPU/compositor state (from force-kills) and starts failing even Electron-11/17 builds; it self-heals
+  after an idle period. When bulk-booting many old versions (e.g. `collect-runtime-versions`), pace them with
+  a cool-down between boots. The relaunch-retry covers ordinary single-use flakiness.
