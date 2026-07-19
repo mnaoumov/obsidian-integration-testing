@@ -197,6 +197,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     configDir?: string;
   }
 
+  // `window.app` / `app.workspace` are declared always-present, but are transiently
+  // Undefined during boot and after an owned-window reload. Probe through these
+  // Optional-member views so the readiness check can guard them without a false
+  // `no-unnecessary-condition`.
+  interface WorkspaceLike {
+    layoutReady?: boolean;
+  }
+
+  interface AppLike {
+    workspace?: WorkspaceLike;
+  }
+
   type CurrentWebContents = ReturnType<Window['electron']['remote']['getCurrentWebContents']>;
 
   // The Electron modifier-key names `sendInputEvent` accepts (e.g. 'meta', 'control', 'shift', 'alt').
@@ -394,12 +406,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     obsidianModule: existingObsidianModule,
 
     async pollVaultBasePath(this: IntegrationTestingNamespace): Promise<string> {
-      // Old Obsidian versions (e.g. 0.9.x) predate `Workspace.onLayoutReady`.
-      // `ensureLayoutReady` calls it unconditionally, so it throws there — but those
-      // Versions already expose the `layoutReady` flag, which is `true` by the time
-      // An owned vault window is up. Only wait when layout is not yet ready, so the
-      // Missing method is never invoked on old versions.
-      if (!this.app.workspace.layoutReady) {
+      // `window.app`, its `workspace`, and layout can all be transiently
+      // Unavailable during boot or right after an owned-window reload, and old
+      // Obsidian predates `Workspace.onLayoutReady`. This runs inside the transport's
+      // Readiness poll, which retries on throw, so check `window.app` FIRST and bail
+      // Cleanly until it, its workspace, and layout are all ready — never dereference
+      // An undefined `window.app`.
+      // eslint-disable-next-line no-restricted-syntax -- window.app/workspace are runtime-optional during boot.
+      const app = this.app as unknown as AppLike | undefined;
+      if (!app?.workspace) {
+        throw new Error('Owned vault is not ready yet (window.app/workspace not initialized).');
+      }
+      // Old Obsidian predates `Workspace.onLayoutReady` but has `layoutReady === true`
+      // By the time a window is up; only wait via `ensureLayoutReady` when it is not
+      // Yet ready (modern versions early in boot), so the missing method is never hit.
+      if (!app.workspace.layoutReady) {
         await this.ensureLayoutReady();
       }
 
