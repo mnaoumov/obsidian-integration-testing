@@ -849,8 +849,9 @@ old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-
 (`fn({ app })`) work on the whole range. **`obsidianModule`** resolves wherever the community-plugin registry
 exists (`plugins.manifests` + `loadPlugin`) — the API **first appears at 0.9.7**, so the module resolves on
 **every version from 0.9.7 up** (0.9.7 needs two partial-API workarounds — undefined `configDir` and absent
-`uninstallPlugin` — see the `getObsidianModule` bullet). It is `undefined` on the **0.6.4–0.9.6** band, which
-has no registry at all (predates community plugins) — a genuine platform limit there, not a harness gap.
+`uninstallPlugin` — see the `getObsidianModule` bullet). It is `null` on the **0.6.4–0.9.6** band, which
+has no registry at all (predates community plugins) — a genuine platform limit there, not a harness gap;
+`getObsidianModule` warns once (`console.warn`) on that band so a `null` `obsidianModule` is self-explaining.
 
 The owned instance opens its vault by pre-seeding `obsidian.json` into the temp `--user-data-dir` (no CLI
 arg exists for it). The auto-open marker **changed across Obsidian's history**, and the harness had baked in
@@ -894,10 +895,10 @@ The old-version fixes, each CDP-diagnosed:
   absent or partial on the pre-plugin-API band (0.6.4–0.9.6: `plugins` exists but has no `isEnabled`, and the
   `loadPlugin` + `manifests` registry is absent or incomplete). Both now probe a local `PluginsLike` optional-member
   view (casting past `obsidian-typings`' always-present declarations avoids a false `no-unnecessary-condition`)
-  and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `undefined` only
-  when the registry is absent entirely (`loadPlugin`/`manifests` missing — the **0.6.4–0.9.6** band, which
-  predates community plugins, so there is genuinely no way to resolve the module; `require('obsidian')` fails
-  outside a plugin-load context too). Where the registry exists, it MAKES the trick work (next bullet), so
+  and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `null` (warning
+  once via `console.warn`) only when the registry is absent entirely (`loadPlugin`/`manifests` missing — the
+  **0.6.4–0.9.6** band, which predates community plugins, so there is genuinely no way to resolve the module;
+  `require('obsidian')` fails outside a plugin-load context too). Where the registry exists, it MAKES the trick work (next bullet), so
   `obsidianModule` resolves **down to 0.9.7** (the first version with the API).
 - **Off-screen hiding — `require('electron').remote` fallback (fixes an Electron-10 boot wedge).**
   `moveOwnedWindowOffscreen` polled `window.electron.remote` every 250 ms for 20 s; old versions have no
@@ -930,7 +931,7 @@ The old-version fixes, each CDP-diagnosed:
   present, else let the temp plugin linger harmlessly in the ephemeral owned vault. CDP-confirmed: **0.9.7
   (asar-swapped onto the 0.9.6 shell), 0.9.10, and 0.9.11 now return an `obsidianModule` object** (previously
   `undefined` / a crash). The earlier "wrap in try/catch → return `undefined`" was a give-up hack and was
-  replaced. `undefined` remains only for the no-registry band (**0.6.4–0.9.6**).
+  replaced. `null` (with a one-time `console.warn`) remains only for the no-registry band (**0.6.4–0.9.6**).
 - **Test** — pure unit test (`owned-vault-seed.test.ts`) for the seed shape; opt-in heavy integration test
   `src/owned-vault-open.integration.test.ts` (`OBSIDIAN_TEST_OLD_VAULT_OPEN=1`) pins **0.6.4** (the oldest
   supported installer), which exercises the whole old-version stack at once — auto-open (`last_open`), the

@@ -269,6 +269,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const holder = window as unknown as Partial<IntegrationTestingHolder>;
   const existingContexts = holder.__obsidianIntegrationTesting?.contexts ?? {};
   const existingObsidianModule = holder.__obsidianIntegrationTesting?.obsidianModule;
+  // Warn at most once per bootstrap that `obsidianModule` is `null` on this version.
+  let hasWarnedMissingObsidianModule = false;
 
   const ns: IntegrationTestingNamespace = {
     get app() {
@@ -344,13 +346,17 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
       // The temp-plugin trick below resolves `require('obsidian')`, which only
       // Works inside a plugin-load context. It needs the community-plugin registry
-      // (`loadPlugin` + `manifests`); versions that lack it entirely (e.g. 0.6.x has
-      // No `manifests`) cannot run it, so return `undefined` — app-only closures
-      // Still run.
+      // (`loadPlugin` + `manifests`), which FIRST appears in Obsidian 0.9.7; the
+      // 0.6.4-0.9.6 band has no registry and cannot run it, so return `null` (not
+      // `undefined`) - app-only closures (`fn({ app })`) still run.
       // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
       const plugins = this.app.plugins as unknown as PluginsLike;
       if (!plugins.loadPlugin || !plugins.manifests) {
-        return undefined;
+        if (!hasWarnedMissingObsidianModule) {
+          hasWarnedMissingObsidianModule = true;
+          console.warn('[obsidian-integration-testing] `obsidianModule` is `null`: this Obsidian version predates the community-plugin API (added in 0.9.7), so the `obsidian` module cannot be resolved. App-only closures (`fn({ app })`) still work.');
+        }
+        return null;
       }
 
       const SLICE_START = 2;
