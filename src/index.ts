@@ -24,6 +24,8 @@ export {
   setTransportOptionsResolver,
   setVaultPathResolver
 } from './context-provider.ts';
+export type { ReadDemoVaultTreeParams } from './demo-vault-tree.ts';
+export { readDemoVaultTree } from './demo-vault-tree.ts';
 export type {
   CheckElectronCompatibilityParams,
   ElectronCompatibility,
