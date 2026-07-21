@@ -82,6 +82,16 @@ const ANDROID_LOCK_SCOPE = 'android';
  */
 export interface CoreSetupParams {
   /**
+   * Community-plugin ids to enable in the vault **in addition to** the
+   * plugin-under-test, after it is enabled. Each id's built files must already be
+   * present under `.obsidian/plugins/<id>/` — seed them via {@link CoreSetupParams.populate}
+   * (e.g. with `buildDemoVaultPopulate`). Enabling goes through the same
+   * retry/load-verify path as the plugin-under-test. Composes with
+   * `installPlugin: false` (enable extras into an otherwise plugin-less vault).
+   */
+  readonly enableCommunityPlugins?: readonly string[] | undefined;
+
+  /**
    * Whether to install and enable the built plugin in the temp vault. Defaults
    * to `true`. Set to `false` for a **non-plugin** consumer (e.g. a typings
    * crawler) that only needs a registered, empty vault to `evalInObsidian`
@@ -137,6 +147,26 @@ interface CopyPluginIntoVaultParams {
 
   /** The transport (used for the mobile/desktop-only compatibility check). */
   readonly transport: ObsidianTransport;
+}
+
+/**
+ * Parameters for {@link enableExtraCommunityPlugins}.
+ */
+interface EnableExtraCommunityPluginsParams {
+  /** Short label for log messages. */
+  readonly label: string;
+
+  /** The ids of the extra community plugins to enable (their binaries must already be in the vault). */
+  readonly pluginIds: readonly string[];
+
+  /** The temp vault the plugins were seeded into. */
+  readonly tempVault: TempVault;
+
+  /** The transport to evaluate against. */
+  readonly transport: ObsidianTransport;
+
+  /** The resolved transport options (source of the plugin-enable retry knobs). */
+  readonly transportOptions: null | ObsidianTransportOptions;
 }
 
 /**
@@ -226,6 +256,14 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     if (pluginId !== undefined) {
       await enablePluginInVault({ label, pluginId, tempVault, transport, transportOptions });
     }
+
+    await enableExtraCommunityPlugins({
+      label,
+      pluginIds: params?.enableCommunityPlugins ?? [],
+      tempVault,
+      transport,
+      transportOptions
+    });
 
     const augmentedOptions = augmentTransportOptions(transportOptions, transport);
     const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
@@ -382,6 +420,21 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
   await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
 
   return pluginId;
+}
+
+/**
+ * Enables extra community plugins (beyond the plugin-under-test) in the registered vault, each through the
+ * same {@link enablePluginInVault} path. Each plugin's built files must already be present in the vault (seed
+ * them via {@link CoreSetupParams.populate}). A no-op when the list is empty.
+ *
+ * @param params - The enable parameters.
+ */
+async function enableExtraCommunityPlugins(params: EnableExtraCommunityPluginsParams): Promise<void> {
+  const { label, pluginIds, tempVault, transport, transportOptions } = params;
+  for (const pluginId of pluginIds) {
+    log(`[integration-setup:${label}] Enabling extra community plugin "${pluginId}"...`);
+    await enablePluginInVault({ label, pluginId, tempVault, transport, transportOptions });
+  }
 }
 
 /**

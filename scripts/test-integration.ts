@@ -7,5 +7,7 @@ await execFromRoot([
   '--project',
   'integration-tests:owned-attach',
   '--project',
-  'integration-tests:bare-attach'
+  'integration-tests:bare-attach',
+  '--project',
+  'integration-tests:enable-community-plugins'
 ]);
