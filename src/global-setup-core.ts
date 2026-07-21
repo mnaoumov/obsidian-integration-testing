@@ -29,7 +29,10 @@ import type { PopulateFilesParams } from './temp-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
-import { enablePluginWithErrorCapture } from './enable-plugin.ts';
+import {
+  enablePluginWithErrorCapture,
+  getGenericPluginLoadFailureMessage
+} from './enable-plugin.ts';
 import { errorToString } from './error-to-string.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
@@ -382,7 +385,17 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
 async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<void> {
   const { label, pluginId, tempVault, transport } = params;
   log(`[integration-setup:${label}] Enabling plugin "${pluginId}"...`);
-  const { errorMessage } = await evalInObsidian({
+
+  /*
+   * Open a native console-capture window (Layer 2, Android only) around the
+   * enable so that if Obsidian swallows the load error before the monkey-patch
+   * and the renderer console (Layer 1) came up empty, we can still recover the
+   * real cause from `adb logcat`. No-op (undefined) on transports that don't
+   * implement it (e.g. desktop).
+   */
+  const captureHandle = await transport.beginConsoleCapture?.();
+
+  const { errorMessage, isLoaded, rendererConsoleErrors } = await evalInObsidian({
     args: { pluginId },
     fn: enablePluginWithErrorCapture,
     shouldSkipPreflightChecks: true,
@@ -390,11 +403,21 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
     vaultPath: tempVault.path
   });
 
-  if (errorMessage) {
-    throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
+  /*
+   * `errorMessage` is the real throw seen by the monkey-patch;
+   * `rendererConsoleErrors` (Layer 1) is the real cause console-logged in the renderer.
+   */
+  const realError = errorMessage ?? rendererConsoleErrors;
+
+  if (isLoaded && !realError) {
+    log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
+    return;
   }
 
-  log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
+  // Failure: compose the most specific detail available.
+  const logcatTail = realError ? undefined : await transport.readConsoleCaptureSince?.(captureHandle);
+  const detail = realError ?? logcatTail ?? getGenericPluginLoadFailureMessage(pluginId);
+  throw new Error(`Plugin "${pluginId}" failed to load: ${detail}`);
 }
 
 /**

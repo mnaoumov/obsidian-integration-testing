@@ -51,6 +51,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type {
+  ConsoleCaptureHandle,
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
@@ -143,6 +144,18 @@ const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 
+// --- Console capture (Layer 2 of the plugin-load error surfacing, see T88) ---
+const CONSOLE_CAPTURE_MARKER_TAG = 'OIT_CAPTURE';
+const CONSOLE_CAPTURE_TAIL_MAX_LENGTH = 8000;
+const ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS = 5000;
+const LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS = 10000;
+/**
+ * `adb logcat -v time` lines look like `MM-DD HH:MM:SS.mmm LEVEL/TAG( PID): message`.
+ * Keep only the tags Chromium/WebView routes JS `console.*` output and uncaught
+ * errors to (`chromium`, the Capacitor console bridge, and native `AndroidRuntime`).
+ */
+const CONSOLE_CAPTURE_TAG_RE = /\/(?:chromium|AndroidRuntime|Capacitor\/Console)\(/;
+
 const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
   android: '/sdcard/Documents/',
   ios: '@md.obsidian:documents/'
@@ -204,6 +217,25 @@ export class AppiumTransport implements ObsidianTransport {
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
+  }
+
+  /**
+   * Begins a console capture by stamping the device log with a unique marker.
+   *
+   * Uses `adb shell log` to write a marker into `logcat` at capture start so a
+   * later {@link AppiumTransport.readConsoleCaptureSince} can slice out
+   * everything the WebView logged afterwards — without the invasive `logcat -c`
+   * buffer clear.
+   *
+   * @returns A handle carrying the unique marker.
+   */
+  public async beginConsoleCapture(): Promise<ConsoleCaptureHandle> {
+    const marker = `${CONSOLE_CAPTURE_MARKER_TAG}_${randomUUID()}`;
+    await exec(
+      ['adb', '-s', this.deviceId, 'shell', 'log', '-t', CONSOLE_CAPTURE_MARKER_TAG, marker],
+      { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS }
+    );
+    return { marker };
   }
 
   /**
@@ -318,6 +350,42 @@ export class AppiumTransport implements ObsidianTransport {
     } finally {
       await rm(localArchive, { force: true });
     }
+  }
+
+  /**
+   * Dumps `adb logcat` and returns the WebView console/error output logged
+   * since the marker from {@link AppiumTransport.beginConsoleCapture}.
+   *
+   * Filters to the Chromium/WebView tags that carry JS `console.*` output and
+   * uncaught errors, and caps the result length. Bounded, post-hoc,
+   * failure-path-only — never a live monitor.
+   *
+   * @param handle - The capture handle (or `undefined` when capture never started).
+   * @returns The captured console/error text, or `undefined` if nothing relevant was logged.
+   */
+  public async readConsoleCaptureSince(handle: ConsoleCaptureHandle | undefined): Promise<string | undefined> {
+    if (!handle) {
+      return undefined;
+    }
+
+    const dump = await exec(
+      ['adb', '-s', this.deviceId, 'logcat', '-d', '-v', 'time'],
+      { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS }
+    );
+
+    const markerIndex = dump.lastIndexOf(handle.marker);
+    const region = markerIndex === -1 ? dump : dump.slice(markerIndex + handle.marker.length);
+    const relevant = region
+      .split('\n')
+      .filter((line) => CONSOLE_CAPTURE_TAG_RE.test(line))
+      .join('\n')
+      .trim();
+
+    if (!relevant) {
+      return undefined;
+    }
+
+    return relevant.slice(-CONSOLE_CAPTURE_TAIL_MAX_LENGTH);
   }
 
   /**
