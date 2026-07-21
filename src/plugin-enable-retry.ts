@@ -30,6 +30,26 @@ export const DEFAULT_PLUGIN_ENABLE_RETRY_COUNT = 3;
 export const DEFAULT_PLUGIN_ENABLE_RETRY_DELAY_IN_MILLISECONDS = 2000;
 
 /**
+ * The per-retry multiplier for the exponential backoff: each retry waits twice as
+ * long as the previous one.
+ */
+const EXPONENTIAL_BACKOFF_BASE = 2;
+
+/**
+ * Computes the exponential backoff delay for a given retry, from a base delay.
+ *
+ * `attemptIndex` is 0-based: the first retry waits the base delay, the second
+ * twice that, the third four times, and so on.
+ *
+ * @param baseDelayInMilliseconds - The base delay.
+ * @param attemptIndex - The 0-based retry index.
+ * @returns The delay in milliseconds for this retry.
+ */
+export function computeBackoffDelayInMilliseconds(baseDelayInMilliseconds: number, attemptIndex: number): number {
+  return baseDelayInMilliseconds * (EXPONENTIAL_BACKOFF_BASE ** attemptIndex);
+}
+
+/**
  * Resolves the number of extra plugin-enable attempts, applying the default when
  * the option is omitted. Only the Android transport carries the knob; every
  * other transport (and `undefined`) falls back to the default — harmless there,
@@ -40,7 +60,7 @@ export const DEFAULT_PLUGIN_ENABLE_RETRY_DELAY_IN_MILLISECONDS = 2000;
  * @param options - The resolved transport options.
  * @returns The retry count.
  */
-export function resolvePluginEnableRetryCount(options: ObsidianTransportOptions | null): number {
+export function resolvePluginEnableRetryCount(options: null | ObsidianTransportOptions): number {
   return options?.type === 'obsidian-android-appium'
     ? (options.pluginEnableRetryCount ?? DEFAULT_PLUGIN_ENABLE_RETRY_COUNT)
     : DEFAULT_PLUGIN_ENABLE_RETRY_COUNT;
@@ -54,24 +74,10 @@ export function resolvePluginEnableRetryCount(options: ObsidianTransportOptions 
  * @param options - The resolved transport options.
  * @returns The base delay in milliseconds.
  */
-export function resolvePluginEnableRetryDelayInMilliseconds(options: ObsidianTransportOptions | null): number {
+export function resolvePluginEnableRetryDelayInMilliseconds(options: null | ObsidianTransportOptions): number {
   return options?.type === 'obsidian-android-appium'
     ? (options.pluginEnableRetryDelayInMilliseconds ?? DEFAULT_PLUGIN_ENABLE_RETRY_DELAY_IN_MILLISECONDS)
     : DEFAULT_PLUGIN_ENABLE_RETRY_DELAY_IN_MILLISECONDS;
-}
-
-/**
- * Computes the exponential backoff delay for a given retry, from a base delay.
- *
- * `attemptIndex` is 0-based: the first retry waits the base delay, the second
- * twice that, the third four times, and so on.
- *
- * @param baseDelayInMilliseconds - The base delay.
- * @param attemptIndex - The 0-based retry index.
- * @returns The delay in milliseconds for this retry.
- */
-export function computeBackoffDelayInMilliseconds(baseDelayInMilliseconds: number, attemptIndex: number): number {
-  return baseDelayInMilliseconds * (2 ** attemptIndex);
 }
 
 /**

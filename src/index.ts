@@ -59,6 +59,8 @@ export type {
   ObsidianVersionMetadata
 } from './obsidian-metadata.ts';
 export { getVersionMetadata } from './obsidian-metadata.ts';
+export type { PollInObsidianParams } from './poll-in-obsidian.ts';
+export { pollInObsidian } from './poll-in-obsidian.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 export type { SilentAsarFallbackErrorConstructorParams } from './silent-asar-fallback-error.ts';
 export { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';

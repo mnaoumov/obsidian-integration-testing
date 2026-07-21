@@ -62,6 +62,7 @@ import {
 import { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 import { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 import { ensureNonNullable } from './type-guards.ts';
+import { vaultPathsMatch } from './vault-path-match.ts';
 import {
   resolveOwnedHiddenLaunchArgs,
   resolveSandboxLaunchArgs,
@@ -545,9 +546,15 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     const targets = await this.getPageTargets();
     if (targets.length > 0) {
-      const ws = await this.connectToTarget(ensureNonNullable(targets[0]));
+      // The `vault-remove` IPC is sent through a still-open window (`targets[0]`) —
+      // `vaultPath`'s own window was just destroyed above, so bootstrap the namespace
+      // On the existing window's OWN base path, not on `vaultPath` (which no longer has
+      // A live target to match).
+      const removalTarget = ensureNonNullable(targets[0]);
+      const removalBasePath = await this.probeVaultPath(removalTarget);
+      const ws = await this.connectToTarget(removalTarget);
       try {
-        await ensureNamespaceBootstrapped(this, vaultPath);
+        await ensureNamespaceBootstrapped(this, removalBasePath);
         const removeExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath], channel: 'vault-remove' })})`;
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
@@ -784,8 +791,15 @@ export class DesktopCdpTransport implements ObsidianTransport {
   /**
    * Finds the CDP target that has the given vault open.
    *
-   * For a single target, returns it directly. For multiple targets,
-   * probes each by evaluating `getBasePath()` to find the match.
+   * Probes every target by evaluating `getBasePath()` and returns the one whose
+   * base path matches `vaultPath` (via {@link vaultPathsMatch}, tolerant of
+   * separator/case differences). A single target is **not** returned blindly: with
+   * more than one vault open (attach mode's shared instance), the sole-target
+   * shortcut would return whichever window happens to be open regardless of which
+   * vault was requested — the exact mis-routing this method must avoid. A target
+   * whose probe throws is treated as not-ready and skipped (the caller's readiness
+   * poll retries); a target whose probe succeeds but does not match is never
+   * returned. When nothing matches, throw so the caller keeps polling.
    *
    * @param vaultPath - The vault path to match.
    * @returns The matching CDP target.
@@ -797,14 +811,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
       throw new Error('No Obsidian CDP targets found');
     }
 
-    if (targets.length === 1) {
-      return ensureNonNullable(targets[0]);
-    }
-
     for (const target of targets) {
       try {
         const basePath = await this.probeVaultPath(target);
-        if (basePath === vaultPath) {
+        if (vaultPathsMatch(basePath, vaultPath)) {
           return target;
         }
       } catch {
@@ -931,9 +941,18 @@ export class DesktopCdpTransport implements ObsidianTransport {
       throw new Error('No Obsidian CDP targets available. Is Obsidian running?');
     }
 
-    const ipcWs = await this.connectToTarget(ensureNonNullable(targets[0]));
+    // The `vault-open` IPC is sent through an EXISTING window (`targets[0]`), so the
+    // Helper namespace must be bootstrapped on THAT window — not on `vaultPath`, whose
+    // Window does not exist yet. Bootstrapping against `vaultPath` here would route
+    // Through `findTargetForVault(vaultPath)` with only the existing window present and
+    // Poison the connection cache (label `vaultPath`, socket → the existing window), so
+    // Every later eval for `vaultPath` would mis-route to the existing window. Probe the
+    // Existing window's own base path and bootstrap against that instead.
+    const existingTarget = ensureNonNullable(targets[0]);
+    const existingVaultPath = await this.probeVaultPath(existingTarget);
+    const ipcWs = await this.connectToTarget(existingTarget);
     try {
-      await ensureNamespaceBootstrapped(this, vaultPath);
+      await ensureNamespaceBootstrapped(this, existingVaultPath);
       const ipcExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath, false], channel: 'vault-open' })})`;
       await this.sendCommand(ipcWs, 'Runtime.evaluate', {
         awaitPromise: true,
