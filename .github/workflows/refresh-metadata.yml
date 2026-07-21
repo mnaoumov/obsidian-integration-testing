@@ -1,0 +1,51 @@
+name: Refresh Metadata
+
+# Runs npm run refresh:metadata (scripts/refresh-metadata.ts): additively merges the
+# upstream obsidian-versions.json download URLs into the repo-root metadata.json. The
+# script is byte-stable, so this commits ONLY when upstream actually changed. Daily so
+# new Obsidian releases land in the catalog within a day; also manual (workflow_dispatch).
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the refreshed metadata.json to main
+
+concurrency: # never overlap two refresh runs
+  group: refresh-metadata
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh metadata.json
+        run: npm run refresh:metadata
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- metadata.json; then
+            echo "metadata.json unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metadata.json
+          git commit -m "chore: refresh metadata.json"
+          git push
