@@ -26,7 +26,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
+    globalSetup: ['obsidian-integration-testing/vitest-global-setup-plugin'],
   },
 });
 ```
@@ -52,8 +52,8 @@ Or add it to `compilerOptions.types` in your `tsconfig.json`:
 ```ts
 // jest.config.ts
 export default {
-  globalSetup: 'obsidian-integration-testing/jest-global-setup',
-  globalTeardown: 'obsidian-integration-testing/jest-global-teardown',
+  globalSetup: 'obsidian-integration-testing/jest-global-setup-plugin',
+  globalTeardown: 'obsidian-integration-testing/jest-global-teardown-plugin',
 };
 ```
 
@@ -383,7 +383,7 @@ Use `getTempVault()` to get the temporary vault created by the global setup:
 ```ts
 import { describe, expect, it } from 'vitest';
 import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVault } from 'obsidian-integration-testing/vitest-global-setup';
+import { getTempVault } from 'obsidian-integration-testing/vitest-global-setup-plugin';
 
 describe('my-plugin', () => {
   const vault = getTempVault();
@@ -418,7 +418,7 @@ describe('my-plugin', () => {
 
 ```ts
 import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVault } from 'obsidian-integration-testing/jest-global-setup';
+import { getTempVault } from 'obsidian-integration-testing/jest-global-setup-plugin';
 
 describe('my-plugin', () => {
   const vault = getTempVault();
@@ -444,7 +444,7 @@ This capability reaches all three consumption paths.
 
 ```ts
 // integration-global-setup.ts
-import { createSetup } from 'obsidian-integration-testing/vitest-global-setup';
+import { createSetup } from 'obsidian-integration-testing/vitest-global-setup-plugin';
 
 export const { setup, teardown } = createSetup({
   populate: () => ({
@@ -469,7 +469,7 @@ export default defineConfig({
 
 ```ts
 // integration-global-setup.ts — shared createSetup pair
-import { createSetup } from 'obsidian-integration-testing/jest-global-setup';
+import { createSetup } from 'obsidian-integration-testing/jest-global-setup-plugin';
 
 export const { setup, teardown } = createSetup({
   populate: () => ({
@@ -499,6 +499,28 @@ export default {
 Both files share the same `createSetup` instance (via the common module), so `teardown` cleans up exactly what `setup` created.
 
 **Manual** — when wiring `TempVault` yourself (without a framework global setup), call `vault.populate()` before `vault.register()`, as shown in [Create a temporary vault](#create-a-temporary-vault).
+
+### Non-plugin consumers
+
+If your project is **not** a plugin — a tool that only needs a registered, empty vault to `evalInObsidian` against (e.g. a typings crawler) — point `globalSetup` at the **`-no-plugin`** entry point instead of `-plugin`. It still launches one owned, off-screen Obsidian instance and publishes its endpoint to workers so each worker **attaches** to it, but skips reading `dist/manifest.json`, copying a plugin, writing `community-plugins.json`, and enabling a plugin. No wrapper module needed:
+
+```ts
+// vitest.config.ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    globalSetup: ['obsidian-integration-testing/vitest-global-setup-no-plugin']
+  }
+});
+```
+
+```ts
+// your.integration.test.ts — read the empty registered vault's path
+import { getTempVault } from 'obsidian-integration-testing/vitest-global-setup-no-plugin';
+```
+
+For Jest, use `obsidian-integration-testing/jest-global-setup-no-plugin` (`globalSetup`) + `obsidian-integration-testing/jest-global-teardown-no-plugin` (`globalTeardown`). If you also need to pre-populate the empty vault, build the pair yourself with `createSetup({ installPlugin: false, populate })` from the `-plugin` factory and re-export its `setup`/`teardown` (the same wrapper pattern shown above for `populate`).
 
 > [!WARNING]
 >
@@ -591,7 +613,7 @@ By default the library **launches and owns an isolated Obsidian instance** in a 
    export default defineConfig({
      test: {
        fileParallelism: false,
-       globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
+       globalSetup: ['obsidian-integration-testing/vitest-global-setup-plugin'],
      },
    });
    ```
@@ -721,7 +743,7 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    export default defineConfig({
      test: {
        fileParallelism: false,
-       globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
+       globalSetup: ['obsidian-integration-testing/vitest-global-setup-plugin'],
        environmentOptions: {
          obsidianTransport: {
            type: 'obsidian-android-appium',
@@ -808,7 +830,7 @@ export default defineConfig({
         test: {
           name: 'integration-tests:desktop-cdp',
           fileParallelism: false,
-          globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
+          globalSetup: ['obsidian-integration-testing/vitest-global-setup-plugin'],
           include: ['src/**/*.integration.test.ts'],
           exclude: ['src/**/*.android.integration.test.ts'],
           // default transport, can be omitted
@@ -821,7 +843,7 @@ export default defineConfig({
         test: {
           name: 'integration-tests:android-appium',
           fileParallelism: false,
-          globalSetup: ['obsidian-integration-testing/vitest-global-setup'],
+          globalSetup: ['obsidian-integration-testing/vitest-global-setup-plugin'],
           include: ['src/**/*.android.integration.test.ts'],
           environmentOptions: {
             obsidianTransport: {

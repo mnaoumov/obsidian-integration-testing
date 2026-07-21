@@ -71,6 +71,17 @@ const ANDROID_LOCK_SCOPE = 'android';
  */
 export interface CoreSetupParams {
   /**
+   * Whether to install and enable the built plugin in the temp vault. Defaults
+   * to `true`. Set to `false` for a **non-plugin** consumer (e.g. a typings
+   * crawler) that only needs a registered, empty vault to `evalInObsidian`
+   * against: the plugin `dist`/`manifest.json` read, the copy into
+   * `.obsidian/plugins`, the `community-plugins.json` write, and the enable step
+   * are all skipped, while the transport, temp vault, registration, and
+   * worker-facing endpoint provisioning still run unchanged.
+   */
+  readonly installPlugin?: boolean | undefined;
+
+  /**
    * Files and folders to write into the vault **before** Obsidian opens it, so
    * its startup scan indexes them in one pass (see {@link TempVault.populate}).
    * Use this for large fixtures — writing thousands of notes after open and
@@ -101,11 +112,47 @@ export interface CoreSetupResult {
 }
 
 /**
+ * Parameters for {@link copyPluginIntoVault}.
+ */
+interface CopyPluginIntoVaultParams {
+  /** Short label for log messages. */
+  readonly label: string;
+
+  /** The project root to resolve the built plugin from. */
+  readonly projectRoot: string;
+
+  /** The temp vault to copy the plugin into. */
+  readonly tempVault: TempVault;
+
+  /** The transport (used for the mobile/desktop-only compatibility check). */
+  readonly transport: ObsidianTransport;
+}
+
+/**
+ * Parameters for {@link enablePluginInVault}.
+ */
+interface EnablePluginInVaultParams {
+  /** Short label for log messages. */
+  readonly label: string;
+
+  /** The id of the plugin to enable. */
+  readonly pluginId: string;
+
+  /** The temp vault the plugin was copied into. */
+  readonly tempVault: TempVault;
+
+  /** The transport to evaluate against. */
+  readonly transport: ObsidianTransport;
+}
+
+/**
  * Framework-agnostic global setup logic.
  *
- * Loads `.env` from the project root, creates a transport, copies the built
- * plugin into a temporary vault, registers the vault with Obsidian, and
- * enables the plugin.
+ * Loads `.env` from the project root, creates a transport, creates and registers
+ * a temporary vault with Obsidian, and — unless {@link CoreSetupParams.installPlugin}
+ * is `false` — copies the built plugin into the vault and enables it. The
+ * plugin-less mode still launches the owned instance and publishes its
+ * worker-facing endpoint, so a non-plugin consumer reuses the same attach wiring.
  *
  * @param params - Setup parameters.
  * @returns The setup result containing the temp vault, transport, and resolved options.
@@ -137,27 +184,18 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     log(`[integration-setup:${label}] Transport created: ${transport.constructor.name}`);
 
     log(`[integration-setup:${label}] Project root: ${projectRoot}`);
-    const distPath = await resolveDistPath(projectRoot);
-    const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
-    const pluginId = manifestJson.id;
-
-    if (transport.isMobile && manifestJson.isDesktopOnly) {
-      throw new Error(
-        `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
-      );
-    }
-
-    const mainJs = join(distPath, MAIN_JS);
-    const buildStat = await stat(mainJs);
-
-    log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+    const shouldInstallPlugin = params?.installPlugin !== false;
 
     tempVault = new TempVault();
     log(`[integration-setup:${label}] Created temp vault: ${tempVault.path}`);
-    const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
-    await mkdir(pluginDir, { recursive: true });
-    await cp(distPath, pluginDir, { recursive: true });
-    await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+
+    let pluginId: string | undefined;
+
+    if (shouldInstallPlugin) {
+      pluginId = await copyPluginIntoVault({ label, projectRoot, tempVault, transport });
+    } else {
+      log(`[integration-setup:${label}] Skipping plugin install (installPlugin: false) — registering an empty vault.`);
+    }
 
     if (params?.populate) {
       const entryCount = Object.keys(params.populate).length;
@@ -171,23 +209,9 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     await tempVault.register(transport);
     log(`[integration-setup:${label}] Vault registered.`);
 
-    // Enable the plugin and verify it loaded. Obsidian's enablePlugin() wraps
-    // LoadPlugin() in a try-catch that swallows errors and returns false.
-    // We monkey-patch loadPlugin() to capture the error before it's swallowed.
-    log(`[integration-setup:${label}] Enabling plugin "${pluginId}"...`);
-    const { errorMessage } = await evalInObsidian({
-      args: { pluginId },
-      fn: enablePluginWithErrorCapture,
-      shouldSkipPreflightChecks: true,
-      transport,
-      vaultPath: tempVault.path
-    });
-
-    if (errorMessage) {
-      throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
+    if (pluginId !== undefined) {
+      await enablePluginInVault({ label, pluginId, tempVault, transport });
     }
-
-    log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
 
     const augmentedOptions = augmentTransportOptions(transportOptions, transport);
     const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
@@ -310,6 +334,67 @@ function augmentTransportOptions(
   }
 
   return options;
+}
+
+/**
+ * Copies the built plugin into the temp vault and marks it as a community plugin.
+ *
+ * Reads `manifest.json` from the newer of `dist/dev`/`dist/build`, rejects a
+ * desktop-only plugin on a mobile transport, copies the build into
+ * `.obsidian/plugins/<id>`, and writes `.obsidian/community-plugins.json`.
+ *
+ * @param params - The copy parameters.
+ * @returns The plugin id read from the manifest.
+ */
+async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<string> {
+  const { label, projectRoot, tempVault, transport } = params;
+  const distPath = await resolveDistPath(projectRoot);
+  const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
+  const pluginId = manifestJson.id;
+
+  if (transport.isMobile && manifestJson.isDesktopOnly) {
+    throw new Error(
+      `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
+    );
+  }
+
+  const mainJs = join(distPath, MAIN_JS);
+  const buildStat = await stat(mainJs);
+  log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+
+  const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
+  await mkdir(pluginDir, { recursive: true });
+  await cp(distPath, pluginDir, { recursive: true });
+  await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+
+  return pluginId;
+}
+
+/**
+ * Enables the plugin in the registered vault and verifies it loaded.
+ *
+ * Obsidian's `enablePlugin()` wraps `loadPlugin()` in a try-catch that swallows
+ * errors and returns false, so {@link enablePluginWithErrorCapture} monkey-patches
+ * `loadPlugin()` to capture the error before it's swallowed.
+ *
+ * @param params - The enable parameters.
+ */
+async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<void> {
+  const { label, pluginId, tempVault, transport } = params;
+  log(`[integration-setup:${label}] Enabling plugin "${pluginId}"...`);
+  const { errorMessage } = await evalInObsidian({
+    args: { pluginId },
+    fn: enablePluginWithErrorCapture,
+    shouldSkipPreflightChecks: true,
+    transport,
+    vaultPath: tempVault.path
+  });
+
+  if (errorMessage) {
+    throw new Error(`Plugin "${pluginId}" failed to load: ${errorMessage}`);
+  }
+
+  log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
 }
 
 /**

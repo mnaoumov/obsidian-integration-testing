@@ -55,6 +55,16 @@ setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.tempVaultPat
  */
 export interface CreateSetupOptions {
   /**
+   * Whether to install and enable the built plugin in the temp vault. Defaults
+   * to `true`. Set to `false` for a **non-plugin** consumer that only needs a
+   * registered, empty vault to `evalInObsidian` against — the owned instance is
+   * still launched and its endpoint published to workers, so re-exporting
+   * `createSetup({ installPlugin: false })` reuses the same attach wiring with no
+   * plugin copy/enable. See {@link CoreSetupParams.installPlugin}.
+   */
+  readonly installPlugin?: boolean;
+
+  /**
    * Returns files/folders to write into the vault before Obsidian opens it (see
    * {@link CoreSetupParams.populate}). A thunk so large fixtures are built lazily,
    * once, in the setup process.
@@ -74,7 +84,8 @@ export interface JestGlobalSetup {
  * Creates a Jest global setup/teardown pair, optionally pre-populating the vault
  * before Obsidian opens it — use this for a dedicated large-vault/performance
  * setup. The plain {@link setup} / {@link teardown} exports are the no-populate
- * case (`createSetup()`).
+ * case (`createSetup()`). Pass `{ installPlugin: false }` for a non-plugin consumer
+ * that only needs a registered, empty vault (see {@link CreateSetupOptions.installPlugin}).
  *
  * @param options - Setup options.
  * @returns The `setup` and `teardown` functions to re-export from a `globalSetup` module.
@@ -87,7 +98,7 @@ export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
   async function setup(): Promise<void> {
     const transportOptions = globalThis.__obsidianIntegrationTesting?.transportOptions;
 
-    setupResult = await coreSetup({ populate: options?.populate?.(), transportOptions });
+    setupResult = await coreSetup({ installPlugin: options?.installPlugin, populate: options?.populate?.(), transportOptions });
 
     globalThis.__obsidianIntegrationTesting = {
       ...globalThis.__obsidianIntegrationTesting,

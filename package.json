@@ -30,7 +30,17 @@
         "default": "./dist/lib/cjs/index.cjs"
       }
     },
-    "./jest-global-setup": {
+    "./jest-global-setup-no-plugin": {
+      "import": {
+        "types": "./dist/lib/esm/jest/global-setup-no-plugin.d.mts",
+        "default": "./dist/lib/esm/jest/global-setup-no-plugin.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/jest/global-setup-no-plugin.d.cts",
+        "default": "./dist/lib/cjs/jest/global-setup-no-plugin.cjs"
+      }
+    },
+    "./jest-global-setup-plugin": {
       "import": {
         "types": "./dist/lib/esm/jest/global-setup.d.mts",
         "default": "./dist/lib/esm/jest/global-setup.mjs"
@@ -40,7 +50,17 @@
         "default": "./dist/lib/cjs/jest/global-setup.cjs"
       }
     },
-    "./jest-global-teardown": {
+    "./jest-global-teardown-no-plugin": {
+      "import": {
+        "types": "./dist/lib/esm/jest/global-teardown-no-plugin.d.mts",
+        "default": "./dist/lib/esm/jest/global-teardown-no-plugin.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/jest/global-teardown-no-plugin.d.cts",
+        "default": "./dist/lib/cjs/jest/global-teardown-no-plugin.cjs"
+      }
+    },
+    "./jest-global-teardown-plugin": {
       "import": {
         "types": "./dist/lib/esm/jest/global-teardown.d.mts",
         "default": "./dist/lib/esm/jest/global-teardown.mjs"
@@ -60,7 +80,17 @@
         "default": "./dist/lib/cjs/jest/setup.cjs"
       }
     },
-    "./vitest-global-setup": {
+    "./vitest-global-setup-no-plugin": {
+      "import": {
+        "types": "./dist/lib/esm/vitest/global-setup-no-plugin.d.mts",
+        "default": "./dist/lib/esm/vitest/global-setup-no-plugin.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/cjs/vitest/global-setup-no-plugin.d.cts",
+        "default": "./dist/lib/cjs/vitest/global-setup-no-plugin.cjs"
+      }
+    },
+    "./vitest-global-setup-plugin": {
       "import": {
         "types": "./dist/lib/esm/vitest/global-setup.d.mts",
         "default": "./dist/lib/esm/vitest/global-setup.mjs"
