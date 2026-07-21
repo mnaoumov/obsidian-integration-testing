@@ -5,6 +5,19 @@
  */
 
 /**
+ * An opaque handle identifying a console-capture window opened by
+ * {@link ObsidianTransport.beginConsoleCapture} and consumed by
+ * {@link ObsidianTransport.readConsoleCaptureSince}.
+ */
+export interface ConsoleCaptureHandle {
+  /**
+   * A unique marker written into the target's log stream at capture start,
+   * used to slice out everything logged after this point.
+   */
+  readonly marker: string;
+}
+
+/**
  * A pluggable transport that evaluates JavaScript expressions inside a running
  * Obsidian instance and manages vault lifecycle.
  *
@@ -14,6 +27,22 @@
  * - {@link AppiumTransport} — Mobile Obsidian via Appium WebView JS injection
  */
 export interface ObsidianTransport {
+  /**
+   * Begins capturing the target's native console/error stream so a later
+   * {@link ObsidianTransport.readConsoleCaptureSince} can return everything
+   * logged since this call.
+   *
+   * Used to surface the *real* plugin-load error when Obsidian swallows it
+   * before the harness's `loadPlugin` monkey-patch sees it (the error then
+   * only exists in the renderer/WebView console). Optional and platform-specific:
+   * implemented by {@link AppiumTransport} (tails `adb logcat`); absent on
+   * {@link DesktopCdpTransport} (desktop errors are surfaced in-renderer, and a
+   * developer can open DevTools directly).
+   *
+   * @returns An opaque handle to pass to {@link ObsidianTransport.readConsoleCaptureSince}, or `undefined` when unsupported.
+   */
+  beginConsoleCapture?(): Promise<ConsoleCaptureHandle | undefined>;
+
   /**
    * Disposes of transport resources (e.g. WebSocket connections, Appium sessions).
    */
@@ -70,6 +99,17 @@ export interface ObsidianTransport {
    * @param files - Map of relative file paths to content buffers.
    */
   pushFiles?(vaultPath: string, files: Record<string, Uint8Array>): Promise<void>;
+
+  /**
+   * Reads the native console/error output captured since the matching
+   * {@link ObsidianTransport.beginConsoleCapture} call.
+   *
+   * A bounded, post-hoc, failure-path-only dump — not a live monitor.
+   *
+   * @param handle - The handle returned by {@link ObsidianTransport.beginConsoleCapture} (or `undefined` when capture was unsupported).
+   * @returns The captured console/error text, or `undefined` when unsupported or nothing relevant was logged.
+   */
+  readConsoleCaptureSince?(handle: ConsoleCaptureHandle | undefined): Promise<string | undefined>;
 
   /**
    * Registers a vault path so Obsidian can target it.

@@ -107,6 +107,23 @@ const INVALID_EXPORT_MAIN = `
 module.exports = {}; exports.default = {};
 `;
 
+/*
+ * Emits console.error/warn, then throws in onload. The throw is caught by the
+ * monkey-patch (errorMessage set, isLoaded true), so Layer 1's console capture
+ * must not leak into the result — verifies the gating on the caught path.
+ */
+const CONSOLE_THEN_CRASH_MAIN = `
+const { Plugin } = require('obsidian');
+class P extends Plugin {
+  onload() {
+    console.error('noisy console.error during onload');
+    console.warn('noisy console.warn during onload');
+    throw new Error('console then crash');
+  }
+}
+module.exports = P; exports.default = P;
+`;
+
 interface PluginTestCase {
   /**
    * When set, asserts that `errorMessage` contains this substring.
@@ -139,6 +156,18 @@ const TEST_CASES: PluginTestCase[] = [
     id: 'test-async-crash',
     mainJs: ASYNC_CRASH_MAIN,
     name: 'async onload (crash)',
+    shouldBeEnabled: false,
+    shouldBeLoaded: true
+  },
+  /*
+   * Noisy console output plus a caught onload throw — the captured console must
+   * not leak into the surfaced error (errorMessage wins; rendererConsoleErrors stays undefined).
+   */
+  {
+    expectedError: 'console then crash',
+    id: 'test-console-then-crash',
+    mainJs: CONSOLE_THEN_CRASH_MAIN,
+    name: 'console.error then onload crash',
     shouldBeEnabled: false,
     shouldBeLoaded: true
   },
@@ -253,6 +282,15 @@ describe('plugin load detection', () => {
       } else {
         expect(result.errorMessage).toBeUndefined();
       }
+
+      /*
+       * Layer 1 (T88) captures the renderer console only on the swallow path
+       * (`!errorMessage && !isLoaded`), which desktop never reaches — every
+       * desktop failure throws through the `loadPlugin` monkey-patch. So the
+       * capture must stay empty here even for fixtures that `console.error`
+       * before failing (no noise leaks into the surfaced error).
+       */
+      expect(result.rendererConsoleErrors).toBeUndefined();
     });
   }
 });
