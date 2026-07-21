@@ -23,7 +23,9 @@ import {
 } from 'node:fs/promises';
 import { join } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
+import { setTimeout as sleep } from 'node:timers/promises';
 
+import type { EnablePluginResult } from './enable-plugin.ts';
 import type { SetupLock } from './setup-lock.ts';
 import type { PopulateFilesParams } from './temp-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
@@ -36,6 +38,12 @@ import {
 import { errorToString } from './error-to-string.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { log } from './log.ts';
+import {
+  computeBackoffDelayInMilliseconds,
+  resolvePluginEnableRetryCount,
+  resolvePluginEnableRetryDelayInMilliseconds,
+  shouldRetryPluginEnable
+} from './plugin-enable-retry.ts';
 import { acquireSetupLock } from './setup-lock.ts';
 import { TempVault } from './temp-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
@@ -146,6 +154,9 @@ interface EnablePluginInVaultParams {
 
   /** The transport to evaluate against. */
   readonly transport: ObsidianTransport;
+
+  /** The resolved transport options (source of the plugin-enable retry knobs). */
+  readonly transportOptions: ObsidianTransportOptions | null;
 }
 
 /**
@@ -213,7 +224,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     log(`[integration-setup:${label}] Vault registered.`);
 
     if (pluginId !== undefined) {
-      await enablePluginInVault({ label, pluginId, tempVault, transport });
+      await enablePluginInVault({ label, pluginId, tempVault, transport, transportOptions });
     }
 
     const augmentedOptions = augmentTransportOptions(transportOptions, transport);
@@ -383,7 +394,7 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
  * @param params - The enable parameters.
  */
 async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<void> {
-  const { label, pluginId, tempVault, transport } = params;
+  const { label, pluginId, tempVault, transport, transportOptions } = params;
   log(`[integration-setup:${label}] Enabling plugin "${pluginId}"...`);
 
   /*
@@ -395,28 +406,81 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
    */
   const captureHandle = await transport.beginConsoleCapture?.();
 
-  const { errorMessage, isLoaded, rendererConsoleErrors } = await evalInObsidian({
-    args: { pluginId },
-    fn: enablePluginWithErrorCapture,
-    shouldSkipPreflightChecks: true,
-    transport,
-    vaultPath: tempVault.path
-  });
-
   /*
-   * `errorMessage` is the real throw seen by the monkey-patch;
-   * `rendererConsoleErrors` (Layer 1) is the real cause console-logged in the renderer.
+   * On a freshly cold-booted emulator the plugin subsystem can still be settling
+   * when we enable the plugin, so a single-shot enable races the load and loses
+   * (the plugin lands in the enabled set but never loads). Retry the enable +
+   * load-verification a few times with exponential backoff, which recovers the
+   * transient race. A captured load error (`realError`) is a deterministic bug —
+   * retrying cannot fix it, so we fail fast. Non-Android transports resolve to
+   * the same defaults but never enter the retry path: their load either succeeds
+   * on the first attempt or throws a captured error.
    */
-  const realError = errorMessage ?? rendererConsoleErrors;
+  const maxAttempts = 1 + resolvePluginEnableRetryCount(transportOptions);
+  const baseDelayInMilliseconds = resolvePluginEnableRetryDelayInMilliseconds(transportOptions);
 
-  if (isLoaded && !realError) {
-    log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully.`);
-    return;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let result: EnablePluginResult;
+    try {
+      result = await evalInObsidian({
+        args: { pluginId },
+        fn: enablePluginWithErrorCapture,
+        shouldSkipPreflightChecks: true,
+        transport,
+        vaultPath: tempVault.path
+      });
+    } catch (error) {
+      /*
+       * The eval itself threw (e.g. the WebView context was lost mid-execution on
+       * a churning guest) — a transport-level transient. Retry if attempts remain.
+       */
+      if (attempt < maxAttempts) {
+        const delayInMilliseconds = computeBackoffDelayInMilliseconds(baseDelayInMilliseconds, attempt - 1);
+        log(
+          `[integration-setup:${label}] Enable attempt ${String(attempt)}/${String(maxAttempts)} threw `
+            + `(${errorToString(error)}); retrying in ${String(delayInMilliseconds)}ms...`
+        );
+        await sleep(delayInMilliseconds);
+        continue;
+      }
+      throw error;
+    }
+
+    /*
+     * `errorMessage` is the real throw seen by the monkey-patch;
+     * `rendererConsoleErrors` (Layer 1) is the real cause console-logged in the renderer.
+     */
+    const realError = result.errorMessage ?? result.rendererConsoleErrors;
+
+    if (result.isLoaded && !realError) {
+      const attemptSuffix = attempt > 1 ? ` (attempt ${String(attempt)}/${String(maxAttempts)})` : '';
+      log(`[integration-setup:${label}] Plugin "${pluginId}" enabled successfully${attemptSuffix}.`);
+      return;
+    }
+
+    // A captured load error is deterministic — fail fast rather than retry.
+    if (!shouldRetryPluginEnable(result)) {
+      throw new Error(`Plugin "${pluginId}" failed to load: ${realError ?? getGenericPluginLoadFailureMessage(pluginId)}`);
+    }
+
+    // Transient cold-boot race (enabled but not loaded, no cause captured): retry.
+    if (attempt < maxAttempts) {
+      const delayInMilliseconds = computeBackoffDelayInMilliseconds(baseDelayInMilliseconds, attempt - 1);
+      log(
+        `[integration-setup:${label}] Plugin "${pluginId}" enabled but not loaded `
+          + `(attempt ${String(attempt)}/${String(maxAttempts)}); retrying in ${String(delayInMilliseconds)}ms...`
+      );
+      await sleep(delayInMilliseconds);
+    }
   }
 
-  // Failure: compose the most specific detail available.
-  const logcatTail = realError ? undefined : await transport.readConsoleCaptureSince?.(captureHandle);
-  const detail = realError ?? logcatTail ?? getGenericPluginLoadFailureMessage(pluginId);
+  /*
+   * Exhausted every attempt on the transient signature: compose the most
+   * specific detail available (`adb logcat` tail on Android, else the generic
+   * message) — unchanged from the pre-retry single-shot failure.
+   */
+  const logcatTail = await transport.readConsoleCaptureSince?.(captureHandle);
+  const detail = logcatTail ?? getGenericPluginLoadFailureMessage(pluginId);
   throw new Error(`Plugin "${pluginId}" failed to load: ${detail}`);
 }
 

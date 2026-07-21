@@ -82,6 +82,17 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
     await app.plugins.setEnable(true);
   }
 
+  /*
+   * Force a genuine reload when retrying. If a prior attempt left the plugin in
+   * the enabled set but not loaded (the cold-boot race), a plain re-enable can
+   * short-circuit on some Obsidian versions without re-attempting the load.
+   * Fully reset the enabled state first so the `enablePluginAndSave` below is a
+   * real fresh enable + load. No-op on the first attempt (not yet enabled).
+   */
+  if (app.plugins.enabledPlugins.has(pluginId) && !(pluginId in app.plugins.plugins)) {
+    await app.plugins.disablePluginAndSave(pluginId);
+  }
+
   let errorMessage: string | undefined;
   // eslint-disable-next-line @typescript-eslint/unbound-method -- Intentional monkey-patch; restored in finally.
   const origLoadPlugin = app.plugins.loadPlugin;

@@ -111,6 +111,36 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly layoutReadyTimeoutInMilliseconds?: number;
 
   /**
+   * Number of extra attempts to enable the plugin and verify it loaded, on top
+   * of the first attempt.
+   *
+   * On a freshly cold-booted emulator the plugin subsystem can still be settling
+   * when the harness enables the plugin, so the enable lands in the enabled set
+   * but the load races and fails (`"<id>" is in the enabled set but not loaded`).
+   * Device-idle and `layoutReady` are already awaited, so this is the narrow
+   * residual race: the harness retries the enable + load-verification this many
+   * times with exponential backoff (see
+   * {@link pluginEnableRetryDelayInMilliseconds}), forcing a genuine reload each
+   * attempt. A captured plugin load error is treated as a deterministic bug and
+   * is **not** retried. Set `0` to disable retry (a single attempt).
+   *
+   * @default `3`
+   */
+  readonly pluginEnableRetryCount?: number;
+
+  /**
+   * Base delay in milliseconds between plugin-enable attempts (see
+   * {@link pluginEnableRetryCount}).
+   *
+   * The delay grows exponentially per retry: the first retry waits this long,
+   * the second twice as long, the third four times, and so on — giving a
+   * still-settling cold guest progressively more time to become ready.
+   *
+   * @default `2000`
+   */
+  readonly pluginEnableRetryDelayInMilliseconds?: number;
+
+  /**
    * Timeout in milliseconds for establishing the Appium session (WebDriverIO
    * `remote()` — UiAutomator2 server install + app launch).
    *
