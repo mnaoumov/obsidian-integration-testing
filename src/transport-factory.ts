@@ -26,6 +26,7 @@ import {
 } from 'webdriverio';
 
 import type { InstallerCompatibility } from './installer-compatibility.ts';
+import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
   DesktopCdpTransportConfig,
   OwnedInstanceConfig
@@ -46,6 +47,10 @@ import {
   resolveAppiumStartTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
+import {
+  checkAvdExists,
+  listAvailableAvds
+} from './avd-list.ts';
 import {
   resolveInstallerCompatibilityAction,
   resolveShouldThrowOnIncompatibleInstaller,
@@ -76,6 +81,7 @@ import {
   resolveConcreteVersion
 } from './obsidian-version-switch.ts';
 import { compareVersions } from './obsidian-version.ts';
+import { buildProcessExitMessage } from './process-exit-message.ts';
 import { resolveDeadBootGraceInMilliseconds } from './renderer-boot-detection.ts';
 import {
   resolveAppiumSpawnFlags,
@@ -93,6 +99,7 @@ const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
 const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_CONNECTION_RETRY_COUNT = 3;
+const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const OWNED_USER_DATA_PREFIX = 'userdata-';
@@ -106,6 +113,7 @@ const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
+const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
@@ -125,35 +133,6 @@ interface AsarPlan {
 
   /** The app version whose own installer shell to download (a downgrade). */
   readonly downgradeInstallerVersion?: string | undefined;
-}
-
-/**
- * Details of an emulator process that has exited.
- */
-interface EmulatorExitInfo {
-  /** Exit code, or `null` if the process was terminated by a signal. */
-  code: null | number;
-
-  /** Terminating signal, or `null` if the process exited normally. */
-  signal: NodeJS.Signals | null;
-}
-
-/**
- * A spawned emulator process together with helpers to inspect its captured
- * output and exit status.
- */
-interface EmulatorLaunch {
-  /** The spawned emulator process. */
-  process: ChildProcess;
-
-  /** Returns the exit details once the process has exited, otherwise `undefined`. */
-  readExitInfo: () => EmulatorExitInfo | undefined;
-
-  /** Returns the captured stdout+stderr (bounded to the most recent output). */
-  readOutput: () => string;
-
-  /** Stops accumulating output. Call once startup has succeeded. */
-  stopCapture: () => void;
 }
 
 /**
@@ -190,6 +169,24 @@ interface InstalledShell {
 
   /** The detected shell version, or `undefined` when it cannot be determined. */
   readonly shellVersion: string | undefined;
+}
+
+/**
+ * A spawned child process (the Android emulator or the Appium server) together
+ * with helpers to inspect its captured output and exit status.
+ */
+interface ProcessLaunch {
+  /** The spawned process. */
+  process: ChildProcess;
+
+  /** Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`. */
+  readExitInfo: () => ProcessExitInfo | undefined;
+
+  /** Returns the captured stdout+stderr (bounded to the most recent output). */
+  readOutput: () => string;
+
+  /** Stops accumulating output. Call once startup has succeeded. */
+  stopCapture: () => void;
 }
 
 /**
@@ -498,7 +495,69 @@ class AppiumTransportFactory {
 
     this.log('Appium is not installed. Installing globally via `npm install -g appium`...');
     await exec('npm install -g appium');
-    this.log('Appium installed.');
+
+    /*
+     * Re-verify: a global install can land under an npm prefix whose bin dir is
+     * not on the spawn PATH (e.g. a scoop/nvm-managed prefix), in which case
+     * `npx --no-install appium` still cannot resolve it. Fail fast with an
+     * actionable message rather than proceeding to auto-start a server that can
+     * never come up (which would otherwise spin out the full readiness timeout).
+     */
+    const verify = await exec('npx --no-install appium --version', {
+      isQuiet: true,
+      shouldIgnoreExitCode: true,
+      shouldIncludeDetails: true
+    });
+    if (verify.exitCode !== 0) {
+      throw new Error(
+        'Appium was installed via `npm install -g appium` but is still not resolvable via `npx --no-install appium`. '
+          + 'The npm global bin directory (see `npm config get prefix`) is likely not on PATH. Add it to PATH, or set '
+          + '`shouldAutoInstallAppiumDependencies: false` and install/manage Appium yourself.'
+      );
+    }
+    this.log(`Appium installed (version ${verify.stdout.trim() || 'unknown'}).`);
+  }
+
+  /**
+   * Fails fast when the requested AVD does not exist, before an emulator is
+   * spawned.
+   *
+   * Without this preflight a missing AVD name is only discovered after
+   * {@link startEmulator} spawns `emulator -avd <name>` and the boot never
+   * completes — a full {@link EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS} spin ending
+   * in a generic "no new device appeared". Instead this lists the configured
+   * AVDs up front and throws an actionable error naming the available ones. AVD
+   * creation is deliberately not automated (it requires a system-image download,
+   * license acceptance, and hardware/API-level choices).
+   *
+   * @param avdName - The requested AVD name.
+   */
+  private async ensureAvdExists(avdName: string): Promise<void> {
+    const emulatorBinary = this.resolveEmulatorBinary();
+    this.log(`Verifying AVD "${avdName}" exists (${emulatorBinary} -list-avds)...`);
+
+    const [error, stdout] = await new Promise<[Error | null, string]>((resolve) => {
+      execFile(emulatorBinary, ['-list-avds'], { timeout: EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS }, (execError, execStdout) => {
+        resolve([execError, execStdout]);
+      });
+    });
+
+    if (error) {
+      throw new Error(
+        `Failed to list AVDs via \`${emulatorBinary} -list-avds\`: ${error.message}. `
+          + 'Is the Android SDK emulator installed and ANDROID_HOME/ANDROID_SDK_ROOT correct?'
+      );
+    }
+
+    if (!checkAvdExists({ avdListOutput: stdout, avdName })) {
+      const available = listAvailableAvds(stdout);
+      throw new Error(
+        `Android AVD "${avdName}" not found. Available AVDs: ${available.length > 0 ? available.join(', ') : '(none)'}. `
+          + 'Create it (e.g. in the Android Studio Device Manager, or via `avdmanager create avd`), or set `avdName` to an existing AVD.'
+      );
+    }
+
+    this.log(`AVD "${avdName}" exists.`);
   }
 
   private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
@@ -515,6 +574,7 @@ class AppiumTransportFactory {
     }
 
     this.log(`AVD "${avdName}" not found on any existing device, starting a new emulator...`);
+    await this.ensureAvdExists(avdName);
     const emulator = this.startEmulator(avdName, isEmulatorVisible);
 
     let actualDeviceId: string;
@@ -664,20 +724,22 @@ class AppiumTransportFactory {
       needsAppiumStart = true;
     }
 
-    let appiumProcess: ChildProcess | undefined;
+    let appiumLaunch: ProcessLaunch | undefined;
 
     if (needsAppiumStart) {
       if (shouldAutoInstallAppiumDependencies) {
         await this.ensureAppiumDependencies();
       }
       this.log(`Appium not reachable, auto-starting on port ${String(port)}...`);
-      appiumProcess = this.startAppiumServer(port, isAppiumConsoleVisible);
+      appiumLaunch = this.startAppiumServer(port, isAppiumConsoleVisible);
     }
+
+    const appiumProcess = appiumLaunch?.process;
 
     try {
       const [, deviceResult] = await Promise.all([
-        needsAppiumStart
-          ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds).then(() => {
+        appiumLaunch
+          ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds, appiumLaunch).then(() => {
             this.log('Auto-started Appium server is ready.');
           })
           : Promise.resolve(),
@@ -698,21 +760,61 @@ class AppiumTransportFactory {
     }
   }
 
-  private startAppiumServer(port: number, isAppiumConsoleVisible?: boolean): ChildProcess {
+  private startAppiumServer(port: number, isAppiumConsoleVisible?: boolean): ProcessLaunch {
     const isConsoleHidden = shouldHideAppiumConsole(isAppiumConsoleVisible);
     const { detached, windowsHide } = resolveAppiumSpawnFlags(isConsoleHidden);
-    const child = spawn(`npx appium --log-timestamp --port ${String(port)} --allow-insecure=${CHROMEDRIVER_AUTODOWNLOAD_FEATURE}`, {
+    /*
+     * `--no-install`: Appium is guaranteed present by `ensureAppiumInstalled`
+     * before we reach here, so pin npx to the installed copy. Without it, npx
+     * would silently try to download Appium fresh from the registry — a
+     * slow/hung failure in a hidden console — whenever it could not resolve the
+     * global install (e.g. a global prefix not on PATH). See `ensureAppiumInstalled`.
+     *
+     * Pipe stdout/stderr even when hidden (rather than discarding) so an early
+     * failure such as a crash or a missing driver is captured and surfaced
+     * immediately by `waitForAppiumReady`, mirroring `startEmulator`;
+     * `windowsHide` still suppresses the console window.
+     */
+    const child = spawn(`npx --no-install appium --log-timestamp --port ${String(port)} --allow-insecure=${CHROMEDRIVER_AUTODOWNLOAD_FEATURE}`, {
       detached,
       shell: true,
-      stdio: isConsoleHidden ? 'ignore' : ['ignore', 'inherit', 'inherit'],
+      stdio: isConsoleHidden ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'inherit', 'inherit'],
       windowsHide
     });
 
+    let capturedOutput = '';
+    let exitInfo: ProcessExitInfo | undefined;
+    let isCapturing = true;
+
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+    child.once('exit', (code, signal) => {
+      exitInfo = { code, signal };
+    });
+    child.once('error', (error) => {
+      exitInfo = { code: null, signal: null, spawnError: error.message };
+    });
+
     child.unref();
-    return child;
+
+    return {
+      process: child,
+      readExitInfo: () => exitInfo,
+      readOutput: () => capturedOutput,
+      stopCapture: (): void => {
+        isCapturing = false;
+      }
+    };
+
+    function appendOutput(chunk: Buffer): void {
+      if (!isCapturing) {
+        return;
+      }
+      capturedOutput = (capturedOutput + chunk.toString()).slice(-APPIUM_OUTPUT_TAIL_MAX_LENGTH);
+    }
   }
 
-  private startEmulator(avdName: string, isEmulatorVisible?: boolean): EmulatorLaunch {
+  private startEmulator(avdName: string, isEmulatorVisible?: boolean): ProcessLaunch {
     const emulatorBinary = this.resolveEmulatorBinary();
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
     const args = buildEmulatorArgs({ avdName, isHidden: isWindowHidden });
@@ -730,13 +832,21 @@ class AppiumTransportFactory {
     });
 
     let capturedOutput = '';
-    let exitInfo: EmulatorExitInfo | undefined;
+    let exitInfo: ProcessExitInfo | undefined;
     let isCapturing = true;
 
     child.stdout.on('data', appendOutput);
     child.stderr.on('data', appendOutput);
     child.once('exit', (code, signal) => {
       exitInfo = { code, signal };
+    });
+    /*
+     * A spawn failure (e.g. ENOENT for a missing/broken emulator binary) emits
+     * 'error', not 'exit'. Record it as a synthetic exit so the boot/new-device
+     * polls fail fast instead of spinning out the full boot timeout.
+     */
+    child.once('error', (error) => {
+      exitInfo = { code: null, signal: null, spawnError: error.message };
     });
 
     child.unref();
@@ -804,7 +914,7 @@ class AppiumTransportFactory {
     });
   }
 
-  private async waitForAppiumReady(url: URL, timeoutInMilliseconds: number): Promise<void> {
+  private async waitForAppiumReady(url: URL, timeoutInMilliseconds: number, launch: ProcessLaunch): Promise<void> {
     const start = Date.now();
     this.log(
       `Waiting for Appium at ${url.href} (timeout: ${String(timeoutInMilliseconds)}ms, poll: ${String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
@@ -812,8 +922,19 @@ class AppiumTransportFactory {
     const deadline = start + timeoutInMilliseconds;
 
     while (Date.now() < deadline) {
+      /*
+       * If the server process already died (crashed, or never started), stop
+       * polling and surface why — otherwise a doomed server spins out the whole
+       * readiness timeout with no diagnostics (the original T84 symptom).
+       */
+      const exitInfo = launch.readExitInfo();
+      if (exitInfo) {
+        throw buildDeathError(exitInfo);
+      }
+
       try {
         await this.checkAppiumReachable(url);
+        launch.stopCapture();
         this.log(`Appium server ready after ${String(Date.now() - start)}ms.`);
         return;
       } catch {
@@ -824,12 +945,26 @@ class AppiumTransportFactory {
       }
     }
 
-    throw new Error(
-      `Auto-started Appium server did not become ready within ${String(timeoutInMilliseconds)}ms`
-    );
+    const finalExitInfo = launch.readExitInfo();
+    if (finalExitInfo) {
+      throw buildDeathError(finalExitInfo);
+    }
+
+    const outputTail = launch.readOutput().trim();
+    const outputSection = outputTail.length > 0 ? `\n\nAppium server output (tail):\n${outputTail}` : '';
+    throw new Error(`Auto-started Appium server did not become ready within ${String(timeoutInMilliseconds)}ms.${outputSection}`);
+
+    function buildDeathError(exitInfo: ProcessExitInfo): Error {
+      return new Error(buildProcessExitMessage({
+        exitInfo,
+        output: launch.readOutput(),
+        outputLabel: 'Appium server output',
+        subject: 'Auto-started Appium server'
+      }));
+    }
   }
 
-  private async waitForBoot(deviceId: string, deadline: number, emulator: EmulatorLaunch): Promise<void> {
+  private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch): Promise<void> {
     const remainingMs = Math.max(0, deadline - Date.now());
     this.log(
       `Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
@@ -854,7 +989,12 @@ class AppiumTransportFactory {
 
       const exitInfo = emulator.readExitInfo();
       if (exitInfo) {
-        throw new Error(buildEmulatorExitMessage(exitInfo, emulator.readOutput()));
+        throw new Error(buildProcessExitMessage({
+          exitInfo,
+          output: emulator.readOutput(),
+          outputLabel: 'Emulator output',
+          subject: 'Android emulator'
+        }));
       }
 
       await new Promise((resolve) => {
@@ -919,7 +1059,7 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForNewDevice(deviceIdsBefore: string[], emulator: EmulatorLaunch, deviceIdleTimeoutInMilliseconds: number): Promise<string> {
+  private async waitForNewDevice(deviceIdsBefore: string[], emulator: ProcessLaunch, deviceIdleTimeoutInMilliseconds: number): Promise<string> {
     this.log(
       `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
@@ -940,7 +1080,12 @@ class AppiumTransportFactory {
 
       const exitInfo = emulator.readExitInfo();
       if (exitInfo) {
-        throw new Error(buildEmulatorExitMessage(exitInfo, emulator.readOutput()));
+        throw new Error(buildProcessExitMessage({
+          exitInfo,
+          output: emulator.readOutput(),
+          outputLabel: 'Emulator output',
+          subject: 'Android emulator'
+        }));
       }
 
       await new Promise((resolve) => {
@@ -999,25 +1144,6 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
   // eslint-disable-next-line require-atomic-updates -- Single-threaded worker; no concurrent writes.
   cachedTransport = result;
   return result;
-}
-
-/**
- * Builds a descriptive error message for an emulator process that exited during
- * startup, appending the captured output tail when available.
- *
- * @param exitInfo - The emulator's exit details.
- * @param output - The captured stdout+stderr tail.
- * @returns A human-readable error message.
- */
-function buildEmulatorExitMessage(exitInfo: EmulatorExitInfo, output: string): string {
-  const reason = exitInfo.signal === null
-    ? `exited prematurely with code ${String(exitInfo.code)}`
-    : `was terminated by signal ${exitInfo.signal}`;
-  const trimmedOutput = output.trim();
-  const details = trimmedOutput.length > 0
-    ? `\n\nEmulator output (tail):\n${trimmedOutput}`
-    : '';
-  return `Android emulator ${reason} during startup.${details}`;
 }
 
 /**

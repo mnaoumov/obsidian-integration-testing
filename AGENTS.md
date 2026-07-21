@@ -675,7 +675,8 @@ dead-boot for table-known combos (see the L18 cross-reference).
 
 ## L22. Auto-install Appium dependencies before auto-starting the server
 
-The harness auto-starts the Appium server via `npx appium`, which assumes both Appium **and** the
+The harness auto-starts the Appium server via `npx --no-install appium` (the `--no-install` pin and the
+server-process observability that surrounds it are **L27**), which assumes both Appium **and** the
 `uiautomator2` driver are already installed — a missing driver was a common first-run failure (the exact
 scenario that motivated this: `npx --no-install appium --version` exits non-zero on a machine with no
 global Appium). `startAppiumAndEmulator` now closes that gap: when it is about to auto-start the server
@@ -946,3 +947,54 @@ The old-version fixes, each CDP-diagnosed:
   host's GPU/compositor state (from force-kills) and starts failing even Electron-11/17 builds; it self-heals
   after an idle period. When bulk-booting many old versions (e.g. `collect-runtime-versions`), pace them with
   a cool-down between boots. The relaunch-retry covers ordinary single-use flakiness.
+
+## L27. Fail-fast + observable Android auto-provisioning (Appium server / emulator / AVD)
+
+L22 auto-installs the Appium toolchain, but a first run on a machine with only the Android SDK + `adb`
+(no global Appium, no booted AVD) still **spun the full 180 s `appiumStartTimeout` on "Appium server not
+ready yet"** and then hung on teardown, with **no diagnostics** — the T84 report. Root cause: the
+auto-started Appium server was **fire-and-forget** (`startAppiumServer` spawned `npx appium` with
+`stdio: 'ignore'`, watching neither `exit`/`error` nor output), so `waitForAppiumReady` polled `/status`
+blindly for the whole timeout no matter why the server failed to come up. The emulator path already did
+the right thing (`startEmulator` pipes output, captures a bounded tail, detects early `exit` →
+`buildEmulatorExitMessage`), but had its own two gaps. This section gives the server the same treatment
+and closes the emulator's gaps, so the Android path is either turnkey **or** fails fast with an actionable
+message — never a silent full-timeout spin.
+
+- **Shared exit-message builder** — `src/process-exit-message.ts` (pure, unit-tested;
+  `process-exit-message.test.ts`): `buildProcessExitMessage({ subject, exitInfo, output, outputLabel })`
+  and the `ProcessExitInfo` shape (`code`/`signal`, plus `spawnError` for a process that never started).
+  Replaces the old inline `buildEmulatorExitMessage` (now gone) and is reused by both the emulator and the
+  Appium server. The `ProcessLaunch` interface (in the factory) unifies what `startEmulator` /
+  `startAppiumServer` return.
+- **Appium server is now observed like the emulator.** `startAppiumServer` returns a `ProcessLaunch`:
+  even when the console is hidden it pipes stdout/stderr (`stdio: ['ignore','pipe','pipe']`) so an early
+  failure's output is captured (`windowsHide` still suppresses the window), and it records `exit` **and**
+  a spawn `error` (ENOENT) as a `ProcessExitInfo`. `waitForAppiumReady` takes the launch and, each poll
+  iteration, checks `readExitInfo()` **first** — if the server already died it throws
+  `buildProcessExitMessage(...)` with the captured tail **immediately** instead of polling out the
+  timeout; the timeout path also appends the tail.
+- **`--no-install` on the server spawn.** The spawn is `npx --no-install appium …` (was `npx appium`).
+  Appium is guaranteed present by `ensureAppiumInstalled` before this point, so `--no-install` stops npx
+  from silently attempting a slow/hung fresh **registry download** in a hidden console whenever it can't
+  resolve the global install (e.g. a global prefix not on PATH) — a prime suspect for the original spin.
+- **`ensureAppiumInstalled` re-verifies after `npm install -g appium`.** A global install can land under
+  an npm prefix whose bin dir is not on the spawn PATH (this host's is the scoop/nvm-managed
+  `…\scoop\apps\nvm\current\nodejs\nodejs`), so it re-probes `npx --no-install appium --version` and, if
+  still non-zero, **throws** an actionable error (points at `npm config get prefix` / PATH, and the
+  `shouldAutoInstallAppiumDependencies: false` opt-out) rather than proceeding to a server that can never
+  start.
+- **Emulator gap 1 — spawn `error`.** `startEmulator` now also listens for `error` (previously only
+  `exit`), recording a synthetic `ProcessExitInfo { spawnError }`. A missing/broken emulator binary
+  (ENOENT emits `error`, not `exit`) now fails fast via the existing boot/new-device exit checks instead
+  of spinning the full 120 s boot timeout.
+- **Emulator gap 2 — AVD preflight.** `ensureDeviceConnected` calls `ensureAvdExists(avdName)` before
+  spawning a new emulator (skipped when the AVD is already running): it runs `emulator -list-avds` and, if
+  the requested AVD is absent, throws naming the **available** AVDs. AVD creation is deliberately **not**
+  automated (system-image download + license acceptance + hardware/API-level choices are too opinionated
+  to bake in — the fail-fast-only decision for T84). The parse is pure/unit-tested — `src/avd-list.ts`
+  (`checkAvdExists` / `listAvailableAvds`, `avd-list.test.ts`); the `execFile` orchestration stays in the
+  `v8 ignore` factory.
+- **Pure/testable split** mirrors L21–L25: message-building and list-parsing live in unit-tested modules
+  (`process-exit-message.ts`, `avd-list.ts`); only the spawn/`execFile` glue stays in the integration-only
+  factory.
