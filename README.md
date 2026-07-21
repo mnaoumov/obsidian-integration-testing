@@ -765,6 +765,25 @@ save a snapshot, and always boot from that snapshot. Either way, an ANR signals 
 under-provisioned, so also give the AVD more vCPUs/RAM and confirm hardware acceleration
 (`emulator -accel-check`).
 
+#### Troubleshooting: "Android AVD ... not found" / "Appium server ... exited during startup"
+
+The Android setup fails fast (rather than spinning out a timeout) when the toolchain cannot be brought
+up, naming what is missing:
+
+- **`Android AVD "<name>" not found. Available AVDs: ...`** — the `avdName` you passed does not exist.
+  Run `emulator -list-avds`, then either point `avdName` at a listed AVD or create the one you want
+  (Android Studio Device Manager, or `avdmanager create avd`). AVD creation is not automated — it needs a
+  system-image download, license acceptance, and hardware/API-level choices.
+- **`Auto-started Appium server ... during startup` / `... did not become ready ...`** — the harness
+  auto-started Appium (`npx --no-install appium`) but it exited or never responded; the message appends
+  the captured server output. Usually a missing/broken toolchain: pass `isAppiumConsoleVisible: true` to
+  watch the live server log, or manage Appium yourself (`shouldAutoStartAppium: false`, pointing
+  `appiumUrl` at your own running server).
+- **`Appium was installed ... but is still not resolvable ...`** — the auto-install ran
+  `npm install -g appium`, but the npm global bin dir is not on PATH (common with scoop/nvm-managed Node).
+  Add it to PATH (see `npm config get prefix`), or set `shouldAutoInstallAppiumDependencies: false` and
+  install Appium yourself.
+
 #### Troubleshooting: "Obsidian layout did not become ready"
 
 Registering a vault reloads the page, triggering a full Obsidian re-init (reopen the vault and
