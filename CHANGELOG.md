@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 9.0.0
+
+- feat(global-setup)!: split into -plugin / -no-plugin entry points
+- feat: fail fast
+- ci: regularly refresh metadata
+- chore: update libs
+- feat: add readDemoVaultTree for pre-launch demo-vault seeding
+
 ## 8.4.0
 
 - chore: collect metadata
