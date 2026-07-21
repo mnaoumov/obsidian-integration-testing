@@ -1003,3 +1003,50 @@ message — never a silent full-timeout spin.
 - **Pure/testable split** mirrors L21–L25: message-building and list-parsing live in unit-tested modules
   (`process-exit-message.ts`, `avd-list.ts`); only the spawn/`execFile` glue stays in the integration-only
   factory.
+
+## L28. Multi-window CDP routing — match a target by its base path, never by count
+
+The desktop CDP transport routes each `evalInObsidian({ vaultPath })` to the correct Obsidian window by
+its vault base path. **In attach mode a single owned instance can hold several vault windows at once** (the
+global-setup shared vault + any vault a worker registers in-worker), so routing must always be by identity,
+never "there is only one window, use it".
+
+- **`findTargetForVault` matches by probed base path only.** It probes every page target's
+  `app.vault.adapter.getBasePath()` and returns the one that matches `vaultPath` via **`vaultPathsMatch`**
+  (`src/vault-path-match.ts`, pure + unit-tested — normalizes separator flavor and, on a case-insensitive
+  filesystem, case; on Windows `getBasePath()` and the Node `TempVault` path are backslash-identical, so the
+  normalization is defensive). There is **no `targets.length === 1` shortcut** — returning the sole window
+  blindly mis-routes whenever the requested vault's window is not (yet) the one open. A target whose probe
+  *throws* is treated as not-ready and skipped (the caller's readiness poll retries); a target whose probe
+  *succeeds but does not match* is never returned; when nothing matches it throws so the caller keeps polling.
+- **`openVaultInRunningInstance` bootstraps the helper namespace against the EXISTING window.** The
+  `vault-open` IPC is sent through an already-open window (`targets[0]`), so the namespace must be
+  bootstrapped on *that* window — it probes `targets[0]`'s own base path and
+  `ensureNamespaceBootstrapped(this, existingBasePath)`. Bootstrapping against the not-yet-open `vaultPath`
+  (the pre-fix bug) routed through `findTargetForVault(vaultPath)` with only the existing window present and
+  **poisoned the connection cache** (label `vaultPath`, socket → the existing window), so every later
+  `evalInObsidian({ vaultPath })` mis-routed to the shared window (the closure saw the shared vault's name
+  and none of the fresh vault's plugins — the T116 symptom).
+- **Why OIT's own suites never caught it:** the `integration-tests` project registers **in-worker → owned
+  mode**, where every `register()` relaunches a fresh single-window instance, so a second window never
+  exists. Only attach mode (`integration-tests:owned-attach`, and real consumers like ODU) opens a second
+  window. Regression coverage: the "second registered vault routes to its own window" case in
+  `owned-instance-worker-attach.integration.test.ts` registers a second vault against the shared instance
+  and asserts its evals see the fresh vault, not the shared one.
+
+## L29. Node-side kick-off + poll (`pollInObsidian`)
+
+A single `evalInObsidian` closure cannot run past CDP's ~30s `Runtime.evaluate` cap, so a long-running
+in-Obsidian operation (e.g. a whole plugin/vault bootstrap) cannot be awaited inside one closure.
+`pollInObsidian` (`src/poll-in-obsidian.ts`, exported from the barrel) drives it from **Node** instead:
+an optional short `start` closure kicks the work off once, then a short `poll` closure is re-evaluated on
+an interval — each a separate, well-under-30s eval — until the Node-side `until(result)` predicate accepts,
+or a Node-side `timeoutInMilliseconds` (default `120000`) elapses. `args` / `contextId` / `transport` /
+`vaultPath` are forwarded to every underlying `evalInObsidian` (a shared `contextId` lets `start` stash
+non-serializable state that `poll` reads). It replaces the per-test hand-rolled `evalInObsidian` + `sleep`
+loop.
+
+Pure/testable split (mirrors L18/L21–L27): the timing loop is the pure, unit-tested **`pollUntil`**
+(`src/poll-until.ts`, clock + sleep injected for deterministic tests); `pollInObsidian` is the thin
+integration-only wiring (drives a live Obsidian), `v8 ignore`d and covered by
+`poll-in-obsidian.integration.test.ts`.
