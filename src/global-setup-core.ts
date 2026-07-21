@@ -156,7 +156,7 @@ interface EnablePluginInVaultParams {
   readonly transport: ObsidianTransport;
 
   /** The resolved transport options (source of the plugin-enable retry knobs). */
-  readonly transportOptions: ObsidianTransportOptions | null;
+  readonly transportOptions: null | ObsidianTransportOptions;
 }
 
 /**
