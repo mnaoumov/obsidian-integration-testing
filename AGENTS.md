@@ -6,15 +6,20 @@ A library that provides helpers for integration testing Obsidian plugins against
 
 The package exports these entry points:
 
-| Entry point                                         | Purpose                                                                              |
-|-----------------------------------------------------|--------------------------------------------------------------------------------------|
-| `obsidian-integration-testing`                      | Main — `evalInObsidian`, `connectToCdp`, `ContextId`, `TempVault`, transports, types |
-| `obsidian-integration-testing/vitest-global-setup`  | Vitest global `setup`/`teardown` + `getTempVault()`                                  |
-| `obsidian-integration-testing/vitest-setup`         | Vitest **per-worker** `setupFiles` entry — registers the context resolvers           |
-| `obsidian-integration-testing/vitest/typings`       | Opt-in Vitest module augmentations (`ProvidedContext`, `EnvironmentOptions`)         |
-| `obsidian-integration-testing/jest-global-setup`    | Jest global setup (default + named `setup`/`teardown`) + `getTempVault()`            |
-| `obsidian-integration-testing/jest-global-teardown` | Jest global teardown (default export) — separate module Jest requires                |
-| `obsidian-integration-testing/jest-setup`           | Jest **per-worker** `setupFiles` entry — registers the context resolvers             |
+All entry points are under the `obsidian-integration-testing` package; `…/` below abbreviates that prefix.
+
+| Entry point | Purpose |
+| --- | --- |
+| `obsidian-integration-testing` | Main — `evalInObsidian`, `connectToCdp`, `ContextId`, `TempVault`, transports, types |
+| `…/vitest-global-setup-plugin` | Vitest global `setup`/`teardown` + `getTempVault()` — **installs & enables** the built plugin |
+| `…/vitest-global-setup-no-plugin` | Vitest global `setup`/`teardown` + `getTempVault()` — **empty vault**, for non-plugin consumers |
+| `…/vitest-setup` | Vitest **per-worker** `setupFiles` entry — registers the context resolvers |
+| `…/vitest/typings` | Opt-in Vitest module augmentations (`ProvidedContext`, `EnvironmentOptions`) |
+| `…/jest-global-setup-plugin` | Jest global setup (default + named) — **installs & enables** the built plugin |
+| `…/jest-global-setup-no-plugin` | Jest global setup (default + named) — **empty vault**, for non-plugin consumers |
+| `…/jest-global-teardown-plugin` | Jest global teardown (default export) for the plugin setup — separate module Jest requires |
+| `…/jest-global-teardown-no-plugin` | Jest global teardown (default export) for the no-plugin setup — separate module Jest requires |
+| `…/jest-setup` | Jest **per-worker** `setupFiles` entry — registers the context resolvers |
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 

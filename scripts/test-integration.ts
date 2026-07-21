@@ -5,5 +5,7 @@ await execFromRoot([
   '--project',
   'integration-tests',
   '--project',
-  'integration-tests:owned-attach'
+  'integration-tests:owned-attach',
+  '--project',
+  'integration-tests:bare-attach'
 ]);
