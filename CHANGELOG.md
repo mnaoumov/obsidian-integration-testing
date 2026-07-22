@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 9.1.0
+
+- feat: allow install additional plugins
+- fix: ensure correct vault window
+- feat: safety checks
+- feat: capture logs
+
 ## 9.0.0
 
 - feat(global-setup)!: split into -plugin / -no-plugin entry points
