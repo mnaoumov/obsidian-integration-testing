@@ -500,6 +500,36 @@ Both files share the same `createSetup` instance (via the common module), so `te
 
 **Manual** — when wiring `TempVault` yourself (without a framework global setup), call `vault.populate()` before `vault.register()`, as shown in [Create a temporary vault](#create-a-temporary-vault).
 
+### Seed a plugin's `demo-vault/` and enable extra community plugins
+
+A plugin's committed `demo-vault/` often needs more than the plugin-under-test — e.g. **CodeScript Toolkit** (`fix-require-modules`) to run its `code-button` blocks, or the `demo-vault-helper` bootstrap. Two pieces make this a one-liner:
+
+- **`enableCommunityPlugins`** — a `createSetup` option listing community-plugin ids to enable **in addition to** the plugin-under-test, after it is enabled. Each id's built files must already be in the vault (seed them below). This replaces the hand-rolled `beforeAll` that turned off restricted mode and called `enablePlugin(...)` in every demo-vault test.
+- **`buildDemoVaultPopulate`** — reads the repo's `demo-vault/` tree, carries over selected `.obsidian/*` config (`app.json`, `appearance.json`, `core-plugins.json` by default), and seeds each injected plugin's binaries (+ optional `data.json`) — returning a `populate` map. It complements the release-time demo-vault archiving in `obsidian-dev-utils`.
+
+```ts
+// integration-global-setup.ts
+import { buildDemoVaultPopulate } from 'obsidian-integration-testing';
+import { createSetup } from 'obsidian-integration-testing/vitest-global-setup-plugin';
+import { getRootFolder } from 'obsidian-dev-utils/script-utils/root';
+import { join } from 'node:path';
+
+const CST_ID = 'fix-require-modules';
+
+export const { setup, teardown } = createSetup({
+  // Turn on the seeded extra plugins (the plugin-under-test is enabled automatically).
+  enableCommunityPlugins: [CST_ID],
+  populate: () =>
+    buildDemoVaultPopulate({
+      demoVaultPath: join(getRootFolder() ?? process.cwd(), 'demo-vault'),
+      // CST binaries come from the demo vault's local (gitignored) install; `data` writes its data.json.
+      injectPlugins: [{ pluginId: CST_ID, data: { modulesRoot: '_assets' } }]
+    })
+});
+```
+
+`buildDemoVaultPopulate` throws an actionable error if an injected plugin's `main.js`/`manifest.json` is missing from the demo vault — open `demo-vault/` in Obsidian once so `demo-vault-helper` installs it, then re-run. `enableCommunityPlugins` also composes with `installPlugin: false` (enable extras into an otherwise plugin-less vault).
+
 ### Non-plugin consumers
 
 If your project is **not** a plugin — a tool that only needs a registered, empty vault to `evalInObsidian` against (e.g. a typings crawler) — point `globalSetup` at the **`-no-plugin`** entry point instead of `-plugin`. It still launches one owned, off-screen Obsidian instance and publishes its endpoint to workers so each worker **attaches** to it, but skips reading `dist/manifest.json`, copying a plugin, writing `community-plugins.json`, and enabling a plugin. No wrapper module needed:

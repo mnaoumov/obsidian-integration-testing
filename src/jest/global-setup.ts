@@ -55,6 +55,14 @@ setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.tempVaultPat
  */
 export interface CreateSetupOptions {
   /**
+   * Community-plugin ids to enable in the vault in addition to the plugin-under-test,
+   * after it is enabled (see {@link CoreSetupParams.enableCommunityPlugins}). Seed each
+   * plugin's built files via {@link CreateSetupOptions.populate} (e.g. with `buildDemoVaultPopulate`)
+   * so the enable finds them on disk.
+   */
+  readonly enableCommunityPlugins?: readonly string[];
+
+  /**
    * Whether to install and enable the built plugin in the temp vault. Defaults
    * to `true`. Set to `false` for a **non-plugin** consumer that only needs a
    * registered, empty vault to `evalInObsidian` against — the owned instance is
@@ -98,7 +106,12 @@ export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
   async function setup(): Promise<void> {
     const transportOptions = globalThis.__obsidianIntegrationTesting?.transportOptions;
 
-    setupResult = await coreSetup({ installPlugin: options?.installPlugin, populate: options?.populate?.(), transportOptions });
+    setupResult = await coreSetup({
+      enableCommunityPlugins: options?.enableCommunityPlugins,
+      installPlugin: options?.installPlugin,
+      populate: options?.populate?.(),
+      transportOptions
+    });
 
     globalThis.__obsidianIntegrationTesting = {
       ...globalThis.__obsidianIntegrationTesting,
@@ -144,8 +157,8 @@ const defaultGlobalSetup = createSetup();
 /**
  * Jest global setup function (no pre-population).
  *
- * Copies the built plugin into a temporary vault, enables it via the Obsidian CLI,
- * and populates `globalThis.__obsidianIntegrationTesting` for tests.
+ * Copies the built plugin into a temporary vault, enables it via a renderer eval
+ * over the transport, and populates `globalThis.__obsidianIntegrationTesting` for tests.
  *
  * Transport options are read from `globalThis.__obsidianIntegrationTesting.transportOptions`.
  * Set this in your Jest config via the `globals` option.

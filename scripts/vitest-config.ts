@@ -18,6 +18,12 @@ const OWNED_ATTACH_TEST_FILE = 'src/owned-instance-worker-attach.integration.tes
 // `vitest-setup` resolvers.
 const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.ts';
 
+// The `enableCommunityPlugins` end-to-end suite runs in its own project: its global
+// Setup seeds a demo vault with two dummy plugins (via `buildDemoVaultPopulate`) and
+// Enables them through `createSetup({ enableCommunityPlugins })`, then the worker
+// Asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
+const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
+
 // Inject the per-version compatibility table into `obsidian-metadata.ts` under
 // Test, the same way the esbuild build does via `define`. Two mechanisms are
 // Needed because Vitest's per-project `define` reaches the unit-test project but
@@ -73,7 +79,7 @@ export const config = defineConfig({
       {
         test: {
           environment: 'node',
-          exclude: [...SHARED_EXCLUDE, OWNED_ATTACH_TEST_FILE, BARE_ATTACH_TEST_FILE],
+          exclude: [...SHARED_EXCLUDE, OWNED_ATTACH_TEST_FILE, BARE_ATTACH_TEST_FILE, ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
           include: [INTEGRATION_TEST_FILES],
           name: 'integration-tests',
           setupFiles: [METADATA_SETUP_FILE],
@@ -105,6 +111,19 @@ export const config = defineConfig({
           include: [BARE_ATTACH_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:bare-attach',
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
+          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+        }
+      },
+      {
+        test: {
+          environment: 'node',
+          exclude: SHARED_EXCLUDE,
+          fileParallelism: false,
+          globalSetup: ['./scripts/enable-community-plugins-global-setup.ts'],
+          include: [ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:enable-community-plugins',
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
           testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }

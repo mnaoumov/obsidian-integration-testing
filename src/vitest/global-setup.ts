@@ -37,6 +37,14 @@ setVaultPathResolver(() => inject('tempVaultPath'));
  */
 export interface CreateSetupOptions {
   /**
+   * Community-plugin ids to enable in the vault in addition to the plugin-under-test,
+   * after it is enabled (see {@link CoreSetupParams.enableCommunityPlugins}). Seed each
+   * plugin's built files via {@link CreateSetupOptions.populate} (e.g. with `buildDemoVaultPopulate`)
+   * so the enable finds them on disk.
+   */
+  readonly enableCommunityPlugins?: readonly string[];
+
+  /**
    * Whether to install and enable the built plugin in the temp vault. Defaults
    * to `true`. Set to `false` for a **non-plugin** consumer that only needs a
    * registered, empty vault to `evalInObsidian` against — the owned instance is
@@ -83,7 +91,12 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
     const label = transportOptions?.type ?? 'obsidian-cdp';
 
     try {
-      setupResult = await coreSetup({ installPlugin: options?.installPlugin, populate: options?.populate?.(), transportOptions });
+      setupResult = await coreSetup({
+        enableCommunityPlugins: options?.enableCommunityPlugins,
+        installPlugin: options?.installPlugin,
+        populate: options?.populate?.(),
+        transportOptions
+      });
     } catch (error: unknown) {
       // Catch setup errors so that other projects' tests can still run.
       // Individual tests in this project will fail with the stored error
@@ -121,8 +134,8 @@ const defaultGlobalSetup = createSetup();
 /**
  * Vitest global setup function (no pre-population).
  *
- * Copies the built plugin into a temporary vault, enables it via the Obsidian CLI,
- * and provides `tempVaultPath` to tests.
+ * Copies the built plugin into a temporary vault, enables it via a renderer eval
+ * over the transport, and provides `tempVaultPath` to tests.
  *
  * @param project - The Vitest project.
  * @returns A promise that resolves when setup completes.

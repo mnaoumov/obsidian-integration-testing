@@ -24,7 +24,7 @@ const POLL_INTERVAL_IN_MILLISECONDS = 100;
 const WORK_DELAY_IN_MILLISECONDS = 1000;
 
 /** A window view exposing the ad-hoc marker the closures read/write. */
-interface MarkerWindow {
+interface MarkerWindow extends Window {
   __t116PollMarker?: boolean;
 }
 
