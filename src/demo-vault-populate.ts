@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import type { PopulateFilesParams } from './temp-vault.ts';
 
 import { readDemoVaultTree } from './demo-vault-tree.ts';
+import { ensureNonNullable } from './type-guards.ts';
 
 const OBSIDIAN_CONFIG_DIR = '.obsidian';
 const PLUGINS_DIR = 'plugins';
@@ -148,7 +149,7 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
   }
 
   if (data !== undefined) {
-    const dataJson: string = JSON.stringify(data, null, DATA_JSON_INDENT);
+    const dataJson: string = ensureNonNullable(JSON.stringify(data, null, DATA_JSON_INDENT));
     map[`${pluginPrefix}/${DATA_JSON}`] = `${dataJson}\n`;
   }
 }
