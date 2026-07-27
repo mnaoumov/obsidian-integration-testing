@@ -225,6 +225,11 @@ async function updateChangelog(newVersion: string): Promise<void> {
 
   await writeFile(changelogPath, newChangeLog, 'utf-8');
 
+  if (!process.stdin.isTTY) {
+    console.log('Non-interactive session detected; using the generated CHANGELOG.md as-is.');
+    return;
+  }
+
   const codeVersion = await execFromRoot('code --version', {
     isQuiet: true,
     shouldIgnoreExitCode: true
