@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 9.1.1
+
+- fix(version): skip interactive CHANGELOG editor in non-interactive sessions
+- fix: enable alwaysUpdateLinks in owned vaults so headless renames resolve
+
 ## 9.1.0
 
 - feat: allow install additional plugins
