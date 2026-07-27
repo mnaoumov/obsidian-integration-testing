@@ -5248,5 +5248,12 @@
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.2.asar.gz"
     }
+  },
+  "1.13.3": {
+    "channel": "catalyst",
+    "changelogUrl": "https://obsidian.md/changelog/2026-07-21-desktop-v1.13.3/",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.13.3.asar.gz"
+    }
   }
 }
