@@ -62,6 +62,8 @@ Every setup capability must reach **all three** consumption paths, never just on
 
 When adding or changing any adapter-facing option, update the core and **both** adapters in the same change. A capability that lands in only one framework is incomplete. Both adapter files are excluded from unit-test coverage (`v8 ignore`) because they are integration-time glue; keep them as thin as possible so the shared logic stays in the core.
 
+**Parity also covers the runtime environment, not just the API.** The harness chain reads the `OBSIDIAN_METADATA` global at module scope (L20), so every runtime that loads it must supply it — including Jest, which has no `define`. Both runners load the same framework-neutral `scripts/metadata-global-setup.ts` through their `setupFiles` (`scripts/jest-config.ts` / the integration projects in `scripts/vitest-config.ts`); without it a Jest suite dies at import with `ReferenceError: OBSIDIAN_METADATA is not defined` before a single test runs (T241). Any future build-time injection needs the same treatment on both sides.
+
 ## L7. Cross-process run serialization
 
 Two integration-test runs that share the same Obsidian resources corrupt each other. On **Android** the emulator and Appium server are shared, so concurrent runs collide (symptoms: `ECONNREFUSED`, "vault not open"). On **desktop** this no longer applies: each run owns an isolated instance (its own temp `--user-data-dir` and free CDP port; Electron's single-instance lock is per-userData), so desktop runs are independent and need no lock.
@@ -551,8 +553,12 @@ installer/Electron compatibility knobs. It is a
 **data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is
 injected as the `OBSIDIAN_METADATA` global — esbuild's `define` inlines it into the build (the built
 library stays self-contained, no runtime file read), the unit-test project uses Vitest's `define`, and the
-integration-test projects set it via the `scripts/vitest-metadata-setup.ts` setup-file global. The usual
-format/lint/spellcheck gates apply.
+runtimes with no `define` (the Vitest main process, the Vitest integration projects, and every Jest worker
+— see L6) publish it via the shared `scripts/metadata-global-setup.ts` setup file. Every one of those
+paths — plus the byte-stable catalog read/write — sources the table from
+`scripts/helpers/metadata-global.ts` (`METADATA_JSON_PATH` resolved from `import.meta.dirname`, so the read
+does not depend on the invocation directory; `readMetadataJsonText` for the `define` callers,
+`defineObsidianMetadataGlobal` for the global). The usual format/lint/spellcheck gates apply.
 
 **`downloads` — baked asset URLs (superset from upstream `obsidian-versions.json`).** Each version carries
 an optional `downloads` object with the *exact* published URLs for the assets this harness downloads:
@@ -590,8 +596,8 @@ unit-tested `src/ecmascript-version.ts` `deriveEcmaScriptVersion` (a curated Chr
 breakpoint table). Electron bundles the same Node/V8/Chromium on every OS for a given Electron version, so a
 single-platform run is authoritative for all platforms — no per-OS matrix. Versions that dead-boot (an
 installer too old to render) are logged and skipped. It runs under jiti, which lacks the `OBSIDIAN_METADATA`
-`define` global, so the script shims that global from `metadata.json` (like `vitest-metadata-setup.ts`)
-before dynamically importing `connectToCdp`.
+`define` global, so the script calls the shared `defineObsidianMetadataGlobal()` (the same shim the test
+runners get via `metadata-global-setup.ts`) before dynamically importing `connectToCdp`.
 
 Two installer-floor fields:
 
