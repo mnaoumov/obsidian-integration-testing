@@ -31,7 +31,7 @@
  * and launches Electron, so — like the other download-and-boot suites — it is
  * opt-in via `OBSIDIAN_TEST_OLD_VAULT_OPEN=1` (and needs `xvfb` + the sandbox
  * disabled on Linux CI). `OBSIDIAN_METADATA` is provided by
- * `scripts/vitest-metadata-setup.ts` (already in the `integration-tests` project).
+ * `scripts/metadata-global-setup.ts` (already in the `integration-tests` project).
  */
 
 import { basename } from 'node:path';

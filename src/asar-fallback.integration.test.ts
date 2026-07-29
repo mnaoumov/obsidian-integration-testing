@@ -24,7 +24,7 @@
  * and launches Electron, so — like the other download-and-boot suites — it is
  * opt-in via `OBSIDIAN_TEST_ASAR_FALLBACK=1` (and needs `xvfb` + the sandbox
  * disabled on Linux CI). `OBSIDIAN_METADATA` is provided by
- * `scripts/vitest-metadata-setup.ts` (already in the `integration-tests` project).
+ * `scripts/metadata-global-setup.ts` (already in the `integration-tests` project).
  */
 
 import process from 'node:process';

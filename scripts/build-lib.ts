@@ -9,6 +9,8 @@ import {
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { readMetadataJsonText } from './helpers/metadata-global.ts';
+
 interface PackageJson {
   version: string;
 }
@@ -19,7 +21,7 @@ const packageVersion = (JSON.parse(readFileSync('package.json', 'utf-8')) as Pac
 // Library is self-contained (inlined into the output, no runtime file read). The
 // Raw JSON text is a valid expression, so esbuild substitutes it as an object
 // Literal — matching how OBSIDIAN_INTEGRATION_TESTING_VERSION is injected.
-const obsidianMetadataJson = readFileSync('metadata.json', 'utf-8');
+const obsidianMetadataJson = readMetadataJsonText();
 
 function getEntryPoints(dir: string): string[] {
   const entries: string[] = [];
