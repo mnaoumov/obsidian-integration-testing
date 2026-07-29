@@ -1050,3 +1050,33 @@ Pure/testable split (mirrors L18/L21–L27): the timing loop is the pure, unit-t
 (`src/poll-until.ts`, clock + sleep injected for deterministic tests); `pollInObsidian` is the thin
 integration-only wiring (drives a live Obsidian), `v8 ignore`d and covered by
 `poll-in-obsidian.integration.test.ts`.
+
+## L30. Security overrides (`brace-expansion` GHSA-mh99-v99m-4gvg)
+
+`npm audit` reported 27 high advisories, **all** of them the same root cause: `brace-expansion`
+[GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg) (DoS via unbounded expansion). The
+fix ships **only** on the `5.x` line, and the advisory's vulnerable range is `<= 5.0.7` — which covers every
+`1.x` / `2.x` / `3.x` release, so a backport alone would not clear the audit; the advisory metadata itself has
+to stop covering the legacy lines. Nothing here depends on `brace-expansion` directly: it arrives through
+`minimatch@3` / `@5` / `@9`, which pin the unpatched `1.x` / `2.x` lines. `npm audit fix` cannot resolve it
+(its only offer downgrades unrelated packages), so the `overrides` block carries the fix — the same shape ODU
+uses (see its AGENTS.md "Security overrides"):
+
+| Override | Vulnerable path it closes |
+| --- | --- |
+| `glob` → `^13.0.6` | `@jest/reporters`, `jest-config`, `jest-runtime` (`^10.5.0`), `@wdio/config` (`^10.2.2`) and `archiver-utils` (`^10.0.0`) all resolved `glob@10` → `minimatch@9`; `test-exclude@6` pulled `glob@7` → `minimatch@3`. `glob@13` is on `minimatch@^10`, which uses the patched `brace-expansion@5`. |
+| `test-exclude` → `^8.0.0` | `babel-plugin-istanbul@7` pins `test-exclude@^6`, whose own `minimatch@^3` is unpatched. `test-exclude@8` moved to `minimatch@^10`. |
+| `readdir-glob` → `^3.0.0` | `archiver@7` pins `readdir-glob@^1.1.2` → `minimatch@5`. `readdir-glob@3` is on `minimatch@^10`. |
+
+Result: one deduped `brace-expansion@5.0.8` and one `minimatch@10.2.5` in the whole tree, and a clean
+`npm audit`. Call sites were verified against the new majors rather than assumed — `glob@13` still
+exports the callable `glob()` plus `glob.sync` / `globSync` / `hasMagic` (what the Jest, WDIO and archiver
+packages call), `test-exclude@8`'s default export is still a `new TestExclude(...)` with `shouldInstrument()`,
+and `readdir-glob@3` is still a callable factory emitting `match` / `end`. `glob@13` requires Node
+`18 || 20 || >=22`.
+
+**Remove all three** once the advisory stops flagging the legacy lines (test with
+`npm audit --json` after `npm update`, not just `npm view brace-expansion versions --json`: as of 2026-07-29
+the legacy heads are `1.1.17` / `2.1.3` / `3.0.5` and all are still inside the `<= 5.0.7` range, so the
+maintenance releases that already landed changed nothing). These overrides exist purely for the advisory —
+per G41 they go as soon as it does.

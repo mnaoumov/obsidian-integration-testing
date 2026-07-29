@@ -46,6 +46,7 @@
     "funcs",
     "getprop",
     "getwindowname",
+    "GHSA",
     "hermeticity",
     "IMAGENAME",
     "inlines",
