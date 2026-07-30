@@ -23,7 +23,7 @@ All entry points are under the `obsidian-integration-testing` package; `…/` be
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
-Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18.
+Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`, `leftover-cleanup`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18.
 
 The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: own vs. attach), with `obsidian-instance.ts` (launch + free port + kill), `obsidian-version*.ts` (asar version resolution/download/cache), and `obsidian-installer.ts` (shell version detect/download/extract — it resolves the installer asset by querying the release's real asset list via the GitHub API and picking the platform-correct name with the pure, unit-tested `installer-asset.ts`, tolerating the historical dot-vs-hyphen separator rename, with a both-separator templated fallback when the API is unavailable). `transport-factory.ts` resolves the owned-instance config (shell exe + asar + temp user-data dir) from the version knobs.
 
@@ -1088,3 +1088,64 @@ and `readdir-glob@3` is still a callable factory emitting `match` / `end`. `glob
 the legacy heads are `1.1.17` / `2.1.3` / `3.0.5` and all are still inside the `<= 5.0.7` range, so the
 maintenance releases that already landed changed nothing). These overrides exist purely for the advisory —
 per G41 they go as soon as it does.
+
+## L31. Leftover cleanup — sweep at both ends; device unconditional, host age-gated
+
+**A run that dies cannot clean up after itself, and on Android that is the normal case.** Teardown removes
+the vault through the WebView, and a dead WebView is exactly what most Android failures are — the logs say so
+directly: `Vault cleanup error (non-fatal): no such window`. So every failure leaks a `temp-vault-*`
+directory **and leaves it registered**, which is work Obsidian redoes at every startup, inside the same
+WebView-readiness budget the run is already straining. Failures therefore make the next failure likelier,
+which is why six Android runs of one unchanged build gave 2 passes and 4 failures in a single afternoon
+(T265): every failure landed in global setup or the first test, never in an assertion, wearing four different
+masks (`Plugin … is in the enabled set but not loaded`, `invalid session id`, `no such window`,
+`No WEBVIEW_md.obsidian context found within 60000ms`) that all mean "the WebView never came up". The AVD held
+**103 leftover vaults**; the host held **312** `temp-vault-*` plus **331** owned `userdata-*` profiles. It is
+about Obsidian's startup enumeration cost, not disk space (the 103 vaults were ~108 MB).
+
+**The start-of-run sweep is the half that breaks the loop, because it runs before anything that can die.**
+
+- **Device (Android)** — `AppiumTransportFactory.sweepDeviceLeftoverVaults`, called from `createNewSession`
+  after the device is connected and **before `remote()`** (which launches Obsidian via
+  `appium:appPackage`/`appActivity`) — the last point at which nothing has to enumerate vaults yet, and the
+  only sweep that needs no WebView. `adb shell ls -1 <vaultBasePath>` → `filterLeftoverNames` → a batched
+  `adb shell` recursive delete (`ADB_VAULT_SWEEP_BATCH_SIZE`, so a hundred leftovers cannot overflow the
+  command line). Not in `attachToExistingSession` — a worker must never sweep.
+- **Device registry** — `AppiumTransport.registerVault` prunes the **other** `temp-vault-*` entries from
+  `mobile-external-vaults` (and their `enable-plugin-<path>` keys) in the same `browser.execute` that adds its
+  own, since it already holds a healthy WebView there. It is this registry, not the filesystem, that Obsidian
+  enumerates at startup, so sweeping the directories alone would still leave the list long.
+- **Device teardown** — `AppiumTransport.unregisterVault` now removes the vault directory over `adb`
+  **whether or not the `localStorage` step succeeded** (that step is wrapped in `try`/`catch`). Routing the
+  removal through the app is what made every failed run leak its vault.
+- **Host** — `sweepHostLeftovers` (`leftover-cleanup.ts`) removes `temp-vault-*` under `tmpdir()` and
+  `userdata-*` under `<tmpdir>/obsidian-integration-testing`. Wired into `coreSetup` (before the transport is
+  created) and `coreTeardown`, so Vitest / Jest / Manual all inherit it per **L6**, plus `connectToCdp`,
+  which mints the same directories outside the core.
+
+**The two halves gate differently, and the asymmetry is the point:**
+
+| Sweep      | Gate                                      | Why                                                                                                                                                                                                                                                                                   |
+| ---------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Device** | Unconditional                             | Android runs hold the exclusive `android` setup lock (**L7**), so no concurrent run can own a device vault. An age gate would let a vault leaked ten minutes ago survive into the next run — precisely the loop this exists to break.                                                 |
+| **Host**   | Older than `leftoverMaxAgeInMilliseconds` | Desktop runs are deliberately **not** serialized (**L7** — each owns an isolated instance), and every project on the machine shares one `tmpdir()`. A young directory may belong to a live run of another repo; one was observed being written four minutes before this work started. |
+
+**Knobs** (on **both** transport option interfaces, per **L6**): `shouldSweepLeftovers` (`@default true`)
+and `leftoverMaxAgeInMilliseconds` (`@default 7200000`, `0` disables the host age gate; the device sweep
+ignores it by design). `shouldSweepLeftovers` is threaded into `AppiumTransportConfig` so the
+`localStorage` prune honours it too — but unregistering **this run's own** vault always happens; that is
+teardown, not a sweep.
+
+**`leftover-cleanup.ts` is deliberately NOT `v8 ignore`d.** `filterLeftoverNames` / `checkIsLeftoverStale` /
+the two resolvers are pure, and `sweepHostLeftovers` takes injectable `roots`, so the whole module is
+unit-tested against mocked `node:fs/promises` (**G16** — unit tests never touch the real filesystem) rather
+than hidden from the 100% gate. It also owns the `TEMP_VAULT_DIR_PREFIX` / `OWNED_USER_DATA_DIR_PREFIX` /
+`HARNESS_TEMP_DIR_NAME` constants that `temp-vault.ts` and `transport-factory.ts` now build their paths
+from, so the sweeper and the creator can never disagree about what the residue is called.
+
+Everything is best-effort: an unreadable root, an entry that cannot be `stat`ed, and a directory another
+process still holds (Windows `EPERM`) are counted and skipped, never thrown — a sweep must not fail the run
+it is cleaning up for.
+
+Manual fallback when investigating: a recursive `adb shell` delete of `/sdcard/Documents/temp-vault-*`, with
+`adb shell ls /sdcard/Documents | wc -l` and `adb shell df -h /data` to see the damage.

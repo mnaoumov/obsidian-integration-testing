@@ -21,7 +21,10 @@ import {
   stat,
   writeFile
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import {
+  basename,
+  join
+} from 'node:path';
 import process, { loadEnvFile } from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -37,6 +40,11 @@ import {
 } from './enable-plugin.ts';
 import { errorToString } from './error-to-string.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import {
+  resolveLeftoverMaxAgeInMilliseconds,
+  resolveShouldSweepLeftovers,
+  sweepHostLeftovers
+} from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import {
   computeBackoffDelayInMilliseconds,
@@ -192,6 +200,23 @@ interface EnablePluginInVaultParams {
 }
 
 /**
+ * Parameters for {@link sweepLeftovers}.
+ */
+interface SweepLeftoversParams {
+  /** Directory names to keep regardless of age (e.g. a concurrent setup's vault). */
+  readonly excludedNames?: readonly string[] | undefined;
+
+  /** Short label for log messages. */
+  readonly label: string;
+
+  /** Which end of the run is sweeping, for the log prefix. */
+  readonly phase: 'setup' | 'teardown';
+
+  /** The resolved transport options (source of the sweep knobs). */
+  readonly transportOptions: ObsidianTransportOptions | undefined;
+}
+
+/**
  * Framework-agnostic global setup logic.
  *
  * Loads `.env` from the project root, creates a transport, creates and registers
@@ -220,6 +245,8 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     lock = await acquireSetupLock({ label, scope: lockScope });
     log(`[integration-setup:${label}] Setup lock acquired.`);
   }
+
+  await sweepLeftovers({ label, phase: 'setup', transportOptions });
 
   let transport: ObsidianTransport | undefined;
   let tempVault: TempVault | undefined;
@@ -323,6 +350,13 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
     activeSetups.delete(result);
     releaseSetupLock(result);
   }
+
+  await sweepLeftovers({
+    excludedNames: [...activeSetups].map((activeSetup) => basename(activeSetup.tempVault.path)),
+    label: result.transportLabel,
+    phase: 'teardown',
+    transportOptions: result.transportOptions
+  });
 }
 
 /**
@@ -730,6 +764,40 @@ async function resolveDistPath(projectRoot: string): Promise<string> {
   }
 
   throw new Error('No build found. Run `npm run build` or `npm run dev` first.');
+}
+
+/**
+ * Removes the host-side temp directories earlier runs leaked.
+ *
+ * Runs at both ends of a run: at setup it happens **before** the transport is
+ * created, so it does not depend on a healthy Obsidian/WebView — which is
+ * exactly what a failed run no longer has, and why a failed run cannot clean up
+ * after itself. Age-gated (see `leftoverMaxAgeInMilliseconds`) because desktop
+ * runs are not serialized and every project on the machine shares one temp
+ * directory. Best-effort: a sweep never fails the run it is cleaning up for.
+ *
+ * @param params - The sweep parameters.
+ */
+async function sweepLeftovers(params: SweepLeftoversParams): Promise<void> {
+  const { label, phase, transportOptions } = params;
+  if (!resolveShouldSweepLeftovers(transportOptions)) {
+    return;
+  }
+
+  try {
+    const result = await sweepHostLeftovers({
+      excludedNames: params.excludedNames,
+      maxAgeInMilliseconds: resolveLeftoverMaxAgeInMilliseconds(transportOptions)
+    });
+    if (result.removedCount > 0 || result.failedCount > 0) {
+      log(
+        `[integration-${phase}:${label}] Swept ${String(result.removedCount)} leftover temp director(ies) `
+          + `from earlier runs (${String(result.failedCount)} still in use).`
+      );
+    }
+  } catch (error: unknown) {
+    log(`[integration-${phase}:${label}] Leftover sweep error (non-fatal): ${errorToString(error)}`);
+  }
 }
 
 /**

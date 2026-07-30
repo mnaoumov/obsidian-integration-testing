@@ -199,11 +199,74 @@ describe('AppiumTransport.registerVault', () => {
   it('should execute localStorage configuration with device vault path', async () => {
     await transport.registerVault('/tmp/my-vault');
 
-    // The execute call sets localStorage entries.
+    // The execute call sets localStorage entries, and prunes earlier runs' temp-vault registrations.
     expect(mockBrowser.execute).toHaveBeenCalledWith(
       expect.any(Function),
-      '/sdcard/Documents/my-vault'
+      '/sdcard/Documents/my-vault',
+      '/sdcard/Documents/temp-vault-'
     );
+  });
+
+  it('should not pass a prune prefix when leftover sweeping is disabled', async () => {
+    const noSweepTransport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android',
+      shouldSweepLeftovers: false
+    });
+
+    await noSweepTransport.registerVault('/tmp/my-vault');
+
+    expect(mockBrowser.execute).toHaveBeenCalledWith(
+      expect.any(Function),
+      '/sdcard/Documents/my-vault',
+      ''
+    );
+  });
+});
+
+describe('AppiumTransport.unregisterVault', () => {
+  let transport: AppiumTransport;
+  let mockBrowser: MockBrowser;
+
+  beforeEach(() => {
+    mockBrowser = createMockBrowser();
+    mockBrowser.execute.mockResolvedValue(true);
+    mockExec.mockReset().mockResolvedValue('');
+    transport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android'
+    });
+  });
+
+  it('should remove the vault directory from the device', async () => {
+    await transport.unregisterVault('/tmp/my-vault');
+
+    const rmCall = mockExec.mock.calls.find((call) => {
+      const cmd = call[0];
+      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('rm');
+    });
+
+    expect(rmCall).toBeDefined();
+    const cmd = ensureNonNullable(rmCall)[0] as string[];
+    expect(cmd).toContain('-rf');
+    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault');
+  });
+
+  it('should still remove the vault directory when the WebView is gone', async () => {
+    mockBrowser.execute.mockRejectedValue(new Error('no such window: target window already closed'));
+
+    await transport.unregisterVault('/tmp/my-vault');
+
+    const rmCall = mockExec.mock.calls.find((call) => {
+      const cmd = call[0];
+      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('rm');
+    });
+
+    expect(rmCall).toBeDefined();
+    const cmd = ensureNonNullable(rmCall)[0] as string[];
+    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault');
   });
 });
 

@@ -26,6 +26,12 @@ import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ObsidianCdpTransportOptions } from './transport-options.ts';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import {
+  resolveLeftoverMaxAgeInMilliseconds,
+  resolveShouldSweepLeftovers,
+  sweepHostLeftovers
+} from './leftover-cleanup.ts';
+import { log } from './log.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 import { TempVault } from './temp-vault.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
@@ -280,7 +286,9 @@ interface ResolvedEndpoint {
  * @returns A {@link Promise} that resolves to the live {@link CdpConnection}.
  */
 export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpConnection> {
-  const transport = await createTransportFromOptions(buildCdpTransportOptions(options));
+  const transportOptions = buildCdpTransportOptions(options);
+  await sweepLeftovers(transportOptions);
+  const transport = await createTransportFromOptions(transportOptions);
   const vault = new TempVault(options?.vault);
   const shouldRemoveVaultOnDispose = options?.shouldRemoveVaultOnDispose ?? (options?.vault === undefined);
 
@@ -384,6 +392,37 @@ function resolveEndpoint(transport: unknown, options: ConnectToCdpOptions | unde
   }
 
   throw new Error('connectToCdp: could not determine the CDP port.');
+}
+
+/**
+ * Removes the host-side temp directories earlier runs leaked, before this
+ * connection adds its own.
+ *
+ * `connectToCdp` mints the same `temp-vault-*` / owned `userdata-*` directories
+ * the test global setup does, and an ad-hoc debugging session is exactly the
+ * kind that gets killed with a leftover behind — so it sweeps too. Age-gated and
+ * best-effort; see the core's `sweepLeftovers`.
+ *
+ * @param transportOptions - The resolved transport options (source of the sweep knobs).
+ */
+async function sweepLeftovers(transportOptions: ObsidianCdpTransportOptions): Promise<void> {
+  if (!resolveShouldSweepLeftovers(transportOptions)) {
+    return;
+  }
+
+  try {
+    const result = await sweepHostLeftovers({
+      maxAgeInMilliseconds: resolveLeftoverMaxAgeInMilliseconds(transportOptions)
+    });
+    if (result.removedCount > 0 || result.failedCount > 0) {
+      log(
+        `[connect-to-cdp] Swept ${String(result.removedCount)} leftover temp director(ies) from earlier runs `
+          + `(${String(result.failedCount)} still in use).`
+      );
+    }
+  } catch (error: unknown) {
+    log(`[connect-to-cdp] Leftover sweep error (non-fatal): ${String(error)}`);
+  }
 }
 
 /* v8 ignore stop */

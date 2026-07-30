@@ -787,19 +787,21 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
 
 Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs (all with sensible defaults):
 
-| Option                                        | Purpose                                                                                                          | Default                |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                        | `'md.obsidian'`        |
-| `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to become ready; only when the harness auto-starts it.               | `180000`               |
-| `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for a started emulator to go idle before the session; avoids inflated cold setup. 0 skips.   | `60000`                |
-| `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window and live output. Hidden and quiet by default.                 | `false`                |
-| `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.      | `false`                |
-| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.                     | `90000`                |
-| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.         | `180000`               |
-| `shouldAutoInstallAppiumDependencies`         | Auto-install missing Appium + the UiAutomator2 driver before auto-starting the server (global `npm install -g`). | `true`                 |
-| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                   | `true`                 |
-| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                   | `'/sdcard/Documents/'` |
-| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                                | `60000`                |
+| Option                                        | Purpose                                                                                                                 | Default                |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `appId`                                       | App package (Android) or bundle ID (iOS).                                                                               | `'md.obsidian'`        |
+| `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to become ready; only when the harness auto-starts it.                      | `180000`               |
+| `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for a started emulator to go idle before the session; avoids inflated cold setup. 0 skips.          | `60000`                |
+| `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window and live output. Hidden and quiet by default.                        | `false`                |
+| `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.             | `false`                |
+| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.                            | `90000`                |
+| `leftoverMaxAgeInMilliseconds`                | Age gate for the **host** leftover sweep; the device sweep is unconditional. See [Leftover cleanup](#leftover-cleanup). | `7200000`              |
+| `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.                | `180000`               |
+| `shouldAutoInstallAppiumDependencies`         | Auto-install missing Appium + the UiAutomator2 driver before auto-starting the server (global `npm install -g`).        | `true`                 |
+| `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                          | `true`                 |
+| `shouldSweepLeftovers`                        | Remove the temp vaults / instance profiles earlier runs leaked. See [Leftover cleanup](#leftover-cleanup).              | `true`                 |
+| `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                          | `'/sdcard/Documents/'` |
+| `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                                       | `60000`                |
 
 > [!NOTE]
 >
@@ -844,6 +846,40 @@ that can exceed the default `90000`ms budget and fail setup with
 `Obsidian layout did not become ready within 90000ms`. Give the AVD more resources (see above) and,
 if needed, raise the budget via `layoutReadyTimeoutInMilliseconds` in the transport options. It is
 headroom, not a substitute for adequate provisioning.
+
+### Leftover cleanup
+
+A run that dies mid-flight cannot clean up after itself. On Android that is the normal case, not the
+exception: teardown removes the vault through the WebView, and a dead WebView is exactly what most
+failures are (`Vault cleanup error (non-fatal): no such window`). So every failure leaves a
+`temp-vault-*` directory behind — and, worse, leaves it **registered**, which is work Obsidian has to
+redo at every startup, inside the same WebView-readiness budget the run is already straining. Failures
+therefore make the next failure likelier. One real emulator had accumulated **103 leftover vaults**.
+
+Every run now sweeps at **both ends**, and the start sweep is the one that matters, because it runs
+before anything that can die:
+
+- **On the device (Android)** — before the Appium session launches Obsidian, every `temp-vault-*`
+  directory under `vaultBasePath` is removed over `adb`, and their stale entries are pruned from
+  Obsidian Mobile's `localStorage` vault registry when the run registers its own vault. Unregistering
+  a vault now removes its device directory over `adb` **whether or not the WebView answered**.
+- **On the host** — leftover `temp-vault-*` staging directories and owned `userdata-*` instance
+  profiles in the system temp directory are removed.
+
+The two halves gate differently, on purpose:
+
+| Sweep      | Gate                                           | Why                                                                                                                                                      |
+| ---------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Device** | Unconditional                                  | Android runs hold an exclusive lock, so no concurrent run can own a device vault — and an age gate would let a vault leaked minutes ago poison a rerun.  |
+| **Host**   | Only older than `leftoverMaxAgeInMilliseconds` | Desktop runs are deliberately not serialized, and every project on the machine shares one temp directory, so a young directory may belong to a live run. |
+
+Both knobs are available on either transport:
+
+- **`shouldSweepLeftovers`** (default `true`) — set `false` to disable both sweeps entirely.
+- **`leftoverMaxAgeInMilliseconds`** (default `7200000`, i.e. two hours) — the host age gate. Raise it
+  if a run of yours can outlive the default; `0` removes every host match regardless of age.
+
+Sweeping is best-effort throughout: a directory another process still holds is skipped, never thrown.
 
 ### Running multiple platforms
 

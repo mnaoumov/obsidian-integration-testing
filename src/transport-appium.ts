@@ -57,6 +57,7 @@ import type {
 } from './transport.ts';
 
 import { exec } from './exec.ts';
+import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
 
 /**
@@ -118,6 +119,19 @@ export interface AppiumTransportConfig {
   platform: 'android' | 'ios';
 
   /**
+   * Whether registering a vault also prunes the **other** `temp-vault-*`
+   * registrations earlier runs left in Obsidian Mobile's `localStorage`.
+   *
+   * The device-side directories are swept before the app launches (see the
+   * factory); this removes their now-dangling registry entries, which are what
+   * Obsidian actually enumerates at startup. Unregistering this run's own vault
+   * is unaffected — that always happens.
+   *
+   * @default `true`
+   */
+  shouldSweepLeftovers?: boolean;
+
+  /**
    * Base path on the device where Obsidian stores vaults.
    *
    * Defaults:
@@ -143,6 +157,7 @@ const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
+const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30000;
 
 // --- Console capture (Layer 2 of the plugin-load error surfacing, see T88) ---
 const CONSOLE_CAPTURE_MARKER_TAG = 'OIT_CAPTURE';
@@ -156,8 +171,16 @@ const LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS = 10000;
  */
 const CONSOLE_CAPTURE_TAG_RE = /\/(?:chromium|AndroidRuntime|Capacitor\/Console)\(/;
 
+/**
+ * Base path on an Android device where Obsidian Mobile stores its vaults.
+ *
+ * Exported because the transport factory sweeps leftover vaults from it before
+ * a transport exists (see the repo's L31).
+ */
+export const DEFAULT_ANDROID_VAULT_BASE_PATH = '/sdcard/Documents/';
+
 const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
-  android: '/sdcard/Documents/',
+  android: DEFAULT_ANDROID_VAULT_BASE_PATH,
   ios: '@md.obsidian:documents/'
 };
 
@@ -199,6 +222,7 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly isSessionOwner: boolean;
   private readonly layoutReadyTimeoutInMilliseconds: number;
   private readonly platform: 'android' | 'ios';
+  private readonly shouldSweepLeftovers: boolean;
   private readonly vaultBasePath: string;
 
   private readonly webviewTimeoutInMilliseconds: number;
@@ -215,7 +239,8 @@ export class AppiumTransport implements ObsidianTransport {
     this.layoutReadyTimeoutInMilliseconds = config.layoutReadyTimeoutInMilliseconds ?? DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS;
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
-    this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? '/sdcard/Documents/';
+    this.shouldSweepLeftovers = config.shouldSweepLeftovers ?? true;
+    this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? DEFAULT_ANDROID_VAULT_BASE_PATH;
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
   }
 
@@ -399,7 +424,13 @@ export class AppiumTransport implements ObsidianTransport {
    * 4. Trigger `location.reload()` so Obsidian re-reads localStorage and opens the vault
    * 5. Wait for `app.workspace.layoutReady`
    *
-   * Existing vault registrations in localStorage are preserved (append, not overwrite).
+   * Existing vault registrations in localStorage are preserved (append, not
+   * overwrite) — except the **harness's own** `temp-vault-*` registrations from
+   * earlier runs, which are pruned when {@link AppiumTransportConfig.shouldSweepLeftovers}
+   * is on. Their directories are already gone (the factory sweeps them before
+   * the app launches), and it is this registry — not the filesystem — that
+   * Obsidian enumerates at startup, so leaving them is what makes each failed
+   * run slow the next one down.
    *
    * @param vaultPath - The absolute path to the vault on the host machine.
    */
@@ -417,16 +448,31 @@ export class AppiumTransport implements ObsidianTransport {
     // Context may be temporarily unavailable during reload.
     this.isInWebViewContext = false;
 
-    await this.browser.execute((path: string) => {
-      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
-      if (!existing.includes(path)) {
-        existing.push(path);
+    const stalePrefix = this.shouldSweepLeftovers ? `${this.vaultBasePath}${TEMP_VAULT_DIR_PREFIX}` : '';
+
+    await this.browser.execute(
+      (path: string, prunePrefix: string) => {
+        let existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
+
+        if (prunePrefix) {
+          const stale = existing.filter((registered) => registered !== path && registered.startsWith(prunePrefix));
+          for (const registered of stale) {
+            localStorage.removeItem(`enable-plugin-${registered}`);
+          }
+          existing = existing.filter((registered) => !stale.includes(registered));
+        }
+
+        if (!existing.includes(path)) {
+          existing.push(path);
+        }
         localStorage.setItem('mobile-external-vaults', JSON.stringify(existing));
-      }
-      localStorage.setItem('mobile-selected-vault', path);
-      localStorage.setItem(`enable-plugin-${path}`, 'true');
-      location.reload();
-    }, deviceVaultPath);
+        localStorage.setItem('mobile-selected-vault', path);
+        localStorage.setItem(`enable-plugin-${path}`, 'true');
+        location.reload();
+      },
+      deviceVaultPath,
+      stalePrefix
+    );
 
     // Wait for reload + vault initialization.
     await this.waitForLayoutReady();
@@ -438,29 +484,42 @@ export class AppiumTransport implements ObsidianTransport {
    * Preserves other vault registrations. If the unregistered vault was selected,
    * switches to the first remaining vault (or clears the selection).
    *
-   * Note: Vault files on the device are not deleted. The test harness or CI
-   * environment should handle device cleanup.
+   * The vault's **files are then removed from the device over `adb`, whether or
+   * not the `localStorage` step succeeded** — deliberately, because the
+   * `localStorage` step goes through the WebView and a dead WebView is exactly
+   * what most Android failures are. Routing the removal through the app was what
+   * made every failed run leak its vault (`Vault cleanup error (non-fatal): no
+   * such window`), so the filesystem-level removal must not depend on it.
    *
    * @param vaultPath - The absolute path to the vault on the host machine.
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
     const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
 
-    await this.ensureWebViewContext();
+    try {
+      await this.ensureWebViewContext();
 
-    await this.browser.execute((path: string) => {
-      const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
-      const filtered = existing.filter((v) => v !== path);
-      localStorage.setItem('mobile-external-vaults', JSON.stringify(filtered));
-      localStorage.removeItem(`enable-plugin-${path}`);
-      if (localStorage.getItem('mobile-selected-vault') === path) {
-        if (filtered.length > 0) {
-          localStorage.setItem('mobile-selected-vault', filtered[0] ?? '');
-        } else {
-          localStorage.removeItem('mobile-selected-vault');
+      await this.browser.execute((path: string) => {
+        const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
+        const filtered = existing.filter((v) => v !== path);
+        localStorage.setItem('mobile-external-vaults', JSON.stringify(filtered));
+        localStorage.removeItem(`enable-plugin-${path}`);
+        if (localStorage.getItem('mobile-selected-vault') === path) {
+          if (filtered.length > 0) {
+            localStorage.setItem('mobile-selected-vault', filtered[0] ?? '');
+          } else {
+            localStorage.removeItem('mobile-selected-vault');
+          }
         }
-      }
-    }, deviceVaultPath);
+      }, deviceVaultPath);
+    } catch (error: unknown) {
+      log(
+        `[appium-transport] Could not deregister ${deviceVaultPath} from localStorage `
+          + `(${String(error)}); removing its files anyway.`
+      );
+    }
+
+    await this.removeDeviceVaultDir(deviceVaultPath);
   }
 
   /**
@@ -539,6 +598,27 @@ export class AppiumTransport implements ObsidianTransport {
       await exec(['adb', '-s', this.deviceId, 'push', localMarker, remoteMarker], { isQuiet: true });
     } finally {
       await rm(localMarker, { force: true });
+    }
+  }
+
+  /**
+   * Removes a vault directory from the device over `adb`.
+   *
+   * Best-effort: a failure is logged, not thrown, so a teardown problem never
+   * masks the test result. The next run's start-of-run sweep picks up whatever
+   * this could not remove.
+   *
+   * @param deviceVaultPath - The device-side vault directory path.
+   */
+  private async removeDeviceVaultDir(deviceVaultPath: string): Promise<void> {
+    try {
+      log(`[appium-transport] Removing vault directory from device: ${deviceVaultPath}`);
+      await exec(
+        ['adb', '-s', this.deviceId, 'shell', 'rm', '-rf', deviceVaultPath],
+        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS }
+      );
+    } catch (error: unknown) {
+      log(`[appium-transport] Vault directory removal failed (non-fatal): ${String(error)}`);
     }
   }
 

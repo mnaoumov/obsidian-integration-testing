@@ -24,6 +24,7 @@ import {
 import type { ObsidianTransport } from './transport.ts';
 
 import { getTransportOptions } from './context-provider.ts';
+import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 import {
   registerVault,
@@ -70,7 +71,7 @@ export class TempVault {
    * @param path - An explicit vault path. If omitted, a temp directory is created.
    */
   public constructor(path?: string) {
-    this.path = path ?? mkdtempSync(join(tmpdir(), 'temp-vault-'));
+    this.path = path ?? mkdtempSync(join(tmpdir(), TEMP_VAULT_DIR_PREFIX));
   }
 
   /**
