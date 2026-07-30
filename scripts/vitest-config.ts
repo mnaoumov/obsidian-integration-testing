@@ -1,5 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+
+import {
+  defineObsidianMetadataGlobal,
+  readMetadataJsonText
+} from './helpers/metadata-global.ts';
 
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
@@ -33,9 +37,9 @@ const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integra
 // Unit project filesystem-free), while the integration-test projects publish the
 // Same table as a global via `METADATA_SETUP_FILE`.
 const DEFINE = {
-  OBSIDIAN_METADATA: readFileSync('metadata.json', 'utf-8')
+  OBSIDIAN_METADATA: readMetadataJsonText()
 };
-const METADATA_SETUP_FILE = './scripts/vitest-metadata-setup.ts';
+const METADATA_SETUP_FILE = './scripts/metadata-global-setup.ts';
 
 // The integration projects' global-setup modules (owned-attach / bare-attach) run in
 // The Vitest main process, where the per-project `define` (unit-tests only) and the
@@ -43,10 +47,7 @@ const METADATA_SETUP_FILE = './scripts/vitest-metadata-setup.ts';
 // Global here — this config is evaluated in that same main process — so a global
 // Setup importing the harness chain resolves `OBSIDIAN_METADATA` instead of throwing
 // `OBSIDIAN_METADATA is not defined` at module evaluation.
-Object.defineProperty(globalThis, 'OBSIDIAN_METADATA', {
-  configurable: true,
-  value: JSON.parse(DEFINE.OBSIDIAN_METADATA)
-});
+defineObsidianMetadataGlobal();
 
 export const config = defineConfig({
   test: {

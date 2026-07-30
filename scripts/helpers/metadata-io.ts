@@ -19,11 +19,11 @@ import {
 import type { ObsidianVersionMetadata } from '../../src/obsidian-metadata.ts';
 
 import { compareVersions } from '../../src/obsidian-version.ts';
+import { METADATA_JSON_PATH } from './metadata-global.ts';
 
 /** The repo-root catalog: version → metadata (mutable while merging). */
 export type MetadataTable = Record<string, ObsidianVersionMetadata>;
 
-const METADATA_PATH = 'metadata.json';
 const JSON_INDENT = 2;
 
 /**
@@ -32,7 +32,7 @@ const JSON_INDENT = 2;
  * @returns The parsed, mutable catalog.
  */
 export async function readMetadataTable(): Promise<MetadataTable> {
-  return JSON.parse(await readFile(METADATA_PATH, 'utf-8')) as MetadataTable;
+  return JSON.parse(await readFile(METADATA_JSON_PATH, 'utf-8')) as MetadataTable;
 }
 
 /**
@@ -56,5 +56,5 @@ export function serializeTable(table: MetadataTable): string {
  * @param table - The catalog to write.
  */
 export async function writeMetadataTable(table: MetadataTable): Promise<void> {
-  await writeFile(METADATA_PATH, serializeTable(table));
+  await writeFile(METADATA_JSON_PATH, serializeTable(table));
 }

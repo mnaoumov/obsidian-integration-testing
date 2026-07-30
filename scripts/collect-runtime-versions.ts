@@ -23,7 +23,6 @@
  *   npm run collect:runtime-versions -- --force     # recollect already-recorded versions
  */
 
-import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import type { ObsidianRuntimeVersions } from '../src/obsidian-metadata.ts';
@@ -31,6 +30,7 @@ import type { ObsidianRuntimeVersions } from '../src/obsidian-metadata.ts';
 import { deriveEcmaScriptVersion } from '../src/ecmascript-version.ts';
 import { errorToString } from '../src/error-to-string.ts';
 import { compareVersions } from '../src/obsidian-version.ts';
+import { defineObsidianMetadataGlobal } from './helpers/metadata-global.ts';
 import {
   readMetadataTable,
   writeMetadataTable
@@ -38,12 +38,9 @@ import {
 
 // The built library reads its version table from the `OBSIDIAN_METADATA` global.
 // Esbuild's `define` inlines it at build time; under jiti that global is absent,
-// So the transitively-imported reader throws at load. Inject it from
-// `metadata.json` first — the same shim `scripts/vitest-metadata-setup.ts` uses.
-Object.defineProperty(globalThis, 'OBSIDIAN_METADATA', {
-  configurable: true,
-  value: JSON.parse(readFileSync('metadata.json', 'utf-8'))
-});
+// So the transitively-imported reader throws at load. Publish it first — the same
+// Shim `scripts/metadata-global-setup.ts` gives the test runners.
+defineObsidianMetadataGlobal();
 
 /** The desktop-installer download key for the current host platform. */
 type PlatformInstallerKey = 'dmg' | 'exe' | 'tar';
