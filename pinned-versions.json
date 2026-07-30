@@ -7,35 +7,16 @@
     "means the condition that justified the pin has changed and the pin should be re-examined. `check: null` means no",
     "mechanical test exists — it is reported for manual review on every run instead of going quiet. Every exact pin must",
     "have an entry here, and every entry must correspond to a real pin; the script errors on either mismatch.",
-    "The caret-ranged overrides (glob, js-yaml, markdown-it, readdir-glob, test-exclude) are swept automatically and are",
-    "deliberately not listed. Modeled on obsidian-dev-utils/pinned-versions.json; rule G100."
+    "The caret-ranged overrides (glob, js-yaml, markdown-it, readdir-glob, test-exclude, tmp) are swept automatically and",
+    "are deliberately not listed. Modeled on obsidian-dev-utils/pinned-versions.json; rule G100."
   ],
   "pins": {
     "webdriverio": {
       "section": "dependencies",
-      "why": "Pinned in 647edb5 so patch-package could apply patches/webdriverio+9.27.0.patch, whose filename embeds the exact version. b65f32f ('chore: stop patching') deleted every patch and replaced them with scripts/helpers/check-project-types.ts, so that reason is gone. What survives is lockstep: @wdio/protocols and @wdio/types are direct devDependencies and must equal the exact versions webdriverio itself declares, so all three move together or not at all. 9.30.0 is published.",
+      "why": "No justification left. It was pinned in 647edb5 so patch-package could apply patches/webdriverio+9.27.0.patch, whose filename embeds the exact version; b65f32f ('chore: stop patching') deleted every patch. Until the unused-devDependency cleanup it also anchored @wdio/protocols and @wdio/types, which had to match the exact versions webdriverio declares — both are gone now, so nothing else in package.json is tied to this version. 9.30.0 is published.",
       "check": null,
       "expect": null,
-      "manualCheck": "To retire the pin, bump all three together — and read webdriverio's own dependencies first, because the trio stopped moving in lockstep after 9.27.0: webdriverio@9.30.0 declares @wdio/protocols 9.30.0 but @wdio/types 9.29.1. Set the two devDependencies to exactly what the chosen webdriverio release declares, then `npm ls @wdio/protocols @wdio/types` must show one copy of each (a second copy is what the pins exist to prevent), then run `npm run build:compile:typescript` and the wdio-backed integration suites."
-    },
-    "@wdio/protocols": {
-      "section": "devDependencies",
-      "why": "Must equal the exact version webdriverio declares. webdriverio pins its @wdio/* dependencies exactly, so any other value puts a second copy of the package in the tree and two conflicting sets of its declarations into the same TypeScript program.",
-      "check": "node -e \"process.stdout.write(JSON.parse(require('node:fs').readFileSync('node_modules/webdriverio/package.json', 'utf8')).dependencies['@wdio/protocols'])\"",
-      "expect": "9.27.0"
-    },
-    "@wdio/types": {
-      "section": "devDependencies",
-      "why": "Same as @wdio/protocols — webdriverio declares it exactly, so a different value means two copies. Note this one diverges from the webdriverio version from 9.30.0 on (webdriverio@9.30.0 declares @wdio/types 9.29.1), so it cannot be bumped by copying the webdriverio version.",
-      "check": "node -e \"process.stdout.write(JSON.parse(require('node:fs').readFileSync('node_modules/webdriverio/package.json', 'utf8')).dependencies['@wdio/types'])\"",
-      "expect": "9.27.0"
-    },
-    "@vitest/runner": {
-      "section": "devDependencies",
-      "why": "Present since the initial commit (8523807) with no recorded reason, and no justification found for it now: nothing in the repo references @vitest/runner outside package.json, and vitest@4.1.10 declares an exact @vitest/runner 4.1.10 of its own — so the pin does not dedupe anything, it adds a second copy of the package to the tree (`npm ls @vitest/runner` shows both 4.1.0 and 4.1.10). Recorded as unjustified rather than quietly kept.",
-      "check": null,
-      "expect": null,
-      "manualCheck": "Delete the devDependency, `npm install`, then run `npm run build:compile:typescript` and `npm test`. If both are green, the pin and the dependency are both stale and the removal stands. If a build needs the package resolvable at the root, set it to the exact version vitest declares instead of 4.1.0, so the tree holds one copy."
+      "manualCheck": "Move it to a caret range (^9.30.0 or newer) so the sweep maintains it, `npm install`, then run `npm run build:compile:typescript`, `npm test`, and — because this is the transport dependency the Android/Appium path drives — `npm run test:integration` against a real device, which the unit suites cannot cover. If that is green, delete this entry along with the pin."
     },
     "typescript": {
       "section": "devDependencies",
@@ -55,24 +36,6 @@
       "why": "Live in the tree exactly once, under webdriverio → archiver → archiver-utils, which asks for ^4.17.15. The override forces the newest 4.x across every copy rather than whatever old release the transitive range resolves to. Its justification is simply 'this is the newest lodash', so it goes stale the moment a newer one publishes.",
       "check": "npm view lodash version",
       "expect": "4.18.1"
-    },
-    "lodash-es": {
-      "section": "overrides",
-      "why": "Companion to the lodash override, but nothing in the installed tree depends on lodash-es — `npm ls lodash-es` is empty — so the override is inert and only takes effect if some future dependency pulls it in. Kept as a forward floor; the check fires when that happens.",
-      "check": "node -e \"process.stdout.write(require('node:fs').existsSync('node_modules/lodash-es') ? 'present' : 'absent')\"",
-      "expect": "absent"
-    },
-    "electron": {
-      "section": "overrides",
-      "why": "Added in 993c38c with the rest of the override block; nothing in the installed tree depends on electron — `npm ls electron` is empty — so the pin is inert today. The harness drives the Electron that Obsidian ships, never an npm-installed one, so if a dependency ever does pull electron in, the version it lands on is a decision to make deliberately rather than inherit. The check fires on that day.",
-      "check": "node -e \"process.stdout.write(require('node:fs').existsSync('node_modules/electron') ? 'present' : 'absent')\"",
-      "expect": "absent"
-    },
-    "mermaid": {
-      "section": "overrides",
-      "why": "Added in 993c38c with the rest of the override block; nothing in the installed tree depends on mermaid — `npm ls mermaid` is empty — so the pin is inert. Kept as a forward floor; the check fires if a dependency starts pulling it in, at which point the pinned version has to be justified or dropped.",
-      "check": "node -e \"process.stdout.write(require('node:fs').existsSync('node_modules/mermaid') ? 'present' : 'absent')\"",
-      "expect": "absent"
     }
   }
 }
