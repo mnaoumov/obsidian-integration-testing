@@ -17,10 +17,13 @@
 
 import type { ObsidianVersionDownloads } from '../src/obsidian-metadata.ts';
 
+import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import {
   readMetadataTable,
   writeMetadataTable
 } from './helpers/metadata-io.ts';
+
+exitIfScriptDisabled();
 
 /** The subset of the upstream `obsidian-versions.json` document we read. */
 interface UpstreamCatalog {

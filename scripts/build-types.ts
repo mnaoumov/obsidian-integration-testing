@@ -15,7 +15,10 @@ import {
   relative
 } from 'node:path';
 
+import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { execFromRoot } from './helpers/root.ts';
+
+exitIfScriptDisabled();
 
 const SRC_DIR = 'src';
 const ESM_DIR = 'dist/lib/esm';

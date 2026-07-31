@@ -30,11 +30,14 @@ import type { ObsidianRuntimeVersions } from '../src/obsidian-metadata.ts';
 import { deriveEcmaScriptVersion } from '../src/ecmascript-version.ts';
 import { errorToString } from '../src/error-to-string.ts';
 import { compareVersions } from '../src/obsidian-version.ts';
+import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { defineObsidianMetadataGlobal } from './helpers/metadata-global.ts';
 import {
   readMetadataTable,
   writeMetadataTable
 } from './helpers/metadata-io.ts';
+
+exitIfScriptDisabled();
 
 // The built library reads its version table from the `OBSIDIAN_METADATA` global.
 // Esbuild's `define` inlines it at build time; under jiti that global is absent,
