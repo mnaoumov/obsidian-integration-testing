@@ -5260,7 +5260,10 @@
     "channel": "catalyst",
     "changelogUrl": "https://obsidian.md/changelog/2026-07-27-desktop-v1.13.4/",
     "downloads": {
-      "asar": "https://releases.obsidian.md/release/obsidian-1.13.4.asar.gz"
+      "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/obsidian-1.13.4.asar.gz",
+      "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.dmg",
+      "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.exe",
+      "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/obsidian-1.13.4.tar.gz"
     }
   }
 }
