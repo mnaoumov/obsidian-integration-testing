@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 9.2.0
+
+- feat(version-matrix): run the suites once when both supported ends are the same version
+- refactor(cleanup): batch the device vault removal via exec's ExecArg
+- feat(cleanup): sweep leftover temp vaults and instance profiles at both ends of a run
+- build: record the verified depcheck false positives
+- chore(deps): drop unused devDependencies and inert overrides
+- docs: record a release condition for every pinned version
+- chore(deps): update npm dependencies and lift the tmp override off a vulnerable version
+- fix(jest): supply the OBSIDIAN_METADATA global via a shared setup file
+- fix(setup-lock): identify the holder by heartbeat, not just its pid
+- fix(deps): override glob/test-exclude/readdir-glob to clear GHSA-mh99-v99m-4gvg
+- chore(deps): update caret-ranged dependencies to their latest versions
+- chore: refresh metadata.json
+
 ## 9.1.1
 
 - fix(version): skip interactive CHANGELOG editor in non-interactive sessions
