@@ -9,7 +9,10 @@ import {
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { readMetadataJsonText } from './helpers/metadata-global.ts';
+
+exitIfScriptDisabled();
 
 interface PackageJson {
   version: string;
