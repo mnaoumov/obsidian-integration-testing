@@ -113,8 +113,6 @@ const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30000;
-// Vault paths per `adb shell rm` invocation, bounded so a device holding a hundred leftovers cannot overflow the command-line length limit.
-const ADB_VAULT_SWEEP_BATCH_SIZE = 25;
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
 // Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
 // Appium server (it has no effect as a capability) avoids the failure
@@ -983,13 +981,10 @@ class AppiumTransportFactory {
       }
 
       this.log(`Removing ${String(names.length)} leftover temp vault(s) from ${vaultBasePath} on device ${deviceId}...`);
-      for (let index = 0; index < names.length; index += ADB_VAULT_SWEEP_BATCH_SIZE) {
-        const batch = names.slice(index, index + ADB_VAULT_SWEEP_BATCH_SIZE);
-        await exec(
-          ['adb', '-s', deviceId, 'shell', 'rm', '-rf', ...batch.map((name) => `${vaultBasePath}${name}`)],
-          { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
-        );
-      }
+      await exec(
+        ['adb', '-s', deviceId, 'shell', 'rm', '-rf', { batchedArgs: names.map((name) => `${vaultBasePath}${name}`) }],
+        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
+      );
       this.log(`Removed ${String(names.length)} leftover temp vault(s) from device ${deviceId}.`);
     } catch (error: unknown) {
       this.log(`Warning: failed to sweep leftover temp vaults: ${error instanceof Error ? error.message : 'unknown error'}`);

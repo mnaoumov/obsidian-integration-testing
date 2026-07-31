@@ -1108,9 +1108,16 @@ about Obsidian's startup enumeration cost, not disk space (the 103 vaults were ~
 - **Device (Android)** — `AppiumTransportFactory.sweepDeviceLeftoverVaults`, called from `createNewSession`
   after the device is connected and **before `remote()`** (which launches Obsidian via
   `appium:appPackage`/`appActivity`) — the last point at which nothing has to enumerate vaults yet, and the
-  only sweep that needs no WebView. `adb shell ls -1 <vaultBasePath>` → `filterLeftoverNames` → a batched
-  `adb shell` recursive delete (`ADB_VAULT_SWEEP_BATCH_SIZE`, so a hundred leftovers cannot overflow the
-  command line). Not in `attachToExistingSession` — a worker must never sweep.
+  only sweep that needs no WebView. `adb shell ls -1 <vaultBasePath>` → `filterLeftoverNames` → one
+  `adb shell` recursive delete, with the paths passed as `exec`'s `ExecArg` `batchedArgs` so a device holding
+  a hundred leftovers is split at the platform's real command-line limit rather than a hand-rolled count.
+  Not in `attachToExistingSession` — a worker must never sweep.
+
+  A `temp-vault-*` **glob** would also work (Windows spawns `adb` with no shell, and on Unix the absolute
+  path cannot match on the host so the literal survives to the device shell). Enumerating is preferred
+  because it yields the removed **count** for the log — the very diagnostic that made T265 a task — reuses
+  the same unit-tested selection rule as the host sweep, including its `excludedNames` hook, and does not
+  lean on two layers of "unmatched glob stays literal".
 - **Device registry** — `AppiumTransport.registerVault` prunes the **other** `temp-vault-*` entries from
   `mobile-external-vaults` (and their `enable-plugin-<path>` keys) in the same `browser.execute` that adds its
   own, since it already holds a healthy WebView there. It is this registry, not the filesystem, that Obsidian
