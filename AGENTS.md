@@ -1156,3 +1156,60 @@ it is cleaning up for.
 
 Manual fallback when investigating: a recursive `adb shell` delete of `/sdcard/Documents/temp-vault-*`, with
 `adb shell ls /sdcard/Documents | wc -l` and `adb shell df -h /data` to see the damage.
+
+## L32. Version matrix — both G99 ends by default, de-duped on the **resolved** version
+
+G99 makes support a **range**, `[latest public, latest catalyst]`, with **both ends verified**. The ends move
+independently and periodically **coincide**: when public catches up to catalyst, `public-latest` and
+`catalyst-latest` provision the same build. Before this, every consuming repo discharged the duty by hand
+with two scripts, so the coincidence meant the second run re-ran the first build — while the project still
+reported "green on public AND catalyst", a two-end claim nobody had verified. The Blueprint fork's
+`AGENTS.md` carried exactly that stale claim ("catalyst 1.13.4, public-latest 1.12.7") long after public had
+moved to 1.13.4; the only evidence was the `[version-switch] Using cached asar for 1.13.4.` provisioning line
+(T266).
+
+The harness resolves both channels before it launches anything, so it decides once instead of making every
+consumer decide.
+
+- **`runObsidianVersionMatrix({ run, versions })`** (`run-version-matrix.ts`, exported from the barrel) runs a
+  suite once per **distinct** version. `versions` takes an array or a comma-separated string, so
+  `process.env['OBSIDIAN_VERSION']` passes straight through; omitted/empty ⇒
+  `DEFAULT_OBSIDIAN_VERSION_SPECS` = `['public-latest', 'catalyst-latest']`.
+- **De-duplication is keyed on the RESOLVED version, never the specifier string.** `['1.13.4',
+  'catalyst-latest']` collapses when catalyst *is* 1.13.4, exactly as the two aliases do when the channels
+  converge. Keying on the string would only have caught the literal-duplicate case, which is not the one that
+  bites.
+- **The loop lives above the transport, in a runner — deliberately not in a Vitest-config helper.** A test
+  framework's global setup **cannot re-run its own test files**: it launches one instance for one run. A
+  config helper expanding one project into N (`integration-tests:desktop@1.12.7`, `…@1.13.4`) would carry the
+  version in the project name for free, but it is Vitest-only and needs an async manifest fetch at
+  config-load time. The runner takes the suite invocation as a `run` callback instead, so it never launches
+  anything itself and Vitest / Jest / Manual all inherit it per **L6**.
+- **Only the runner's default is both ends.** `obsidianVersion` with no explicit pin still means "whatever
+  your installed Obsidian runs", so `connectToCdp()`, the CLI (**L10**), and suites not using the runner are
+  untouched. The two-end default applies exactly where the G99 duty applies.
+- **Every version runs before anything is reported** (not fail-fast): stopping at the first failure leaves
+  "catalyst broke" and "both ends broke" indistinguishable without a second run. The thrown `AggregateError`
+  names the failed and passed versions and carries each underlying error.
+- **The collapse is always logged, never inferred** — `2 requested specifiers resolve to 1 distinct version:
+  1.13.4 (public-latest, catalyst-latest). Running the suites once.` A reader seeing one run where they
+  expected two must be told the second end was already covered, not left guessing whether it was skipped by
+  accident. That line is the whole point of the change.
+- **Missing-channel degradation.** Making catalyst part of the *default* means a manifest that momentarily
+  ships no `beta` entry would newly break every consumer's gate. So a **default** specifier that cannot
+  resolve is dropped with a logged reason, while an **explicitly requested** one still throws; an empty
+  resolution set always throws rather than silently verifying nothing.
+
+**Pure/glue split** (as **L20**/**L18**/**L31**): every decision — normalizing the requested specifiers,
+resolving them against a manifest, de-duplicating, sequencing, and formatting the plan/summary lines — is
+pure and unit-tested in `version-matrix.ts`. Only the single manifest fetch and the `log` calls are
+`v8 ignore`d, in `run-version-matrix.ts`. `version-matrix.integration.test.ts` drives the real manifest with
+a stub `run` callback, so it exercises the live collapse in under a second and launches no Obsidian. It
+asserts **uniqueness**, not a fixed run count — the channels converge and diverge over time, and a test
+pinned to today's count would fail the moment catalyst moves ahead.
+
+**Not yet adopted by consumers.** Blueprint (P36) and the 23 plugins still run two desktop scripts; migrating
+them (collapse into one, delete `test-integration-desktop-catalyst.ts`) is follow-up work. Their `run`
+callbacks must keep hand-spawning vitest because `obsidian-dev-utils`' `test()` helper does not propagate
+`OBSIDIAN_VERSION` to the child — teaching it to forward env belongs in ODU. Android is unaffected: the
+Appium transport runs the installed APK and takes no `obsidianVersion`.
