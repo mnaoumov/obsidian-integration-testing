@@ -111,6 +111,21 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly layoutReadyTimeoutInMilliseconds?: number;
 
   /**
+   * How old a leftover **host** directory must be before
+   * {@link shouldSweepLeftovers} removes it.
+   *
+   * Governs the host-side sweep only (the `temp-vault-*` staging directories
+   * this run's machine accumulates in its temp dir). The **device** sweep is
+   * unconditional: Android runs hold the exclusive `android` setup lock, so no
+   * concurrent run can own a device vault, and an age gate there would let a
+   * vault leaked minutes ago survive into the next run — which is the failure
+   * loop the sweep exists to break. Set `0` to remove every host match too.
+   *
+   * @default `7200000`
+   */
+  readonly leftoverMaxAgeInMilliseconds?: number;
+
+  /**
    * Number of extra attempts to enable the plugin and verify it loaded, on top
    * of the first attempt.
    *
@@ -189,6 +204,25 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * @default `true`
    */
   readonly shouldAutoStartAppium?: boolean;
+
+  /**
+   * Whether the harness removes the temporary directories earlier runs leaked.
+   *
+   * When `true` (the default), each run sweeps at start **and** at end: on the
+   * device, every `temp-vault-*` directory under {@link vaultBasePath} (plus the
+   * stale vault registrations in Obsidian Mobile's `localStorage`); on the host,
+   * the leftover `temp-vault-*` and owned `userdata-*` directories older than
+   * {@link leftoverMaxAgeInMilliseconds}.
+   *
+   * A run that dies cannot clean up after itself — its teardown goes through the
+   * WebView, and a dead WebView is what most Android failures are — so the
+   * residue accumulates and slows the next run's startup enumeration until it
+   * misses the WebView-readiness budget. The start sweep is the half that breaks
+   * that loop, because it runs before anything that can die.
+   *
+   * @default `true`
+   */
+  readonly shouldSweepLeftovers?: boolean;
 
   /**
    * Discriminant for the transport type.
@@ -292,6 +326,20 @@ export interface ObsidianCdpTransportOptions {
   readonly isObsidianAppVisible?: boolean;
 
   /**
+   * How old a leftover directory must be before {@link shouldSweepLeftovers}
+   * removes it.
+   *
+   * The gate matters most on desktop: runs are deliberately **not** serialized
+   * (each owns an isolated instance), and every project on the machine shares
+   * one temp directory, so a young `temp-vault-*` / `userdata-*` directory may
+   * well belong to a run that is still in flight. Raise it if a run of yours can
+   * outlive the default; set `0` to remove every match regardless of age.
+   *
+   * @default `7200000`
+   */
+  readonly leftoverMaxAgeInMilliseconds?: number;
+
+  /**
    * Pins the **Electron shell** (installer build) the owned instance runs.
    *
    * Accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`.
@@ -341,6 +389,19 @@ export interface ObsidianCdpTransportOptions {
    * @default `false`
    */
   readonly shouldDisableSandbox?: boolean;
+
+  /**
+   * Whether the harness removes the temporary directories earlier runs leaked.
+   *
+   * When `true` (the default), each run sweeps at start and at end for
+   * `temp-vault-*` staging directories and owned `userdata-*` instance profiles
+   * older than {@link leftoverMaxAgeInMilliseconds}. A run killed mid-flight
+   * never reaches its own cleanup, so without this the temp directory grows
+   * without bound.
+   *
+   * @default `true`
+   */
+  readonly shouldSweepLeftovers?: boolean;
 
   /**
    * Whether an **unrunnable** installer↔app version pair fails fast before launch.

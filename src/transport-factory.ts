@@ -66,6 +66,13 @@ import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { checkInstallerCompatibility } from './installer-compatibility.ts';
 import { killProcessTree } from './kill-process-tree.ts';
+import {
+  filterLeftoverNames,
+  HARNESS_TEMP_DIR_NAME,
+  OWNED_USER_DATA_DIR_PREFIX,
+  resolveShouldSweepLeftovers,
+  TEMP_VAULT_DIR_PREFIX
+} from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 import { getObsidianConfigDir } from './obsidian-config.ts';
@@ -87,7 +94,10 @@ import {
   resolveAppiumSpawnFlags,
   resolveEmulatorSpawnFlags
 } from './spawn-options.ts';
-import { AppiumTransport } from './transport-appium.ts';
+import {
+  AppiumTransport,
+  DEFAULT_ANDROID_VAULT_BASE_PATH
+} from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { ensureNonNullable } from './type-guards.ts';
 import {
@@ -102,7 +112,9 @@ const APPIUM_CONNECTION_RETRY_COUNT = 3;
 const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const OWNED_USER_DATA_PREFIX = 'userdata-';
+const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30000;
+// Vault paths per `adb shell rm` invocation, bounded so a device holding a hundred leftovers cannot overflow the command-line length limit.
+const ADB_VAULT_SWEEP_BATCH_SIZE = 25;
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
 // Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
 // Appium server (it has no effect as a capability) avoids the failure
@@ -235,6 +247,17 @@ interface StartAppiumAndEmulatorResult {
   readonly emulatorProcess?: ChildProcess | undefined;
 }
 
+/**
+ * Parameters for {@link AppiumTransportFactory.sweepDeviceLeftoverVaults}.
+ */
+interface SweepDeviceLeftoverVaultsParams {
+  /** The device UDID to sweep. */
+  readonly deviceId: string;
+
+  /** The device-side directory Obsidian Mobile stores its vaults in. */
+  readonly vaultBasePath: string;
+}
+
 let cachedTransport: ObsidianTransport | undefined;
 
 /**
@@ -323,6 +346,7 @@ class AppiumTransportFactory {
       deviceId,
       isSessionOwner: false,
       platform: 'android',
+      shouldSweepLeftovers: resolveShouldSweepLeftovers(options),
       ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
       ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
       ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
@@ -386,6 +410,17 @@ class AppiumTransportFactory {
       emulatorProcess = result.emulatorProcess;
       const actualDeviceId = result.actualDeviceId;
 
+      /*
+       * Before `remote()` launches Obsidian — the last point at which nothing
+       * has to enumerate the device's vaults yet.
+       */
+      if (resolveShouldSweepLeftovers(options)) {
+        await this.sweepDeviceLeftoverVaults({
+          deviceId: actualDeviceId,
+          vaultBasePath: options.vaultBasePath ?? DEFAULT_ANDROID_VAULT_BASE_PATH
+        });
+      }
+
       const sessionConnectionRetryTimeout = resolveSessionConnectionRetryTimeoutInMilliseconds(options);
       this.log(
         `Connecting to Appium (device=${actualDeviceId}, app=${appId}, retryTimeout: ${String(sessionConnectionRetryTimeout)}ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
@@ -418,6 +453,7 @@ class AppiumTransportFactory {
         browser,
         deviceId: actualDeviceId,
         platform: 'android',
+        shouldSweepLeftovers: resolveShouldSweepLeftovers(options),
         ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
         ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
         ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
@@ -914,6 +950,52 @@ class AppiumTransportFactory {
     });
   }
 
+  /**
+   * Removes the `temp-vault-*` directories earlier runs left on the device.
+   *
+   * Runs **before** `remote()` launches Obsidian — the last moment at which
+   * nothing has to enumerate the device's vaults yet, and the only sweep that
+   * does not depend on a healthy WebView. That independence is the whole point:
+   * a run whose WebView died cannot unregister or delete its own vault, so
+   * without this each failure leaves residue that slows the next run's startup
+   * enumeration and makes the next failure likelier.
+   *
+   * Unconditional (no age gate) — Android runs hold the exclusive `android`
+   * setup lock, so no concurrent run can own a device vault, and an age gate
+   * would let a vault leaked minutes ago survive into this run. Best-effort: a
+   * failure is logged, not thrown.
+   *
+   * @param params - The device and vault base path to sweep.
+   */
+  private async sweepDeviceLeftoverVaults(params: SweepDeviceLeftoverVaultsParams): Promise<void> {
+    const { deviceId, vaultBasePath } = params;
+
+    try {
+      const listing = await exec(
+        ['adb', '-s', deviceId, 'shell', 'ls', '-1', vaultBasePath],
+        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
+      );
+
+      const names = filterLeftoverNames({ names: listing.split('\n'), prefixes: [TEMP_VAULT_DIR_PREFIX] });
+      if (names.length === 0) {
+        this.log(`No leftover temp vaults on device ${deviceId}.`);
+        return;
+      }
+
+      this.log(`Removing ${String(names.length)} leftover temp vault(s) from ${vaultBasePath} on device ${deviceId}...`);
+      for (let index = 0; index < names.length; index += ADB_VAULT_SWEEP_BATCH_SIZE) {
+        const batch = names.slice(index, index + ADB_VAULT_SWEEP_BATCH_SIZE);
+        await exec(
+          ['adb', '-s', deviceId, 'shell', 'rm', '-rf', ...batch.map((name) => `${vaultBasePath}${name}`)],
+          { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
+        );
+      }
+      this.log(`Removed ${String(names.length)} leftover temp vault(s) from device ${deviceId}.`);
+    } catch (error: unknown) {
+      this.log(`Warning: failed to sweep leftover temp vaults: ${error instanceof Error ? error.message : 'unknown error'}`);
+    }
+  }
+
   private async waitForAppiumReady(url: URL, timeoutInMilliseconds: number, launch: ProcessLaunch): Promise<void> {
     const start = Date.now();
     this.log(
@@ -1240,9 +1322,9 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
  * @returns The absolute path to the new directory.
  */
 function createOwnedUserDataDir(): string {
-  const root = join(tmpdir(), 'obsidian-integration-testing');
+  const root = join(tmpdir(), HARNESS_TEMP_DIR_NAME);
   mkdirSync(root, { recursive: true });
-  return mkdtempSync(join(root, OWNED_USER_DATA_PREFIX));
+  return mkdtempSync(join(root, OWNED_USER_DATA_DIR_PREFIX));
 }
 
 /**
