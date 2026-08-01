@@ -67,11 +67,10 @@ import { IncompatibleInstallerVersionError } from './incompatible-installer-vers
 import { checkInstallerCompatibility } from './installer-compatibility.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import {
-  filterLeftoverNames,
   HARNESS_TEMP_DIR_NAME,
   OWNED_USER_DATA_DIR_PREFIX,
   resolveShouldSweepLeftovers,
-  TEMP_VAULT_DIR_PREFIX
+  sweepDeviceLeftovers
 } from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
@@ -963,29 +962,44 @@ class AppiumTransportFactory {
    * would let a vault leaked minutes ago survive into this run. Best-effort: a
    * failure is logged, not thrown.
    *
+   * The removals go one directory at a time and the outcome is re-listed rather
+   * than inferred; {@link sweepDeviceLeftovers} explains why.
+   *
    * @param params - The device and vault base path to sweep.
    */
   private async sweepDeviceLeftoverVaults(params: SweepDeviceLeftoverVaultsParams): Promise<void> {
     const { deviceId, vaultBasePath } = params;
 
     try {
-      const listing = await exec(
-        ['adb', '-s', deviceId, 'shell', 'ls', '-1', vaultBasePath],
-        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
-      );
+      const result = await sweepDeviceLeftovers({
+        listNames: async (): Promise<string[]> => {
+          const listing = await exec(
+            ['adb', '-s', deviceId, 'shell', 'ls', '-1', vaultBasePath],
+            { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
+          );
+          return listing.split('\n');
+        },
+        removeDir: async (path: string): Promise<void> => {
+          await exec(
+            ['adb', '-s', deviceId, 'shell', 'rm', '-rf', path],
+            { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
+          );
+        },
+        vaultBasePath
+      });
 
-      const names = filterLeftoverNames({ names: listing.split('\n'), prefixes: [TEMP_VAULT_DIR_PREFIX] });
-      if (names.length === 0) {
+      if (result.removedCount === 0 && result.failedNames.length === 0) {
         this.log(`No leftover temp vaults on device ${deviceId}.`);
         return;
       }
 
-      this.log(`Removing ${String(names.length)} leftover temp vault(s) from ${vaultBasePath} on device ${deviceId}...`);
-      await exec(
-        ['adb', '-s', deviceId, 'shell', 'rm', '-rf', { batchedArgs: names.map((name) => `${vaultBasePath}${name}`) }],
-        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
-      );
-      this.log(`Removed ${String(names.length)} leftover temp vault(s) from device ${deviceId}.`);
+      this.log(`Removed ${String(result.removedCount)} leftover temp vault(s) from ${vaultBasePath} on device ${deviceId}.`);
+
+      if (result.failedNames.length > 0) {
+        this.log(
+          `Warning: ${String(result.failedNames.length)} leftover temp vault(s) could not be removed and will be retried next run: ${result.failedNames.join(', ')}`
+        );
+      }
     } catch (error: unknown) {
       this.log(`Warning: failed to sweep leftover temp vaults: ${error instanceof Error ? error.message : 'unknown error'}`);
     }

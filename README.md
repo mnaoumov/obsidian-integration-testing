@@ -938,6 +938,20 @@ Both knobs are available on either transport:
 
 Sweeping is best-effort throughout: a directory another process still holds is skipped, never thrown.
 
+**One directory at a time, and the result is measured.** The device sweep removes each vault with its own
+`rm -rf` and then re-lists what is left, so the count it reports is what actually went away rather than
+what it asked for. Both halves of that matter, and both come from the same measured failure:
+
+- An Android emulator can end up holding a directory whose name the FUSE layer cannot express — `rm -rf`,
+  `find -delete` and force-stopping Obsidian first all answer `Operation not permitted`, and it is
+  permanent. Removing the whole set in one command let that single entry decide the fate of every other:
+  one device was found carrying **26** leftover vaults that the sweep had been "removing" every run.
+  Per-directory, it costs one warning per run instead of the whole sweep.
+- A removal that leaves the directory behind is otherwise invisible, because `rm -rf` runs with its exit
+  code ignored. A run that passed end to end was still leaking a vault apiece, silently. Anything that
+  survives is now named in the log, at both ends — the start-of-run sweep and the teardown — and is
+  retried by the next run's sweep.
+
 ### Running multiple platforms
 
 Use vitest projects to run the same tests on multiple platforms:

@@ -17,12 +17,30 @@ import {
   OWNED_USER_DATA_DIR_PREFIX,
   resolveLeftoverMaxAgeInMilliseconds,
   resolveShouldSweepLeftovers,
+  sweepDeviceLeftovers,
   sweepHostLeftovers,
   TEMP_VAULT_DIR_PREFIX
 } from './leftover-cleanup.ts';
 
 const HOUR_IN_MILLISECONDS = 3600000;
 const FIXED_NOW_IN_MILLISECONDS = 1000000000000;
+const DEVICE_VAULT_COUNT_2 = 2;
+const DEVICE_VAULT_COUNT_3 = 3;
+
+/**
+ * A stand-in for the device side of the sweep: it lists what it still holds and
+ * records every removal it was asked for.
+ */
+interface DeviceDouble {
+  /** The absolute paths `removeDir` was called with, in order. */
+  readonly attemptedPaths: string[];
+
+  /** Lists the names still present. */
+  readonly listNames: () => Promise<readonly string[]>;
+
+  /** Removes one directory, rejecting for the names configured as un-removable. */
+  readonly removeDir: (path: string) => Promise<void>;
+}
 
 const mockReaddir = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn());
@@ -303,5 +321,96 @@ describe('sweepHostLeftovers', () => {
 
     expect(mockReaddir).toHaveBeenCalledWith(tmpdir());
     expect(mockReaddir).toHaveBeenCalledWith(join(tmpdir(), 'obsidian-integration-testing'));
+  });
+});
+
+describe('sweepDeviceLeftovers', () => {
+  const VAULT_BASE_PATH = '/sdcard/Documents/';
+
+  /**
+   * Builds a device double whose listing reflects the removals that succeeded.
+   *
+   * @param names - The entry names the device starts with.
+   * @param unremovableNames - The names whose removal fails, as the emulator's un-expressible entry does.
+   * @returns The `listNames` / `removeDir` pair plus the removal paths attempted, in order.
+   */
+  function createDevice(names: readonly string[], unremovableNames: readonly string[] = []): DeviceDouble {
+    const remaining = new Set(names);
+    const attemptedPaths: string[] = [];
+    return {
+      attemptedPaths,
+      listNames: (): Promise<readonly string[]> => Promise.resolve([...remaining]),
+      removeDir: (path: string): Promise<void> => {
+        attemptedPaths.push(path);
+        const name = path.slice(VAULT_BASE_PATH.length);
+        if (unremovableNames.includes(name)) {
+          return Promise.reject(new Error(`rm: ${name}: Operation not permitted`));
+        }
+        remaining.delete(name);
+        return Promise.resolve();
+      }
+    };
+  }
+
+  it('should report nothing when the device carries no leftovers', async () => {
+    const device = createDevice([]);
+
+    const result = await sweepDeviceLeftovers({ ...device, vaultBasePath: VAULT_BASE_PATH });
+
+    expect(result).toEqual({ failedNames: [], removedCount: 0 });
+    expect(device.attemptedPaths).toEqual([]);
+  });
+
+  it('should ignore entries that are not temp vaults', async () => {
+    const device = createDevice(['notes', 'Downloads']);
+
+    const result = await sweepDeviceLeftovers({ ...device, vaultBasePath: VAULT_BASE_PATH });
+
+    expect(result).toEqual({ failedNames: [], removedCount: 0 });
+    expect(device.attemptedPaths).toEqual([]);
+  });
+
+  it('should remove every temp vault, one directory at a time', async () => {
+    const device = createDevice(['temp-vault-a', 'temp-vault-b', 'notes']);
+
+    const result = await sweepDeviceLeftovers({ ...device, vaultBasePath: VAULT_BASE_PATH });
+
+    expect(result).toEqual({ failedNames: [], removedCount: DEVICE_VAULT_COUNT_2 });
+    expect(device.attemptedPaths).toEqual(['/sdcard/Documents/temp-vault-a', '/sdcard/Documents/temp-vault-b']);
+  });
+
+  // The defect this function exists for: one directory whose name the FUSE layer cannot express refuses
+  // Removal forever, and a single batched `rm -rf` let it take every other directory down with it.
+  it('should remove the rest when one directory refuses to be removed', async () => {
+    const device = createDevice(
+      ['temp-vault-a', 'temp-vault-X8fvA4', 'temp-vault-b'],
+      ['temp-vault-X8fvA4']
+    );
+
+    const result = await sweepDeviceLeftovers({ ...device, vaultBasePath: VAULT_BASE_PATH });
+
+    expect(result.removedCount).toBe(DEVICE_VAULT_COUNT_2);
+    expect(result.failedNames).toEqual(['temp-vault-X8fvA4']);
+    expect(device.attemptedPaths).toHaveLength(DEVICE_VAULT_COUNT_3);
+  });
+
+  // A removal command can exit 0 and still leave the directory behind, which is how a sweep came to
+  // Report success while clearing nothing. Counting the survivors is the only honest answer.
+  it('should not count a directory that survives a removal reporting success', async () => {
+    const result = await sweepDeviceLeftovers({
+      listNames: (): Promise<readonly string[]> => Promise.resolve(['temp-vault-a']),
+      removeDir: (): Promise<void> => Promise.resolve(),
+      vaultBasePath: VAULT_BASE_PATH
+    });
+
+    expect(result).toEqual({ failedNames: ['temp-vault-a'], removedCount: 0 });
+  });
+
+  it('should join the base path and the name without inserting a separator', async () => {
+    const device = createDevice(['temp-vault-a']);
+
+    await sweepDeviceLeftovers({ ...device, vaultBasePath: VAULT_BASE_PATH });
+
+    expect(device.attemptedPaths).toEqual(['/sdcard/Documents/temp-vault-a']);
   });
 });

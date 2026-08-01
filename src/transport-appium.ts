@@ -602,11 +602,18 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
-   * Removes a vault directory from the device over `adb`.
+   * Removes a vault directory from the device over `adb`, and CHECKS that it is
+   * actually gone.
    *
    * Best-effort: a failure is logged, not thrown, so a teardown problem never
    * masks the test result. The next run's start-of-run sweep picks up whatever
    * this could not remove.
+   *
+   * The check is the point. `rm -rf` runs with `shouldIgnoreExitCode`, so an
+   * unremoved directory used to leave no trace at all — which is how runs that
+   * passed end to end were still found to be leaking a vault apiece, invisibly,
+   * until someone counted the directories on the device by hand. A leak is now
+   * named in the log at the moment it happens.
    *
    * @param deviceVaultPath - The device-side vault directory path.
    */
@@ -617,6 +624,18 @@ export class AppiumTransport implements ObsidianTransport {
         ['adb', '-s', this.deviceId, 'shell', 'rm', '-rf', deviceVaultPath],
         { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS }
       );
+
+      const listing = await exec(
+        ['adb', '-s', this.deviceId, 'shell', 'ls', '-d', deviceVaultPath],
+        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS }
+      );
+
+      if (listing.includes(deviceVaultPath)) {
+        log(
+          `[appium-transport] Warning: ${deviceVaultPath} survived removal and is now leaked residue. `
+            + 'The next run\'s start-of-run sweep will retry it.'
+        );
+      }
     } catch (error: unknown) {
       log(`[appium-transport] Vault directory removal failed (non-fatal): ${String(error)}`);
     }

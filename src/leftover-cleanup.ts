@@ -106,6 +106,42 @@ export interface LeftoverRoot {
 }
 
 /**
+ * Parameters for {@link sweepDeviceLeftovers}.
+ */
+export interface SweepDeviceLeftoversParams {
+  /**
+   * Lists the entry names directly under the vault base path. A listing failure
+   * must resolve to an empty list rather than reject — a device with no vault
+   * directory yet is the normal first-run state, not an error.
+   */
+  readonly listNames: () => Promise<readonly string[]>;
+
+  /**
+   * Removes ONE directory, by absolute device path. May reject; the caller
+   * treats a rejection as this directory failing and moves on to the next.
+   */
+  readonly removeDir: (path: string) => Promise<void>;
+
+  /** The absolute device path the vaults sit under, including its trailing separator. */
+  readonly vaultBasePath: string;
+}
+
+/**
+ * Result of {@link sweepDeviceLeftovers}.
+ */
+export interface SweepDeviceLeftoversResult {
+  /**
+   * The names that were still present after the sweep. Named rather than
+   * counted, because the interesting case is a directory that fails EVERY run
+   * and a caller can only say so if it knows which one.
+   */
+  readonly failedNames: string[];
+
+  /** How many directories are verifiably gone. */
+  readonly removedCount: number;
+}
+
+/**
  * Options for {@link sweepHostLeftovers}.
  */
 export interface SweepHostLeftoversOptions {
@@ -208,6 +244,51 @@ export function resolveLeftoverMaxAgeInMilliseconds(options: ObsidianTransportOp
  */
 export function resolveShouldSweepLeftovers(options: ObsidianTransportOptions | undefined): boolean {
   return options?.shouldSweepLeftovers ?? true;
+}
+
+/**
+ * Removes the leftover vault directories a device is carrying, one directory at
+ * a time, and reports what is verifiably gone.
+ *
+ * **One directory per removal, and a failure is non-fatal.** Removing the whole
+ * set in a single `rm -rf` lets one un-removable entry decide the fate of every
+ * other: a name that the FUSE layer cannot express (an Android emulator can
+ * produce one — `rm -rf`, `find -delete` and force-stopping Obsidian first all
+ * answer `Operation not permitted`) is permanent, so a sweep that gives up on it
+ * gives up forever, and the residue only grows. Per-directory, that entry costs
+ * one warning per run instead of the whole sweep.
+ *
+ * **The result is measured, not assumed.** The directories are re-listed
+ * afterwards and only the ones that actually disappeared are counted, because
+ * the failure this was written for was a sweep that reported success while
+ * clearing nothing — a removal command can exit non-zero, or partially succeed,
+ * and neither is visible from its exit code alone.
+ *
+ * @param params - How to list and remove, and the base path to sweep.
+ * @returns The verified removal count and the names that survived.
+ */
+export async function sweepDeviceLeftovers(
+  params: SweepDeviceLeftoversParams
+): Promise<SweepDeviceLeftoversResult> {
+  const { listNames, removeDir, vaultBasePath } = params;
+
+  const names = filterLeftoverNames({ names: await listNames(), prefixes: [TEMP_VAULT_DIR_PREFIX] });
+  if (names.length === 0) {
+    return { failedNames: [], removedCount: 0 };
+  }
+
+  for (const name of names) {
+    try {
+      await removeDir(`${vaultBasePath}${name}`);
+    } catch {
+      // Non-fatal by design: the next directory still gets its chance.
+    }
+  }
+
+  const survivingNames = filterLeftoverNames({ names: await listNames(), prefixes: [TEMP_VAULT_DIR_PREFIX] });
+  const failedNames = names.filter((name) => survivingNames.includes(name));
+
+  return { failedNames, removedCount: names.length - failedNames.length };
 }
 
 /**
