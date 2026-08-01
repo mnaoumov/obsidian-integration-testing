@@ -18,6 +18,16 @@ interface AbArgs {
   b: number;
 }
 
+interface CreateNoteProbe {
+  content: string;
+  path: string;
+}
+
+interface CreateNoteRepairProbe {
+  content: string;
+  modifyCallCount: number;
+}
+
 const tempVault = new TempVault();
 let vaultPath: string;
 
@@ -366,6 +376,90 @@ ${name}`;
       // Well below the default 5000 ms timeout, proving the default interval is small.
       const UPPER_BOUND_IN_MILLISECONDS = 1000;
       expect(result).toBeLessThan(UPPER_BOUND_IN_MILLISECONDS);
+    });
+  });
+
+  describe('createNote', () => {
+    it('should create a note whose content is readable back', async () => {
+      const result = await evalInObsidian({
+        async fn({ app, lib: { createNote } }): Promise<CreateNoteProbe> {
+          const path = 'create-note-basic.md';
+          const content = 'created through the harness helper';
+          const file = await createNote({ content, path });
+          return {
+            content: await app.vault.read(file),
+            path: file.path
+          };
+        },
+        vaultPath
+      });
+
+      expect(result).toEqual({
+        content: 'created through the harness helper',
+        path: 'create-note-basic.md'
+      });
+    });
+
+    // The Android transport loses ~0.9% of `vault.create` writes: the file lands 0 bytes on disk while
+    // `TFile.stat` reports the full size. It cannot be provoked on desktop, so the repair path is driven
+    // By patching `vault.read` to report the lost-write symptom once — the same thing the helper sees.
+    it('should rewrite a note whose content did not land, then confirm it', async () => {
+      const result = await evalInObsidian({
+        async fn({ app, lib: { createNote } }): Promise<CreateNoteRepairProbe> {
+          const path = 'create-note-repair.md';
+          const content = 'content that is lost on the first read';
+
+          const vault = app.vault;
+          const originalRead = vault.read.bind(vault);
+          const originalModify = vault.modify.bind(vault);
+          let modifyCallCount = 0;
+          let hasReportedLostWrite = false;
+
+          vault.read = async (file): Promise<string> => {
+            if (!hasReportedLostWrite && file.path === path) {
+              hasReportedLostWrite = true;
+              return '';
+            }
+            return originalRead(file);
+          };
+          vault.modify = async (file, data): Promise<void> => {
+            modifyCallCount++;
+            await originalModify(file, data);
+          };
+
+          try {
+            const file = await createNote({ content, path });
+            return { content: await originalRead(file), modifyCallCount };
+          } finally {
+            vault.read = originalRead;
+            vault.modify = originalModify;
+          }
+        },
+        vaultPath
+      });
+
+      expect(result).toEqual({
+        content: 'content that is lost on the first read',
+        modifyCallCount: 1
+      });
+    });
+
+    it('should throw naming the path when the content never lands', async () => {
+      await expect(evalInObsidian({
+        async fn({ app, lib: { createNote } }): Promise<void> {
+          const path = 'create-note-hopeless.md';
+          const vault = app.vault;
+          const originalRead = vault.read.bind(vault);
+          vault.read = async (file): Promise<string> => file.path === path ? '' : originalRead(file);
+
+          try {
+            await createNote({ content: 'never lands', path });
+          } finally {
+            vault.read = originalRead;
+          }
+        },
+        vaultPath
+      })).rejects.toThrow('createNote could not write "create-note-hopeless.md": expected 11 characters, the vault holds 0 after 3 repair attempts.');
     });
   });
 

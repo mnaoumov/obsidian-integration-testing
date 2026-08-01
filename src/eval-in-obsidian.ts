@@ -7,7 +7,8 @@
 import type {
   App,
   Editor,
-  Modifier
+  Modifier,
+  TFile
 } from 'obsidian';
 // eslint-disable-next-line import-x/no-namespace -- We need to reference `obsidian` module.
 import type * as obsidian from 'obsidian';
@@ -84,6 +85,22 @@ export interface CommonArgs {
    * The `obsidian` module, resolved at runtime inside the Obsidian process.
    */
   obsidianModule: typeof obsidian;
+}
+
+/**
+ * Parameters for {@link CommonArgs.createNote}.
+ */
+export interface CreateNoteParams {
+  /**
+   * The note's content. This exact string is what the created note is read back
+   * against, so it is the definition of a successful write.
+   */
+  readonly content: string;
+
+  /**
+   * The vault-relative path to create, extension included.
+   */
+  readonly path: string;
 }
 
 /**
@@ -169,6 +186,36 @@ export interface HoverElementParams {
  * ```
  */
 export interface Lib {
+  /**
+   * Creates a note and does not return until its content is verifiably on
+   * disk, rewriting it if it is not.
+   *
+   * Use this instead of `app.vault.create` in any suite that may run on
+   * Android. The emulator transport loses roughly **0.9 %** of `vault.create`
+   * writes (measured: 7 lost in 800 creates): the file lands **0 bytes** on
+   * disk while Obsidian's in-memory `TFile.stat` reports the full byte count,
+   * and it does not heal on its own. A suite doing ~34 creates per run
+   * therefore has a ~26 % chance of at least one lost write, and whichever test
+   * loses that lottery fails on a `waitUntil` for content that was never
+   * written — which is why it reads as an unrelated per-test flake rather than
+   * one shared cause.
+   *
+   * Verification is by **reading the note back**, never by inspecting
+   * `TFile.stat`: `stat` is exactly the field that lies here. A rewrite through
+   * `vault.modify` with the same content lands correctly (also measured), so a
+   * lost write costs a retry rather than a failure. A note whose content still
+   * does not match after the bounded retries throws, naming the path and both
+   * lengths, so a genuinely broken write fails loudly instead of spinning.
+   *
+   * Harmless everywhere else — on a transport that does not lose writes the
+   * read-back matches first time and nothing is rewritten.
+   *
+   * @param params - The note path and content.
+   * @returns A {@link Promise} resolving to the created file, once its content
+   *   is confirmed.
+   */
+  createNote(this: void, params: CreateNoteParams): Promise<TFile>;
+
   /**
    * Moves the mouse pointer to the center of an element using **trusted**
    * Electron pointer input, then polls until the element actually matches

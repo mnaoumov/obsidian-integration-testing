@@ -6,9 +6,13 @@
  * between `eval-in-obsidian.ts` and the transport modules.
  */
 
-import type { App } from 'obsidian';
+import type {
+  App,
+  TFile
+} from 'obsidian';
 
 import type {
+  CreateNoteParams,
   HoverElementParams,
   MoveMouseParams,
   PressKeyParams,
@@ -259,6 +263,17 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const WAIT_UNTIL_TIMEOUT_IN_MILLISECONDS = 5000;
 
   /**
+   * How many times {@link createNote} rewrites a note whose content did not
+   * reach the filesystem before giving up.
+   *
+   * The Android emulator loses roughly 1 write in 110, so a single repair
+   * already makes a lost note astronomically unlikely; the extra attempts cost
+   * nothing when nothing is lost, and the cap is what keeps a genuinely broken
+   * write from being retried forever instead of failing with a readable error.
+   */
+  const CREATE_NOTE_REPAIR_ATTEMPT_COUNT = 3;
+
+  /**
    * Prefix used by {@link errorToString}'s nested-error separator lines, matching
    * the `    at` prefix of a V8 stack-trace frame so the separators blend into
    * the surrounding stack. Kept identical to `obsidian-dev-utils`' `errorToString`.
@@ -323,7 +338,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       // The injected `lib` bag: base helpers from the harness, then providers on top.
       // Resolvers run in-renderer (they read renderer globals a provider published).
       // Rebuilding per eval keeps `lib` fresh and tolerant of a late-loaded provider.
-      const lib = { hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
+      const lib = { createNote, hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
       for (const resolveLib of this.libResolvers) {
         Object.assign(lib, resolveLib());
       }
@@ -565,6 +580,36 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     while (element.matches(':hover') && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
     }
+  }
+
+  async function createNote(createParams: CreateNoteParams): Promise<TFile> {
+    const { content, path } = createParams;
+
+    const file = await ns.app.vault.create(path, content);
+
+    // Read the file back rather than trusting `file.stat`. `stat` is precisely
+    // The field that lies here: on a lost write it reports the full byte count
+    // While the filesystem holds zero bytes.
+    for (let attempt = 0; attempt <= CREATE_NOTE_REPAIR_ATTEMPT_COUNT; attempt++) {
+      const actualContent = await ns.app.vault.read(file);
+      if (actualContent === content) {
+        return file;
+      }
+
+      if (attempt === CREATE_NOTE_REPAIR_ATTEMPT_COUNT) {
+        throw new Error(
+          `createNote could not write "${path}": expected ${String(content.length)} characters, `
+            + `the vault holds ${String(actualContent.length)} after ${String(CREATE_NOTE_REPAIR_ATTEMPT_COUNT)} repair attempts.`
+        );
+      }
+
+      // A rewrite of the same content lands correctly — measured. This is the
+      // Whole workaround.
+      await ns.app.vault.modify(file, content);
+    }
+
+    // Unreachable: the loop either returns or throws on its last iteration.
+    throw new Error(`createNote could not write "${path}".`);
   }
 
   async function waitUntil(waitParams: WaitUntilParams): Promise<void> {

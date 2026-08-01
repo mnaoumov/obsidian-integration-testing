@@ -213,6 +213,56 @@ const value = await evalInObsidian({
 });
 ```
 
+### Create a note that is actually written (`createNote`)
+
+**Use `lib.createNote({ content, path })` instead of `app.vault.create` in any suite that may run
+on Android.** The emulator transport loses roughly **0.9 %** of `vault.create` writes — measured at
+7 lost in 800 creates, over two runs of a 400-create stress harness.
+
+What a lost write looks like, captured at the moment of failure and before any repair:
+
+| Probe                                 | Value                     |
+| ------------------------------------- | ------------------------- |
+| `adapter.stat(path).size`             | `0`                       |
+| `adapter.stat(path).size` + 500 ms    | `0`                       |
+| `vault.read(file).length`             | `0`                       |
+| `vault.cachedRead(file).length`       | `0`                       |
+| `file.stat.size` (Obsidian's `TFile`) | `38` — the full content   |
+
+So the write is lost **below** Obsidian: `TFile.stat` says it wrote the content, the filesystem
+holds zero bytes, and it does not heal on its own. It is not a trash/recreate race — creating a
+fresh never-used path fails at the same rate as recreating a just-trashed one.
+
+The consequence for a suite is worse than the rate suggests: at ~34 creates per run there is a
+**~26 %** chance of at least one lost write, and whichever test loses that lottery is the one that
+fails — on a `waitUntil` for content that was never written. It moves between tests run to run,
+which is exactly why it reads as a per-test flake rather than one shared cause.
+
+`createNote` creates the note, **reads it back**, and rewrites it through `vault.modify` (which
+lands correctly) until the content matches, up to three repairs. Verification is by read-back and
+never by `TFile.stat` — `stat` is precisely the field that lies here. If the content still has not
+landed, it throws naming the path and both lengths, so a genuinely broken write fails loudly
+instead of being retried forever. On a transport that does not lose writes the first read matches
+and nothing is rewritten, so it is safe to use everywhere.
+
+```ts
+const heading = await evalInObsidian({
+  fn: async ({ app, lib: { createNote, waitUntil }, obsidianModule }) => {
+    // Guaranteed on disk before the wait below can depend on it.
+    const file = await createNote({ content: '# Title\n', path: 'note.md' });
+    await app.workspace.getLeaf().openFile(file);
+    await waitUntil({
+      message: 'the rendered heading did not appear',
+      predicate: () => Boolean(document.querySelector('.markdown-preview-view h1'))
+    });
+    return document.querySelector('.markdown-preview-view h1')?.textContent ?? null;
+  }
+});
+```
+
+Whether `modify` / `process` writes can be lost the same way is **not** measured — only `create`
+was stressed — so a content assertion that fails elsewhere may share this cause.
+
 ### Inject a shared library (`lib`)
 
 Because a callback is serialized via `toString()` and **cannot import modules**, it can't reuse
