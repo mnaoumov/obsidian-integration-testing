@@ -11,6 +11,7 @@
   "dictionaryDefinitions": [],
   "dictionaries": [],
   "words": [
+    "adbd",
     "allusers",
     "amaro",
     "appops",
@@ -70,6 +71,7 @@
     "napi",
     "Naumov",
     "nbytes",
+    "ncore",
     "ncrypto",
     "netsim",
     "nobrowse",
@@ -79,6 +81,7 @@
     "osascript",
     "pgrep",
     "pkill",
+    "playstore",
     "pluginsdir",
     "Popout",
     "Precomputes",

@@ -798,6 +798,8 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    - Open Android Studio → Device Manager → Create Virtual Device
    - Select a phone profile (e.g. Pixel 7) and a system image (e.g. API 34)
    - Give the AVD a name (e.g. `obsidian_test`) — this is the value you pass as `avdName`
+   - **Provision it deliberately — Android Studio's defaults are not enough.** See
+     [AVD provisioning](#avd-provisioning) below and set these before you start using the device.
    - You do **not** need to start the emulator manually — the test framework auto-starts it
 
    To list existing AVD names:
@@ -805,6 +807,50 @@ Runs tests against Obsidian Mobile on an Android emulator or real device via App
    ```bash
    emulator -list-avds
    ```
+
+   #### AVD provisioning
+
+   These are minimums, not suggestions. Following the steps above with Android Studio's defaults
+   produces a device that fails — and it fails in ways that look like plugin bugs, so the cost of
+   getting this wrong is paid in debugging, not in an obvious error.
+
+   | Setting                    | Minimum | Android Studio's default | Why                                                                        |
+   | -------------------------- | ------- | ------------------------ | -------------------------------------------------------------------------- |
+   | `disk.dataPartition.size`  | `16G`   | `6G`                     | This is the one that actually bites — see below.                           |
+   | `hw.ramSize`               | `4096`  | `2048`                   | The WebView has to become ready inside a fixed budget.                     |
+   | `vm.heapSize`              | `512`   | `256`                    | Obsidian is a large WebView app.                                           |
+   | `hw.cpu.ncore`             | `4`+    | `4`                      | Raise it if the host has cores to spare; emulator startup is CPU-bound.    |
+
+   Edit them in Device Manager → *Edit* → *Show Advanced Settings*, or directly in the AVD's
+   `config.ini` (`~/.android/avd/<name>.avd/config.ini`); a size change needs a wipe of user data.
+
+   **Why disk is the setting that matters.** Every failed run leaks a `temp-vault-*` directory, and
+   every leaked vault stays **registered** for Obsidian to enumerate at startup — inside the same
+   WebView-readiness budget the run is already straining (see [Leftover cleanup](#leftover-cleanup)).
+   A full `/data` then produces failures that look like anything but a full disk:
+
+   - `/data` at 92 % with 103 leftover vaults: runs failed in global setup with `WEBVIEW_md.obsidian`
+     timing out at the full 60 s. After a sweep the same context was found in **0.3 s**.
+   - `/data` at 91 % with only **8** leftover vaults — the count alone is not the signal. The four
+     disk-bound cases (the only ones creating folders and renaming files) timed out at webdriver's
+     30 s wall, and the same four passed **6/6 in isolation on the same device**.
+
+   **Prefer a `google_apis` image over `google_apis_playstore`.** A Play-Store image consumes most of a
+   default data partition on its own, and it blocks `adb root` (`adbd cannot run as root in production
+   builds`) — so when `/data` does fill, you cannot inspect it to find out what is using the space.
+   `pm trim-caches 5G` recovers on the order of tens of megabytes and is the only lever left without
+   root. `google_apis` is smaller and does allow `adb root`; nothing in this harness needs the Play
+   Store.
+
+   **Health check — run this before blaming the plugin:**
+
+   ```bash
+   adb shell df -h /data
+   adb shell ls -d /sdcard/Documents/temp-vault-* | wc -l
+   ```
+
+   And apply the isolation rule: **a suite that fails in the aggregate and passes alone is the device**,
+   not the code.
 
 3. Install [Obsidian](https://obsidian.md/download) on the emulator (via Play Store or APK sideload) and grant storage permission — either via the app's permission prompt or via `adb`:
 
@@ -873,8 +919,8 @@ as the device reports `sys.boot_completed`, the harness runs
 This narrows but cannot fully close the race — an ANR that fires between boot completing and that
 command still slips through. To eliminate it entirely, boot the AVD once, run the command yourself,
 save a snapshot, and always boot from that snapshot. Either way, an ANR signals the emulator is
-under-provisioned, so also give the AVD more vCPUs/RAM and confirm hardware acceleration
-(`emulator -accel-check`).
+under-provisioned, so check it against [AVD provisioning](#avd-provisioning) and confirm hardware
+acceleration (`emulator -accel-check`).
 
 #### Troubleshooting: "Android AVD ... not found" / "Appium server ... exited during startup"
 
@@ -900,9 +946,11 @@ up, naming what is missing:
 Registering a vault reloads the page, triggering a full Obsidian re-init (reopen the vault and
 reload every plugin — the heaviest startup step). On a cold-booted or under-provisioned emulator
 that can exceed the default `90000`ms budget and fail setup with
-`Obsidian layout did not become ready within 90000ms`. Give the AVD more resources (see above) and,
-if needed, raise the budget via `layoutReadyTimeoutInMilliseconds` in the transport options. It is
-headroom, not a substitute for adequate provisioning.
+`Obsidian layout did not become ready within 90000ms`. Run the health check in
+[AVD provisioning](#avd-provisioning) first — a full `/data` presents exactly like this — then bring the
+AVD up to the minimums there and, if still needed, raise the budget via
+`layoutReadyTimeoutInMilliseconds` in the transport options. It is headroom, not a substitute for
+adequate provisioning.
 
 ### Leftover cleanup
 
