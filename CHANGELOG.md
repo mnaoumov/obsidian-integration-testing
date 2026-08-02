@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 9.2.1
+
+- feat(lib): add a content-verified createNote helper to the injected lib bag
+- docs(android): state the AVD provisioning minimums in setup, disk included
+- fix(leftover-cleanup): sweep device vaults one directory at a time and verify the result
+- feat(scripts): add per-script env-var off switch
+- chore: refresh metadata.json
+
 ## 9.2.0
 
 - feat(version-matrix): run the suites once when both supported ends are the same version
