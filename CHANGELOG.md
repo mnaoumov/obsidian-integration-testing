@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 9.2.2
+
+- fix: kill orphans
+
 ## 9.2.1
 
 - feat(lib): add a content-verified createNote helper to the injected lib bag
