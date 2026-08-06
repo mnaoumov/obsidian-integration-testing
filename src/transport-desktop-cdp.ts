@@ -55,6 +55,7 @@ import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
 import { getVersionMetadata } from './obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
 import { buildOwnedObsidianJson } from './owned-vault-seed.ts';
+import { buildParentLivenessWatchdogExpr } from './parent-liveness.ts';
 import {
   checkRendererBootState,
   DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS
@@ -596,6 +597,26 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Points the owned instance's renderer at this process's liveness socket so it
+   * destroys itself if we die without running teardown (see `parent-liveness.ts`).
+   *
+   * Best-effort by design. A renderer without Node access reports `'unavailable'`
+   * and an evaluation failure is logged and swallowed: the watchdog is a backstop
+   * for an already-abnormal exit, never a reason to fail an otherwise good launch.
+   *
+   * @param vaultPath - The vault path to evaluate in.
+   * @param parentLivenessPort - The loopback port the renderer should connect back to.
+   */
+  private async armParentLivenessWatchdog(vaultPath: string, parentLivenessPort: number): Promise<void> {
+    try {
+      const result = await this.evaluate(buildParentLivenessWatchdogExpr(parentLivenessPort), { cwd: vaultPath });
+      log(`[cdp-transport] Parent-liveness watchdog on port ${String(parentLivenessPort)}: ${result}.`);
+    } catch (error: unknown) {
+      log(`[cdp-transport] Could not arm the parent-liveness watchdog (instance may outlive a killed harness): ${String(error)}`);
+    }
+  }
+
+  /**
    * Verifies the running app (asar) version matches the swapped-in pin, storing the
    * verdict on {@link getAsarFallback}. On a **silent fallback** (the installer ran
    * its own bundled asar instead of the pin) it throws {@link SilentAsarFallbackError}
@@ -1098,6 +1119,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
       try {
         await this.waitForOwnedVaultReady(vaultPath);
+        await this.armParentLivenessWatchdog(vaultPath, instance.parentLivenessPort);
         return;
       } catch (error: unknown) {
         if (error instanceof RendererFailedToInitializeError || error instanceof SilentAsarFallbackError) {

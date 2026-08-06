@@ -17,6 +17,7 @@ import { createServer } from 'node:net';
 
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
+import { startParentLivenessServer } from './parent-liveness.ts';
 
 /**
  * Parameters for {@link launchOwnedObsidianInstance}.
@@ -53,6 +54,14 @@ export interface OwnedObsidianInstance {
   /** Kills the instance and its entire process tree. */
   kill(): void;
 
+  /**
+   * Loopback port the instance's renderer connects back to so it destroys
+   * itself if this harness process dies without cleaning up. See
+   * `parent-liveness.ts` for why the parent/child relationship alone is not
+   * enough.
+   */
+  readonly parentLivenessPort: number;
+
   /** The CDP remote-debugging port the instance was launched with. */
   readonly port: number;
 }
@@ -80,6 +89,10 @@ export async function launchOwnedObsidianInstance(
   const port = await pickFreePort();
   const cdpUrl = `http://${cdpHost}:${String(port)}`;
 
+  // Listen BEFORE spawning, so the renderer watchdog can never race the server
+  // Into a failed connect (which it treats as "no watchdog", leaving the instance alive).
+  const livenessServer = await startParentLivenessServer();
+
   log(`[obsidian-instance] Launching owned Obsidian: userData=${params.userDataDir}, cdpPort=${String(port)}`);
   const child = spawn(
     params.exePath,
@@ -91,13 +104,14 @@ export async function launchOwnedObsidianInstance(
   try {
     await waitForCdpReady(cdpUrl);
     log(`[obsidian-instance] Owned Obsidian is serving CDP at ${cdpUrl}.`);
-    return { cdpUrl, kill, port };
+    return { cdpUrl, kill, parentLivenessPort: livenessServer.port, port };
   } catch (error: unknown) {
     kill();
     throw error;
   }
 
   function kill(): void {
+    livenessServer.close();
     killProcessTree(child);
   }
 }

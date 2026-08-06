@@ -1213,3 +1213,43 @@ them (collapse into one, delete `test-integration-desktop-catalyst.ts`) is follo
 callbacks must keep hand-spawning vitest because `obsidian-dev-utils`' `test()` helper does not propagate
 `OBSIDIAN_VERSION` to the child — teaching it to forward env belongs in ODU. Android is unaffected: the
 Appium transport runs the installed APK and takes no `obsidianVersion`.
+
+## L33. Owned instances die with the harness — a socket, not a parent/child link
+
+**Being a child process buys nothing.** The owned instance is already spawned from the harness
+(`obsidian-instance.ts`), but no operating system turns that into a lifetime guarantee. Windows never
+propagates a parent's death to its children — an orphan just keeps running with a stale parent id — and on
+POSIX a `SIGKILL` aimed at one pid never cascades either. The instance is additionally spawned `detached`,
+so it is not even in the harness's process group. Teardown therefore rests entirely on the harness running
+`killProcessTree` from its own `exit`/signal handlers, which is exactly what a `SIGKILL`, a Task Manager
+kill, or an IDE stop button denies it. Each such kill leaked a hidden Obsidian holding a user-data dir and a
+CDP port, and they accumulated silently: the next run picks a fresh temp dir and a free port, so nothing
+collides and nothing complains. **L31 sweeps leaked directories, not leaked processes** — the two are
+complementary, and neither substitutes for the other.
+
+**Why not the real primitive.** The guaranteed fix is a Windows Job Object with
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` (the OS kills the job when the last handle closes, `TerminateProcess`
+included), or `prctl(PR_SET_PDEATHSIG)` on Linux. Neither is reachable from Node without a native addon —
+too heavy a dependency for this harness, and it would put a compile step in every consumer's install.
+
+**What we use instead.** The one cross-platform resource the kernel reclaims deterministically on process
+death: a socket. `parent-liveness.ts` listens on an ephemeral loopback port **before** the spawn; once the
+vault is ready the transport evaluates `buildParentLivenessWatchdogExpr(port)` in the renderer, which
+`require('node:net')`-connects back. However the harness dies, the kernel closes its end, the renderer sees
+`close`, and the window destroys itself. No polling, no heartbeat interval, no timeout to tune. This is the
+mirror image of `obsidian-dev-utils`' `watchDevInstanceAndStopOnClose`, which stops the dev build when the
+instance is closed; together the two make neither able to outlive the other.
+
+**Fail-open, deliberately.** The renderer arms the destroy handler only after the connection is actually
+established, and a renderer without Node access reports `'unavailable'`. A watchdog that cannot reach the
+harness leaves the instance running rather than killing a window a developer is working in; arming failures
+are logged and swallowed, never fatal to a launch. Arming is idempotent — a retried readiness pass finds the
+stored socket and returns `'already-armed'` rather than opening a second connection.
+
+**Pure/glue split** (as **L20**/**L18**/**L31**/**L32**): the server and the expression builder live in
+`parent-liveness.ts` and are fully unit-tested — the server against real loopback sockets, the expression by
+evaluating it through `new Function('window', …)` against a stubbed `window`, which is what lets the
+destroy/fail-open/fallback branches be driven without a renderer. Only the wiring in `obsidian-instance.ts`
+and `transport-desktop-cdp.ts` is `v8 ignore`d. The expression is written in ES5 style (`var`, `function`,
+no optional chaining) for the same reason as `DISMISS_TRUST_DIALOG_EXPR`: it has to parse on the Chromium
+80-era renderers of the oldest supported Obsidian versions (**L26**).
