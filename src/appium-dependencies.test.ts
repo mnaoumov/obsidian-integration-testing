@@ -8,8 +8,8 @@ import type { ObsidianAndroidAppiumTransportOptions } from './transport-options.
 
 import {
   checkIsAppiumDriverInstalled,
-  resolveShouldAutoInstallAppiumDependencies,
-  UIAUTOMATOR2_DRIVER_NAME
+  UIAUTOMATOR2_DRIVER_NAME,
+  willAutoInstallAppiumDependencies
 } from './appium-dependencies.ts';
 
 const BASE_OPTIONS: ObsidianAndroidAppiumTransportOptions = {
@@ -58,14 +58,14 @@ describe('checkIsAppiumDriverInstalled', () => {
   });
 });
 
-describe('resolveShouldAutoInstallAppiumDependencies', () => {
+describe('willAutoInstallAppiumDependencies', () => {
   it('should default to true when the option is omitted', () => {
-    expect(resolveShouldAutoInstallAppiumDependencies(BASE_OPTIONS)).toBe(true);
+    expect(willAutoInstallAppiumDependencies(BASE_OPTIONS)).toBe(true);
   });
 
   it('should use the provided value when the option is set to false', () => {
     expect(
-      resolveShouldAutoInstallAppiumDependencies({
+      willAutoInstallAppiumDependencies({
         ...BASE_OPTIONS,
         shouldAutoInstallAppiumDependencies: false
       })

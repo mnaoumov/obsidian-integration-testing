@@ -49,21 +49,33 @@ import { getVersionMetadata } from './obsidian-metadata.ts';
  */
 const DOWNLOAD_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36';
 
-/** Base URL for `obsidian-releases` release assets (`.../download/v<ver>/<asset>`). */
+/**
+Base URL for `obsidian-releases` release assets (`.../download/v<ver>/<asset>`).
+ */
 const RELEASE_DOWNLOAD_BASE_URL = 'https://github.com/obsidianmd/obsidian-releases/releases/download';
 
-/** GitHub REST endpoint listing a release's assets by tag (`.../releases/tags/v<ver>`). */
+/**
+GitHub REST endpoint listing a release's assets by tag (`.../releases/tags/v<ver>`).
+ */
 const RELEASE_API_TAG_URL = 'https://api.github.com/repos/obsidianmd/obsidian-releases/releases/tags';
 
-/** The subset of the GitHub release API response this module reads. */
+/**
+The subset of the GitHub release API response this module reads.
+ */
 interface GitHubRelease {
-  /** The release's downloadable assets. */
+  /**
+  The release's downloadable assets.
+   */
   readonly assets: readonly GitHubReleaseAsset[];
 }
 
-/** The subset of a GitHub release's asset object this module reads. */
+/**
+The subset of a GitHub release's asset object this module reads.
+ */
 interface GitHubReleaseAsset {
-  /** The asset file name, e.g. `Obsidian.0.14.5.exe`. */
+  /**
+  The asset file name, e.g. `Obsidian.0.14.5.exe`.
+   */
   readonly name: string;
 }
 
@@ -75,10 +87,14 @@ const MAC_PLIST_VERSION_PATTERN = /<key>CFBundleShortVersionString<\/key>\s*<str
  * A resolved Obsidian shell executable.
  */
 export interface ResolvedShell {
-  /** Absolute path to the Obsidian executable to launch. */
+  /**
+  Absolute path to the Obsidian executable to launch.
+   */
   readonly exePath: string;
 
-  /** The shell's version, or `undefined` if it could not be detected. */
+  /**
+  The shell's version, or `undefined` if it could not be detected.
+   */
   readonly version: string | undefined;
 }
 
@@ -113,17 +129,17 @@ export function detectInstalledShellVersion(exePath: string): string | undefined
  * @throws Error if the asset cannot be downloaded or extracted.
  */
 export async function ensureShellCached(version: string): Promise<string> {
-  const shellDir = getCachedShellDir(version);
-  const exePath = getCachedShellExePath(shellDir);
+  const shellDirectory = getCachedShellDirectory(version);
+  const exePath = getCachedShellExePath(shellDirectory);
   if (existsSync(exePath)) {
     log(`[installer] Using cached shell for ${version}.`);
     return exePath;
   }
 
-  mkdirSync(shellDir, { recursive: true });
+  mkdirSync(shellDirectory, { recursive: true });
   const assetUrls = await resolveInstallerAssetUrls(version);
-  const assetPath = await downloadInstallerAsset(assetUrls, shellDir, version);
-  extractShell(assetPath, shellDir);
+  const assetPath = await downloadInstallerAsset(assetUrls, shellDirectory, version);
+  extractShell(assetPath, shellDirectory);
   rmSync(assetPath, { force: true });
 
   if (!existsSync(exePath)) {
@@ -140,7 +156,7 @@ export async function ensureShellCached(version: string): Promise<string> {
  * @param version - A concrete public `x.y.z` version.
  * @returns The absolute shell cache directory for the version.
  */
-export function getCachedShellDir(version: string): string {
+export function getCachedShellDirectory(version: string): string {
   return join(SHELL_CACHE_DIR, version);
 }
 
@@ -166,8 +182,8 @@ function assertCommandAvailable(command: string, hint: string): void {
  */
 function detectMacBundleVersion(exePath: string): string | undefined {
   try {
-    const contentsDir = dirname(dirname(exePath));
-    const plist = readFileSync(join(contentsDir, 'Info.plist'), 'utf-8');
+    const contentsDirectory = dirname(dirname(exePath));
+    const plist = readFileSync(join(contentsDirectory, 'Info.plist'), 'utf-8');
     const match = MAC_PLIST_VERSION_PATTERN.exec(plist);
     return match?.groups?.['version'];
   } catch {
@@ -210,16 +226,16 @@ function detectWindowsFileVersion(exePath: string): string | undefined {
  * Downloads a single release asset for a version to a destination file.
  *
  * @param url - The asset download URL.
- * @param dest - Destination file path.
+ * @param destination - Destination file path.
  * @throws Error if the request fails.
  */
-async function downloadAsset(url: string, dest: string): Promise<void> {
+async function downloadAsset(url: string, destination: string): Promise<void> {
   log(`[installer] Downloading installer from ${url} ...`);
   const response = await fetch(url, { headers: { 'User-Agent': DOWNLOAD_USER_AGENT } });
   if (!response.ok) {
     throw new Error(`HTTP ${String(response.status)}`);
   }
-  writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
+  writeFileSync(destination, Buffer.from(await response.arrayBuffer()));
 }
 
 /**
@@ -227,15 +243,15 @@ async function downloadAsset(url: string, dest: string): Promise<void> {
  * candidate URLs, returning the path it was saved to.
  *
  * @param urls - Candidate asset URLs, in priority order.
- * @param shellDir - The destination shell directory.
+ * @param shellDirectory - The destination shell directory.
  * @param version - The release version (for error messages).
  * @returns The downloaded asset's path.
  * @throws Error if none of the candidates can be downloaded.
  */
-async function downloadInstallerAsset(urls: string[], shellDir: string, version: string): Promise<string> {
+async function downloadInstallerAsset(urls: string[], shellDirectory: string, version: string): Promise<string> {
   const errors: string[] = [];
   for (const url of urls) {
-    const assetPath = join(shellDir, basename(url));
+    const assetPath = join(shellDirectory, basename(url));
     try {
       await downloadAsset(url, assetPath);
       return assetPath;
@@ -254,24 +270,24 @@ async function downloadInstallerAsset(urls: string[], shellDir: string, version:
  * Extracts a Linux `.tar.gz` portable build.
  *
  * @param assetPath - Path to the downloaded `.tar.gz`.
- * @param shellDir - Destination shell directory.
+ * @param shellDirectory - Destination shell directory.
  */
-function extractLinuxShell(assetPath: string, shellDir: string): void {
-  run('tar', ['xzf', assetPath, '-C', shellDir, '--strip-components=1']);
+function extractLinuxShell(assetPath: string, shellDirectory: string): void {
+  run('tar', ['xzf', assetPath, '-C', shellDirectory, '--strip-components=1']);
 }
 
 /**
  * Extracts a macOS `.dmg` by mounting it and copying the app bundle.
  *
  * @param assetPath - Path to the downloaded `.dmg`.
- * @param shellDir - Destination shell directory.
+ * @param shellDirectory - Destination shell directory.
  */
-function extractMacShell(assetPath: string, shellDir: string): void {
-  const mountPoint = join(shellDir, '__mnt');
+function extractMacShell(assetPath: string, shellDirectory: string): void {
+  const mountPoint = join(shellDirectory, '__mnt');
   mkdirSync(mountPoint, { recursive: true });
   run('hdiutil', ['attach', '-nobrowse', '-mountpoint', mountPoint, assetPath]);
   try {
-    run('cp', ['-R', join(mountPoint, 'Obsidian.app'), shellDir]);
+    run('cp', ['-R', join(mountPoint, 'Obsidian.app'), shellDirectory]);
   } finally {
     run('hdiutil', ['detach', mountPoint]);
   }
@@ -282,20 +298,20 @@ function extractMacShell(assetPath: string, shellDir: string): void {
  * Extracts a downloaded installer asset into a shell directory, per platform.
  *
  * @param assetPath - The downloaded asset path.
- * @param shellDir - The destination shell directory.
+ * @param shellDirectory - The destination shell directory.
  */
-function extractShell(assetPath: string, shellDir: string): void {
+function extractShell(assetPath: string, shellDirectory: string): void {
   if (process.platform === 'win32') {
-    extractWindowsShell(assetPath, shellDir);
+    extractWindowsShell(assetPath, shellDirectory);
     return;
   }
 
   if (process.platform === 'darwin') {
-    extractMacShell(assetPath, shellDir);
+    extractMacShell(assetPath, shellDirectory);
     return;
   }
 
-  extractLinuxShell(assetPath, shellDir);
+  extractLinuxShell(assetPath, shellDirectory);
 }
 
 /**
@@ -305,15 +321,15 @@ function extractShell(assetPath: string, shellDir: string): void {
  * portable app (mirrors how the scoop manifest installs Obsidian).
  *
  * @param assetPath - Path to the downloaded `.exe`.
- * @param shellDir - Destination shell directory.
+ * @param shellDirectory - Destination shell directory.
  */
-function extractWindowsShell(assetPath: string, shellDir: string): void {
+function extractWindowsShell(assetPath: string, shellDirectory: string): void {
   assertCommandAvailable('7z', 'Install 7-Zip (e.g. `scoop install 7zip`) to extract a pinned Obsidian installer.');
-  const nsisExtractDir = join(shellDir, '__nsis');
-  run('7z', ['x', '-y', `-o${nsisExtractDir}`, assetPath]);
-  const innerArchive = join(nsisExtractDir, '$PLUGINSDIR', 'app-64.7z');
-  run('7z', ['x', '-y', `-o${shellDir}`, innerArchive]);
-  rmSync(nsisExtractDir, { force: true, recursive: true });
+  const nsisExtractDirectory = join(shellDirectory, '__nsis');
+  run('7z', ['x', '-y', `-o${nsisExtractDirectory}`, assetPath]);
+  const innerArchive = join(nsisExtractDirectory, '$PLUGINSDIR', 'app-64.7z');
+  run('7z', ['x', '-y', `-o${shellDirectory}`, innerArchive]);
+  rmSync(nsisExtractDirectory, { force: true, recursive: true });
 }
 
 /**
@@ -352,19 +368,19 @@ async function fetchReleaseAssetNames(version: string): Promise<string[] | undef
 /**
  * Returns the expected cached shell executable path for the current platform.
  *
- * @param shellDir - The shell cache directory for a version.
+ * @param shellDirectory - The shell cache directory for a version.
  * @returns The executable path.
  */
-function getCachedShellExePath(shellDir: string): string {
+function getCachedShellExePath(shellDirectory: string): string {
   if (process.platform === 'win32') {
-    return join(shellDir, 'Obsidian.exe');
+    return join(shellDirectory, 'Obsidian.exe');
   }
 
   if (process.platform === 'darwin') {
-    return join(shellDir, 'Obsidian.app', 'Contents', 'MacOS', 'Obsidian');
+    return join(shellDirectory, 'Obsidian.app', 'Contents', 'MacOS', 'Obsidian');
   }
 
-  return join(shellDir, 'obsidian');
+  return join(shellDirectory, 'obsidian');
 }
 
 /**
@@ -403,12 +419,12 @@ async function resolveInstallerAssetUrls(version: string): Promise<string[]> {
  * Runs a command synchronously, throwing on a non-zero exit.
  *
  * @param command - The command.
- * @param args - The arguments.
+ * @param commandArguments - The arguments.
  */
-function run(command: string, args: string[]): void {
-  const result = spawnSync(command, args, { stdio: 'ignore' });
+function run(command: string, commandArguments: string[]): void {
+  const result = spawnSync(command, commandArguments, { stdio: 'ignore' });
   if (result.status !== 0) {
-    throw new Error(`Command failed: ${command} ${args.map((arg) => basename(arg)).join(' ')} (exit ${String(result.status)})`);
+    throw new Error(`Command failed: ${command} ${commandArguments.map((argument) => basename(argument)).join(' ')} (exit ${String(result.status)})`);
   }
 }
 

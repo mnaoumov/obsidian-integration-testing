@@ -26,13 +26,13 @@ describe('castTo', () => {
 
 describe('ensureGenericObject', () => {
   it('should return the same object', () => {
-    const obj = { name: 'test' };
-    expect(ensureGenericObject(obj)).toBe(obj);
+    const object = { name: 'test' };
+    expect(ensureGenericObject(object)).toBe(object);
   });
 
   it('should expose dynamic string-keyed access', () => {
-    const obj = { name: 'test' };
-    expect(ensureGenericObject(obj)['missing']).toBeUndefined();
+    const object = { name: 'test' };
+    expect(ensureGenericObject(object)['missing']).toBeUndefined();
   });
 });
 

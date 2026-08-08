@@ -15,10 +15,14 @@
  * Parameters for the {@link SilentAsarFallbackError} constructor.
  */
 export interface SilentAsarFallbackErrorConstructorParams {
-  /** The pinned Obsidian app (asar) version that was requested. */
+  /**
+  The pinned Obsidian app (asar) version that was requested.
+   */
   readonly requestedVersion: string;
 
-  /** The Obsidian app (asar) version the instance is actually running. */
+  /**
+  The Obsidian app (asar) version the instance is actually running.
+   */
   readonly runningApiVersion: string;
 }
 
@@ -30,10 +34,14 @@ export interface SilentAsarFallbackErrorConstructorParams {
  * surface an actionable remedy (pin a newer installer).
  */
 export class SilentAsarFallbackError extends Error {
-  /** The pinned Obsidian app (asar) version that was requested. */
+  /**
+  The pinned Obsidian app (asar) version that was requested.
+   */
   public readonly requestedVersion: string;
 
-  /** The Obsidian app (asar) version the instance is actually running. */
+  /**
+  The Obsidian app (asar) version the instance is actually running.
+   */
   public readonly runningApiVersion: string;
 
   /**

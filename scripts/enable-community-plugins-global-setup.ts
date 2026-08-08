@@ -23,7 +23,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { PopulateFilesParams } from '../src/temp-vault.ts';
+import type { PopulateFilesParams } from '../src/temporary-vault.ts';
 
 import { buildDemoVaultPopulate } from '../src/demo-vault-populate.ts';
 import { createSetup } from '../src/vitest/global-setup.ts';
@@ -71,16 +71,16 @@ function buildDemoVaultPopulateForTest(): PopulateFilesParams {
   writeFileSync(join(demoVaultPath, 'note.md'), '# Demo note\n');
 
   for (const pluginId of EXTRA_PLUGIN_IDS) {
-    const pluginDir = join(demoVaultPath, '.obsidian', 'plugins', pluginId);
-    mkdirSync(pluginDir, { recursive: true });
+    const pluginDirectory = join(demoVaultPath, '.obsidian', 'plugins', pluginId);
+    mkdirSync(pluginDirectory, { recursive: true });
     writeFileSync(
-      join(pluginDir, 'main.js'),
+      join(pluginDirectory, 'main.js'),
       'const { Plugin } = require(\'obsidian\');\n'
         + 'class P extends Plugin { onload() {} }\n'
         + 'module.exports = P; exports.default = P;\n'
     );
     writeFileSync(
-      join(pluginDir, 'manifest.json'),
+      join(pluginDirectory, 'manifest.json'),
       JSON.stringify({
         author: 'obsidian-integration-testing',
         description: `Dummy plugin ${pluginId} for the enableCommunityPlugins regression test.`,

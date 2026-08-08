@@ -30,28 +30,37 @@ export interface LaunchOwnedObsidianInstanceParams {
    */
   readonly cdpHost?: string;
 
-  /** Absolute path to the Obsidian executable (shell) to launch. */
+  /**
+  Absolute path to the Obsidian executable (shell) to launch.
+   */
   readonly exePath: string;
 
   /**
-   * Extra command-line args appended after `--user-data-dir` and
+   * Extra command-line arguments appended after `--user-data-dir` and
    * `--remote-debugging-port` — used to pass the keep-alive Chromium flags when
    * the instance is launched hidden (off-screen). Empty by default.
    */
-  readonly extraArgs?: readonly string[];
+  readonly extraArguments?: readonly string[];
 
-  /** Absolute path to the isolated user-data dir to pass via `--user-data-dir`. */
-  readonly userDataDir: string;
+  /**
+  Absolute path to the isolated user-data dir to pass via `--user-data-dir`.
+   */
+
+  readonly userDataDirectory: string;
 }
 
 /**
  * A running, harness-owned Obsidian instance.
  */
 export interface OwnedObsidianInstance {
-  /** Base CDP URL, e.g. `http://127.0.0.1:51888`. */
+  /**
+  Base CDP URL, e.g. `http://127.0.0.1:51888`.
+   */
   readonly cdpUrl: string;
 
-  /** Kills the instance and its entire process tree. */
+  /**
+  Kills the instance and its entire process tree.
+   */
   kill(): void;
 
   /**
@@ -62,13 +71,15 @@ export interface OwnedObsidianInstance {
    */
   readonly parentLivenessPort: number;
 
-  /** The CDP remote-debugging port the instance was launched with. */
+  /**
+  The CDP remote-debugging port the instance was launched with.
+   */
   readonly port: number;
 }
 
 const DEFAULT_CDP_HOST = '127.0.0.1';
 const CDP_READY_POLL_INTERVAL_IN_MILLISECONDS = 1000;
-const CDP_READY_TIMEOUT_IN_MILLISECONDS = 60000;
+const CDP_READY_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 interface CdpTarget {
   type: string;
@@ -93,10 +104,10 @@ export async function launchOwnedObsidianInstance(
   // Into a failed connect (which it treats as "no watchdog", leaving the instance alive).
   const livenessServer = await startParentLivenessServer();
 
-  log(`[obsidian-instance] Launching owned Obsidian: userData=${params.userDataDir}, cdpPort=${String(port)}`);
+  log(`[obsidian-instance] Launching owned Obsidian: userData=${params.userDataDirectory}, cdpPort=${String(port)}`);
   const child = spawn(
     params.exePath,
-    [`--user-data-dir=${params.userDataDir}`, `--remote-debugging-port=${String(port)}`, ...(params.extraArgs ?? [])],
+    [`--user-data-dir=${params.userDataDirectory}`, `--remote-debugging-port=${String(port)}`, ...(params.extraArguments ?? [])],
     { detached: true, stdio: 'ignore' }
   );
   child.unref();

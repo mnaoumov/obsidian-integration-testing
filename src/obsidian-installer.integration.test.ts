@@ -35,7 +35,7 @@ import {
 import {
   detectInstalledShellVersion,
   ensureShellCached,
-  getCachedShellDir
+  getCachedShellDirectory
 } from './obsidian-installer.ts';
 import { resolveConcreteVersion } from './obsidian-version-switch.ts';
 
@@ -56,7 +56,7 @@ describe.runIf(SHOULD_RUN_INSTALLER_TEST)('installer shell download and extract'
       // Installer assets exist for public releases only (catalyst ships no exe).
       const version = await resolveConcreteVersion('public-latest');
       // Evict any cached shell so the download + extraction path actually runs.
-      rmSync(getCachedShellDir(version), { force: true, recursive: true });
+      rmSync(getCachedShellDirectory(version), { force: true, recursive: true });
 
       const exePath = await ensureShellCached(version);
       expect(existsSync(exePath)).toBe(true);

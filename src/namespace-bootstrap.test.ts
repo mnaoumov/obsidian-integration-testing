@@ -41,8 +41,8 @@ describe('ensureNamespaceBootstrapped', () => {
     mockEvaluate.mockResolvedValueOnce('');
     await ensureNamespaceBootstrapped(mockTransport, '/vault');
     expect(mockEvaluate).toHaveBeenCalledTimes(2);
-    const bootstrapExpr = mockEvaluate.mock.calls[1]?.[0];
-    expect(bootstrapExpr).toContain('function bootstrapNamespace');
+    const bootstrapExpression = mockEvaluate.mock.calls[1]?.[0];
+    expect(bootstrapExpression).toContain('function bootstrapNamespace');
   });
 
   it('should send bootstrap expression when namespace does not exist', async () => {
@@ -82,8 +82,8 @@ describe('ensureNamespaceBootstrapped', () => {
     mockEvaluate.mockResolvedValueOnce('false');
     mockEvaluate.mockResolvedValueOnce('');
     await ensureNamespaceBootstrapped(mockTransport, '/vault');
-    const bootstrapExpr = ensureNonNullable(mockEvaluate.mock.calls[1])[0];
+    const bootstrapExpression = ensureNonNullable(mockEvaluate.mock.calls[1])[0];
     // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval -- We don't eval, we just check the syntax.
-    expect(() => new Function(bootstrapExpr)).not.toThrow();
+    expect(() => new Function(bootstrapExpression)).not.toThrow();
   });
 });

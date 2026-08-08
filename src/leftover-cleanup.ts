@@ -38,7 +38,7 @@ import type { ObsidianTransportOptions } from './transport-options.ts';
 /**
  * Default for the `leftoverMaxAgeInMilliseconds` transport option — two hours.
  */
-export const DEFAULT_LEFTOVER_MAX_AGE_IN_MILLISECONDS = 7200000;
+export const DEFAULT_LEFTOVER_MAX_AGE_IN_MILLISECONDS = 7_200_000;
 
 /**
  * Name of the harness's own directory inside {@link tmpdir}, which holds the
@@ -68,10 +68,14 @@ export interface CheckIsLeftoverStaleParams {
    */
   readonly maxAgeInMilliseconds: number;
 
-  /** The entry's modification time, in epoch milliseconds. */
+  /**
+  The entry's modification time, in epoch milliseconds.
+   */
   readonly modifiedAtInMilliseconds: number;
 
-  /** The current time, in epoch milliseconds. */
+  /**
+  The current time, in epoch milliseconds.
+   */
   readonly nowInMilliseconds: number;
 }
 
@@ -79,7 +83,9 @@ export interface CheckIsLeftoverStaleParams {
  * Parameters for {@link filterLeftoverNames}.
  */
 export interface FilterLeftoverNamesParams {
-  /** Names to keep even when they match a prefix (e.g. the current run's own vault). */
+  /**
+  Names to keep even when they match a prefix (e.g. the current run's own vault).
+   */
   readonly excludedNames?: readonly string[] | undefined;
 
   /**
@@ -89,7 +95,9 @@ export interface FilterLeftoverNamesParams {
    */
   readonly names: readonly string[];
 
-  /** Directory-name prefixes that mark an entry as the harness's own residue. */
+  /**
+  Directory-name prefixes that mark an entry as the harness's own residue.
+   */
   readonly prefixes: readonly string[];
 }
 
@@ -98,10 +106,14 @@ export interface FilterLeftoverNamesParams {
  * residue inside it.
  */
 export interface LeftoverRoot {
-  /** The absolute path to scan. */
+  /**
+  The absolute path to scan.
+   */
   readonly path: string;
 
-  /** Directory-name prefixes that mark an entry as removable residue. */
+  /**
+  Directory-name prefixes that mark an entry as removable residue.
+   */
   readonly prefixes: readonly string[];
 }
 
@@ -120,9 +132,11 @@ export interface SweepDeviceLeftoversParams {
    * Removes ONE directory, by absolute device path. May reject; the caller
    * treats a rejection as this directory failing and moves on to the next.
    */
-  readonly removeDir: (path: string) => Promise<void>;
+  readonly removeDirectory: (path: string) => Promise<void>;
 
-  /** The absolute device path the vaults sit under, including its trailing separator. */
+  /**
+  The absolute device path the vaults sit under, including its trailing separator.
+   */
   readonly vaultBasePath: string;
 }
 
@@ -137,7 +151,9 @@ export interface SweepDeviceLeftoversResult {
    */
   readonly failedNames: string[];
 
-  /** How many directories are verifiably gone. */
+  /**
+  How many directories are verifiably gone.
+   */
   readonly removedCount: number;
 }
 
@@ -145,7 +161,9 @@ export interface SweepDeviceLeftoversResult {
  * Options for {@link sweepHostLeftovers}.
  */
 export interface SweepHostLeftoversOptions {
-  /** Names to keep regardless of age (e.g. the current run's own directories). */
+  /**
+  Names to keep regardless of age (e.g. the current run's own directories).
+   */
   readonly excludedNames?: readonly string[] | undefined;
 
   /**
@@ -166,24 +184,34 @@ export interface SweepHostLeftoversOptions {
  * Result of {@link sweepHostLeftovers}.
  */
 export interface SweepHostLeftoversResult {
-  /** How many directories were selected for removal but could not be removed. */
+  /**
+  How many directories were selected for removal but could not be removed.
+   */
   readonly failedCount: number;
 
-  /** How many directories were removed. */
+  /**
+  How many directories were removed.
+   */
   readonly removedCount: number;
 }
 
 /**
  * Parameters for {@link checkIsRemovableDir}.
  */
-interface CheckIsRemovableDirParams {
-  /** How old the entry must be to be removed (`0` disables the gate). */
+interface CheckIsRemovableDirectoryParams {
+  /**
+  How old the entry must be to be removed (`0` disables the gate).
+   */
   readonly maxAgeInMilliseconds: number;
 
-  /** The sweep's reference time, in epoch milliseconds. */
+  /**
+  The sweep's reference time, in epoch milliseconds.
+   */
   readonly nowInMilliseconds: number;
 
-  /** The absolute path to the entry. */
+  /**
+  The absolute path to the entry.
+   */
   readonly path: string;
 }
 
@@ -236,17 +264,6 @@ export function resolveLeftoverMaxAgeInMilliseconds(options: ObsidianTransportOp
 }
 
 /**
- * Resolves whether leftover directories are swept, applying the default when
- * the option is omitted.
- *
- * @param options - The transport options.
- * @returns `true` when the sweeps should run.
- */
-export function resolveShouldSweepLeftovers(options: ObsidianTransportOptions | undefined): boolean {
-  return options?.shouldSweepLeftovers ?? true;
-}
-
-/**
  * Removes the leftover vault directories a device is carrying, one directory at
  * a time, and reports what is verifiably gone.
  *
@@ -270,7 +287,7 @@ export function resolveShouldSweepLeftovers(options: ObsidianTransportOptions | 
 export async function sweepDeviceLeftovers(
   params: SweepDeviceLeftoversParams
 ): Promise<SweepDeviceLeftoversResult> {
-  const { listNames, removeDir, vaultBasePath } = params;
+  const { listNames, removeDirectory, vaultBasePath } = params;
 
   const names = filterLeftoverNames({ names: await listNames(), prefixes: [TEMP_VAULT_DIR_PREFIX] });
   if (names.length === 0) {
@@ -279,7 +296,7 @@ export async function sweepDeviceLeftovers(
 
   for (const name of names) {
     try {
-      await removeDir(`${vaultBasePath}${name}`);
+      await removeDirectory(`${vaultBasePath}${name}`);
     } catch {
       // Non-fatal by design: the next directory still gets its chance.
     }
@@ -313,13 +330,13 @@ export async function sweepHostLeftovers(options?: SweepHostLeftoversOptions): P
   for (const root of roots) {
     const names = filterLeftoverNames({
       excludedNames: options?.excludedNames,
-      names: await readDirNames(root.path),
+      names: await readDirectoryNames(root.path),
       prefixes: root.prefixes
     });
 
     for (const name of names) {
       const path = join(root.path, name);
-      if (!await checkIsRemovableDir({ maxAgeInMilliseconds, nowInMilliseconds, path })) {
+      if (!await checkIsRemovableDirectory({ maxAgeInMilliseconds, nowInMilliseconds, path })) {
         continue;
       }
 
@@ -336,12 +353,23 @@ export async function sweepHostLeftovers(options?: SweepHostLeftoversOptions): P
 }
 
 /**
+ * Resolves whether leftover directories are swept, applying the default when
+ * the option is omitted.
+ *
+ * @param options - The transport options.
+ * @returns `true` when the sweeps should run.
+ */
+export function willSweepLeftovers(options: ObsidianTransportOptions | undefined): boolean {
+  return options?.shouldSweepLeftovers ?? true;
+}
+
+/**
  * Checks whether a matched entry is a directory old enough to remove.
  *
  * @param params - The entry path and age-gate inputs.
  * @returns `true` when the entry may be removed.
  */
-async function checkIsRemovableDir(params: CheckIsRemovableDirParams): Promise<boolean> {
+async function checkIsRemovableDirectory(params: CheckIsRemovableDirectoryParams): Promise<boolean> {
   const { maxAgeInMilliseconds, nowInMilliseconds } = params;
   try {
     const stats = await stat(params.path);
@@ -371,7 +399,7 @@ function getDefaultLeftoverRoots(): LeftoverRoot[] {
  * @param path - The absolute path to list.
  * @returns The entry names, or an empty list.
  */
-async function readDirNames(path: string): Promise<string[]> {
+async function readDirectoryNames(path: string): Promise<string[]> {
   try {
     return await readdir(path);
   } catch {

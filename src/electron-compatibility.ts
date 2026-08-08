@@ -28,37 +28,33 @@ import type { ObsidianVersionMetadata } from './obsidian-metadata.ts';
 import { compareVersions } from './obsidian-version.ts';
 
 /**
- * Parameters for {@link checkElectronCompatibility}.
- */
-export interface CheckElectronCompatibilityParams {
-  /** The Electron version the instance is actually running, or `undefined` when unreadable. */
-  readonly actualElectronVersion: string | undefined;
-
-  /** The resolved Obsidian app (asar) version that is running. */
-  readonly appVersion: string;
-
-  /** The `metadata.json` entry for {@link appVersion}, or `undefined` when absent. */
-  readonly metadata: ObsidianVersionMetadata | undefined;
-}
-
-/**
  * The runtime Electron compatibility verdict for a booted owned instance, carried
  * as data on the transport / connection result so consumers can assert on it.
  */
 export interface ElectronCompatibility {
-  /** The Electron version the instance is actually running, or `null` when unreadable. */
+  /**
+  The Electron version the instance is actually running, or `null` when unreadable.
+   */
   readonly actualElectronVersion: null | string;
 
-  /** The resolved Obsidian app (asar) version that is running. */
+  /**
+  The resolved Obsidian app (asar) version that is running.
+   */
   readonly appVersion: string;
 
-  /** A human-readable explanation, present for the `'nagged'` tier. */
+  /**
+  A human-readable explanation, present for the `'nagged'` tier.
+   */
   readonly message?: string;
 
-  /** The app's recommended-minimum Electron version, when the table carries one. */
+  /**
+  The app's recommended-minimum Electron version, when the table carries one.
+   */
   readonly minRecommendedElectronVersion?: string;
 
-  /** The resolved compatibility tier. */
+  /**
+  The resolved compatibility tier.
+   */
   readonly tier: ElectronCompatibilityTier;
 }
 
@@ -74,6 +70,26 @@ export interface ElectronCompatibility {
 export type ElectronCompatibilityTier = 'nagged' | 'ok' | 'unknown';
 
 /**
+ * Parameters for {@link resolveElectronCompatibility}.
+ */
+export interface ResolveElectronCompatibilityParams {
+  /**
+  The Electron version the instance is actually running, or `undefined` when unreadable.
+   */
+  readonly actualElectronVersion: string | undefined;
+
+  /**
+  The resolved Obsidian app (asar) version that is running.
+   */
+  readonly appVersion: string;
+
+  /**
+  The `metadata.json` entry for {@link appVersion}, or `undefined` when absent.
+   */
+  readonly metadata: ObsidianVersionMetadata | undefined;
+}
+
+/**
  * Computes the runtime Electron compatibility verdict for a booted owned instance.
  *
  * Only `'nagged'` warrants a warning; `'ok'` and `'unknown'` are silent. An
@@ -84,7 +100,7 @@ export type ElectronCompatibilityTier = 'nagged' | 'ok' | 'unknown';
  *   version's metadata entry.
  * @returns The compatibility verdict.
  */
-export function checkElectronCompatibility(params: CheckElectronCompatibilityParams): ElectronCompatibility {
+export function resolveElectronCompatibility(params: ResolveElectronCompatibilityParams): ElectronCompatibility {
   const { actualElectronVersion, appVersion, metadata } = params;
   const minRecommendedElectronVersion = metadata?.minRecommendedElectronVersion;
 

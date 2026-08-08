@@ -22,13 +22,19 @@ const LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
  * The observable state of the owned window, sampled inside Obsidian.
  */
 interface WindowState {
-  /** Whether the window's left edge sits at/beyond the screen's right edge. */
+  /**
+  Whether the window's left edge sits at/beyond the screen's right edge.
+  */
   readonly isOffscreen: boolean;
 
-  /** Whether `requestAnimationFrame` kept firing (renderer not backgrounded). */
+  /**
+  Whether `requestAnimationFrame` kept firing (renderer not backgrounded).
+  */
   readonly rafFired: boolean;
 
-  /** `document.visibilityState` at sample time. */
+  /**
+  `document.visibilityState` at sample time.
+  */
   readonly visibility: string;
 }
 
@@ -72,7 +78,7 @@ describe('connect-to-cdp integration', () => {
       expect(await connection.invoke('2 + 3')).toBe('5');
 
       const vaultName = await connection.evalInObsidian({
-        fn({ app }): string {
+        callback({ app }): string {
           return app.vault.getName();
         }
       });

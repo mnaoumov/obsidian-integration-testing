@@ -22,10 +22,14 @@
  * One Chromium-major → ECMAScript-edition breakpoint.
  */
 interface EcmaScriptBreakpoint {
-  /** The ECMAScript-edition label (e.g. `'ES2022'`) supported from {@link minChromeMajor} onward. */
+  /**
+  The ECMAScript-edition label (e.g. `'ES2022'`) supported from {@link minChromeMajor} onward.
+   */
   readonly ecmaScriptVersion: string;
 
-  /** The lowest Chromium major that fully supports {@link ecmaScriptVersion}. */
+  /**
+  The lowest Chromium major that fully supports {@link ecmaScriptVersion}.
+   */
   readonly minChromeMajor: number;
 }
 

@@ -15,13 +15,19 @@
  * Parameters for the {@link IncompatibleInstallerVersionError} constructor.
  */
 export interface IncompatibleInstallerVersionErrorConstructorParams {
-  /** The resolved Obsidian app (asar) version that was requested. */
+  /**
+  The resolved Obsidian app (asar) version that was requested.
+   */
   readonly appVersion: string;
 
-  /** The resolved installer/Electron shell version that is too old to run it. */
+  /**
+  The resolved installer/Electron shell version that is too old to run it.
+   */
   readonly installerVersion: string;
 
-  /** The oldest installer version that can boot {@link appVersion}. */
+  /**
+  The oldest installer version that can boot {@link appVersion}.
+   */
   readonly minRunnableInstallerVersion: string;
 }
 
@@ -32,13 +38,19 @@ export interface IncompatibleInstallerVersionErrorConstructorParams {
  * actionable remedy.
  */
 export class IncompatibleInstallerVersionError extends Error {
-  /** The resolved Obsidian app (asar) version that was requested. */
+  /**
+  The resolved Obsidian app (asar) version that was requested.
+   */
   public readonly appVersion: string;
 
-  /** The resolved installer/Electron shell version that is too old to run it. */
+  /**
+  The resolved installer/Electron shell version that is too old to run it.
+   */
   public readonly installerVersion: string;
 
-  /** The oldest installer version that can boot {@link appVersion}. */
+  /**
+  The oldest installer version that can boot {@link appVersion}.
+   */
   public readonly minRunnableInstallerVersion: string;
 
   /**

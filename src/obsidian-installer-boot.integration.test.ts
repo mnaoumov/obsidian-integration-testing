@@ -52,7 +52,7 @@ describe.runIf(SHOULD_RUN_BOOT_TEST)('owned-instance boot via pinned installer',
         expect(await connection.invoke('2 + 3')).toBe('5');
 
         const vaultName = await connection.evalInObsidian({
-          fn({ app }): string {
+          callback({ app }): string {
             return app.vault.getName();
           }
         });

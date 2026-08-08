@@ -14,7 +14,7 @@ import type { TestProject } from 'vitest/node';
 import { inject } from 'vitest';
 
 import type { CoreSetupResult } from '../global-setup-core.ts';
-import type { PopulateFilesParams } from '../temp-vault.ts';
+import type { PopulateFilesParams } from '../temporary-vault.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 import {
@@ -27,10 +27,10 @@ import {
   coreTeardown
 } from '../global-setup-core.ts';
 import { log } from '../log.ts';
-import { TempVault } from '../temp-vault.ts';
+import { TemporaryVault } from '../temporary-vault.ts';
 
 setTransportOptionsResolver(() => inject('obsidianTransport'));
-setVaultPathResolver(() => inject('tempVaultPath'));
+setVaultPathResolver(() => inject('temporaryVaultPath'));
 
 /**
  * Options for {@link createSetup}.
@@ -107,7 +107,7 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
     }
 
     project.provide('obsidianTransport', setupResult.transportOptions);
-    project.provide('tempVaultPath', setupResult.tempVault.path);
+    project.provide('temporaryVaultPath', setupResult.temporaryVault.path);
   }
 
   async function teardown(): Promise<void> {
@@ -120,13 +120,13 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
  *
  * @returns The temporary vault.
  */
-export function getTempVault(): TempVault {
-  const tempVaultPath = inject('tempVaultPath');
+export function getTemporaryVault(): TemporaryVault {
+  const temporaryVaultPath = inject('temporaryVaultPath');
   const setupErrorMessage = inject('setupError');
   if (setupErrorMessage) {
     throw new Error(`Integration setup failed — cannot get temp vault: ${setupErrorMessage}`);
   }
-  return new TempVault(tempVaultPath);
+  return new TemporaryVault(temporaryVaultPath);
 }
 
 const defaultGlobalSetup = createSetup();
@@ -135,7 +135,7 @@ const defaultGlobalSetup = createSetup();
  * Vitest global setup function (no pre-population).
  *
  * Copies the built plugin into a temporary vault, enables it via a renderer eval
- * over the transport, and provides `tempVaultPath` to tests.
+ * over the transport, and provides `temporaryVaultPath` to tests.
  *
  * @param project - The Vitest project.
  * @returns A promise that resolves when setup completes.

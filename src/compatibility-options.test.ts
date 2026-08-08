@@ -7,53 +7,53 @@ import {
 import {
   resolveAsarFallbackAction,
   resolveInstallerCompatibilityAction,
-  resolveShouldThrowOnIncompatibleInstaller,
-  resolveShouldThrowOnSilentAsarFallback,
-  resolveShouldWarnOnCompatibilityIssues
+  willThrowOnIncompatibleInstaller,
+  willThrowOnSilentAsarFallback,
+  willWarnOnCompatibilityIssues
 } from './compatibility-options.ts';
 
-describe('resolveShouldWarnOnCompatibilityIssues', () => {
+describe('willWarnOnCompatibilityIssues', () => {
   it('should warn by default when the option is omitted', () => {
-    expect(resolveShouldWarnOnCompatibilityIssues()).toBe(true);
-    expect(resolveShouldWarnOnCompatibilityIssues(undefined)).toBe(true);
+    expect(willWarnOnCompatibilityIssues()).toBe(true);
+    expect(willWarnOnCompatibilityIssues(undefined)).toBe(true);
   });
 
   it('should not warn when explicitly disabled', () => {
-    expect(resolveShouldWarnOnCompatibilityIssues(false)).toBe(false);
+    expect(willWarnOnCompatibilityIssues(false)).toBe(false);
   });
 
   it('should warn when explicitly enabled', () => {
-    expect(resolveShouldWarnOnCompatibilityIssues(true)).toBe(true);
+    expect(willWarnOnCompatibilityIssues(true)).toBe(true);
   });
 });
 
-describe('resolveShouldThrowOnIncompatibleInstaller', () => {
+describe('willThrowOnIncompatibleInstaller', () => {
   it('should throw by default when the option is omitted', () => {
-    expect(resolveShouldThrowOnIncompatibleInstaller()).toBe(true);
-    expect(resolveShouldThrowOnIncompatibleInstaller(undefined)).toBe(true);
+    expect(willThrowOnIncompatibleInstaller()).toBe(true);
+    expect(willThrowOnIncompatibleInstaller(undefined)).toBe(true);
   });
 
   it('should not throw when explicitly disabled', () => {
-    expect(resolveShouldThrowOnIncompatibleInstaller(false)).toBe(false);
+    expect(willThrowOnIncompatibleInstaller(false)).toBe(false);
   });
 
   it('should throw when explicitly enabled', () => {
-    expect(resolveShouldThrowOnIncompatibleInstaller(true)).toBe(true);
+    expect(willThrowOnIncompatibleInstaller(true)).toBe(true);
   });
 });
 
-describe('resolveShouldThrowOnSilentAsarFallback', () => {
+describe('willThrowOnSilentAsarFallback', () => {
   it('should throw by default when the option is omitted', () => {
-    expect(resolveShouldThrowOnSilentAsarFallback()).toBe(true);
-    expect(resolveShouldThrowOnSilentAsarFallback(undefined)).toBe(true);
+    expect(willThrowOnSilentAsarFallback()).toBe(true);
+    expect(willThrowOnSilentAsarFallback(undefined)).toBe(true);
   });
 
   it('should not throw when explicitly disabled', () => {
-    expect(resolveShouldThrowOnSilentAsarFallback(false)).toBe(false);
+    expect(willThrowOnSilentAsarFallback(false)).toBe(false);
   });
 
   it('should throw when explicitly enabled', () => {
-    expect(resolveShouldThrowOnSilentAsarFallback(true)).toBe(true);
+    expect(willThrowOnSilentAsarFallback(true)).toBe(true);
   });
 });
 

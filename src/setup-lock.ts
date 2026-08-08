@@ -65,7 +65,9 @@ const PROCESS_EXISTENCE_PROBE_SIGNAL = 0;
  * Parameters for {@link acquireSetupLock}.
  */
 export interface AcquireSetupLockParams {
-  /** Short transport label for log messages (e.g. `"obsidian-cli"`). */
+  /**
+  Short transport label for log messages (e.g. `"obsidian-cli"`).
+   */
   readonly label: string;
 
   /**
@@ -88,7 +90,9 @@ export interface AcquireSetupLockParams {
  * A held setup lock. Release it once the run's teardown is complete.
  */
 export interface SetupLock {
-  /** Releases the lock. Safe to call more than once. */
+  /**
+  Releases the lock. Safe to call more than once.
+   */
   release(): void;
 }
 
@@ -96,16 +100,24 @@ export interface SetupLock {
  * Parameters for {@link createLockHandle}.
  */
 interface CreateLockHandleParams {
-  /** The transport label of this run. */
+  /**
+  The transport label of this run.
+   */
   readonly label: string;
 
-  /** The path to the lock file this run just created. */
+  /**
+  The path to the lock file this run just created.
+   */
   readonly lockFilePath: string;
 
-  /** The lock info this run wrote when it acquired the lock. */
+  /**
+  The lock info this run wrote when it acquired the lock.
+   */
   readonly ownInfo: LockFileInfo;
 
-  /** The lock scope, for log messages. */
+  /**
+  The lock scope, for log messages.
+   */
   readonly scope: string;
 }
 
@@ -113,13 +125,19 @@ interface CreateLockHandleParams {
  * Parameters for {@link createTimeoutError}.
  */
 interface CreateTimeoutErrorParams {
-  /** The current holder's lock info, or `null` if it could not be read. */
+  /**
+  The current holder's lock info, or `null` if it could not be read.
+   */
   readonly info: LockFileInfo | null;
 
-  /** The lock scope. */
+  /**
+  The lock scope.
+   */
   readonly scope: string;
 
-  /** The timeout that elapsed. */
+  /**
+  The timeout that elapsed.
+   */
   readonly timeoutInMilliseconds: number;
 }
 
@@ -127,19 +145,29 @@ interface CreateTimeoutErrorParams {
  * Parameters for {@link formatWaitMessage}.
  */
 interface FormatWaitMessageParams {
-  /** The current holder's lock info, or `null` if it could not be read. */
+  /**
+  The current holder's lock info, or `null` if it could not be read.
+   */
   readonly info: LockFileInfo | null;
 
-  /** The transport label of the waiting run. */
+  /**
+  The transport label of the waiting run.
+   */
   readonly label: string;
 
-  /** How much of the acquisition timeout is left. */
+  /**
+  How much of the acquisition timeout is left.
+   */
   readonly remainingInMilliseconds: number;
 
-  /** The lock scope. */
+  /**
+  The lock scope.
+   */
   readonly scope: string;
 
-  /** How long this run has been waiting so far. */
+  /**
+  How long this run has been waiting so far.
+   */
   readonly waitedInMilliseconds: number;
 }
 
@@ -147,7 +175,9 @@ interface FormatWaitMessageParams {
  * The JSON payload stored inside a lock file, identifying the holder.
  */
 interface LockFileInfo {
-  /** When the lock was acquired (`Date.now()` epoch milliseconds). */
+  /**
+  When the lock was acquired (`Date.now()` epoch milliseconds).
+   */
   readonly acquiredAtInMilliseconds: number;
 
   /**
@@ -160,27 +190,39 @@ interface LockFileInfo {
    */
   readonly heartbeatAtInMilliseconds?: number | undefined;
 
-  /** The host that holds the lock (PID liveness is only valid on the same host). */
+  /**
+  The host that holds the lock (PID liveness is only valid on the same host).
+   */
   readonly hostname: string;
 
-  /** The transport label of the holding run. */
+  /**
+  The transport label of the holding run.
+   */
   readonly label: string;
 
-  /** The process ID of the holding run. */
+  /**
+  The process ID of the holding run.
+   */
   readonly pid: number;
 }
 
 /**
- * Parameters for {@link refreshHeartbeat}.
+ * Parameters for {@link didRefreshHeartbeat}.
  */
 interface RefreshHeartbeatParams {
-  /** The transport label of this run. */
+  /**
+  The transport label of this run.
+   */
   readonly label: string;
 
-  /** The path to the lock file to refresh. */
+  /**
+  The path to the lock file to refresh.
+   */
   readonly lockFilePath: string;
 
-  /** The lock info this run wrote when it acquired the lock. */
+  /**
+  The lock info this run wrote when it acquired the lock.
+   */
   readonly ownInfo: LockFileInfo;
 }
 
@@ -199,7 +241,7 @@ export async function acquireSetupLock(params: AcquireSetupLockParams): Promise<
   } = params;
   const timeoutInMilliseconds = params.timeoutInMilliseconds ?? DEFAULT_TIMEOUT_IN_MILLISECONDS;
   const lockFilePath = getLockFilePath(scope);
-  mkdirSync(getLockDir(), { recursive: true });
+  mkdirSync(getLockDirectory(), { recursive: true });
 
   const startedAtInMilliseconds = Date.now();
   const deadlineInMilliseconds = startedAtInMilliseconds + timeoutInMilliseconds;
@@ -334,7 +376,7 @@ function createLockHandle(params: CreateLockHandleParams): SetupLock {
   let isReleased = false;
 
   const heartbeatTimer = setInterval(() => {
-    const isStillOurs = refreshHeartbeat({
+    const isStillOurs = didRefreshHeartbeat({
       label,
       lockFilePath,
       ownInfo
@@ -417,6 +459,42 @@ function describeInfo(info: LockFileInfo): string {
 }
 
 /**
+ * Rewrites the lock file with a fresh heartbeat timestamp, so waiting runs can
+ * tell this holder apart from a crashed one whose PID has been recycled.
+ *
+ * A lock file that is missing or unreadable is still treated as ours and rewritten:
+ * this run never released, so its claim stands.
+ *
+ * @param params - The refresh parameters.
+ * @returns `true` while the lock is still ours, `false` once another run owns it.
+ */
+function didRefreshHeartbeat(params: RefreshHeartbeatParams): boolean {
+  const {
+    label,
+    lockFilePath,
+    ownInfo
+  } = params;
+
+  const info = readLockFileInfo(lockFilePath);
+  if (info && !checkIsOwnLock(info)) {
+    return false;
+  }
+
+  const refreshedInfo: LockFileInfo = {
+    ...ownInfo,
+    heartbeatAtInMilliseconds: Date.now()
+  };
+  try {
+    writeFileSync(lockFilePath, JSON.stringify(refreshedInfo));
+  } catch (error: unknown) {
+    // Not fatal: the lock is still held and will still be released. Only its
+    // Heartbeat goes stale, which at worst lets a waiting run steal it.
+    log(`[integration-setup:${label}] Failed to refresh the setup lock heartbeat: ${errorToString(error)}`);
+  }
+  return true;
+}
+
+/**
  * Formats a duration as a compact `1m 30s` / `45s` string for progress logs.
  *
  * @param milliseconds - The duration in milliseconds.
@@ -479,7 +557,7 @@ function getLastSeenAtInMilliseconds(info: LockFileInfo): number {
  *
  * @returns The absolute path to the lock directory.
  */
-function getLockDir(): string {
+function getLockDirectory(): string {
   return join(tmpdir(), LOCK_DIR_NAME);
 }
 
@@ -490,7 +568,7 @@ function getLockDir(): string {
  * @returns The absolute path to the scope's lock file.
  */
 function getLockFilePath(scope: string): string {
-  return join(getLockDir(), `${scope}${LOCK_FILE_SUFFIX}`);
+  return join(getLockDirectory(), `${scope}${LOCK_FILE_SUFFIX}`);
 }
 
 /**
@@ -505,42 +583,6 @@ function readLockFileInfo(lockFilePath: string): LockFileInfo | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Rewrites the lock file with a fresh heartbeat timestamp, so waiting runs can
- * tell this holder apart from a crashed one whose PID has been recycled.
- *
- * A lock file that is missing or unreadable is still treated as ours and rewritten:
- * this run never released, so its claim stands.
- *
- * @param params - The refresh parameters.
- * @returns `true` while the lock is still ours, `false` once another run owns it.
- */
-function refreshHeartbeat(params: RefreshHeartbeatParams): boolean {
-  const {
-    label,
-    lockFilePath,
-    ownInfo
-  } = params;
-
-  const info = readLockFileInfo(lockFilePath);
-  if (info && !checkIsOwnLock(info)) {
-    return false;
-  }
-
-  const refreshedInfo: LockFileInfo = {
-    ...ownInfo,
-    heartbeatAtInMilliseconds: Date.now()
-  };
-  try {
-    writeFileSync(lockFilePath, JSON.stringify(refreshedInfo));
-  } catch (error: unknown) {
-    // Not fatal: the lock is still held and will still be released. Only its
-    // Heartbeat goes stale, which at worst lets a waiting run steal it.
-    log(`[integration-setup:${label}] Failed to refresh the setup lock heartbeat: ${errorToString(error)}`);
-  }
-  return true;
 }
 
 /**

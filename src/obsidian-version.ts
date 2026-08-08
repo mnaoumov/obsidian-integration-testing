@@ -35,10 +35,14 @@ const VERSION_SEGMENT_COUNT = 3;
  * A version specifier resolved against a release channel.
  */
 export interface ChannelVersionSpec {
-  /** The channel to resolve against the manifest. */
+  /**
+  The channel to resolve against the manifest.
+   */
   readonly channel: ReleaseChannel;
 
-  /** Discriminant. */
+  /**
+  Discriminant.
+   */
   readonly kind: 'channel';
 }
 
@@ -46,7 +50,9 @@ export interface ChannelVersionSpec {
  * The `beta` (catalyst) entry of {@link DesktopReleasesManifest}.
  */
 export interface DesktopReleasesBeta {
-  /** The latest catalyst version, e.g. `'1.13.1'`. */
+  /**
+  The latest catalyst version, e.g. `'1.13.1'`.
+   */
   readonly latestVersion: string;
 }
 
@@ -69,10 +75,14 @@ export interface DesktopReleasesManifest {
  * A version specifier naming a concrete `x.y.z` version.
  */
 export interface ExplicitVersionSpec {
-  /** Discriminant. */
+  /**
+  Discriminant.
+   */
   readonly kind: 'explicit';
 
-  /** The concrete `x.y.z` version. */
+  /**
+  The concrete `x.y.z` version.
+   */
   readonly version: string;
 }
 
@@ -103,8 +113,8 @@ export function compareVersions(a: string, b: string): number {
   const aSegments = parseVersionSegments(a);
   const bSegments = parseVersionSegments(b);
 
-  for (let i = 0; i < VERSION_SEGMENT_COUNT; i++) {
-    const diff = (aSegments[i] ?? 0) - (bSegments[i] ?? 0);
+  for (let index = 0; index < VERSION_SEGMENT_COUNT; index++) {
+    const diff = (aSegments[index] ?? 0) - (bSegments[index] ?? 0);
     if (diff !== 0) {
       return diff;
     }

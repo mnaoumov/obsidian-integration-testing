@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 export const jestConfig: Config = {
   extensionsToTreatAsEsm: ['.ts'],
+  // eslint-disable-next-line unicorn/name-replacements -- `rootDir` is Jest's own config option name.
   rootDir: join(import.meta.dirname, '..'),
   // The harness chain reads the `OBSIDIAN_METADATA` global at module scope, and
   // Jest has no `define` to inline it — publish it per worker from the same

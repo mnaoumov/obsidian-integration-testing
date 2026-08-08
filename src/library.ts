@@ -12,6 +12,7 @@
  * `define` option. At test time (Vitest), it falls back to `'dev'`.
  */
 /* v8 ignore start -- Build-time constant; the else branch is only reachable when esbuild's define replaces the global. */
+// eslint-disable-next-line unicorn/no-typeof-undefined -- The `typeof` guard is required: outside a built bundle the global is never DECLARED, so reading it directly throws a `ReferenceError` rather than yielding `undefined`.
 export const LIBRARY_VERSION: string = typeof OBSIDIAN_INTEGRATION_TESTING_VERSION === 'undefined'
   ? 'dev'
   : OBSIDIAN_INTEGRATION_TESTING_VERSION;

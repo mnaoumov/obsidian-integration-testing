@@ -25,21 +25,21 @@ import {
 } from 'vitest';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
-import { buildParentLivenessWatchdogExpr } from './parent-liveness.ts';
-import { TempVault } from './temp-vault.ts';
+import { buildParentLivenessWatchdogExpression } from './parent-liveness.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
-const tempVault = new TempVault();
+const temporaryVault = new TemporaryVault();
 let vaultPath: string;
 
 beforeAll(async () => {
-  await tempVault.register();
-  vaultPath = tempVault.path;
+  await temporaryVault.register();
+  vaultPath = temporaryVault.path;
 }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
 afterAll(async () => {
-  await tempVault.dispose();
+  await temporaryVault.dispose();
 });
 
 /**
@@ -69,9 +69,9 @@ interface WatchdogSocketState {
 describe('parent-liveness watchdog', () => {
   it('holds an open socket back to the harness process', async () => {
     const state = await evalInObsidian({
-      fn(): WatchdogSocketState {
+      callback(): WatchdogSocketState {
         // eslint-disable-next-line no-restricted-syntax -- Approved double cast: the watchdog's window property is internal to the harness and deliberately not declared globally.
-        const holder = window as unknown as ParentLivenessHolder;
+        const holder = globalThis as unknown as ParentLivenessHolder;
         const socket = holder.__obsidianIntegrationTestingParentLiveness;
         return {
           isArmed: Boolean(socket),
@@ -94,11 +94,11 @@ describe('parent-liveness watchdog', () => {
     // Here: a second arming must short-circuit before it ever tries to connect.
     const UNUSED_PORT = 1;
     const result = await evalInObsidian({
-      args: { expression: buildParentLivenessWatchdogExpr(UNUSED_PORT) },
-      fn({ expression }): string {
+      callback({ expression }): string {
         // Runs the harness's own expression exactly as the transport delivers it.
         return String(globalThis.eval(expression));
       },
+      input: { expression: buildParentLivenessWatchdogExpression(UNUSED_PORT) },
       vaultPath
     });
 
@@ -114,9 +114,9 @@ describe('parent-liveness watchdog', () => {
  */
 async function readRemotePort(): Promise<number | undefined> {
   return evalInObsidian({
-    fn(): number | undefined {
+    callback(): number | undefined {
       // eslint-disable-next-line no-restricted-syntax -- Approved double cast, same rationale as above.
-      const holder = window as unknown as ParentLivenessHolder;
+      const holder = globalThis as unknown as ParentLivenessHolder;
       return holder.__obsidianIntegrationTestingParentLiveness?.remotePort;
     },
     vaultPath

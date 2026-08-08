@@ -35,17 +35,17 @@ describe('bare (plugin-less) instance worker attach', () => {
     // Context the plugin-less global setup published (transport options incl. the
     // Owned CDP port, and the temp vault path).
     const basePath = await evalInObsidian({
-      fn({ app }): string {
+      callback({ app }): string {
         return (app.vault.adapter as FileSystemAdapter).getBasePath();
       }
     });
 
-    expect(basePath).toBe(inject('tempVaultPath'));
+    expect(basePath).toBe(inject('temporaryVaultPath'));
   });
 
   it('registers an empty vault with no enabled community plugins', async () => {
     const enabledPluginCount = await evalInObsidian({
-      fn({ app }): number {
+      callback({ app }): number {
         return app.plugins.enabledPlugins.size;
       }
     });

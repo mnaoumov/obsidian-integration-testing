@@ -58,7 +58,7 @@ describe('evalInObsidian', () => {
   it('should parse JSON result from transport output', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: { key: 'value' } }));
     const result = await evalInObsidian({
-      fn(): Record<string, string> {
+      callback(): Record<string, string> {
         return { key: 'value' };
       }
     });
@@ -71,21 +71,21 @@ describe('evalInObsidian', () => {
     expectTypeOf(
       // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- Testing void function.
       await evalInObsidian({
-        args: { pluginId: 'test-plugin' },
-        async fn({ pluginId }): Promise<void> {
+        async callback({ pluginId }): Promise<void> {
           await Promise.resolve(pluginId);
-        }
+        },
+        input: { pluginId: 'test-plugin' }
       })
     ).toBeVoid();
   });
 
-  it('should pass args and call transport.evaluate', async () => {
+  it('should pass input and call transport.evaluate', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 5 }));
     const result = await evalInObsidian({
-      args: { a: 2, b: 3 },
-      fn({ a, b }): number {
+      callback({ a, b }): number {
         return a + b;
-      }
+      },
+      input: { a: 2, b: 3 }
     });
     expect(result).toBe(5);
     expect(mockTransportEvaluate).toHaveBeenCalled();
@@ -94,26 +94,26 @@ describe('evalInObsidian', () => {
   it('should generate syntactically valid JavaScript in the expression', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 5 }));
     await evalInObsidian({
-      args: { a: 2, b: 3 },
-      fn({ a, b }): number {
+      callback({ a, b }): number {
         return a + b;
-      }
+      },
+      input: { a: 2, b: 3 }
     });
     // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval -- We don't eval, we just check the syntax.
     expect(() => new Function(getLastExpression())).not.toThrow();
   });
 
-  it('should generate valid JavaScript when args contain functions', async () => {
+  it('should generate valid JavaScript when input contain functions', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 10 }));
     await evalInObsidian({
-      args: {
+      callback({ transform, value }): number {
+        return transform(value);
+      },
+      input: {
         transform(this: void, x: number): number {
           return x * 2;
         },
         value: 5
-      },
-      fn({ transform, value }): number {
-        return transform(value);
       }
     });
     // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval -- We don't eval, we just check the syntax.
@@ -125,16 +125,16 @@ describe('evalInObsidian', () => {
     interface Context {
       value: number;
     }
-    const ctx = new ContextId<Context>();
+    const contextId = new ContextId<Context>();
     await evalInObsidian({
-      contextId: ctx,
-      fn({ context }): string {
+      callback({ context }): string {
         context.value = 42;
         return 'ok';
-      }
+      },
+      contextId
     });
     const expression = getLastExpression();
-    expect(expression).toContain(`"contextId": "${String(ctx)}"`);
+    expect(expression).toContain(`"contextId": "${String(contextId)}"`);
     // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval -- We don't eval, we just check the syntax.
     expect(() => new Function(expression)).not.toThrow();
   });
@@ -142,7 +142,7 @@ describe('evalInObsidian', () => {
   it('should not pass contextId when contextId is absent', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 1 }));
     await evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       }
     });
@@ -151,18 +151,18 @@ describe('evalInObsidian', () => {
   });
 
   it('should throw with error details when Obsidian returns an error envelope', async () => {
-    mockTransportEvaluate.mockResolvedValue(JSON.stringify({ type: 'error', value: 'Error: something broke\n    at fn (eval:1:1)' }));
+    mockTransportEvaluate.mockResolvedValue(JSON.stringify({ type: 'error', value: 'Error: something broke\n    at callback (eval:1:1)' }));
     await expect(evalInObsidian({
-      fn(): string {
+      callback(): string {
         return 'ok';
       }
-    })).rejects.toThrow('evalInObsidian: Error inside Obsidian:\nError: something broke\n    at fn (eval:1:1)');
+    })).rejects.toThrow('evalInObsidian: Error inside Obsidian:\nError: something broke\n    at callback (eval:1:1)');
   });
 
   it('should throw with descriptive message when Obsidian returns non-JSON output', async () => {
     mockTransportEvaluate.mockResolvedValue('Error: something went wrong');
     await expect(evalInObsidian({
-      fn(): string {
+      callback(): string {
         return 'ok';
       }
     })).rejects.toThrow('evalInObsidian: Obsidian returned non-JSON output');
@@ -171,7 +171,7 @@ describe('evalInObsidian', () => {
   it('should return undefined when transport returns empty string', async () => {
     mockTransportEvaluate.mockResolvedValue('');
     const result = await evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       }
     });
@@ -181,7 +181,7 @@ describe('evalInObsidian', () => {
   it('should rethrow transport errors', async () => {
     mockTransportEvaluate.mockRejectedValue(new Error('Something unexpected'));
     await expect(evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       },
       shouldSkipPreflightChecks: true
@@ -193,7 +193,7 @@ describe('pre-flight checks', () => {
   it('should throw when vaultPath does not exist on disk', async () => {
     mockExistsSync.mockReturnValue(false);
     await expect(evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       },
       vaultPath: '/nonexistent/vault/path'
@@ -204,7 +204,7 @@ describe('pre-flight checks', () => {
   it('should call transport.preflightCheck when shouldSkipPreflightChecks is false', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 1 }));
     await evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       }
     });
@@ -214,7 +214,7 @@ describe('pre-flight checks', () => {
   it('should propagate transport preflightCheck errors', async () => {
     mockTransportPreflightCheck.mockRejectedValueOnce(new Error('Vault is not registered in Obsidian'));
     await expect(evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       }
     })).rejects.toThrow('Vault is not registered in Obsidian');
@@ -223,7 +223,7 @@ describe('pre-flight checks', () => {
   it('should skip pre-flight checks when shouldSkipPreflightChecks is true', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 42 }));
     const result = await evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 42;
       },
       shouldSkipPreflightChecks: true
@@ -241,15 +241,15 @@ describe('ContextId', () => {
   });
 
   it('should serialize via toString and toJSON', () => {
-    const ctx = new ContextId();
-    expect(ctx.toString()).toBe(ctx.toJSON());
-    expect(String(ctx)).toBe(ctx.toString());
+    const context = new ContextId();
+    expect(context.toString()).toBe(context.toJSON());
+    expect(String(context)).toBe(context.toString());
   });
 
   it('should dispose context without vaultPath', async () => {
     mockTransportEvaluate.mockResolvedValue('(no output)');
-    const ctx = new ContextId();
-    await ctx.dispose();
+    const context = new ContextId();
+    await context.dispose();
     expect(mockTransportEvaluate).toHaveBeenCalled();
     const expression = getLastExpression();
     // eslint-disable-next-line no-new-func, @typescript-eslint/no-implied-eval -- We don't eval, we just check the syntax.
@@ -263,24 +263,24 @@ describe('ContextId', () => {
     const { tmpdir } = await import('node:os');
     // eslint-disable-next-line no-restricted-syntax -- Dynamic imports needed to bypass the node:fs mock.
     const { join } = await import('node:path');
-    const dir = mkdtempSync(join(tmpdir(), 'test-ctx-dispose-'));
+    const directory = mkdtempSync(join(tmpdir(), 'test-ctx-dispose-'));
     try {
       mockTransportEvaluate.mockResolvedValue('(no output)');
-      const ctx = new ContextId();
-      await ctx.dispose(dir);
+      const context = new ContextId();
+      await context.dispose(directory);
       expect(mockTransportEvaluate).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ cwd: dir })
+        expect.objectContaining({ cwd: directory })
       );
     } finally {
-      rmdirSync(dir);
+      rmdirSync(directory);
     }
   });
 
   it('should support await using', async () => {
     mockTransportEvaluate.mockResolvedValue('(no output)');
     {
-      await using _ctx = new ContextId();
+      await using _context = new ContextId();
     }
     expect(mockTransportEvaluate).toHaveBeenCalled();
   });

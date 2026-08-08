@@ -102,6 +102,6 @@ describe.each(CHANNELS)('asar download and unpack ($label channel)', ({ alias })
  */
 function parseAsarHeader(buffer: Buffer): AsarHeader {
   const headerJsonLength = buffer.readUInt32LE(ASAR_HEADER_JSON_LENGTH_OFFSET);
-  const headerJson = buffer.toString('utf8', ASAR_HEADER_JSON_OFFSET, ASAR_HEADER_JSON_OFFSET + headerJsonLength);
+  const headerJson = buffer.toString('utf-8', ASAR_HEADER_JSON_OFFSET, ASAR_HEADER_JSON_OFFSET + headerJsonLength);
   return JSON.parse(headerJson) as AsarHeader;
 }

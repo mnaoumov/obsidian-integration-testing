@@ -27,12 +27,12 @@ describe('buildDemoVaultPopulate', () => {
     rmSync(root, { force: true, recursive: true });
   });
 
-  function writePluginBinaries(pluginId: string, sourceDir?: string): string {
-    const dir = sourceDir ?? join(root, '.obsidian', 'plugins', pluginId);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'main.js'), `// ${pluginId} main`);
-    writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ id: pluginId }));
-    return dir;
+  function writePluginBinaries(pluginId: string, sourceDirectory?: string): string {
+    const directory = sourceDirectory ?? join(root, '.obsidian', 'plugins', pluginId);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'main.js'), `// ${pluginId} main`);
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ id: pluginId }));
+    return directory;
   }
 
   it('should carry the note tree (excluding .obsidian) into the map', () => {
@@ -100,13 +100,14 @@ describe('buildDemoVaultPopulate', () => {
     expect(map['.obsidian/plugins/fix-require-modules/nested']).toBeUndefined();
   });
 
-  it('should read an injected plugin from an explicit sourceDir', () => {
-    const sourceDir = writePluginBinaries('cst', join(root, 'external', 'cst'));
+  it('should read an injected plugin from an explicit sourceDirectory', () => {
+    const sourceDirectory = writePluginBinaries('cst', join(root, 'external', 'cst'));
 
     const map = buildDemoVaultPopulate({
       demoVaultPath: root,
       excludedNames: ['.obsidian', '.git', 'external'],
-      injectPlugins: [{ pluginId: 'cst', sourceDir }]
+
+      injectPlugins: [{ pluginId: 'cst', sourceDirectory }]
     });
 
     expect(map['.obsidian/plugins/cst/main.js']?.toString()).toBe('// cst main');
@@ -114,8 +115,8 @@ describe('buildDemoVaultPopulate', () => {
   });
 
   it('should overlay data.json from the data param and skip the on-disk data.json', () => {
-    const dir = writePluginBinaries('cst');
-    writeFileSync(join(dir, 'data.json'), '{"stale":true}');
+    const directory = writePluginBinaries('cst');
+    writeFileSync(join(directory, 'data.json'), '{"stale":true}');
 
     const map = buildDemoVaultPopulate({
       demoVaultPath: root,
@@ -126,8 +127,8 @@ describe('buildDemoVaultPopulate', () => {
   });
 
   it('should keep the on-disk data.json when no data param is given', () => {
-    const dir = writePluginBinaries('cst');
-    writeFileSync(join(dir, 'data.json'), '{"onDisk":true}');
+    const directory = writePluginBinaries('cst');
+    writeFileSync(join(directory, 'data.json'), '{"onDisk":true}');
 
     const map = buildDemoVaultPopulate({
       demoVaultPath: root,
@@ -138,9 +139,9 @@ describe('buildDemoVaultPopulate', () => {
   });
 
   it('should throw an actionable error when a required plugin binary is missing', () => {
-    const dir = join(root, '.obsidian', 'plugins', 'cst');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'manifest.json'), '{}');
+    const directory = join(root, '.obsidian', 'plugins', 'cst');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'manifest.json'), '{}');
     // The main.js file is intentionally missing.
 
     expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'cst' }] }))
@@ -148,9 +149,9 @@ describe('buildDemoVaultPopulate', () => {
   });
 
   it('should throw when manifest.json is missing even though main.js is present', () => {
-    const dir = join(root, '.obsidian', 'plugins', 'cst');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'main.js'), '// main');
+    const directory = join(root, '.obsidian', 'plugins', 'cst');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'main.js'), '// main');
     // The manifest.json file is intentionally missing.
 
     expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'cst' }] }))

@@ -9,7 +9,7 @@
 
 import type { Plugin } from 'obsidian';
 
-import type { CommonArgs } from './eval-in-obsidian.ts';
+import type { CommonArguments } from './eval-in-obsidian.ts';
 
 /**
  * Parameters for {@link enablePluginWithErrorCapture}.
@@ -70,14 +70,14 @@ interface IntegrationTestingHolder {
  * Obsidian's `enablePlugin` try-catch swallows them. The original method
  * is always restored in a `finally` block.
  *
- * Designed to be passed as the `fn` argument to {@link evalInObsidian}.
+ * Designed to be passed as the `callback` argument to {@link evalInObsidian}.
  *
- * @param args - The common args plus the plugin ID.
- * @param args.app - The Obsidian app instance.
- * @param args.pluginId - The ID of the plugin to enable.
+ * @param input - The common input plus the plugin ID.
+ * @param input.app - The Obsidian app instance.
+ * @param input.pluginId - The ID of the plugin to enable.
  * @returns The enable result with error message and enabled status.
  */
-export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs & EnablePluginParams): Promise<EnablePluginResult> {
+export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArguments & EnablePluginParams): Promise<EnablePluginResult> {
   if (!app.plugins.isEnabled()) {
     await app.plugins.setEnable(true);
   }
@@ -89,7 +89,7 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
    * Fully reset the enabled state first so the `enablePluginAndSave` below is a
    * real fresh enable + load. No-op on the first attempt (not yet enabled).
    */
-  if (app.plugins.enabledPlugins.has(pluginId) && !(pluginId in app.plugins.plugins)) {
+  if (app.plugins.enabledPlugins.has(pluginId) && !Object.hasOwn(app.plugins.plugins, pluginId)) {
     await app.plugins.disablePluginAndSave(pluginId);
   }
 
@@ -103,7 +103,7 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
       return result;
     } catch (error) {
       // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
-      const holder = window as unknown as Partial<IntegrationTestingHolder>;
+      const holder = globalThis as unknown as Partial<IntegrationTestingHolder>;
       errorMessage = holder.__obsidianIntegrationTesting?.errorToString(error) ?? String(error);
       throw error;
     }
@@ -119,41 +119,41 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
    */
   const capturedConsole: string[] = [];
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast, same rationale as above.
-  const formatHolder = window as unknown as Partial<IntegrationTestingHolder>;
-  function formatArg(arg: unknown): string {
-    if (arg instanceof Error) {
-      return formatHolder.__obsidianIntegrationTesting?.errorToString(arg) ?? String(arg);
+  const formatHolder = globalThis as unknown as Partial<IntegrationTestingHolder>;
+  function formatArgument(argument: unknown): string {
+    if (argument instanceof Error) {
+      return formatHolder.__obsidianIntegrationTesting?.errorToString(argument) ?? String(argument);
     }
-    if (typeof arg === 'string') {
-      return arg;
+    if (typeof argument === 'string') {
+      return argument;
     }
-    if (arg === undefined || arg === null) {
-      return String(arg);
+    if (argument === undefined || argument === null) {
+      return String(argument);
     }
-    const json = JSON.stringify(arg);
-    return json ?? Object.prototype.toString.call(arg);
+    const json = JSON.stringify(argument);
+    return json ?? Object.prototype.toString.call(argument);
   }
-  function recordConsole(...args: unknown[]): void {
-    capturedConsole.push(args.map(formatArg).join(' '));
+  function recordConsole(...input: unknown[]): void {
+    capturedConsole.push(input.map((argument) => formatArgument(argument)).join(' '));
   }
   const origConsoleError = console.error;
   const origConsoleWarn = console.warn;
-  console.error = (...args: unknown[]): void => {
-    recordConsole(...args);
-    origConsoleError.apply(console, args);
+  console.error = (...input: unknown[]): void => {
+    recordConsole(...input);
+    origConsoleError.apply(console, input);
   };
-  console.warn = (...args: unknown[]): void => {
-    recordConsole(...args);
-    origConsoleWarn.apply(console, args);
+  console.warn = (...input: unknown[]): void => {
+    recordConsole(...input);
+    origConsoleWarn.apply(console, input);
   };
   function onWindowError(event: ErrorEvent): void {
-    capturedConsole.push(event.error instanceof Error ? formatArg(event.error) : event.message);
+    capturedConsole.push(event.error instanceof Error ? formatArgument(event.error) : event.message);
   }
   function onUnhandledRejection(event: PromiseRejectionEvent): void {
-    capturedConsole.push(formatArg(event.reason));
+    capturedConsole.push(formatArgument(event.reason));
   }
-  window.addEventListener('error', onWindowError);
-  window.addEventListener('unhandledrejection', onUnhandledRejection);
+  globalThis.addEventListener('error', onWindowError);
+  globalThis.addEventListener('unhandledrejection', onUnhandledRejection);
 
   try {
     await app.plugins.enablePluginAndSave(pluginId);
@@ -162,16 +162,16 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgs
     app.plugins.loadPlugin = origLoadPlugin;
     console.error = origConsoleError;
     console.warn = origConsoleWarn;
-    window.removeEventListener('error', onWindowError);
-    window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    globalThis.removeEventListener('error', onWindowError);
+    globalThis.removeEventListener('unhandledrejection', onUnhandledRejection);
   }
 
-  const isLoaded = pluginId in app.plugins.plugins;
+  const isLoaded = Object.hasOwn(app.plugins.plugins, pluginId);
 
   let rendererConsoleErrors: string | undefined;
   if (!errorMessage && !isLoaded) {
     const joined = capturedConsole.join('\n').trim();
-    rendererConsoleErrors = joined ? joined : undefined;
+    rendererConsoleErrors = joined || undefined;
   }
 
   return {

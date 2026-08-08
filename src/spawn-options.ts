@@ -34,7 +34,9 @@ export interface SpawnVisibilityFlags {
    */
   readonly detached: boolean;
 
-  /** Whether to hide the child's console window (`windowsHide`). */
+  /**
+  Whether to hide the child's console window (`windowsHide`).
+   */
   readonly windowsHide: boolean;
 }
 

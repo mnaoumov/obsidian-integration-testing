@@ -7,9 +7,9 @@
 export type {
   AsarFallback,
   AsarFallbackTier,
-  CheckAsarFallbackParams
+  ResolveAsarFallbackParams
 } from './asar-fallback-detection.ts';
-export { checkAsarFallback } from './asar-fallback-detection.ts';
+export { resolveAsarFallback } from './asar-fallback-detection.ts';
 export type {
   CdpConnection,
   ConnectToCdpOptions
@@ -32,11 +32,11 @@ export { buildDemoVaultPopulate } from './demo-vault-populate.ts';
 export type { ReadDemoVaultTreeParams } from './demo-vault-tree.ts';
 export { readDemoVaultTree } from './demo-vault-tree.ts';
 export type {
-  CheckElectronCompatibilityParams,
   ElectronCompatibility,
-  ElectronCompatibilityTier
+  ElectronCompatibilityTier,
+  ResolveElectronCompatibilityParams
 } from './electron-compatibility.ts';
-export { checkElectronCompatibility } from './electron-compatibility.ts';
+export { resolveElectronCompatibility } from './electron-compatibility.ts';
 export type {
   EvalInObsidianParams,
   HoverElementParams,
@@ -51,11 +51,11 @@ export { evalInObsidian } from './eval-in-obsidian.ts';
 export type { IncompatibleInstallerVersionErrorConstructorParams } from './incompatible-installer-version-error.ts';
 export { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 export type {
-  CheckInstallerCompatibilityParams,
   InstallerCompatibility,
-  InstallerCompatibilityTier
+  InstallerCompatibilityTier,
+  ResolveInstallerCompatibilityParams
 } from './installer-compatibility.ts';
-export { checkInstallerCompatibility } from './installer-compatibility.ts';
+export { resolveInstallerCompatibility } from './installer-compatibility.ts';
 export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';
 export type {
@@ -78,8 +78,8 @@ export { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams
-} from './temp-vault.ts';
-export { TempVault } from './temp-vault.ts';
+} from './temporary-vault.ts';
+export { TemporaryVault } from './temporary-vault.ts';
 export type {
   AppiumSessionInfo,
   AppiumTransportConfig

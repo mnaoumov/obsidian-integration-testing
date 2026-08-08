@@ -32,7 +32,7 @@ export const setup = noPluginGlobalSetup.setup;
 export const teardown = noPluginGlobalSetup.teardown;
 
 export {
-  getTempVault,
+  getTemporaryVault,
   getTransportOptions
 } from './global-setup.ts';
 

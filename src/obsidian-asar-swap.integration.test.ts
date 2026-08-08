@@ -54,7 +54,7 @@ describe.runIf(SHOULD_RUN)('Linux asar-swap version-pin regression', () => {
       });
       try {
         const runningVersion = await connection.evalInObsidian({
-          fn({ obsidianModule }): string {
+          callback({ obsidianModule }): string {
             return obsidianModule.apiVersion;
           }
         });

@@ -10,9 +10,7 @@
 
 /* v8 ignore start -- Integration-time teardown covered by integration tests, not unit tests. */
 
-import { teardown } from './global-setup-no-plugin.ts';
-
 // eslint-disable-next-line import-x/no-default-export -- Jest's globalTeardown loader requires a default-export function.
-export default teardown;
+export { teardown as default } from './global-setup-no-plugin.ts';
 
 /* v8 ignore stop */

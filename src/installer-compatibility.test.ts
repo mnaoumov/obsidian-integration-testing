@@ -6,13 +6,13 @@ import {
 
 import type { ObsidianVersionMetadata } from './obsidian-metadata.ts';
 
-import { checkInstallerCompatibility } from './installer-compatibility.ts';
+import { resolveInstallerCompatibility } from './installer-compatibility.ts';
 
 const APP_VERSION = '1.13.1';
 
-describe('checkInstallerCompatibility', () => {
+describe('resolveInstallerCompatibility', () => {
   it('is `unknown` when the installer version is not known', () => {
-    const verdict = checkInstallerCompatibility({
+    const verdict = resolveInstallerCompatibility({
       appVersion: APP_VERSION,
       installerVersion: undefined,
       metadata: { minRunnableInstallerVersion: '1.1.9' }
@@ -21,7 +21,7 @@ describe('checkInstallerCompatibility', () => {
   });
 
   it('is `unknown` when there is no metadata entry', () => {
-    const verdict = checkInstallerCompatibility({
+    const verdict = resolveInstallerCompatibility({
       appVersion: APP_VERSION,
       installerVersion: '1.1.9',
       metadata: undefined
@@ -31,14 +31,14 @@ describe('checkInstallerCompatibility', () => {
 
   it('is `unknown` when the entry has no run floor', () => {
     const metadata: ObsidianVersionMetadata = { channel: 'catalyst' };
-    const verdict = checkInstallerCompatibility({ appVersion: APP_VERSION, installerVersion: '1.1.9', metadata });
+    const verdict = resolveInstallerCompatibility({ appVersion: APP_VERSION, installerVersion: '1.1.9', metadata });
     expect(verdict.tier).toBe('unknown');
     expect(verdict.installerVersion).toBe('1.1.9');
   });
 
   it('is `unrunnable` when the installer is below the run floor', () => {
     const metadata: ObsidianVersionMetadata = { minRunnableInstallerVersion: '1.1.9' };
-    const verdict = checkInstallerCompatibility({ appVersion: APP_VERSION, installerVersion: '0.14.5', metadata });
+    const verdict = resolveInstallerCompatibility({ appVersion: APP_VERSION, installerVersion: '0.14.5', metadata });
     expect(verdict).toEqual({
       appVersion: APP_VERSION,
       installerVersion: '0.14.5',
@@ -52,7 +52,7 @@ describe('checkInstallerCompatibility', () => {
       minRecommendedInstallerVersion: '0.11.0',
       minRunnableInstallerVersion: '0.6.4'
     };
-    const verdict = checkInstallerCompatibility({ appVersion: '0.15.6', installerVersion: '0.5.0', metadata });
+    const verdict = resolveInstallerCompatibility({ appVersion: '0.15.6', installerVersion: '0.5.0', metadata });
     expect(verdict.tier).toBe('unrunnable');
     expect(verdict.minRecommendedInstallerVersion).toBe('0.11.0');
     expect(verdict.minRunnableInstallerVersion).toBe('0.6.4');
@@ -63,7 +63,7 @@ describe('checkInstallerCompatibility', () => {
       minRecommendedInstallerVersion: '0.11.0',
       minRunnableInstallerVersion: '0.6.4'
     };
-    const verdict = checkInstallerCompatibility({ appVersion: '0.15.6', installerVersion: '0.6.4', metadata });
+    const verdict = resolveInstallerCompatibility({ appVersion: '0.15.6', installerVersion: '0.6.4', metadata });
     expect(verdict.tier).toBe('nagged');
     expect(verdict.minRecommendedInstallerVersion).toBe('0.11.0');
     expect(verdict.message).toContain('0.11.0');
@@ -74,7 +74,7 @@ describe('checkInstallerCompatibility', () => {
       minRecommendedInstallerVersion: '0.11.0',
       minRunnableInstallerVersion: '0.6.4'
     };
-    const verdict = checkInstallerCompatibility({ appVersion: '0.15.6', installerVersion: '0.12.0', metadata });
+    const verdict = resolveInstallerCompatibility({ appVersion: '0.15.6', installerVersion: '0.12.0', metadata });
     expect(verdict).toEqual({
       appVersion: '0.15.6',
       installerVersion: '0.12.0',
@@ -86,7 +86,7 @@ describe('checkInstallerCompatibility', () => {
 
   it('is `ok` (no message) when at/above the run floor and no recommended floor is known', () => {
     const metadata: ObsidianVersionMetadata = { minRunnableInstallerVersion: '1.1.9' };
-    const verdict = checkInstallerCompatibility({ appVersion: APP_VERSION, installerVersion: '1.5.8', metadata });
+    const verdict = resolveInstallerCompatibility({ appVersion: APP_VERSION, installerVersion: '1.5.8', metadata });
     expect(verdict).toEqual({
       appVersion: APP_VERSION,
       installerVersion: '1.5.8',

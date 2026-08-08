@@ -25,12 +25,16 @@ import {
 
 exitIfScriptDisabled();
 
-/** The subset of the upstream `obsidian-versions.json` document we read. */
+/**
+The subset of the upstream `obsidian-versions.json` document we read.
+*/
 interface UpstreamCatalog {
   readonly versions: readonly UpstreamVersionEntry[];
 }
 
-/** The subset of an upstream entry's `downloads` map we bake into our catalog. */
+/**
+The subset of an upstream entry's `downloads` map we bake into our catalog.
+*/
 interface UpstreamDownloads {
   readonly asar?: string;
   readonly dmg?: string;
@@ -38,7 +42,9 @@ interface UpstreamDownloads {
   readonly tar?: string;
 }
 
-/** The subset of an upstream `obsidian-versions.json` version entry we read. */
+/**
+The subset of an upstream `obsidian-versions.json` version entry we read.
+*/
 interface UpstreamVersionEntry {
   readonly changelogUrl?: string;
   readonly downloads?: UpstreamDownloads;
@@ -104,7 +110,7 @@ async function main(): Promise<void> {
     } else {
       table[entry.version] = {
         channel: entry.isBeta ? 'catalyst' : 'public',
-        ...(entry.changelogUrl === undefined ? {} : { changelogUrl: entry.changelogUrl }),
+        ...(entry.changelogUrl !== undefined && { changelogUrl: entry.changelogUrl }),
         downloads
       };
       added++;

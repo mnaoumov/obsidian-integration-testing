@@ -14,25 +14,39 @@
  * Parameters for {@link pollUntil}.
  */
 export interface PollUntilParams<Result> {
-  /** Runs one attempt and resolves with its result. */
+  /**
+  Runs one attempt and resolves with its result.
+   */
   attempt(this: void): Promise<Result>;
 
-  /** Delay between attempts, in milliseconds. */
+  /**
+  Delay between attempts, in milliseconds.
+   */
   readonly intervalInMilliseconds: number;
 
-  /** Returns the current time in milliseconds (injected for deterministic tests). */
+  /**
+  Returns the current time in milliseconds (injected for deterministic tests).
+   */
   nowInMilliseconds(this: void): number;
 
-  /** Sleeps for the given number of milliseconds (injected for deterministic tests). */
+  /**
+  Sleeps for the given number of milliseconds (injected for deterministic tests).
+   */
   sleep(this: void, milliseconds: number): Promise<void>;
 
-  /** Total budget before the poll rejects, in milliseconds. */
+  /**
+  Total budget before the poll rejects, in milliseconds.
+   */
   readonly timeoutInMilliseconds: number;
 
-  /** Optional detail appended to the timeout error message. */
+  /**
+  Optional detail appended to the timeout error message.
+   */
   readonly timeoutMessage?: string;
 
-  /** Whether a given attempt result is acceptable (stops the poll). */
+  /**
+  Whether a given attempt result is acceptable (stops the poll).
+   */
   until(this: void, result: Result): boolean;
 }
 

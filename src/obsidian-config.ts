@@ -46,6 +46,37 @@ interface ObsidianVaultEntry {
 }
 
 /**
+ * Removes a vault entry from Obsidian's `obsidian.json` config file.
+ *
+ * @param vaultPath - The absolute path to the vault folder.
+ * @returns `true` if the vault was found and removed, `false` otherwise.
+ */
+export function didRemoveVaultFromConfig(vaultPath: string): boolean {
+  const config = readObsidianJson();
+  if (!config) {
+    return false;
+  }
+
+  const normalizedTarget = normalizePath(vaultPath);
+  let wasFound = false;
+
+  for (const [id, entry] of Object.entries(config.vaults)) {
+    if (normalizePath(entry.path) === normalizedTarget) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Removing a vault entry by its dynamic key.
+      delete config.vaults[id];
+      wasFound = true;
+      break;
+    }
+  }
+
+  if (wasFound) {
+    writeObsidianJson(config);
+  }
+
+  return wasFound;
+}
+
+/**
  * Returns the platform-specific path to the **user's** Obsidian config (user-data)
  * directory — `%APPDATA%\obsidian` on Windows, `~/Library/Application Support/obsidian`
  * on macOS, `$XDG_CONFIG_HOME/obsidian` (or `~/.config/obsidian`) on Linux.
@@ -55,15 +86,13 @@ interface ObsidianVaultEntry {
  *
  * @returns The absolute path to the `obsidian/` config directory.
  */
-export function getObsidianConfigDir(): string {
+export function getObsidianConfigDirectory(): string {
   if (process.platform === 'win32') {
     const appData = process.env['APPDATA'];
     if (appData) {
       return join(appData, 'obsidian');
     }
-  }
-
-  if (process.platform === 'darwin') {
+  } else if (process.platform === 'darwin') {
     return join(homedir(), 'Library', 'Application Support', 'obsidian');
   }
 
@@ -104,37 +133,6 @@ export function isVaultRegistered(vaultPath: string): boolean {
 }
 
 /**
- * Removes a vault entry from Obsidian's `obsidian.json` config file.
- *
- * @param vaultPath - The absolute path to the vault folder.
- * @returns `true` if the vault was found and removed, `false` otherwise.
- */
-export function removeVaultFromConfig(vaultPath: string): boolean {
-  const config = readObsidianJson();
-  if (!config) {
-    return false;
-  }
-
-  const normalizedTarget = normalizePath(vaultPath);
-  let wasFound = false;
-
-  for (const [id, entry] of Object.entries(config.vaults)) {
-    if (normalizePath(entry.path) === normalizedTarget) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Removing a vault entry by its dynamic key.
-      delete config.vaults[id];
-      wasFound = true;
-      break;
-    }
-  }
-
-  if (wasFound) {
-    writeObsidianJson(config);
-  }
-
-  return wasFound;
-}
-
-/**
  * Normalizes a vault path for comparison.
  * On Windows, paths are case-insensitive and separators may vary.
  *
@@ -152,7 +150,7 @@ function normalizePath(vaultPath: string): string {
  * @returns The parsed config, or `undefined` if the file doesn't exist or can't be parsed.
  */
 function readObsidianJson(): ObsidianJson | undefined {
-  const configPath = join(getObsidianConfigDir(), 'obsidian.json');
+  const configPath = join(getObsidianConfigDirectory(), 'obsidian.json');
   try {
     const content = readFileSync(configPath, 'utf-8');
     return JSON.parse(content) as ObsidianJson;
@@ -167,6 +165,6 @@ function readObsidianJson(): ObsidianJson | undefined {
  * @param config - The config to write.
  */
 function writeObsidianJson(config: ObsidianJson): void {
-  const configPath = join(getObsidianConfigDir(), 'obsidian.json');
+  const configPath = join(getObsidianConfigDirectory(), 'obsidian.json');
   writeFileSync(configPath, JSON.stringify(config));
 }

@@ -40,8 +40,8 @@ import type { ObsidianTransport } from './transport.ts';
 
 import {
   checkIsAppiumDriverInstalled,
-  resolveShouldAutoInstallAppiumDependencies,
-  UIAUTOMATOR2_DRIVER_NAME
+  UIAUTOMATOR2_DRIVER_NAME,
+  willAutoInstallAppiumDependencies
 } from './appium-dependencies.ts';
 import {
   resolveAppiumStartTimeoutInMilliseconds,
@@ -53,28 +53,28 @@ import {
 } from './avd-list.ts';
 import {
   resolveInstallerCompatibilityAction,
-  resolveShouldThrowOnIncompatibleInstaller,
-  resolveShouldThrowOnSilentAsarFallback,
-  resolveShouldWarnOnCompatibilityIssues
+  willThrowOnIncompatibleInstaller,
+  willThrowOnSilentAsarFallback,
+  willWarnOnCompatibilityIssues
 } from './compatibility-options.ts';
 import {
   checkDeviceIdle,
   resolveDeviceIdleTimeoutInMilliseconds
 } from './device-readiness.ts';
-import { buildEmulatorArgs } from './emulator-args.ts';
+import { buildEmulatorArguments } from './emulator-arguments.ts';
 import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
-import { checkInstallerCompatibility } from './installer-compatibility.ts';
+import { resolveInstallerCompatibility } from './installer-compatibility.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import {
   HARNESS_TEMP_DIR_NAME,
   OWNED_USER_DATA_DIR_PREFIX,
-  resolveShouldSweepLeftovers,
-  sweepDeviceLeftovers
+  sweepDeviceLeftovers,
+  willSweepLeftovers
 } from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
-import { getObsidianConfigDir } from './obsidian-config.ts';
+import { getObsidianConfigDirectory } from './obsidian-config.ts';
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import {
   detectInstalledShellVersion,
@@ -111,7 +111,7 @@ const APPIUM_CONNECTION_RETRY_COUNT = 3;
 const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30000;
+const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
 // Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
 // Appium server (it has no effect as a capability) avoids the failure
@@ -121,26 +121,32 @@ const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
-const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120000;
-const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10000;
+const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120_000;
+const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10_000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
-const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120000;
-const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120000;
+const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120_000;
+const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**
  * How the requested app (asar) version will be applied to an owned instance; at
  * most one field is set (see {@link resolveAsarPlan}).
  */
 interface AsarPlan {
-  /** The user's newest installed asar to provision as-is (no download). */
+  /**
+  The user's newest installed asar to provision as-is (no download).
+   */
   readonly asar?: OwnedInstanceConfig['asar'];
 
-  /** The app version to download and asar-swap onto the shell. */
+  /**
+  The app version to download and asar-swap onto the shell.
+   */
   readonly asarVersionToSwap?: string | undefined;
 
-  /** The app version whose own installer shell to download (a downgrade). */
+  /**
+  The app version whose own installer shell to download (a downgrade).
+   */
   readonly downgradeInstallerVersion?: string | undefined;
 }
 
@@ -148,13 +154,19 @@ interface AsarPlan {
  * Parameters for {@link AppiumTransportFactory.ensureDeviceConnected}.
  */
 interface EnsureDeviceConnectedParams {
-  /** AVD name to connect to (starting a new emulator if not already running). */
+  /**
+  AVD name to connect to (starting a new emulator if not already running).
+   */
   readonly avdName: string;
 
-  /** Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it). */
+  /**
+  Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it).
+   */
   readonly deviceIdleTimeoutInMilliseconds: number;
 
-  /** Whether the auto-started emulator window is shown (omitted → hidden). */
+  /**
+  Whether the auto-started emulator window is shown (omitted → hidden).
+   */
   readonly isEmulatorVisible?: boolean | undefined;
 }
 
@@ -162,10 +174,14 @@ interface EnsureDeviceConnectedParams {
  * Result of {@link AppiumTransportFactory.ensureDeviceConnected}.
  */
 interface EnsureDeviceConnectedResult {
-  /** The actual device ID that is connected (may differ from the requested one). */
+  /**
+  The actual device ID that is connected (may differ from the requested one).
+   */
   readonly actualDeviceId: string;
 
-  /** The emulator process, if one was auto-started. */
+  /**
+  The emulator process, if one was auto-started.
+   */
   readonly emulatorProcess?: ChildProcess | undefined;
 }
 
@@ -173,10 +189,14 @@ interface EnsureDeviceConnectedResult {
  * The locally-installed Obsidian shell resolved by {@link resolveInstalledShellOrNull}.
  */
 interface InstalledShell {
-  /** Absolute path to the installed shell executable. */
+  /**
+  Absolute path to the installed shell executable.
+   */
   readonly exePath: string;
 
-  /** The detected shell version, or `undefined` when it cannot be determined. */
+  /**
+  The detected shell version, or `undefined` when it cannot be determined.
+   */
   readonly shellVersion: string | undefined;
 }
 
@@ -185,16 +205,24 @@ interface InstalledShell {
  * with helpers to inspect its captured output and exit status.
  */
 interface ProcessLaunch {
-  /** The spawned process. */
+  /**
+  The spawned process.
+   */
   process: ChildProcess;
 
-  /** Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`. */
+  /**
+  Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`.
+   */
   readExitInfo: () => ProcessExitInfo | undefined;
 
-  /** Returns the captured stdout+stderr (bounded to the most recent output). */
+  /**
+  Returns the captured stdout+stderr (bounded to the most recent output).
+   */
   readOutput: () => string;
 
-  /** Stops accumulating output. Call once startup has succeeded. */
+  /**
+  Stops accumulating output. Call once startup has succeeded.
+   */
   stopCapture: () => void;
 }
 
@@ -202,31 +230,49 @@ interface ProcessLaunch {
  * Parameters for {@link AppiumTransportFactory.startAppiumAndEmulator}.
  */
 interface StartAppiumAndEmulatorParams {
-  /** Resolved timeout in milliseconds for the auto-started Appium server to become ready. */
+  /**
+  Resolved timeout in milliseconds for the auto-started Appium server to become ready.
+   */
   readonly appiumStartTimeoutInMilliseconds: number;
 
-  /** The Appium server URL. */
+  /**
+  The Appium server URL.
+   */
   readonly appiumUrl: URL;
 
-  /** AVD name to start. */
+  /**
+  AVD name to start.
+   */
   readonly avdName: string;
 
-  /** Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it). */
+  /**
+  Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it).
+   */
   readonly deviceIdleTimeoutInMilliseconds: number;
 
-  /** Whether the auto-started Appium server console window is shown (omitted → hidden). */
+  /**
+  Whether the auto-started Appium server console window is shown (omitted → hidden).
+   */
   readonly isAppiumConsoleVisible?: boolean | undefined;
 
-  /** Whether the auto-started emulator window is shown (omitted → hidden). */
+  /**
+  Whether the auto-started emulator window is shown (omitted → hidden).
+   */
   readonly isEmulatorVisible?: boolean | undefined;
 
-  /** The Appium server port. */
+  /**
+  The Appium server port.
+   */
   readonly port: number;
 
-  /** Whether missing Appium dependencies may be auto-installed before the server is auto-started. */
+  /**
+  Whether missing Appium dependencies may be auto-installed before the server is auto-started.
+   */
   readonly shouldAutoInstallAppiumDependencies: boolean;
 
-  /** Whether Appium auto-start is allowed. */
+  /**
+  Whether Appium auto-start is allowed.
+   */
   readonly shouldAutoStartAppium?: boolean | undefined;
 }
 
@@ -234,13 +280,19 @@ interface StartAppiumAndEmulatorParams {
  * Result of {@link AppiumTransportFactory.startAppiumAndEmulator}.
  */
 interface StartAppiumAndEmulatorResult {
-  /** The actual device ID that is connected (may differ from the requested one). */
+  /**
+  The actual device ID that is connected (may differ from the requested one).
+   */
   readonly actualDeviceId: string;
 
-  /** The Appium server process, if one was auto-started. */
+  /**
+  The Appium server process, if one was auto-started.
+   */
   readonly appiumProcess?: ChildProcess | undefined;
 
-  /** The emulator process, if one was auto-started. */
+  /**
+  The emulator process, if one was auto-started.
+   */
   readonly emulatorProcess?: ChildProcess | undefined;
 }
 
@@ -248,26 +300,32 @@ interface StartAppiumAndEmulatorResult {
  * Parameters for {@link AppiumTransportFactory.sweepDeviceLeftoverVaults}.
  */
 interface SweepDeviceLeftoverVaultsParams {
-  /** The device UDID to sweep. */
+  /**
+  The device UDID to sweep.
+   */
   readonly deviceId: string;
 
-  /** The device-side directory Obsidian Mobile stores its vaults in. */
+  /**
+  The device-side directory Obsidian Mobile stores its vaults in.
+   */
   readonly vaultBasePath: string;
 }
 
 let cachedTransport: ObsidianTransport | undefined;
 
 /**
- * Parameters for {@link checkAndReportCompatibility}.
+ * Parameters for {@link resolveAndReportCompatibility}.
  */
-interface CheckAndReportCompatibilityParams {
+interface ResolveAndReportCompatibilityParams {
   /**
    * The app (asar) version that will be swapped onto the shell, or `undefined`
    * when no asar-swap will happen (nothing is checked then).
    */
   readonly appVersion: string | undefined;
 
-  /** The resolved installer/shell version, or `undefined`. */
+  /**
+  The resolved installer/shell version, or `undefined`.
+   */
   readonly installerVersion: string | undefined;
 
   /**
@@ -276,7 +334,9 @@ interface CheckAndReportCompatibilityParams {
    */
   readonly shouldThrowOnIncompatibleInstaller: boolean;
 
-  /** Whether a `'nagged'` (or proceeding-`'unrunnable'`) verdict is logged. */
+  /**
+  Whether a `'nagged'` (or proceeding-`'unrunnable'`) verdict is logged.
+   */
   readonly shouldWarnOnCompatibilityIssues: boolean;
 }
 
@@ -343,7 +403,7 @@ class AppiumTransportFactory {
       deviceId,
       isSessionOwner: false,
       platform: 'android',
-      shouldSweepLeftovers: resolveShouldSweepLeftovers(options),
+      shouldSweepLeftovers: willSweepLeftovers(options),
       ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
       ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
       ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
@@ -353,22 +413,22 @@ class AppiumTransportFactory {
   private checkAppiumReachable(url: URL): Promise<void> {
     return new Promise((resolve, reject) => {
       const statusUrl = new URL('/status', url);
-      const req = http.get(statusUrl, { timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (res) => {
-        res.resume();
+      const request = http.get(statusUrl, { timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (response) => {
+        response.resume();
         resolve();
       });
-      req.on('timeout', () => {
-        req.destroy();
+      request.on('timeout', () => {
+        request.destroy();
         reject(
           new Error(
             `Appium server at ${url.origin} did not respond within ${String(APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS)}ms. Is the Appium server running?`
           )
         );
       });
-      req.on('error', (err) => {
+      request.on('error', (error) => {
         reject(
           new Error(
-            `Cannot reach Appium server at ${url.origin}: ${err.message}. Is the Appium server running?`
+            `Cannot reach Appium server at ${url.origin}: ${error.message}. Is the Appium server running?`
           )
         );
       });
@@ -381,8 +441,8 @@ class AppiumTransportFactory {
     const url = new URL(options.appiumUrl);
 
     const port = Number(url.port);
-    if (isNaN(port)) {
-      throw new Error(`Invalid port in appiumUrl: ${url.port}`);
+    if (Number.isNaN(port)) {
+      throw new TypeError(`Invalid port in appiumUrl: ${url.port}`);
     }
 
     const appId = options.appId ?? APP_PACKAGE;
@@ -399,7 +459,7 @@ class AppiumTransportFactory {
         isAppiumConsoleVisible: options.isAppiumConsoleVisible,
         isEmulatorVisible: options.isEmulatorVisible,
         port,
-        shouldAutoInstallAppiumDependencies: resolveShouldAutoInstallAppiumDependencies(options),
+        shouldAutoInstallAppiumDependencies: willAutoInstallAppiumDependencies(options),
         shouldAutoStartAppium: options.shouldAutoStartAppium
       });
 
@@ -411,7 +471,7 @@ class AppiumTransportFactory {
        * Before `remote()` launches Obsidian — the last point at which nothing
        * has to enumerate the device's vaults yet.
        */
-      if (resolveShouldSweepLeftovers(options)) {
+      if (willSweepLeftovers(options)) {
         await this.sweepDeviceLeftoverVaults({
           deviceId: actualDeviceId,
           vaultBasePath: options.vaultBasePath ?? DEFAULT_ANDROID_VAULT_BASE_PATH
@@ -450,7 +510,7 @@ class AppiumTransportFactory {
         browser,
         deviceId: actualDeviceId,
         platform: 'android',
-        shouldSweepLeftovers: resolveShouldSweepLeftovers(options),
+        shouldSweepLeftovers: willSweepLeftovers(options),
         ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
         ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
         ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
@@ -647,7 +707,7 @@ class AppiumTransportFactory {
           ['-s', deviceId, 'emu', 'avd', 'name'],
           { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
           (_error, stdout) => {
-            resolve(stdout.split('\n')[0]?.trim() ?? '');
+            resolve(stdout.split('\n', 1)[0]?.trim() ?? '');
           }
         );
       });
@@ -677,14 +737,14 @@ class AppiumTransportFactory {
     const lines = output.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
     return lines
       .filter((line) => line.includes('\tdevice'))
-      .map((line) => line.split('\t')[0] ?? '');
+      .map((line) => line.split('\t', 1)[0] ?? '');
   }
 
-  private getDeviceProp(deviceId: string, prop: string): Promise<string> {
+  private getDeviceProperty(deviceId: string, property: string): Promise<string> {
     return new Promise((resolve) => {
       execFile(
         'adb',
-        ['-s', deviceId, 'shell', 'getprop', prop],
+        ['-s', deviceId, 'shell', 'getprop', property],
         { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
         (error, stdout) => {
           // Return no output on timeout/error (not partial stdout) so a non-responsive guest reads as "not idle".
@@ -850,15 +910,15 @@ class AppiumTransportFactory {
   private startEmulator(avdName: string, isEmulatorVisible?: boolean): ProcessLaunch {
     const emulatorBinary = this.resolveEmulatorBinary();
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
-    const args = buildEmulatorArgs({ avdName, isHidden: isWindowHidden });
+    const input = buildEmulatorArguments({ avdName, isHidden: isWindowHidden });
     const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);
-    this.log(`Running: ${emulatorBinary} ${args.join(' ')}`);
+    this.log(`Running: ${emulatorBinary} ${input.join(' ')}`);
     /*
      * Pipe (rather than ignore) stdout/stderr so an early failure such as
      * "x86_64 emulation currently requires hardware acceleration" can be
      * surfaced immediately instead of waiting out the full boot timeout.
      */
-    const child = spawn(emulatorBinary, args, {
+    const child = spawn(emulatorBinary, input, {
       detached,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide
@@ -979,7 +1039,7 @@ class AppiumTransportFactory {
           );
           return listing.split('\n');
         },
-        removeDir: async (path: string): Promise<void> => {
+        removeDirectory: async (path: string): Promise<void> => {
           await exec(
             ['adb', '-s', deviceId, 'shell', 'rm', '-rf', path],
             { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS }
@@ -1129,12 +1189,12 @@ class AppiumTransportFactory {
     );
 
     while (Date.now() < deadline) {
-      const [bootAnimationProp, packageListOutput] = await Promise.all([
-        this.getDeviceProp(deviceId, 'init.svc.bootanim'),
+      const [bootAnimationProperty, packageListOutput] = await Promise.all([
+        this.getDeviceProperty(deviceId, 'init.svc.bootanim'),
         this.listInstalledPackages(deviceId)
       ]);
 
-      if (checkDeviceIdle({ bootAnimationProp, packageListOutput })) {
+      if (checkDeviceIdle({ bootAnimationProperty, packageListOutput })) {
         this.log(`Device ${deviceId} is idle after ${String(Date.now() - start)}ms.`);
         return;
       }
@@ -1238,60 +1298,6 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
 }
 
 /**
- * Runs the proactive installer↔app compatibility check for an asar-swap and acts
- * on the verdict: for an installer below the app's run floor either throws
- * {@link IncompatibleInstallerVersionError} (when
- * {@link CheckAndReportCompatibilityParams.shouldThrowOnIncompatibleInstaller})
- * or proceeds to launch with a warning; for a runnable-but-below-recommended
- * installer logs a warning. Both warnings are suppressed when
- * {@link CheckAndReportCompatibilityParams.shouldWarnOnCompatibilityIssues} is
- * `false`.
- *
- * @param params - The resolved versions and the warn/throw knobs.
- * @returns The verdict, or `undefined` when there is no asar-swap to check.
- */
-function checkAndReportCompatibility(params: CheckAndReportCompatibilityParams): InstallerCompatibility | undefined {
-  const { appVersion, installerVersion, shouldThrowOnIncompatibleInstaller, shouldWarnOnCompatibilityIssues } = params;
-  if (appVersion === undefined) {
-    return undefined;
-  }
-
-  const compatibility = checkInstallerCompatibility({
-    appVersion,
-    installerVersion,
-    metadata: getVersionMetadata(appVersion)
-  });
-
-  const action = resolveInstallerCompatibilityAction({
-    shouldThrowOnIncompatibleInstaller,
-    shouldWarnOnCompatibilityIssues,
-    tier: compatibility.tier
-  });
-
-  if (action === 'throw') {
-    throw new IncompatibleInstallerVersionError({
-      appVersion: compatibility.appVersion,
-      installerVersion: ensureNonNullable(compatibility.installerVersion),
-      minRunnableInstallerVersion: ensureNonNullable(compatibility.minRunnableInstallerVersion)
-    });
-  }
-
-  if (action === 'warn-unrunnable') {
-    log(
-      `[transport-factory:obsidian-cdp] Obsidian installer ${ensureNonNullable(compatibility.installerVersion)} is below the `
-        + `run floor ${ensureNonNullable(compatibility.minRunnableInstallerVersion)} for Obsidian ${compatibility.appVersion}; `
-        + 'proceeding to launch (shouldThrowOnIncompatibleInstaller is false) — the boot will likely dead-boot.'
-    );
-  }
-
-  if (action === 'warn-nagged') {
-    log(`[transport-factory:obsidian-cdp] ${ensureNonNullable(compatibility.message)}`);
-  }
-
-  return compatibility;
-}
-
-/**
  * Creates a desktop CDP transport. When an explicit `port` is given the
  * transport attaches to an already-running Obsidian on that port; otherwise it
  * launches and owns an isolated instance (the default, hermetic mode).
@@ -1320,8 +1326,8 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
     isObsidianAppVisible: options?.isObsidianAppVisible,
     ownedInstance,
     shouldDisableSandbox: options?.shouldDisableSandbox,
-    shouldThrowOnSilentAsarFallback: resolveShouldThrowOnSilentAsarFallback(options?.shouldThrowOnSilentAsarFallback),
-    shouldWarnOnCompatibilityIssues: resolveShouldWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
+    shouldThrowOnSilentAsarFallback: willThrowOnSilentAsarFallback(options?.shouldThrowOnSilentAsarFallback),
+    shouldWarnOnCompatibilityIssues: willWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
   }));
 }
 
@@ -1330,10 +1336,62 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
  *
  * @returns The absolute path to the new directory.
  */
-function createOwnedUserDataDir(): string {
+function createOwnedUserDataDirectory(): string {
   const root = join(tmpdir(), HARNESS_TEMP_DIR_NAME);
   mkdirSync(root, { recursive: true });
   return mkdtempSync(join(root, OWNED_USER_DATA_DIR_PREFIX));
+}
+
+/**
+ * Runs the proactive installer↔app compatibility check for an asar-swap and acts
+ * on the verdict: for an installer below the app's run floor either throws
+ * {@link IncompatibleInstallerVersionError} (when
+ * {@link ResolveAndReportCompatibilityParams.shouldThrowOnIncompatibleInstaller})
+ * or proceeds to launch with a warning; for a runnable-but-below-recommended
+ * installer logs a warning. Both warnings are suppressed when
+ * {@link ResolveAndReportCompatibilityParams.shouldWarnOnCompatibilityIssues} is
+ * `false`.
+ *
+ * @param params - The resolved versions and the warn/throw knobs.
+ * @returns The verdict, or `undefined` when there is no asar-swap to check.
+ */
+function resolveAndReportCompatibility(params: ResolveAndReportCompatibilityParams): InstallerCompatibility | undefined {
+  const { appVersion, installerVersion, shouldThrowOnIncompatibleInstaller, shouldWarnOnCompatibilityIssues } = params;
+  if (appVersion === undefined) {
+    return undefined;
+  }
+
+  const compatibility = resolveInstallerCompatibility({
+    appVersion,
+    installerVersion,
+    metadata: getVersionMetadata(appVersion)
+  });
+
+  const action = resolveInstallerCompatibilityAction({
+    shouldThrowOnIncompatibleInstaller,
+    shouldWarnOnCompatibilityIssues,
+    tier: compatibility.tier
+  });
+
+  if (action === 'throw') {
+    throw new IncompatibleInstallerVersionError({
+      appVersion: compatibility.appVersion,
+      installerVersion: ensureNonNullable(compatibility.installerVersion),
+      minRunnableInstallerVersion: ensureNonNullable(compatibility.minRunnableInstallerVersion)
+    });
+  }
+
+  if (action === 'warn-unrunnable') {
+    log(
+      `[transport-factory:obsidian-cdp] Obsidian installer ${ensureNonNullable(compatibility.installerVersion)} is below the `
+        + `run floor ${ensureNonNullable(compatibility.minRunnableInstallerVersion)} for Obsidian ${compatibility.appVersion}; `
+        + 'proceeding to launch (shouldThrowOnIncompatibleInstaller is false) — the boot will likely dead-boot.'
+    );
+  } else if (action === 'warn-nagged') {
+    log(`[transport-factory:obsidian-cdp] ${ensureNonNullable(compatibility.message)}`);
+  }
+
+  return compatibility;
 }
 
 /**
@@ -1366,7 +1424,7 @@ async function resolveAsarPlan(
   }
 
   if (options?.obsidianInstallerVersion === undefined) {
-    const newest = findNewestAsar(getObsidianConfigDir());
+    const newest = findNewestAsar(getObsidianConfigDirectory());
     if (newest && (shellVersion === undefined || compareVersions(newest.version, shellVersion) >= 0)) {
       return { asar: { path: newest.path, version: newest.version } };
     }
@@ -1408,7 +1466,7 @@ async function resolveInstalledShellOrNull(): Promise<InstalledShell | undefined
  *
  * The concrete (app, installer) version pair is resolved *before* any shell/asar
  * download, so a proactive installer↔app compatibility check
- * ({@link checkInstallerCompatibility}) can fail fast: an installer below the
+ * ({@link resolveInstallerCompatibility}) can fail fast: an installer below the
  * app's run floor throws {@link IncompatibleInstallerVersionError} before
  * anything is downloaded or launched (superseding the reactive dead-boot
  * fast-fail for table-known combos), and a runnable-but-below-recommended
@@ -1444,11 +1502,11 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   // Combination that can dead-boot. The downgrade / own-installer paths run the
   // App's own installer shell, so they always boot and are not checked.
   const swapAppVersion = plan.asarVersionToSwap ?? plan.asar?.version;
-  const compatibility = checkAndReportCompatibility({
+  const compatibility = resolveAndReportCompatibility({
     appVersion: swapAppVersion,
     installerVersion: shellVersion,
-    shouldThrowOnIncompatibleInstaller: resolveShouldThrowOnIncompatibleInstaller(options?.shouldThrowOnIncompatibleInstaller),
-    shouldWarnOnCompatibilityIssues: resolveShouldWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
+    shouldThrowOnIncompatibleInstaller: willThrowOnIncompatibleInstaller(options?.shouldThrowOnIncompatibleInstaller),
+    shouldWarnOnCompatibilityIssues: willWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
   });
 
   // The pin is known runnable — resolve/download the deferred shell + asar now.
@@ -1470,7 +1528,8 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
     ...(asar && { asar }),
     ...(compatibility && { compatibility }),
     exePath: ensureNonNullable(exePath),
-    userDataDir: createOwnedUserDataDir()
+
+    userDataDirectory: createOwnedUserDataDirectory()
   };
 }
 

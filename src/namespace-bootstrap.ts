@@ -59,20 +59,20 @@ export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, 
   };
   const bootstrapVersion = getBootstrapVersion();
   const versionJson = JSON.stringify(bootstrapVersion);
-  const checkResult = await transport.evaluate(
+  const versionMatchJson = await transport.evaluate(
     `JSON.stringify(window.__obsidianIntegrationTesting?.version === ${versionJson})`,
     evalOptions
   );
 
-  if (checkResult === 'true') {
+  if (versionMatchJson === 'true') {
     return;
   }
 
-  const bootstrapExpr = generateFunctionCall(bootstrapNamespace, {
+  const bootstrapExpression = generateFunctionCall(bootstrapNamespace, {
     libResolvers: [...getRegisteredLibResolvers()],
     version: bootstrapVersion
   });
-  await transport.evaluate(bootstrapExpr, evalOptions);
+  await transport.evaluate(bootstrapExpression, evalOptions);
 }
 
 /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process, not in Node. Covered by integration tests. */
@@ -163,9 +163,9 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface EvalWrapperParams {
-    readonly args: Record<string, unknown>;
+    callback(functionArguments: Record<string, unknown>): unknown;
     readonly contextId?: string;
-    fn(fnArgs: Record<string, unknown>): unknown;
+    readonly input: Record<string, unknown>;
   }
 
   interface FileSystemAdapterLike {
@@ -174,8 +174,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface IpcSendSyncParams {
-    readonly args: unknown[];
     readonly channel: string;
+    readonly channelArguments: unknown[];
   }
 
   // Community-plugin API members that old Obsidian versions (e.g. 0.6.x) lack.
@@ -199,6 +199,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // This optional-member view so a `?? '.obsidian'` default is not flagged as an
   // Unnecessary condition.
   interface VaultLike {
+    // eslint-disable-next-line unicorn/name-replacements -- Structural mirror of Obsidian's own `Vault.configDir`; the name has to match for the probe to read it.
     configDir?: string;
   }
 
@@ -281,7 +282,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const STACK_TRACE_PREFIX = '    at';
 
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
-  const holder = window as unknown as Partial<IntegrationTestingHolder>;
+  const holder = globalThis as unknown as Partial<IntegrationTestingHolder>;
   const existingContexts = holder.__obsidianIntegrationTesting?.contexts ?? {};
   const existingObsidianModule = holder.__obsidianIntegrationTesting?.obsidianModule;
   // Warn at most once per bootstrap that `obsidianModule` is `null` on this version.
@@ -290,7 +291,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const ns: IntegrationTestingNamespace = {
     get app() {
       // eslint-disable-next-line @typescript-eslint/no-deprecated -- `app` getter reads `window.app` which is set by Obsidian.
-      return window.app;
+      return globalThis.app;
     },
 
     contexts: existingContexts,
@@ -298,8 +299,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     async destroyCurrentWindow(this: IntegrationTestingNamespace): Promise<void> {
       await this.ensureLayoutReady();
       await sleep(0);
-      const electronWindow = window.electronWindow;
-      window.setTimeout(() => {
+      const electronWindow = globalThis.electronWindow;
+      globalThis.setTimeout(() => {
         electronWindow.destroy();
       }, DESTROY_DELAY_IN_MILLISECONDS);
     },
@@ -342,9 +343,9 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       for (const resolveLib of this.libResolvers) {
         Object.assign(lib, resolveLib());
       }
-      const fullArgs = { ...params.args, app: this.app, context, lib, obsidianModule };
+      const fullArguments = { ...params.input, app: this.app, context, lib, obsidianModule };
       try {
-        const result = await params.fn(fullArgs);
+        const result = await params.callback(fullArguments);
         if (result === undefined) {
           return JSON.stringify({ type: 'undefined' });
         }
@@ -363,52 +364,53 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       // Works inside a plugin-load context. It needs the community-plugin registry
       // (`loadPlugin` + `manifests`), which FIRST appears in Obsidian 0.9.7; the
       // 0.6.4-0.9.6 band has no registry and cannot run it, so return `null` (not
-      // `undefined`) - app-only closures (`fn({ app })`) still run.
+      // `undefined`) - app-only closures (`callback({ app })`) still run.
       // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
       const plugins = this.app.plugins as unknown as PluginsLike;
       if (!plugins.loadPlugin || !plugins.manifests) {
         if (!hasWarnedMissingObsidianModule) {
           hasWarnedMissingObsidianModule = true;
-          console.warn('[obsidian-integration-testing] `obsidianModule` is `null`: this Obsidian version predates the community-plugin API (added in 0.9.7), so the `obsidian` module cannot be resolved. App-only closures (`fn({ app })`) still work.');
+          console.warn('[obsidian-integration-testing] `obsidianModule` is `null`: this Obsidian version predates the community-plugin API (added in 0.9.7), so the `obsidian` module cannot be resolved. App-only closures (`callback({ app })`) still work.');
         }
         return null;
       }
 
       const SLICE_START = 2;
       const randomSuffix = String(Math.random()).slice(SLICE_START);
-      const tempModuleName = `get-obsidian-module-${randomSuffix}`;
+      const temporaryModuleName = `get-obsidian-module-${randomSuffix}`;
       // Old versions (e.g. 0.9.10) leave `vault.configDir` undefined; fall back to
       // Obsidian's default config dir so the temp plugin still gets a valid path,
       // Loads, and its `require('obsidian')` resolves the module.
       // eslint-disable-next-line no-restricted-syntax -- configDir is runtime-optional on old versions.
-      const configDir = (this.app.vault as unknown as VaultLike).configDir ?? '.obsidian';
-      const pluginsDir = `${configDir}/plugins`;
-      const dir = `${pluginsDir}/${tempModuleName}`;
-      this.app.plugins.manifests[tempModuleName] = {
+      const configDirectory = (this.app.vault as unknown as VaultLike).configDir ?? '.obsidian';
+      const pluginsDirectory = `${configDirectory}/plugins`;
+      const directory = `${pluginsDirectory}/${temporaryModuleName}`;
+      this.app.plugins.manifests[temporaryModuleName] = {
         author: '',
         description: '',
-        dir,
-        id: tempModuleName,
+        // eslint-disable-next-line unicorn/name-replacements -- `dir` is Obsidian's own `PluginManifest` member name.
+        dir: directory,
+        id: temporaryModuleName,
         isDesktopOnly: false,
         minAppVersion: '',
-        name: tempModuleName,
+        name: temporaryModuleName,
         version: ''
       };
       // `adapter.mkdir` is not recursive, and an old version on a fresh vault may not
       // Have the config/plugins dirs yet — create the chain so `loadPlugin` finds the
       // Temp plugin at `<configDir>/plugins/<id>`.
-      if (!(await this.app.vault.adapter.exists(configDir))) {
-        await this.app.vault.adapter.mkdir(configDir);
+      if (!(await this.app.vault.adapter.exists(configDirectory))) {
+        await this.app.vault.adapter.mkdir(configDirectory);
       }
-      if (!(await this.app.vault.adapter.exists(pluginsDir))) {
-        await this.app.vault.adapter.mkdir(pluginsDir);
+      if (!(await this.app.vault.adapter.exists(pluginsDirectory))) {
+        await this.app.vault.adapter.mkdir(pluginsDirectory);
       }
-      await this.app.vault.adapter.mkdir(dir);
+      await this.app.vault.adapter.mkdir(directory);
 
-      const pluginFnBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
-      await this.app.vault.adapter.write(`${dir}/main.js`, pluginFnBody);
+      const pluginFunctionBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
+      await this.app.vault.adapter.write(`${directory}/main.js`, pluginFunctionBody);
 
-      await this.app.plugins.loadPlugin(tempModuleName);
+      await this.app.plugins.loadPlugin(temporaryModuleName);
       // `uninstallPlugin` arrived after the plugin API itself, so it is absent on
       // 0.9.7 - the FIRST version to expose `loadPlugin`/`manifests` (0.9.6 and below
       // Have neither, and return `undefined` above). The module is already captured by
@@ -417,7 +419,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       // eslint-disable-next-line no-restricted-syntax -- uninstallPlugin is runtime-optional on old versions.
       const pluginsForCleanup = this.app.plugins as unknown as PluginsLike;
       if (pluginsForCleanup.uninstallPlugin) {
-        await this.app.plugins.uninstallPlugin(tempModuleName);
+        await this.app.plugins.uninstallPlugin(temporaryModuleName);
       }
 
       if (this.obsidianModule) {
@@ -429,7 +431,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     async ipcSendSync(this: IntegrationTestingNamespace, params): Promise<void> {
       await this.ensureLayoutReady();
-      window.electron.ipcRenderer.sendSync(params.channel, ...params.args);
+      globalThis.electron.ipcRenderer.sendSync(params.channel, ...params.channelArguments);
     },
 
     libResolvers: bootstrapParams.libResolvers,
@@ -472,7 +474,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   };
 
   // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
-  (window as unknown as Partial<IntegrationTestingHolder>).__obsidianIntegrationTesting = ns;
+  (globalThis as unknown as Partial<IntegrationTestingHolder>).__obsidianIntegrationTesting = ns;
 
   async function typeIntoEditor(typeParams: TypeIntoEditorParams): Promise<void> {
     const FOCUS_SETTLE_DELAY_IN_MILLISECONDS = 300;
@@ -513,16 +515,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
     const electronModifiers = modifiers.map((modifier): ElectronModifier => {
       switch (modifier) {
-        case 'Alt':
+        case 'Alt': {
           return 'alt';
-        case 'Ctrl':
+        }
+        case 'Ctrl': {
           return 'control';
-        case 'Meta':
+        }
+        case 'Meta': {
           return 'meta';
-        case 'Mod':
+        }
+        case 'Mod': {
           return isMacOS ? 'meta' : 'control';
-        case 'Shift':
+        }
+        case 'Shift': {
           return 'shift';
+        }
         default: {
           // Exhaustiveness guard: adding a `Modifier` member without a case above becomes a compile error.
           const unknownModifier: never = modifier;
@@ -531,7 +538,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       }
     });
 
-    const webContents = window.electron.remote.getCurrentWebContents();
+    const webContents = globalThis.electron.remote.getCurrentWebContents();
 
     // A trusted key press is keyDown -> char -> keyUp: keyDown fires `keydown`, char fires
     // `keypress`/`beforeinput`/`input`, keyUp fires `keyup` — the full real key pipeline.
@@ -557,7 +564,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   function moveMouse(moveParams: MoveMouseParams): void {
-    const webContents = window.electron.remote.getCurrentWebContents();
+    const webContents = globalThis.electron.remote.getCurrentWebContents();
     webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(moveParams.x), y: Math.round(moveParams.y) });
   }
 
@@ -582,8 +589,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
   }
 
-  async function createNote(createParams: CreateNoteParams): Promise<TFile> {
-    const { content, path } = createParams;
+  async function createNote(noteParams: CreateNoteParams): Promise<TFile> {
+    const { content, path } = noteParams;
 
     const file = await ns.app.vault.create(path, content);
 

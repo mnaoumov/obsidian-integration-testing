@@ -31,16 +31,24 @@ import { compareVersions } from './obsidian-version.ts';
  * on the transport / connection result so consumers can assert on it.
  */
 export interface AsarFallback {
-  /** A human-readable explanation, present for the `'fallback'` tier. */
+  /**
+  A human-readable explanation, present for the `'fallback'` tier.
+   */
   readonly message?: string;
 
-  /** The pinned app (asar) version that was requested, or `null` when none. */
+  /**
+  The pinned app (asar) version that was requested, or `null` when none.
+   */
   readonly requestedVersion: null | string;
 
-  /** The app (asar) version actually running, or `null` when unreadable. */
+  /**
+  The app (asar) version actually running, or `null` when unreadable.
+   */
   readonly runningApiVersion: null | string;
 
-  /** The resolved fallback tier. */
+  /**
+  The resolved fallback tier.
+   */
   readonly tier: AsarFallbackTier;
 }
 
@@ -57,9 +65,9 @@ export interface AsarFallback {
 export type AsarFallbackTier = 'fallback' | 'match' | 'unknown';
 
 /**
- * Parameters for {@link checkAsarFallback}.
+ * Parameters for {@link resolveAsarFallback}.
  */
-export interface CheckAsarFallbackParams {
+export interface ResolveAsarFallbackParams {
   /**
    * The pinned Obsidian app (asar) version the owned instance was asked to run,
    * or `undefined` when no asar was swapped (so there is nothing to verify).
@@ -82,7 +90,7 @@ export interface CheckAsarFallbackParams {
  * @param params - The pinned version and the live running version.
  * @returns The fallback verdict.
  */
-export function checkAsarFallback(params: CheckAsarFallbackParams): AsarFallback {
+export function resolveAsarFallback(params: ResolveAsarFallbackParams): AsarFallback {
   const { requestedVersion, runningApiVersion } = params;
 
   if (requestedVersion === undefined || runningApiVersion === undefined) {

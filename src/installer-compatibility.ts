@@ -30,40 +30,38 @@ import type { ObsidianVersionMetadata } from './obsidian-metadata.ts';
 import { compareVersions } from './obsidian-version.ts';
 
 /**
- * Parameters for {@link checkInstallerCompatibility}.
- */
-export interface CheckInstallerCompatibilityParams {
-  /** The resolved Obsidian app (asar) version. */
-  readonly appVersion: string;
-
-  /** The resolved installer/Electron shell version, or `undefined` when unknown. */
-  readonly installerVersion: string | undefined;
-
-  /** The `metadata.json` entry for {@link appVersion}, or `undefined` when absent. */
-  readonly metadata: ObsidianVersionMetadata | undefined;
-}
-
-/**
  * The compatibility verdict for a resolved (app, installer) version pair, carried
  * as data on the transport / connection result so consumers can assert on it.
  */
 export interface InstallerCompatibility {
-  /** The resolved Obsidian app (asar) version. */
+  /**
+  The resolved Obsidian app (asar) version.
+   */
   readonly appVersion: string;
 
-  /** The resolved installer/Electron shell version, or `null` when unknown. */
+  /**
+  The resolved installer/Electron shell version, or `null` when unknown.
+   */
   readonly installerVersion: null | string;
 
-  /** A human-readable explanation, present for the `'nagged'` tier. */
+  /**
+  A human-readable explanation, present for the `'nagged'` tier.
+   */
   readonly message?: string;
 
-  /** The recommended installer floor, when the table carries one. */
+  /**
+  The recommended installer floor, when the table carries one.
+   */
   readonly minRecommendedInstallerVersion?: string;
 
-  /** The run floor, when the table carries one. */
+  /**
+  The run floor, when the table carries one.
+   */
   readonly minRunnableInstallerVersion?: string;
 
-  /** The resolved compatibility tier. */
+  /**
+  The resolved compatibility tier.
+   */
   readonly tier: InstallerCompatibilityTier;
 }
 
@@ -81,6 +79,26 @@ export interface InstallerCompatibility {
 export type InstallerCompatibilityTier = 'nagged' | 'ok' | 'unknown' | 'unrunnable';
 
 /**
+ * Parameters for {@link resolveInstallerCompatibility}.
+ */
+export interface ResolveInstallerCompatibilityParams {
+  /**
+  The resolved Obsidian app (asar) version.
+   */
+  readonly appVersion: string;
+
+  /**
+  The resolved installer/Electron shell version, or `undefined` when unknown.
+   */
+  readonly installerVersion: string | undefined;
+
+  /**
+  The `metadata.json` entry for {@link appVersion}, or `undefined` when absent.
+   */
+  readonly metadata: ObsidianVersionMetadata | undefined;
+}
+
+/**
  * Computes the compatibility verdict for a resolved (app, installer) version pair.
  *
  * Only `'unrunnable'` warrants an error; `'nagged'` warrants a warning; `'ok'` and
@@ -89,7 +107,7 @@ export type InstallerCompatibilityTier = 'nagged' | 'ok' | 'unknown' | 'unrunnab
  * @param params - The resolved versions and the app version's metadata entry.
  * @returns The compatibility verdict.
  */
-export function checkInstallerCompatibility(params: CheckInstallerCompatibilityParams): InstallerCompatibility {
+export function resolveInstallerCompatibility(params: ResolveInstallerCompatibilityParams): InstallerCompatibility {
   const { appVersion, installerVersion, metadata } = params;
   const minRunnableInstallerVersion = metadata?.minRunnableInstallerVersion;
   const minRecommendedInstallerVersion = metadata?.minRecommendedInstallerVersion;

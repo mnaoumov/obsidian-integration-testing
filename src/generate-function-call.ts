@@ -34,12 +34,18 @@ export type GenerateFunctionCallParams<Params = unknown> = AppParams & Params;
  * Parameters for {@link generateNamespaceCall}.
  */
 export interface GenerateNamespaceCallParams {
-  /** User-supplied arguments to pass to the function. */
-  readonly args?: Record<string, unknown>;
-  /** Optional context ID for persistent storage. */
+  /**
+  The user function to evaluate inside Obsidian.
+   */
+  readonly callback: (...input: never[]) => unknown;
+  /**
+  Optional context ID for persistent storage.
+   */
   readonly contextId?: string;
-  /** The user function to evaluate inside Obsidian. */
-  readonly fn: (...args: never[]) => unknown;
+  /**
+  User-supplied arguments to pass to the function.
+   */
+  readonly input?: Record<string, unknown>;
 }
 
 interface AppParams {
@@ -55,7 +61,7 @@ interface AppParams {
  * arguments are serialized via {@link jsonWithFunctions}, producing a
  * self-contained IIFE of the form `(fnExpr)(argsExpr)`.
  *
- * @param fn - The function to call.
+ * @param callback - The function to call.
  * @param params - The arguments to pass. When omitted, the function is called with no arguments.
  * @returns A JavaScript expression string.
  */
@@ -77,14 +83,14 @@ export async function ensureLayoutReady(params: GenerateFunctionCallParams): Pro
  * Generates a JavaScript expression string that immediately invokes the given
  * function with the given arguments.
  *
- * @param fn - The function to call.
+ * @param callback - The function to call.
  * @param params - The arguments to pass.
  * @returns A JavaScript expression string.
  */
-export function generateFunctionCall<Params>(fn: (params: GenerateFunctionCallParams<Params>) => Promisable<unknown>, params: Params): string {
-  const fnExpr = getFunctionExpressionString(fn);
+export function generateFunctionCall<Params>(callback: (params: GenerateFunctionCallParams<Params>) => Promisable<unknown>, params: Params): string {
+  const functionExpression = getFunctionExpressionString(callback);
   const serializedParams = jsonWithFunctions(params);
-  return `(${fnExpr})(Object.assign(${serializedParams}, { app: window.app }))`;
+  return `(${functionExpression})(Object.assign(${serializedParams}, { app: window.app }))`;
 }
 
 /**
@@ -92,7 +98,7 @@ export function generateFunctionCall<Params>(fn: (params: GenerateFunctionCallPa
  * `evalWrapper` on the `window.__obsidianIntegrationTesting` namespace.
  *
  * Unlike {@link generateFunctionCall}, this does not serialize infrastructure
- * functions — only the user's `fn`, `args`, and `contextId`. The infrastructure
+ * functions — only the user's `callback`, `input`, and `contextId`. The infrastructure
  * must already be bootstrapped via {@link ensureNamespaceBootstrapped}.
  *
  * @param params - The user function, arguments, and optional context ID.
@@ -100,9 +106,9 @@ export function generateFunctionCall<Params>(fn: (params: GenerateFunctionCallPa
  */
 export function generateNamespaceCall(params: GenerateNamespaceCallParams): string {
   const serializedParams = jsonWithFunctions({
-    args: params.args ?? {},
+    input: params.input ?? {},
     ...(params.contextId !== undefined && { contextId: params.contextId }),
-    fn: params.fn
+    callback: params.callback
   });
   return `window.__obsidianIntegrationTesting.evalWrapper(${serializedParams})`;
 }

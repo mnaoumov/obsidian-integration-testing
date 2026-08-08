@@ -15,7 +15,7 @@ import {
 import type { ParentLivenessServer } from './parent-liveness.ts';
 
 import {
-  buildParentLivenessWatchdogExpr,
+  buildParentLivenessWatchdogExpression,
   PARENT_LIVENESS_HOST,
   startParentLivenessServer
 } from './parent-liveness.ts';
@@ -24,13 +24,15 @@ import {
  * Port baked into every expression built by these tests. Never connected to for
  * real — the expression is driven against a stubbed `window`.
  */
-const STUB_PORT = 51888;
+const STUB_PORT = 51_888;
 
 /**
  * Overrides for {@link createWatchdogWindowStub}.
  */
 interface CreateWatchdogWindowStubOptions {
-  /** Replacement body for `electronWindow.destroy`. */
+  /**
+  Replacement body for `electronWindow.destroy`.
+  */
   readonly destroyImpl?: () => void;
 }
 
@@ -140,19 +142,19 @@ describe('startParentLivenessServer', () => {
   });
 });
 
-describe('buildParentLivenessWatchdogExpr', () => {
+describe('buildParentLivenessWatchdogExpression', () => {
   it('should embed the port and the loopback host', () => {
-    const expr = buildParentLivenessWatchdogExpr(STUB_PORT);
-    expect(expr).toContain(`net.connect(${String(STUB_PORT)}, '${PARENT_LIVENESS_HOST}')`);
+    const expression = buildParentLivenessWatchdogExpression(STUB_PORT);
+    expect(expression).toContain(`net.connect(${String(STUB_PORT)}, '${PARENT_LIVENESS_HOST}')`);
   });
 
   it('should stay parseable on an ES5-era engine', () => {
-    const expr = buildParentLivenessWatchdogExpr(STUB_PORT);
-    expect(expr).not.toContain('=>');
-    expect(expr).not.toContain('??');
-    expect(expr).not.toContain('?.');
-    expect(expr).not.toContain('let ');
-    expect(expr).not.toContain('const ');
+    const expression = buildParentLivenessWatchdogExpression(STUB_PORT);
+    expect(expression).not.toContain('=>');
+    expect(expression).not.toContain('??');
+    expect(expression).not.toContain('?.');
+    expect(expression).not.toContain('let ');
+    expect(expression).not.toContain('const ');
   });
 
   it('should report already-armed without opening a second socket', () => {
@@ -296,7 +298,7 @@ function evaluateWatchdog(windowStub: WindowStub): string {
    * is built by this repo, never taken from input.
    */
   // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- Evaluating the built expression IS the behavior under test; the source is our own builder.
-  const run = new Function('window', `return ${buildParentLivenessWatchdogExpr(STUB_PORT)};`) as (win: WindowStub) => string;
+  const run = new Function('window', `return ${buildParentLivenessWatchdogExpression(STUB_PORT)};`) as (win: WindowStub) => string;
   return run(windowStub);
 }
 

@@ -49,24 +49,24 @@ export const OWNED_HIDDEN_LAUNCH_FLAGS = [
 export const NO_SANDBOX_LAUNCH_FLAG = '--no-sandbox';
 
 /**
- * Resolves the extra Chromium launch args for an owned desktop instance: the
+ * Resolves the extra Chromium launch arguments for an owned desktop instance: the
  * {@link OWNED_HIDDEN_LAUNCH_FLAGS} when the window is hidden, or an empty list
  * when it is visible (the default).
  *
  * @param isObsidianAppVisible - The resolved option value (omitted → visible).
- * @returns The extra launch args (possibly empty).
+ * @returns The extra launch arguments (possibly empty).
  */
-export function resolveOwnedHiddenLaunchArgs(isObsidianAppVisible?: boolean): string[] {
+export function resolveOwnedHiddenLaunchArguments(isObsidianAppVisible?: boolean): string[] {
   return shouldHideObsidianApp(isObsidianAppVisible) ? [...OWNED_HIDDEN_LAUNCH_FLAGS] : [];
 }
 
 /**
- * Resolves the extra Chromium launch args for disabling the sandbox.
+ * Resolves the extra Chromium launch arguments for disabling the sandbox.
  *
  * @param shouldDisableSandbox - The resolved option value (omitted → sandbox kept).
  * @returns `[{@link NO_SANDBOX_LAUNCH_FLAG}]` when the sandbox should be disabled, else `[]`.
  */
-export function resolveSandboxLaunchArgs(shouldDisableSandbox?: boolean): string[] {
+export function resolveSandboxLaunchArguments(shouldDisableSandbox?: boolean): string[] {
   return (shouldDisableSandbox ?? false) ? [NO_SANDBOX_LAUNCH_FLAG] : [];
 }
 

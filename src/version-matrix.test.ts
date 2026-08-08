@@ -430,7 +430,7 @@ describe('runVersionMatrixEntries', () => {
       run: ({ version }) => {
         throw new Error(`failed on ${version}`);
       }
-    }).catch((caught: unknown) => caught);
+    }).catch((error_: unknown) => error_);
 
     expect(error).toBeInstanceOf(AggregateError);
     expect((error as AggregateError).errors.map((each: unknown) => (each as Error).message))

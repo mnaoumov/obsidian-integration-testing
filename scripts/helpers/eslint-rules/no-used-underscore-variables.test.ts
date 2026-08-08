@@ -25,7 +25,7 @@ ruleTester.run('no-used-underscore-variables', toRuleTesterModule(noUsedUndersco
       name: 'underscore param used in function body'
     },
     {
-      code: 'const fn = (_a: string, _b: number) => _a + _b;',
+      code: 'const callback = (_a: string, _b: number) => _a + _b;',
       errors: [
         { messageId: MESSAGE_ID },
         { messageId: MESSAGE_ID }
@@ -73,7 +73,7 @@ ruleTester.run('no-used-underscore-variables', toRuleTesterModule(noUsedUndersco
       name: 'non-underscore param used normally'
     },
     {
-      code: 'const fn = (_a: string, b: number) => b;',
+      code: 'const callback = (_a: string, b: number) => b;',
       name: 'underscore param unused alongside used param'
     },
     {

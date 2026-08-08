@@ -7,27 +7,27 @@
 /**
  * Converts a function into a string that is a valid function expression.
  *
- * `Function.prototype.toString()` on a shorthand method like `{ fn() {} }`
- * returns `"fn() {}"`, which is not a valid expression.
+ * `Function.prototype.toString()` on a shorthand method like `{ callback() {} }`
+ * returns `"callback() {}"`, which is not a valid expression.
  * This helper detects that form and prefixes it with `function `.
  *
- * @param fn - The function to convert.
+ * @param callback - The function to convert.
  * @returns A string that is a valid function expression.
  */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- We need to use `Function` type.
-export function getFunctionExpressionString(fn: Function): string {
-  const fnString = fn.toString();
+export function getFunctionExpressionString(callback: Function): string {
+  const functionString = callback.toString();
 
-  if (FUNCTION_EXPRESSION_RE.test(fnString)) {
-    return fnString;
+  if (FUNCTION_EXPRESSION_RE.test(functionString)) {
+    return functionString;
   }
 
-  const asyncMatch = ASYNC_KEYWORD_RE.exec(fnString);
+  const asyncMatch = ASYNC_KEYWORD_RE.exec(functionString);
   if (asyncMatch) {
-    return `async function ${fnString.slice(asyncMatch[0].length)}`;
+    return `async function ${functionString.slice(asyncMatch[0].length)}`;
   }
 
-  return `function ${fnString}`;
+  return `function ${functionString}`;
 }
 
 /**

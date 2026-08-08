@@ -45,7 +45,9 @@ exitIfScriptDisabled();
 // Shim `scripts/metadata-global-setup.ts` gives the test runners.
 defineObsidianMetadataGlobal();
 
-/** The desktop-installer download key for the current host platform. */
+/**
+The desktop-installer download key for the current host platform.
+*/
 type PlatformInstallerKey = 'dmg' | 'exe' | 'tar';
 
 /**
@@ -78,12 +80,15 @@ async function collectRuntimeVersions(version: string): Promise<ObsidianRuntimeV
  */
 function getPlatformInstallerKey(): PlatformInstallerKey {
   switch (process.platform) {
-    case 'darwin':
+    case 'darwin': {
       return 'dmg';
-    case 'win32':
+    }
+    case 'win32': {
       return 'exe';
-    default:
+    }
+    default: {
       return 'tar';
+    }
   }
 }
 
@@ -126,7 +131,7 @@ async function main(): Promise<void> {
       table[version] = {
         ...table[version],
         runtimeVersions,
-        ...(ecmaScriptVersion === undefined ? {} : { ecmaScriptVersion })
+        ...(ecmaScriptVersion !== undefined && { ecmaScriptVersion })
       };
       // Write after each version so a long run is resumable if it is interrupted.
       await writeMetadataTable(table);

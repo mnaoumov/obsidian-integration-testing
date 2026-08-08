@@ -4,7 +4,7 @@
  * Reads a plugin's in-repo `demo-vault/` tree into a populate map so a Vitest/Jest global setup can
  * seed it into the temp vault BEFORE Obsidian opens it. Seeding pre-launch lets Obsidian's startup scan
  * index every note in one pass, avoiding the file-watcher race that silently drops events under a bulk
- * post-launch {@link TempVault.populate}.
+ * post-launch {@link TemporaryVault.populate}.
  */
 
 import {
@@ -17,7 +17,7 @@ import {
   sep
 } from 'node:path';
 
-import type { PopulateFilesParams } from './temp-vault.ts';
+import type { PopulateFilesParams } from './temporary-vault.ts';
 
 /**
  * Parameters for {@link readDemoVaultTree}.
@@ -45,7 +45,7 @@ const DEFAULT_EXCLUDED_NAMES = ['.git', '.obsidian'];
  * POSIX path to file bytes), skipping {@link ReadDemoVaultTreeParams.excludedNames}.
  *
  * @param params - The {@link ReadDemoVaultTreeParams}.
- * @returns The populate map, ready to hand to {@link TempVault.populate} or a global setup's `populate`.
+ * @returns The populate map, ready to hand to {@link TemporaryVault.populate} or a global setup's `populate`.
  */
 export function readDemoVaultTree(params: ReadDemoVaultTreeParams): PopulateFilesParams {
   const { demoVaultPath } = params;
@@ -55,13 +55,13 @@ export function readDemoVaultTree(params: ReadDemoVaultTreeParams): PopulateFile
   return map;
 }
 
-function collect(root: string, dir: string, excludedNames: Set<string>, map: PopulateFilesParams): void {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+function collect(root: string, directory: string, excludedNames: Set<string>, map: PopulateFilesParams): void {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (excludedNames.has(entry.name)) {
       continue;
     }
 
-    const absolutePath = join(dir, entry.name);
+    const absolutePath = join(directory, entry.name);
     if (entry.isDirectory()) {
       collect(root, absolutePath, excludedNames, map);
       continue;

@@ -70,7 +70,7 @@ describe('AppiumTransport.pushFiles', () => {
   });
 
   it('should use tmpdir() as cwd for tar to avoid drive-letter path issues', async () => {
-    await transport.pushFiles('C:\\Users\\test\\vault', {});
+    await transport.pushFiles(String.raw`C:\Users\test\vault`, {});
 
     const tarCall = ensureNonNullable(mockExec.mock.calls[0]);
     const command = tarCall[0] as string[];
@@ -82,16 +82,16 @@ describe('AppiumTransport.pushFiles', () => {
   });
 
   it('should use relative archive name in tar command to avoid drive-letter issues', async () => {
-    await transport.pushFiles('C:\\Users\\test\\vault', {});
+    await transport.pushFiles(String.raw`C:\Users\test\vault`, {});
 
     const tarCall = ensureNonNullable(mockExec.mock.calls[0]);
     const command = tarCall[0] as string[];
 
     // The archive name (2nd positional arg after 'czf') should be just a filename, not an absolute path.
-    const archiveArg = ensureNonNullable(command[2]);
-    expect(archiveArg).not.toContain('/');
-    expect(archiveArg).not.toContain('\\');
-    expect(archiveArg).toMatch(/^vault-.*\.tar\.gz$/);
+    const archiveArgument = ensureNonNullable(command[2]);
+    expect(archiveArgument).not.toContain('/');
+    expect(archiveArgument).not.toContain('\\');
+    expect(archiveArgument).toMatch(/^vault-.*\.tar\.gz$/);
   });
 
   it('should not include --force-local flag for cross-platform tar compatibility', async () => {
@@ -119,30 +119,30 @@ describe('AppiumTransport.pushFiles', () => {
     await transport.pushFiles('/tmp/vault', {});
 
     const adbPushCall = mockExec.mock.calls.find((call) => {
-      const cmd = call[0] as string[];
-      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('push');
+      const command = call[0] as string[];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('push');
     });
 
     expect(adbPushCall).toBeDefined();
-    const cmd = ensureNonNullable(adbPushCall)[0] as string[];
-    expect(cmd).toContain('-s');
-    expect(cmd).toContain('emulator-5554');
+    const command = ensureNonNullable(adbPushCall)[0] as string[];
+    expect(command).toContain('-s');
+    expect(command).toContain('emulator-5554');
   });
 
   it('should extract archive on device at correct vault path', async () => {
     await transport.pushFiles('/tmp/my-vault', {});
 
     const adbExtractCall = mockExec.mock.calls.find((call) => {
-      const cmd = call[0] as string[];
-      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('tar');
+      const command = call[0] as string[];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('tar');
     });
 
     expect(adbExtractCall).toBeDefined();
-    const cmd = ensureNonNullable(adbExtractCall)[0] as string[];
+    const command = ensureNonNullable(adbExtractCall)[0] as string[];
     // Should extract to /sdcard/Documents/<vault-name>/
-    expect(cmd).toContain('-C');
-    const cIndex = cmd.indexOf('-C');
-    expect(cmd[cIndex + 1]).toBe('/sdcard/Documents/my-vault');
+    expect(command).toContain('-C');
+    const cIndex = command.indexOf('-C');
+    expect(command[cIndex + 1]).toBe('/sdcard/Documents/my-vault');
   });
 });
 
@@ -165,29 +165,29 @@ describe('AppiumTransport.registerVault', () => {
     await transport.registerVault('/tmp/my-vault');
 
     const pushCall = mockExec.mock.calls.find((call) => {
-      const cmd = call[0];
-      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('push');
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('push');
     });
 
     expect(pushCall).toBeDefined();
-    const cmd = ensureNonNullable(pushCall)[0] as string[];
-    expect(cmd).toContain('-s');
-    expect(cmd).toContain('emulator-5554');
-    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault/.obsidian/app.json');
+    const command = ensureNonNullable(pushCall)[0] as string[];
+    expect(command).toContain('-s');
+    expect(command).toContain('emulator-5554');
+    expect(command.at(-1)).toBe('/sdcard/Documents/my-vault/.obsidian/app.json');
   });
 
   it('should create the .obsidian directory on the device before pushing the marker', async () => {
     await transport.registerVault('/tmp/my-vault');
 
     const mkdirCall = mockExec.mock.calls.find((call) => {
-      const cmd = call[0];
-      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('mkdir');
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('mkdir');
     });
 
     expect(mkdirCall).toBeDefined();
-    const cmd = ensureNonNullable(mkdirCall)[0] as string[];
-    expect(cmd).toContain('-p');
-    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault/.obsidian');
+    const command = ensureNonNullable(mkdirCall)[0] as string[];
+    expect(command).toContain('-p');
+    expect(command.at(-1)).toBe('/sdcard/Documents/my-vault/.obsidian');
   });
 
   it('should switch to WebView context before configuring localStorage', async () => {
@@ -244,14 +244,14 @@ describe('AppiumTransport.unregisterVault', () => {
     await transport.unregisterVault('/tmp/my-vault');
 
     const rmCall = mockExec.mock.calls.find((call) => {
-      const cmd = call[0];
-      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('rm');
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('rm');
     });
 
     expect(rmCall).toBeDefined();
-    const cmd = ensureNonNullable(rmCall)[0] as string[];
-    expect(cmd).toContain('-rf');
-    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault');
+    const command = ensureNonNullable(rmCall)[0] as string[];
+    expect(command).toContain('-rf');
+    expect(command.at(-1)).toBe('/sdcard/Documents/my-vault');
   });
 
   it('should still remove the vault directory when the WebView is gone', async () => {
@@ -260,13 +260,13 @@ describe('AppiumTransport.unregisterVault', () => {
     await transport.unregisterVault('/tmp/my-vault');
 
     const rmCall = mockExec.mock.calls.find((call) => {
-      const cmd = call[0];
-      return Array.isArray(cmd) && cmd[0] === 'adb' && cmd.includes('rm');
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('rm');
     });
 
     expect(rmCall).toBeDefined();
-    const cmd = ensureNonNullable(rmCall)[0] as string[];
-    expect(cmd[cmd.length - 1]).toBe('/sdcard/Documents/my-vault');
+    const command = ensureNonNullable(rmCall)[0] as string[];
+    expect(command.at(-1)).toBe('/sdcard/Documents/my-vault');
   });
 });
 
@@ -293,7 +293,7 @@ describe('AppiumTransport layout-ready timeout', () => {
   });
 
   it('should use the configured layoutReadyTimeoutInMilliseconds', async () => {
-    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 12345;
+    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 12_345;
     const transport = new AppiumTransport({
       browser: strictProxy<Browser>(mockBrowser),
       deviceId: 'emulator-5554',

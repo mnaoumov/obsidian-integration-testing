@@ -33,19 +33,29 @@
  * captured wholesale rather than as a fixed field list.
  */
 export interface ObsidianRuntimeVersions {
-  /** The bundled Chromium version, e.g. `'114.0.5735.289'`. */
+  /**
+  The bundled Chromium version, e.g. `'114.0.5735.289'`.
+   */
   readonly chrome: string;
 
-  /** The bundled Electron version, e.g. `'25.8.1'`. */
+  /**
+  The bundled Electron version, e.g. `'25.8.1'`.
+   */
   readonly electron: string;
 
-  /** The bundled Node.js version, e.g. `'18.15.0'`. */
+  /**
+  The bundled Node.js version, e.g. `'18.15.0'`.
+   */
   readonly node: string;
 
-  /** Every `process.versions` key the Electron build exposes. */
+  /**
+  Every `process.versions` key the Electron build exposes.
+   */
   readonly [key: string]: string;
 
-  /** The bundled V8 version, e.g. `'11.4.183.23'`. */
+  /**
+  The bundled V8 version, e.g. `'11.4.183.23'`.
+   */
   readonly v8: string;
 }
 
@@ -63,16 +73,24 @@ export interface ObsidianRuntimeVersions {
  * hand-rolled resolution.
  */
 export interface ObsidianVersionDownloads {
-  /** The `obsidian-<version>.asar.gz` package URL. */
+  /**
+  The `obsidian-<version>.asar.gz` package URL.
+   */
   readonly asar?: string;
 
-  /** The macOS (universal) `.dmg` installer URL. */
+  /**
+  The macOS (universal) `.dmg` installer URL.
+   */
   readonly dmg?: string;
 
-  /** The Windows x64 `.exe` installer URL. */
+  /**
+  The Windows x64 `.exe` installer URL.
+   */
   readonly exe?: string;
 
-  /** The Linux x64 `.tar.gz` portable-build URL. */
+  /**
+  The Linux x64 `.tar.gz` portable-build URL.
+   */
   readonly tar?: string;
 }
 
@@ -83,13 +101,19 @@ export interface ObsidianVersionDownloads {
  * that version (e.g. only old versions carry {@link minRecommendedInstallerVersion}).
  */
 export interface ObsidianVersionMetadata {
-  /** Whether the version's assets are available (present only when `false`). */
+  /**
+  Whether the version's assets are available (present only when `false`).
+   */
   readonly available?: boolean;
 
-  /** URL of the version's changelog. */
+  /**
+  URL of the version's changelog.
+   */
   readonly changelogUrl?: string;
 
-  /** The release channel: `'public'`, `'catalyst'`, or `'public+catalyst'`. */
+  /**
+  The release channel: `'public'`, `'catalyst'`, or `'public+catalyst'`.
+   */
   readonly channel?: string;
 
   /**

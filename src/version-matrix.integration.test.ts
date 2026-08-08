@@ -43,7 +43,7 @@ async function collectEntries(versions?: readonly string[] | string): Promise<Ob
     run: (entry) => {
       entries.push(entry);
     },
-    ...versions === undefined ? {} : { versions }
+    ...versions !== undefined && { versions }
   });
   return entries;
 }

@@ -6,7 +6,7 @@
  *
  * Two modes:
  * - **Owned (default)**: the transport launches and owns an isolated Obsidian
- *   instance against a temporary `--user-data-dir` on a free `--remote-debugging-port`,
+ *   instance against a temporary `--user-data-directory` on a free `--remote-debugging-port`,
  *   never touching the user's Obsidian. Supports version pinning via the user-data asar.
  * - **Attach**: when an explicit CDP port is configured, the transport connects
  *   to an already-running Obsidian on that port.
@@ -38,35 +38,35 @@ import type {
   TransportEvalOptions
 } from './transport.ts';
 
-import { checkAsarFallback } from './asar-fallback-detection.ts';
+import { resolveAsarFallback } from './asar-fallback-detection.ts';
 import { resolveAsarFallbackAction } from './compatibility-options.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
-import { checkElectronCompatibility } from './electron-compatibility.ts';
+import { resolveElectronCompatibility } from './electron-compatibility.ts';
 import { exec } from './exec.ts';
 import { log } from './log.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
 import {
+  didRemoveVaultFromConfig,
   getVaultId,
-  isVaultRegistered,
-  removeVaultFromConfig
+  isVaultRegistered
 } from './obsidian-config.ts';
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
 import { getVersionMetadata } from './obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
 import { buildOwnedObsidianJson } from './owned-vault-seed.ts';
-import { buildParentLivenessWatchdogExpr } from './parent-liveness.ts';
+import { buildParentLivenessWatchdogExpression } from './parent-liveness.ts';
 import {
-  checkRendererBootState,
-  DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS
+  DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS,
+  resolveRendererBootState
 } from './renderer-boot-detection.ts';
 import { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 import { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 import { ensureNonNullable } from './type-guards.ts';
-import { vaultPathsMatch } from './vault-path-match.ts';
+import { areVaultPathsMatching } from './vault-path-match.ts';
 import {
-  resolveOwnedHiddenLaunchArgs,
-  resolveSandboxLaunchArgs,
+  resolveOwnedHiddenLaunchArguments,
+  resolveSandboxLaunchArguments,
   shouldHideObsidianApp
 } from './visibility.ts';
 
@@ -157,13 +157,17 @@ export interface DesktopCdpTransportConfig {
 }
 
 /**
- * An asar to provision into a harness-owned instance's user-data dir before launch.
+ * An asar to provision into a harness-owned instance's user-data directory before launch.
  */
 export interface OwnedInstanceAsar {
-  /** Absolute path to the cached/source asar file. */
+  /**
+  Absolute path to the cached/source asar file.
+   */
   readonly path: string;
 
-  /** The asar's `x.y.z` version. */
+  /**
+  The asar's `x.y.z` version.
+   */
   readonly version: string;
 }
 
@@ -171,10 +175,12 @@ export interface OwnedInstanceAsar {
  * Configuration for a harness-owned, isolated Obsidian instance.
  *
  * When present, the transport launches and owns its own Obsidian process
- * against an isolated user-data dir instead of attaching to a running instance.
+ * against an isolated user-data directory instead of attaching to a running instance.
  */
 export interface OwnedInstanceConfig {
-  /** Optional asar to provision into {@link userDataDir} before launch. */
+  /**
+  Optional asar to provision into {@link userDataDirectory} before launch.
+   */
   readonly asar?: OwnedInstanceAsar | undefined;
 
   /**
@@ -187,14 +193,17 @@ export interface OwnedInstanceConfig {
    */
   readonly compatibility?: InstallerCompatibility | undefined;
 
-  /** Absolute path to the Obsidian shell executable to launch. */
+  /**
+  Absolute path to the Obsidian shell executable to launch.
+   */
   readonly exePath: string;
 
   /**
-   * Absolute path to the isolated user-data dir. Created and owned by the
+   * Absolute path to the isolated user-data directory. Created and owned by the
    * transport, and deleted on dispose.
    */
-  readonly userDataDir: string;
+
+  readonly userDataDirectory: string;
 }
 
 interface CdpExceptionDetails {
@@ -233,20 +242,24 @@ interface CdpValue {
  * The CDP endpoint of a launched, harness-owned instance.
  */
 interface OwnedInstanceEndpoint {
-  /** CDP host (e.g. `'localhost'`). */
+  /**
+  CDP host (e.g. `'localhost'`).
+   */
   readonly host: string;
 
-  /** The free CDP port the owned instance was launched on. */
+  /**
+  The free CDP port the owned instance was launched on.
+   */
   readonly port: number;
 }
 
-const COMMAND_TIMEOUT_IN_MILLISECONDS = 30000;
+const COMMAND_TIMEOUT_IN_MILLISECONDS = 30_000;
 const VAULT_ID_BYTE_LENGTH = 8;
-const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10000;
+const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10_000;
 const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
 const NO_OUTPUT = '(no output)';
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30000;
+const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Old (Electron 10-era) Obsidian occasionally boots without the workspace ever
 // Initializing, so the vault never becomes ready. A fresh instance is an
 // Independent chance; relaunch up to this many times before giving up.
@@ -256,10 +269,10 @@ const OWNED_LAUNCH_MAX_ATTEMPTS = 3;
 const OWNED_RELAUNCH_SETTLE_IN_MILLISECONDS = 3000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
-const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30000;
+const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30_000;
 const INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS = 500;
 const OWNED_WINDOW_OFFSCREEN_MARGIN_IN_PIXELS = 200;
-const OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS = 20000;
+const OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS = 20_000;
 const OWNED_WINDOW_HIDE_POLL_INTERVAL_IN_MILLISECONDS = 250;
 
 /**
@@ -329,7 +342,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
   /**
    * Disposes of the active WebSocket connection and, in owned-instance mode,
-   * kills the owned Obsidian process and removes its isolated user-data dir.
+   * kills the owned Obsidian process and removes its isolated user-data directory.
    *
    * The removal is retried because Windows briefly holds the just-killed
    * process's file handles, which would otherwise fail `rmSync` with `EPERM`.
@@ -341,30 +354,30 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     this.ownedInstance?.kill();
-    const { userDataDir } = this.ownedConfig;
+    const { userDataDirectory } = this.ownedConfig;
     const deadline = Date.now() + USER_DATA_RM_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
-      if (tryRemoveDir(userDataDir)) {
+      if (didRemoveDirectory(userDataDirectory)) {
         return;
       }
       await delay(USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS);
     }
-    if (!tryRemoveDir(userDataDir)) {
-      log(`[cdp-transport] Could not remove owned user-data dir within ${String(USER_DATA_RM_TIMEOUT_IN_MILLISECONDS)}ms (non-fatal): ${userDataDir}`);
+    if (!didRemoveDirectory(userDataDirectory)) {
+      log(`[cdp-transport] Could not remove owned user-data directory within ${String(USER_DATA_RM_TIMEOUT_IN_MILLISECONDS)}ms (non-fatal): ${userDataDirectory}`);
     }
   }
 
   /**
    * Synchronous disposal — kills the owned instance and makes a best-effort
-   * removal of its user-data dir. Safe to call from a process `exit` handler
-   * (where async retries are impossible; a leftover temp dir is acceptable).
+   * removal of its user-data directory. Safe to call from a process `exit` handler
+   * (where async retries are impossible; a leftover temp directory is acceptable).
    */
   public disposeSync(): void {
     this.disconnect();
     if (this.ownedConfig) {
       this.ownedInstance?.kill();
-      if (!tryRemoveDir(this.ownedConfig.userDataDir)) {
-        log(`[cdp-transport] Owned user-data dir not removed synchronously (process may still hold handles): ${this.ownedConfig.userDataDir}`);
+      if (!didRemoveDirectory(this.ownedConfig.userDataDirectory)) {
+        log(`[cdp-transport] Owned user-data directory not removed synchronously (process may still hold handles): ${this.ownedConfig.userDataDirectory}`);
       }
     }
   }
@@ -392,12 +405,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
       throw new Error(`CDP evaluation error: ${desc}`);
     }
 
-    const resultObj = response.result?.result;
-    if (!resultObj || resultObj.type === 'undefined') {
+    const resultObject = response.result?.result;
+    if (!resultObject || resultObject.type === 'undefined') {
       return NO_OUTPUT;
     }
 
-    return String(resultObj.value);
+    return String(resultObject.value);
   }
 
   /**
@@ -477,7 +490,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     log(`[cdp-transport] Running preflight check for vault: ${vaultPath}`);
     if (!isVaultRegistered(vaultPath)) {
       throw new Error(
-        `Vault is not registered in Obsidian: ${vaultPath}. Register the vault first with registerVault() or TempVault.register().`
+        `Vault is not registered in Obsidian: ${vaultPath}. Register the vault first with registerVault() or TemporaryVault.register().`
       );
     }
 
@@ -526,10 +539,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
       const target = await this.findTargetForVault(vaultPath);
       const ws = await this.connectToTarget(target);
       try {
-        const destroyExpr = 'window.__obsidianIntegrationTesting.destroyCurrentWindow()';
+        const windowDestroyExpression = 'window.__obsidianIntegrationTesting.destroyCurrentWindow()';
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
-          expression: destroyExpr,
+          expression: windowDestroyExpression,
           returnByValue: true
         });
       } finally {
@@ -556,10 +569,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
       const ws = await this.connectToTarget(removalTarget);
       try {
         await ensureNamespaceBootstrapped(this, removalBasePath);
-        const removeExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath], channel: 'vault-remove' })})`;
+        const vaultRemoveExpression = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ channel: 'vault-remove', channelArguments: [vaultPath] })})`;
         await this.sendCommand(ws, 'Runtime.evaluate', {
           awaitPromise: true,
-          expression: removeExpr,
+          expression: vaultRemoveExpression,
           returnByValue: true
         });
       } finally {
@@ -567,7 +580,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
     } else {
       log('[cdp-transport] No CDP targets for removal IPC — removing directly from obsidian.json.');
-      removeVaultFromConfig(vaultPath);
+      didRemoveVaultFromConfig(vaultPath);
     }
   }
 
@@ -585,7 +598,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return;
     }
 
-    const verdict = checkElectronCompatibility({
+    const verdict = resolveElectronCompatibility({
       actualElectronVersion,
       appVersion,
       metadata: getVersionMetadata(appVersion)
@@ -609,7 +622,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private async armParentLivenessWatchdog(vaultPath: string, parentLivenessPort: number): Promise<void> {
     try {
-      const result = await this.evaluate(buildParentLivenessWatchdogExpr(parentLivenessPort), { cwd: vaultPath });
+      const result = await this.evaluate(buildParentLivenessWatchdogExpression(parentLivenessPort), { cwd: vaultPath });
       log(`[cdp-transport] Parent-liveness watchdog on port ${String(parentLivenessPort)}: ${result}.`);
     } catch (error: unknown) {
       log(`[cdp-transport] Could not arm the parent-liveness watchdog (instance may outlive a killed harness): ${String(error)}`);
@@ -628,7 +641,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param runningApiVersion - The live running app version, or `undefined` when unreadable.
    */
   private checkRuntimeAsarFallback(runningApiVersion: string | undefined): void {
-    const verdict = checkAsarFallback({
+    const verdict = resolveAsarFallback({
       requestedVersion: this.ownedConfig?.asar?.version,
       runningApiVersion
     });
@@ -694,12 +707,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async connectToTarget(target: CdpTarget): Promise<WebSocket> {
     const ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise<void>((resolve, reject) => {
-      ws.onopen = (): void => {
+      ws.addEventListener('open', (): void => {
         resolve();
-      };
-      ws.onerror = (): void => {
+      });
+      ws.addEventListener('error', (): void => {
         reject(new Error(`Failed to connect to CDP target: ${target.webSocketDebuggerUrl}`));
-      };
+      });
     });
     return ws;
   }
@@ -813,7 +826,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * Finds the CDP target that has the given vault open.
    *
    * Probes every target by evaluating `getBasePath()` and returns the one whose
-   * base path matches `vaultPath` (via {@link vaultPathsMatch}, tolerant of
+   * base path matches `vaultPath` (via {@link areVaultPathsMatching}, tolerant of
    * separator/case differences). A single target is **not** returned blindly: with
    * more than one vault open (attach mode's shared instance), the sole-target
    * shortcut would return whichever window happens to be open regardless of which
@@ -835,7 +848,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     for (const target of targets) {
       try {
         const basePath = await this.probeVaultPath(target);
-        if (vaultPathsMatch(basePath, vaultPath)) {
+        if (areVaultPathsMatching(basePath, vaultPath)) {
           return target;
         }
       } catch {
@@ -862,7 +875,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * so the next launch gets a pristine single-window instance.
    *
    * Relaunching over a live instance is forwarded by Electron's single-instance
-   * lock on the shared user-data dir and surfaces the vault picker, and opening a
+   * lock on the shared user-data directory and surfaces the vault picker, and opening a
    * second window via IPC leaves stale windows that break vault-target routing —
    * hence a full kill + wait-for-exit (releasing the lock) between launches. A
    * no-op on the first attempt, when no instance is running yet.
@@ -901,7 +914,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     // `moved` on the first success is important on Electron 10-era builds: polling
     // On without a resolvable bridge hammers the renderer with CDP round-trips
     // During boot and intermittently prevents the workspace from initializing.
-    const moveExpr = `(() => {
+    const moveExpression = `(() => {
       let remote = (window.electron && window.electron.remote) || null;
       if (!remote) {
         try { remote = require('electron').remote || null; } catch (requireError) { remote = null; }
@@ -919,12 +932,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const deadline = Date.now() + OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
-        const target = (await this.getPageTargets())[0];
+        const [target] = await this.getPageTargets();
         if (target) {
           const ws = await this.connectToTarget(target);
           try {
             const response = await this.sendCommand(ws, 'Runtime.evaluate', {
-              expression: moveExpr,
+              expression: moveExpression,
               returnByValue: true
             });
             if (response.result?.result?.value === 'moved') {
@@ -974,10 +987,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const ipcWs = await this.connectToTarget(existingTarget);
     try {
       await ensureNamespaceBootstrapped(this, existingVaultPath);
-      const ipcExpr = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ args: [vaultPath, false], channel: 'vault-open' })})`;
+      const ipcExpression = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ channel: 'vault-open', channelArguments: [vaultPath, false] })})`;
       await this.sendCommand(ipcWs, 'Runtime.evaluate', {
         awaitPromise: true,
-        expression: ipcExpr,
+        expression: ipcExpression,
         returnByValue: true
       });
 
@@ -1015,20 +1028,20 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private async probeRendererBootState(): Promise<RendererBootObservation | undefined> {
     try {
-      const target = (await this.getPageTargets())[0];
+      const [target] = await this.getPageTargets();
       if (!target) {
         return undefined;
       }
 
       const ws = await this.connectToTarget(target);
       try {
-        const probeExpr = `JSON.stringify({
+        const probeExpression = `JSON.stringify({
           bodyChildElementCount: document.body ? document.body.childElementCount : 0,
           hasWindowApp: typeof window.app !== 'undefined',
           isDocumentComplete: document.readyState === 'complete'
         })`;
         const response = await this.sendCommand(ws, 'Runtime.evaluate', {
-          expression: probeExpr,
+          expression: probeExpression,
           returnByValue: true
         });
         const value = response.result?.result?.value;
@@ -1079,14 +1092,14 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async registerVaultInOwnedInstance(vaultPath: string): Promise<void> {
     const config = ensureNonNullable(this.ownedConfig);
 
-    mkdirSync(config.userDataDir, { recursive: true });
+    mkdirSync(config.userDataDirectory, { recursive: true });
     if (config.asar) {
-      copyAsarIntoUserData(config.asar.path, config.asar.version, config.userDataDir);
+      copyAsarIntoUserData(config.asar.path, config.asar.version, config.userDataDirectory);
     }
 
     const vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
     const obsidianJson = buildOwnedObsidianJson({ ts: Date.now(), vaultId, vaultPath });
-    writeFileSync(join(config.userDataDir, 'obsidian.json'), JSON.stringify(obsidianJson));
+    writeFileSync(join(config.userDataDirectory, 'obsidian.json'), JSON.stringify(obsidianJson));
 
     // Relaunch-retry: some old (Electron 10-era) Obsidian builds intermittently
     // Boot with `window.app` present but the workspace never initializing, so the
@@ -1103,11 +1116,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
       const instance = await launchOwnedObsidianInstance({
         cdpHost: this.cdpHost,
         exePath: config.exePath,
-        extraArgs: [
-          ...resolveOwnedHiddenLaunchArgs(this.isObsidianAppVisible),
-          ...resolveSandboxLaunchArgs(this.shouldDisableSandbox)
+        extraArguments: [
+          ...resolveOwnedHiddenLaunchArguments(this.isObsidianAppVisible),
+          ...resolveSandboxLaunchArguments(this.shouldDisableSandbox)
         ],
-        userDataDir: config.userDataDir
+
+        userDataDirectory: config.userDataDirectory
       });
       this.ownedInstance = instance;
       this.cdpPort = instance.port;
@@ -1150,11 +1164,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }, this.commandTimeoutInMilliseconds);
 
       function handler(event: MessageEvent): void {
-        const msg = JSON.parse(String(event.data)) as CdpResponse;
-        if (msg.id === id) {
+        const message = JSON.parse(String(event.data)) as CdpResponse;
+        if (message.id === id) {
           clearTimeout(timeout);
           ws.removeEventListener('message', handler);
-          resolve(msg);
+          resolve(message);
         }
       }
 
@@ -1166,7 +1180,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   /**
    * Polls a killed owned instance's CDP endpoint until it stops responding,
    * confirming the process has exited and released Electron's single-instance
-   * lock on the shared user-data dir before a fresh instance is launched into it.
+   * lock on the shared user-data directory before a fresh instance is launched into it.
    *
    * @param cdpUrl - The CDP URL of the instance that was just killed.
    */
@@ -1247,7 +1261,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
           }
           const hasGraceElapsed = documentCompleteSince !== null
             && Date.now() - documentCompleteSince >= this.deadBootGraceInMilliseconds;
-          if (checkRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
+          if (resolveRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
             log('[cdp-transport] Owned renderer failed to initialize (dead boot); failing fast.');
             throw new RendererFailedToInitializeError(vaultPath);
           }
@@ -1282,6 +1296,21 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Attempts to remove a directory recursively, returning whether it succeeded.
+ *
+ * @param directory - The directory to remove.
+ * @returns `true` if removed, `false` if the removal threw (e.g. handles held).
+ */
+function didRemoveDirectory(directory: string): boolean {
+  try {
+    rmSync(directory, { force: true, recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Returns the platform-specific command to launch Obsidian with remote debugging enabled.
  *
  * Resolves the actual installed Obsidian executable (covering installer-based
@@ -1301,21 +1330,6 @@ async function getObsidianLaunchCommand(port: number): Promise<string> {
   }
 
   return `"${exePath}" ${flag} &`;
-}
-
-/**
- * Attempts to remove a directory recursively, returning whether it succeeded.
- *
- * @param dir - The directory to remove.
- * @returns `true` if removed, `false` if the removal threw (e.g. handles held).
- */
-function tryRemoveDir(dir: string): boolean {
-  try {
-    rmSync(dir, { force: true, recursive: true });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /* v8 ignore stop */
