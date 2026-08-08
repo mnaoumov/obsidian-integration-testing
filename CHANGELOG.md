@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 10.0.0
+
+- refactor!: eslint unicorn
+- chore(deps): sweep npm dependencies and override brace-expansion off GHSA-rgw5-rvv9-x895
+
 ## 9.2.2
 
 - fix: kill orphans
