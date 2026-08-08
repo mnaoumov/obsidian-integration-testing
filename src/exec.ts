@@ -10,20 +10,20 @@ import { spawn } from 'node:child_process';
 import process from 'node:process';
 
 /**
- * A command part: either a plain string or an {@link ExecArg} with batched arguments.
+ * A command part: either a plain string or an {@link ExecArgument} with batched arguments.
  */
-export type CommandPart = ExecArg | string;
+export type CommandPart = ExecArgument | string;
 
 /**
- * A command argument that contains a list of args to be batched.
+ * A command argument that contains a list of commandArguments to be batched.
  * If the expanded command exceeds the platform's max command length,
- * the batched args are split into sequential executions.
+ * the batched commandArguments are split into sequential executions.
  */
-export interface ExecArg {
+export interface ExecArgument {
   /**
    * The arguments to batch.
    */
-  readonly batchedArgs: readonly string[];
+  readonly batchedArguments: readonly string[];
 }
 
 /**
@@ -61,7 +61,7 @@ export interface ExecOption {
   readonly shouldIncludeDetails?: boolean;
 
   /**
-   * An input to be passed to the command.
+   * An argument to be passed to the command.
    */
   readonly stdin?: string;
 
@@ -135,26 +135,26 @@ export function exec(command: CommandPart[] | string, options: ExecOption = {}):
     if (batchResult) {
       return batchResult;
     }
-    const args = command.filter((part): part is string => typeof part === 'string');
-    const commandLine = toCommandLine(args);
+    const commandArguments = command.filter((part): part is string => typeof part === 'string');
+    const commandLine = toCommandLine(commandArguments);
 
     const maxCommandLength = getMaxCommandLength();
     if (commandLine.length > maxCommandLength) {
       return Promise.reject(
         new Error(
-          `Command line is too long (${String(commandLine.length)} chars, max ${String(maxCommandLength)} on ${process.platform}). Consider using ExecArg with batchedArgs.`
+          `Command line is too long (${String(commandLine.length)} chars, max ${String(maxCommandLength)} on ${process.platform}). Consider using ExecArgument with batchedArguments.`
         )
       );
     }
 
-    return execString(commandLine, options, args);
+    return execString(commandLine, options, commandArguments);
   }
 
   const maxCommandLength = getMaxCommandLength();
   if (command.length > maxCommandLength) {
     return Promise.reject(
       new Error(
-        `Command line is too long (${String(command.length)} chars, max ${String(maxCommandLength)} on ${process.platform}). Consider using ExecArg with batchedArgs.`
+        `Command line is too long (${String(command.length)} chars, max ${String(maxCommandLength)} on ${process.platform}). Consider using ExecArgument with batchedArguments.`
       )
     );
   }
@@ -167,11 +167,11 @@ export function exec(command: CommandPart[] | string, options: ExecOption = {}):
  *
  * @param command - The command string.
  * @param options - The exec options.
- * @param rawArgs - The original argument array (if available), used by the
+ * @param rawArguments - The original argument array (if available), used by the
  *   direct-spawn fallback on Windows when the command contains newlines.
  * @returns A Promise resolving to the result.
  */
-function execString(command: string, options: ExecOption = {}, rawArgs?: string[]): Promise<ExecResult | string> {
+function execString(command: string, options: ExecOption = {}, rawArguments?: string[]): Promise<ExecResult | string> {
   const {
     cwd = process.cwd(),
     isQuiet: quiet = false,
@@ -182,7 +182,7 @@ function execString(command: string, options: ExecOption = {}, rawArgs?: string[
   } = options;
 
   return new Promise((resolve, reject) => {
-    const child = spawnViaShell(command, cwd, rawArgs);
+    const child = spawnViaShell(command, cwd, rawArguments);
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
 
     if (timeoutInMilliseconds !== undefined) {
@@ -241,9 +241,9 @@ function execString(command: string, options: ExecOption = {}, rawArgs?: string[
       });
     });
 
-    child.on('error', (err) => {
+    child.on('error', (error) => {
       if (!ignoreExitCode) {
-        reject(err);
+        reject(error);
         return;
       }
 
@@ -279,45 +279,41 @@ const CMD_META_RE = /[()%!^"<>&|]/g;
  * Converts an array of command-line arguments into a single command-line string
  * using the `CommandLineToArgvW` convention.
  *
- * @param args - The array of command-line arguments to convert.
+ * @param commandArguments - The array of command-line arguments to convert.
  * @returns A string representing the command-line invocation.
  */
-export function toCommandLine(args: string[]): string {
-  return args.map((arg) => argvQuote(arg)).join(' ');
+export function toCommandLine(commandArguments: string[]): string {
+  return commandArguments.map((argument) => argvQuote(argument)).join(' ');
 }
 
 /**
  * Quotes a single argument so that `CommandLineToArgvW` will decode it
  * unchanged.
  *
- * @param arg - The raw argument string.
+ * @param argument - The raw argument string.
  * @returns The quoted argument string.
  */
-function argvQuote(arg: string): string {
-  if (arg.length > 0 && !/[\s\t\n\v"]/.test(arg)) {
-    return arg;
+function argvQuote(argument: string): string {
+  if (argument.length > 0 && !/[\s\t\n\v"]/.test(argument)) {
+    return argument;
   }
 
   const BACKSLASH_ESCAPE_FACTOR = 2;
   let result = '"';
-  for (let i = 0; i < arg.length; i++) {
-    let numBackslashes = 0;
-    while (i < arg.length && arg[i] === '\\') {
-      i++;
-      numBackslashes++;
+  for (let index = 0; index < argument.length; index++) {
+    let numberBackslashes = 0;
+    while (index < argument.length && argument[index] === '\\') {
+      index++;
+      numberBackslashes++;
     }
 
-    if (i === arg.length) {
-      result += '\\'.repeat(numBackslashes * BACKSLASH_ESCAPE_FACTOR);
+    if (index === argument.length) {
+      result += '\\'.repeat(numberBackslashes * BACKSLASH_ESCAPE_FACTOR);
       break;
     }
 
-    const ch = arg.charAt(i);
-    if (ch === '"') {
-      result += `${'\\'.repeat(numBackslashes * BACKSLASH_ESCAPE_FACTOR + 1)}"`;
-    } else {
-      result += '\\'.repeat(numBackslashes) + ch;
-    }
+    const ch = argument.charAt(index);
+    result += ch === '"' ? `${'\\'.repeat(numberBackslashes * BACKSLASH_ESCAPE_FACTOR + 1)}"` : '\\'.repeat(numberBackslashes) + ch;
   }
 
   result += '"';
@@ -331,15 +327,15 @@ function argvQuote(arg: string): string {
  * @param commandLine - The already-quoted command line string.
  * @returns The string with all cmd metacharacters `^`-escaped.
  */
-function cmdEscapeCommandLine(commandLine: string): string {
-  return commandLine.replace(CMD_META_RE, '^$&');
+function commandEscapeCommandLine(commandLine: string): string {
+  return commandLine.replaceAll(CMD_META_RE, '^$&');
 }
 
 /**
  * Executes batched commands sequentially and concatenates stdout.
  *
- * @param baseCommand - The base command without batched args.
- * @param batches - The batches of args.
+ * @param baseCommand - The base command without batched commandArguments.
+ * @param batches - The batches of commandArguments.
  * @param options - The exec options.
  * @returns A Promise resolving to the concatenated result.
  */
@@ -368,31 +364,31 @@ async function executeBatches(baseCommand: string, batches: string[][], options:
  */
 function getMaxCommandLength(): number {
   const WINDOWS_MAX_COMMAND_LENGTH = 8191;
-  const UNIX_MAX_COMMAND_LENGTH = 131072;
+  const UNIX_MAX_COMMAND_LENGTH = 131_072;
   return process.platform === 'win32' ? WINDOWS_MAX_COMMAND_LENGTH : UNIX_MAX_COMMAND_LENGTH;
 }
 
 /**
- * Handles a command array that may contain an {@link ExecArg}.
+ * Handles a command array that may contain an {@link ExecArgument}.
  * Returns a Promise if batching is needed, or `undefined` if the command
- * has no ExecArg and should be processed normally.
+ * has no ExecArgument and should be processed normally.
  *
  * @param parts - The command parts.
  * @param options - The exec options.
  * @returns A Promise if batching is handled, or `undefined`.
  */
 function handleBatchedCommand(parts: CommandPart[], options: ExecOption): Promise<ExecResult | string> | undefined {
-  const execArgs = parts.filter(isExecArg);
-  if (execArgs.length === 0) {
+  const execArguments = parts.filter(isExecArgument);
+  if (execArguments.length === 0) {
     return undefined;
   }
-  if (execArgs.length > 1) {
-    return Promise.reject(new Error('Only one ExecArg with batchedArgs is allowed per command'));
+  if (execArguments.length > 1) {
+    return Promise.reject(new Error('Only one ExecArgument with batchedArguments is allowed per command'));
   }
 
-  const execArg = execArgs[0];
+  const execArgument = execArguments[0];
   /* v8 ignore start -- Always truthy after the length check above. */
-  if (!execArg) {
+  if (!execArgument) {
     return undefined;
   }
   /* v8 ignore stop */
@@ -401,7 +397,7 @@ function handleBatchedCommand(parts: CommandPart[], options: ExecOption): Promis
   const baseCommand = toCommandLine(staticParts);
   const maxCommandLength = getMaxCommandLength();
 
-  const fullCommand = `${baseCommand} ${execArg.batchedArgs.join(' ')}`;
+  const fullCommand = `${baseCommand} ${execArgument.batchedArguments.join(' ')}`;
   if (fullCommand.length <= maxCommandLength) {
     return execString(fullCommand, options);
   }
@@ -409,23 +405,23 @@ function handleBatchedCommand(parts: CommandPart[], options: ExecOption): Promis
   const batches: string[][] = [];
   let currentBatch: string[] = [];
 
-  for (const arg of execArg.batchedArgs) {
-    const tentative = `${baseCommand} ${[...currentBatch, arg].join(' ')}`;
+  for (const argument of execArgument.batchedArguments) {
+    const tentative = `${baseCommand} ${[...currentBatch, argument].join(' ')}`;
     if (tentative.length > maxCommandLength) {
       if (currentBatch.length === 0) {
         return Promise.reject(
           new Error(
-            `Cannot split command into batches: a single argument (${String(arg.length)} chars) plus the base command (${String(baseCommand.length)} chars) exceeds the max command length (${String(maxCommandLength)}).`
+            `Cannot split command into batches: a single argument (${String(argument.length)} chars) plus the base command (${String(baseCommand.length)} chars) exceeds the max command length (${String(maxCommandLength)}).`
           )
         );
       }
       batches.push(currentBatch);
-      currentBatch = [arg];
+      currentBatch = [argument];
     } else {
-      currentBatch.push(arg);
+      currentBatch.push(argument);
     }
   }
-  /* v8 ignore start -- Always true after the loop; batchedArgs is non-empty at this point. */
+  /* v8 ignore start -- Always true after the loop; batchedArguments is non-empty at this point. */
   if (currentBatch.length > 0) {
     /* v8 ignore stop */
     batches.push(currentBatch);
@@ -435,39 +431,39 @@ function handleBatchedCommand(parts: CommandPart[], options: ExecOption): Promis
 }
 
 /**
- * Checks if a command part is an {@link ExecArg}.
+ * Checks if a command part is an {@link ExecArgument}.
  *
  * @param part - The command part to check.
- * @returns Whether the part is an ExecArg.
+ * @returns Whether the part is an ExecArgument.
  */
-function isExecArg(part: CommandPart): part is ExecArg {
-  return typeof part === 'object' && 'batchedArgs' in part;
+function isExecArgument(part: CommandPart): part is ExecArgument {
+  return typeof part === 'object' && 'batchedArguments' in part;
 }
 
 /**
  * Spawns a child process via the appropriate shell.
  *
- * On Windows, when the raw args array is available, spawns the process
- * directly without any shell — passing args via `CreateProcess`, which
+ * On Windows, when the raw commandArguments array is available, spawns the process
+ * directly without any shell — passing commandArguments via `CreateProcess`, which
  * avoids all `cmd.exe` quoting/escaping issues (nested quotes, metacharacters,
- * newlines in args, etc.).
+ * newlines in commandArguments, etc.).
  *
  * On Windows (cmd.exe path), applies `^`-escaping for cmd metacharacters.
  *
  * @param command - The command string to execute.
  * @param cwd - The working directory.
- * @param rawArgs - The original argument array (if available).
+ * @param rawArguments - The original argument array (if available).
  * @returns The spawned child process.
  */
-function spawnViaShell(command: string, cwd: string, rawArgs?: string[]): ChildProcessWithoutNullStreams {
-  if (process.platform === 'win32' && rawArgs) {
-    const [program, ...args] = rawArgs;
-    /* v8 ignore start -- Always truthy; rawArgs comes from the array path which has at least one element. */
+function spawnViaShell(command: string, cwd: string, rawArguments?: string[]): ChildProcessWithoutNullStreams {
+  if (process.platform === 'win32' && rawArguments) {
+    const [program, ...commandArguments] = rawArguments;
+    /* v8 ignore start -- Always truthy; rawArguments comes from the array path which has at least one element. */
     if (!program) {
       throw new Error('Command array must not be empty');
     }
     /* v8 ignore stop */
-    return spawn(program, args, {
+    return spawn(program, commandArguments, {
       cwd,
       env: CHILD_ENV,
       stdio: 'pipe'
@@ -478,7 +474,7 @@ function spawnViaShell(command: string, cwd: string, rawArgs?: string[]): ChildP
     throw new Error('Commands containing newlines cannot be executed through cmd.exe on Windows. Pass an argument array instead of a string.');
   }
 
-  const shellCommand = process.platform === 'win32' ? cmdEscapeCommandLine(command) : command;
+  const shellCommand = process.platform === 'win32' ? commandEscapeCommandLine(command) : command;
   return spawn(shellCommand, [], {
     cwd,
     env: CHILD_ENV,
@@ -490,13 +486,13 @@ function spawnViaShell(command: string, cwd: string, rawArgs?: string[]): ChildP
 /**
  * Removes a suffix from the end of a string if present.
  *
- * @param str - The string to trim.
+ * @param value - The string to trim.
  * @param suffix - The suffix to remove.
  * @returns The trimmed string.
  */
-function trimEnd(str: string, suffix: string): string {
-  if (str.endsWith(suffix)) {
-    return str.slice(0, -suffix.length);
+function trimEnd(value: string, suffix: string): string {
+  if (value.endsWith(suffix)) {
+    return value.slice(0, -suffix.length);
   }
-  return str;
+  return value;
 }

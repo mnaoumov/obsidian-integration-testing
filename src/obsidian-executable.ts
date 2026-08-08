@@ -107,7 +107,7 @@ async function resolveOnWindows(): Promise<string> {
   }
 
   const localAppData = process.env['LOCALAPPDATA'] ?? '';
-  const installerPath = `${localAppData}\\Programs\\Obsidian\\Obsidian.exe`;
+  const installerPath = String.raw`${localAppData}\Programs\Obsidian\Obsidian.exe`;
   if (existsSync(installerPath)) {
     return installerPath;
   }

@@ -71,7 +71,7 @@ describe.runIf(SHOULD_RUN)('force auto-open + full usability of the owned vault 
         // Seeded vault rather than sticking on the selector (which would time out).
         // Run an app-only closure end-to-end (evalWrapper must tolerate the missing
         // Community-plugin API) and confirm it sees the seeded vault.
-        const vaultName = await connection.evalInObsidian({ fn: ({ app }) => app.vault.getName() });
+        const vaultName = await connection.evalInObsidian({ callback: ({ app }) => app.vault.getName() });
         expect(vaultName).toBe(basename(connection.vault.path));
       } finally {
         await connection.dispose();

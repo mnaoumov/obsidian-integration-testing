@@ -34,7 +34,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
   invalid: [
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => any): void;
+        declare function onClick(callback: (evt: MouseEvent) => any): void;
         onClick(async () => {});
       `,
       errors: [{ messageId: MESSAGE_ID }],
@@ -42,7 +42,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => any): void;
+        declare function onClick(callback: (evt: MouseEvent) => any): void;
         onClick(async function() {});
       `,
       errors: [{ messageId: MESSAGE_ID }],
@@ -50,7 +50,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => unknown): void;
+        declare function onClick(callback: (evt: MouseEvent) => unknown): void;
         onClick(async () => {});
       `,
       errors: [{ messageId: MESSAGE_ID }],
@@ -58,7 +58,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     },
     {
       code: `
-        declare function register(name: string, fn: () => any): void;
+        declare function register(name: string, callback: () => any): void;
         register('test', async () => {});
       `,
       errors: [{ messageId: MESSAGE_ID }],
@@ -66,7 +66,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     },
     {
       code: `
-        declare class Button { onClick(fn: (evt: MouseEvent) => any): void; }
+        declare class Button { onClick(callback: (evt: MouseEvent) => any): void; }
         declare const btn: Button;
         btn.onClick(async () => {});
       `,
@@ -75,7 +75,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => any | string): void;
+        declare function onClick(callback: (evt: MouseEvent) => any | string): void;
         onClick(async () => {});
       `,
       errors: [{ messageId: MESSAGE_ID }],
@@ -83,7 +83,7 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => unknown | number): void;
+        declare function onClick(callback: (evt: MouseEvent) => unknown | number): void;
         onClick(async () => {});
       `,
       errors: [{ messageId: MESSAGE_ID }],
@@ -93,42 +93,42 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
   valid: [
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => any): void;
+        declare function onClick(callback: (evt: MouseEvent) => any): void;
         onClick(() => {});
       `,
       name: 'non-async callback to => any return (fine)'
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => void): void;
+        declare function onClick(callback: (evt: MouseEvent) => void): void;
         onClick(async () => {});
       `,
       name: 'async callback to => void return (handled by no-misused-promises)'
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => Promise<void>): void;
+        declare function onClick(callback: (evt: MouseEvent) => Promise<void>): void;
         onClick(async () => {});
       `,
       name: 'async callback to => Promise<void> return (correct usage)'
     },
     {
       code: `
-        declare function onClick(fn: (evt: MouseEvent) => string): void;
+        declare function onClick(callback: (evt: MouseEvent) => string): void;
         onClick(() => 'ok');
       `,
       name: 'non-async callback to => string return'
     },
     {
       code: `
-        declare function register(name: string, fn: () => Promise<void>): void;
+        declare function register(name: string, callback: () => Promise<void>): void;
         register('test', async () => {});
       `,
       name: 'async callback as second argument with => Promise<void> return'
     },
     {
       code: `
-        declare function takesOne(fn: () => void): void;
+        declare function takesOne(callback: () => void): void;
         takesOne(() => {}, async () => {});
       `,
       name: 'extra async arg beyond declared params (no param to check)'
@@ -136,21 +136,21 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     {
       code: `
         type Awaitable<T> = T | PromiseLike<T>;
-        declare function beforeAll(fn: () => Awaitable<unknown>): void;
+        declare function beforeAll(callback: () => Awaitable<unknown>): void;
         beforeAll(async () => {});
       `,
       name: 'async callback to => Awaitable<unknown> (type alias explicitly handles promises)'
     },
     {
       code: `
-        declare function onDone(fn: () => unknown | Promise<void>): void;
+        declare function onDone(callback: () => unknown | Promise<void>): void;
         onDone(async () => {});
       `,
       name: 'async callback to => unknown | Promise<void> (union explicitly includes Promise)'
     },
     {
       code: `
-        declare function onDone(fn: () => any | Promise<void>): void;
+        declare function onDone(callback: () => any | Promise<void>): void;
         onDone(async () => {});
       `,
       name: 'async callback to => any | Promise<void> (union explicitly includes Promise)'
@@ -158,14 +158,14 @@ ruleTester.run('no-async-callback-to-unsafe-return', toRuleTesterModule(noAsyncC
     {
       code: `
         type Awaitable<T> = T | PromiseLike<T>;
-        declare function beforeAll(fn: () => Awaitable<any>): void;
+        declare function beforeAll(callback: () => Awaitable<any>): void;
         beforeAll(async () => {});
       `,
       name: 'async callback to => Awaitable<any> (type alias explicitly handles promises)'
     },
     {
       code: `
-        declare function run(fn: Function): void;
+        declare function run(callback: Function): void;
         run(async () => {});
       `,
       name: 'async callback to Function type (no call signatures to check)'

@@ -24,7 +24,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Absolute path to the repo-root `metadata.json` catalog. */
+/**
+Absolute path to the repo-root `metadata.json` catalog.
+*/
 export const METADATA_JSON_PATH = join(import.meta.dirname, '..', '..', 'metadata.json');
 
 /**

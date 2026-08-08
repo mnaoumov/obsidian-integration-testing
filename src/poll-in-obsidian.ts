@@ -23,9 +23,9 @@ import type { Promisable } from 'type-fest';
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import type { ContextArgs } from './context-id.ts';
+import type { ContextArguments } from './context-id.ts';
 import type {
-  CommonArgs,
+  CommonArguments,
   EvalInObsidianParams,
   GenericObject
 } from './eval-in-obsidian.ts';
@@ -40,23 +40,23 @@ const DEFAULT_POLL_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**
  * Parameters for {@link pollInObsidian}. Mirrors {@link EvalInObsidianParams} for
- * the shared forwarded fields (`args` / `contextId` / `transport` / `vaultPath`);
+ * the shared forwarded fields (`input` / `contextId` / `transport` / `vaultPath`);
  * `start` / `poll` are the in-Obsidian closures and `until` is the Node-side
  * acceptance predicate.
  */
-export interface PollInObsidianParams<Args extends GenericObject, PollResult, TContextId extends ContextId<unknown> | undefined = undefined> {
-  /**
-   * Additional arguments passed to both `start` and `poll` (serialized like
-   * {@link EvalInObsidianParams.args}).
-   */
-  readonly args?: Args;
-
+export interface PollInObsidianParams<Input extends GenericObject, PollResult, TContextId extends ContextId<unknown> | undefined = undefined> {
   /**
    * A {@link ContextId} shared by `start` and `poll`, so `start` can stash
    * non-serializable state that `poll` later reads. When omitted, each closure
    * gets a fresh empty `context`.
    */
   readonly contextId?: TContextId;
+
+  /**
+   * Additional arguments passed to both `start` and `poll` (serialized like
+   * {@link EvalInObsidianParams.input}).
+   */
+  readonly input?: Input;
 
   /**
    * Delay between `poll` attempts, in milliseconds.
@@ -70,14 +70,14 @@ export interface PollInObsidianParams<Args extends GenericObject, PollResult, TC
    * ~30s CDP cap): it should read and return a JSON-serializable status, not
    * await the long operation itself.
    */
-  poll(this: void, args: Args & CommonArgs & ContextArgs<TContextId>): Promisable<PollResult>;
+  poll(this: void, input: CommonArguments & ContextArguments<TContextId> & Input): Promisable<PollResult>;
 
   /**
    * An optional closure run **once** before polling begins, to kick off the
    * long-running work (fire-and-forget from Node's perspective). Keep it short —
    * start the work and return; do not await it to completion here.
    */
-  start?(this: void, args: Args & CommonArgs & ContextArgs<TContextId>): Promisable<unknown>;
+  start?(this: void, input: CommonArguments & ContextArguments<TContextId> & Input): Promisable<unknown>;
 
   /**
    * Total budget before the poll rejects, in milliseconds.
@@ -116,12 +116,12 @@ export interface PollInObsidianParams<Args extends GenericObject, PollResult, TC
  * @param params - The poll parameters.
  * @returns A {@link Promise} that resolves with the first accepted `poll` result.
  */
-export async function pollInObsidian<Args extends GenericObject, PollResult, TContextId extends ContextId<unknown> | undefined = undefined>(
-  params: PollInObsidianParams<Args, PollResult, TContextId>
+export async function pollInObsidian<Input extends GenericObject, PollResult, TContextId extends ContextId<unknown> | undefined = undefined>(
+  params: PollInObsidianParams<Input, PollResult, TContextId>
 ): Promise<PollResult> {
   const {
-    args,
     contextId,
+    input,
     intervalInMilliseconds = DEFAULT_POLL_INTERVAL_IN_MILLISECONDS,
     poll,
     start,
@@ -132,15 +132,15 @@ export async function pollInObsidian<Args extends GenericObject, PollResult, TCo
     vaultPath
   } = params;
 
-  async function runEval<Result>(fn: (fnArgs: Args & CommonArgs & ContextArgs<TContextId>) => Promisable<Result>): Promise<Result> {
-    const evalParams: EvalInObsidianParams<Args, Result, TContextId> = {
-      fn,
-      ...(args !== undefined && { args }),
+  async function runEval<Result>(callback: (functionArguments: CommonArguments & ContextArguments<TContextId> & Input) => Promisable<Result>): Promise<Result> {
+    const evalParams: EvalInObsidianParams<Input, Result, TContextId> = {
+      callback,
+      ...(input !== undefined && { input }),
       ...(contextId !== undefined && { contextId }),
       ...(transport !== undefined && { transport }),
       ...(vaultPath !== undefined && { vaultPath })
     };
-    return evalInObsidian<Args, Result, TContextId>(evalParams);
+    return evalInObsidian<Input, Result, TContextId>(evalParams);
   }
 
   if (start) {

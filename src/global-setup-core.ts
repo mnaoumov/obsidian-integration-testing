@@ -30,7 +30,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import type { EnablePluginResult } from './enable-plugin.ts';
 import type { SetupLock } from './setup-lock.ts';
-import type { PopulateFilesParams } from './temp-vault.ts';
+import type { PopulateFilesParams } from './temporary-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
@@ -42,8 +42,8 @@ import { errorToString } from './error-to-string.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import {
   resolveLeftoverMaxAgeInMilliseconds,
-  resolveShouldSweepLeftovers,
-  sweepHostLeftovers
+  sweepHostLeftovers,
+  willSweepLeftovers
 } from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import {
@@ -53,7 +53,7 @@ import {
   shouldRetryPluginEnable
 } from './plugin-enable-retry.ts';
 import { acquireSetupLock } from './setup-lock.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
@@ -114,13 +114,15 @@ export interface CoreSetupParams {
 
   /**
    * Files and folders to write into the vault **before** Obsidian opens it, so
-   * its startup scan indexes them in one pass (see {@link TempVault.populate}).
+   * its startup scan indexes them in one pass (see {@link TemporaryVault.populate}).
    * Use this for large fixtures — writing thousands of notes after open and
    * forcing a re-scan is far slower and less reliable.
    */
   readonly populate?: PopulateFilesParams | undefined;
 
-  /** Transport options. When omitted, uses an off-screen owned desktop instance. */
+  /**
+  Transport options. When omitted, uses an off-screen owned desktop instance.
+   */
   readonly transportOptions?: ObsidianTransportOptions | undefined;
 }
 
@@ -129,16 +131,24 @@ export interface CoreSetupParams {
  * to pass context to test workers.
  */
 export interface CoreSetupResult {
-  /** The temporary vault created during setup. */
-  readonly tempVault: TempVault;
+  /**
+  The temporary vault created during setup.
+   */
+  readonly temporaryVault: TemporaryVault;
 
-  /** The transport instance used during setup. */
+  /**
+  The transport instance used during setup.
+   */
   readonly transport: ObsidianTransport;
 
-  /** Short label for log messages (e.g. `"obsidian-cdp"`). */
+  /**
+  Short label for log messages (e.g. `"obsidian-cdp"`).
+   */
   readonly transportLabel: string;
 
-  /** The transport options that were resolved. */
+  /**
+  The transport options that were resolved.
+   */
   readonly transportOptions: ObsidianTransportOptions | undefined;
 }
 
@@ -146,16 +156,24 @@ export interface CoreSetupResult {
  * Parameters for {@link copyPluginIntoVault}.
  */
 interface CopyPluginIntoVaultParams {
-  /** Short label for log messages. */
+  /**
+  Short label for log messages.
+   */
   readonly label: string;
 
-  /** The project root to resolve the built plugin from. */
+  /**
+  The project root to resolve the built plugin from.
+   */
   readonly projectRoot: string;
 
-  /** The temp vault to copy the plugin into. */
-  readonly tempVault: TempVault;
+  /**
+  The temp vault to copy the plugin into.
+   */
+  readonly temporaryVault: TemporaryVault;
 
-  /** The transport (used for the mobile/desktop-only compatibility check). */
+  /**
+  The transport (used for the mobile/desktop-only compatibility check).
+   */
   readonly transport: ObsidianTransport;
 }
 
@@ -163,19 +181,29 @@ interface CopyPluginIntoVaultParams {
  * Parameters for {@link enableExtraCommunityPlugins}.
  */
 interface EnableExtraCommunityPluginsParams {
-  /** Short label for log messages. */
+  /**
+  Short label for log messages.
+   */
   readonly label: string;
 
-  /** The ids of the extra community plugins to enable (their binaries must already be in the vault). */
+  /**
+  The ids of the extra community plugins to enable (their binaries must already be in the vault).
+   */
   readonly pluginIds: readonly string[];
 
-  /** The temp vault the plugins were seeded into. */
-  readonly tempVault: TempVault;
+  /**
+  The temp vault the plugins were seeded into.
+   */
+  readonly temporaryVault: TemporaryVault;
 
-  /** The transport to evaluate against. */
+  /**
+  The transport to evaluate against.
+   */
   readonly transport: ObsidianTransport;
 
-  /** The resolved transport options (source of the plugin-enable retry knobs). */
+  /**
+  The resolved transport options (source of the plugin-enable retry knobs).
+   */
   readonly transportOptions: null | ObsidianTransportOptions;
 }
 
@@ -183,19 +211,29 @@ interface EnableExtraCommunityPluginsParams {
  * Parameters for {@link enablePluginInVault}.
  */
 interface EnablePluginInVaultParams {
-  /** Short label for log messages. */
+  /**
+  Short label for log messages.
+   */
   readonly label: string;
 
-  /** The id of the plugin to enable. */
+  /**
+  The id of the plugin to enable.
+   */
   readonly pluginId: string;
 
-  /** The temp vault the plugin was copied into. */
-  readonly tempVault: TempVault;
+  /**
+  The temp vault the plugin was copied into.
+   */
+  readonly temporaryVault: TemporaryVault;
 
-  /** The transport to evaluate against. */
+  /**
+  The transport to evaluate against.
+   */
   readonly transport: ObsidianTransport;
 
-  /** The resolved transport options (source of the plugin-enable retry knobs). */
+  /**
+  The resolved transport options (source of the plugin-enable retry knobs).
+   */
   readonly transportOptions: null | ObsidianTransportOptions;
 }
 
@@ -203,16 +241,24 @@ interface EnablePluginInVaultParams {
  * Parameters for {@link sweepLeftovers}.
  */
 interface SweepLeftoversParams {
-  /** Directory names to keep regardless of age (e.g. a concurrent setup's vault). */
+  /**
+  Directory names to keep regardless of age (e.g. a concurrent setup's vault).
+   */
   readonly excludedNames?: readonly string[] | undefined;
 
-  /** Short label for log messages. */
+  /**
+  Short label for log messages.
+   */
   readonly label: string;
 
-  /** Which end of the run is sweeping, for the log prefix. */
+  /**
+  Which end of the run is sweeping, for the log prefix.
+   */
   readonly phase: 'setup' | 'teardown';
 
-  /** The resolved transport options (source of the sweep knobs). */
+  /**
+  The resolved transport options (source of the sweep knobs).
+   */
   readonly transportOptions: ObsidianTransportOptions | undefined;
 }
 
@@ -249,7 +295,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   await sweepLeftovers({ label, phase: 'setup', transportOptions });
 
   let transport: ObsidianTransport | undefined;
-  let tempVault: TempVault | undefined;
+  let temporaryVault: TemporaryVault | undefined;
 
   try {
     log(`[integration-setup:${label}] Creating transport...`);
@@ -259,13 +305,13 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     log(`[integration-setup:${label}] Project root: ${projectRoot}`);
     const shouldInstallPlugin = params?.installPlugin !== false;
 
-    tempVault = new TempVault();
-    log(`[integration-setup:${label}] Created temp vault: ${tempVault.path}`);
+    temporaryVault = new TemporaryVault();
+    log(`[integration-setup:${label}] Created temp vault: ${temporaryVault.path}`);
 
     let pluginId: string | undefined;
 
     if (shouldInstallPlugin) {
-      pluginId = await copyPluginIntoVault({ label, projectRoot, tempVault, transport });
+      pluginId = await copyPluginIntoVault({ label, projectRoot, temporaryVault, transport });
     } else {
       log(`[integration-setup:${label}] Skipping plugin install (installPlugin: false) — registering an empty vault.`);
     }
@@ -273,31 +319,31 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     if (params?.populate) {
       const entryCount = Object.keys(params.populate).length;
       log(`[integration-setup:${label}] Populating vault with ${String(entryCount)} entries before open...`);
-      tempVault.populate(params.populate);
+      temporaryVault.populate(params.populate);
     }
 
-    await ensureAlwaysUpdateLinks(tempVault, label);
+    await ensureAlwaysUpdateLinks(temporaryVault, label);
 
     log(`[integration-setup:${label}] Syncing vault to device...`);
-    await tempVault.syncToDevice(transport);
+    await temporaryVault.syncToDevice(transport);
     log(`[integration-setup:${label}] Registering vault...`);
-    await tempVault.register(transport);
+    await temporaryVault.register(transport);
     log(`[integration-setup:${label}] Vault registered.`);
 
     if (pluginId !== undefined) {
-      await enablePluginInVault({ label, pluginId, tempVault, transport, transportOptions });
+      await enablePluginInVault({ label, pluginId, temporaryVault, transport, transportOptions });
     }
 
     await enableExtraCommunityPlugins({
       label,
       pluginIds: params?.enableCommunityPlugins ?? [],
-      tempVault,
+      temporaryVault,
       transport,
       transportOptions
     });
 
     const augmentedOptions = augmentTransportOptions(transportOptions, transport);
-    const result: CoreSetupResult = { tempVault, transport, transportLabel: label, transportOptions: augmentedOptions };
+    const result: CoreSetupResult = { temporaryVault, transport, transportLabel: label, transportOptions: augmentedOptions };
     activeSetups.add(result);
     if (lock) {
       setupLocks.set(result, lock);
@@ -307,8 +353,8 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   } catch (error: unknown) {
     log(`[integration-setup:${label}] Setup failed, cleaning up...`);
     try {
-      if (tempVault && transport) {
-        await tempVault.dispose(transport);
+      if (temporaryVault && transport) {
+        await temporaryVault.dispose(transport);
       }
     } catch (cleanupError: unknown) {
       log(`[integration-setup:${label}] Vault cleanup error (non-fatal): ${errorToString(cleanupError)}`);
@@ -352,7 +398,7 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
   }
 
   await sweepLeftovers({
-    excludedNames: [...activeSetups].map((activeSetup) => basename(activeSetup.tempVault.path)),
+    excludedNames: [...activeSetups].map((activeSetup) => basename(activeSetup.temporaryVault.path)),
     label: result.transportLabel,
     phase: 'teardown',
     transportOptions: result.transportOptions
@@ -437,7 +483,7 @@ function augmentTransportOptions(
  * @returns The plugin id read from the manifest.
  */
 async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<string> {
-  const { label, projectRoot, tempVault, transport } = params;
+  const { label, projectRoot, temporaryVault, transport } = params;
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
@@ -452,10 +498,10 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
   const buildStat = await stat(mainJs);
   log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
 
-  const pluginDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
-  await mkdir(pluginDir, { recursive: true });
-  await cp(distPath, pluginDir, { recursive: true });
-  await writeFile(join(tempVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+  const pluginDirectory = join(temporaryVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
+  await mkdir(pluginDirectory, { recursive: true });
+  await cp(distPath, pluginDirectory, { recursive: true });
+  await writeFile(join(temporaryVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
 
   return pluginId;
 }
@@ -468,10 +514,10 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
  * @param params - The enable parameters.
  */
 async function enableExtraCommunityPlugins(params: EnableExtraCommunityPluginsParams): Promise<void> {
-  const { label, pluginIds, tempVault, transport, transportOptions } = params;
+  const { label, pluginIds, temporaryVault, transport, transportOptions } = params;
   for (const pluginId of pluginIds) {
     log(`[integration-setup:${label}] Enabling extra community plugin "${pluginId}"...`);
-    await enablePluginInVault({ label, pluginId, tempVault, transport, transportOptions });
+    await enablePluginInVault({ label, pluginId, temporaryVault, transport, transportOptions });
   }
 }
 
@@ -485,7 +531,7 @@ async function enableExtraCommunityPlugins(params: EnableExtraCommunityPluginsPa
  * @param params - The enable parameters.
  */
 async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<void> {
-  const { label, pluginId, tempVault, transport, transportOptions } = params;
+  const { label, pluginId, temporaryVault, transport, transportOptions } = params;
   log(`[integration-setup:${label}] Enabling plugin "${pluginId}"...`);
 
   /*
@@ -514,11 +560,11 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
     let result: EnablePluginResult;
     try {
       result = await evalInObsidian({
-        args: { pluginId },
-        fn: enablePluginWithErrorCapture,
+        callback: enablePluginWithErrorCapture,
+        input: { pluginId },
         shouldSkipPreflightChecks: true,
         transport,
-        vaultPath: tempVault.path
+        vaultPath: temporaryVault.path
       });
     } catch (error) {
       /*
@@ -591,12 +637,12 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
  * config keys are preserved, and runs before `syncToDevice` so the value reaches
  * mobile devices too.
  *
- * @param tempVault - The owned temp vault to configure.
+ * @param temporaryVault - The owned temp vault to configure.
  * @param label - The transport label, for logging.
  */
-async function ensureAlwaysUpdateLinks(tempVault: TempVault, label: string): Promise<void> {
-  const configDir = join(tempVault.path, OBSIDIAN_CONFIG_DIR);
-  const appJsonPath = join(configDir, APP_JSON);
+async function ensureAlwaysUpdateLinks(temporaryVault: TemporaryVault, label: string): Promise<void> {
+  const configDirectory = join(temporaryVault.path, OBSIDIAN_CONFIG_DIR);
+  const appJsonPath = join(configDirectory, APP_JSON);
   let appConfig: Record<string, unknown> = {};
   try {
     appConfig = JSON.parse(await readFile(appJsonPath, 'utf-8')) as Record<string, unknown>;
@@ -604,7 +650,7 @@ async function ensureAlwaysUpdateLinks(tempVault: TempVault, label: string): Pro
     // No existing app.json (or unreadable) — start from an empty config.
   }
   appConfig['alwaysUpdateLinks'] = true;
-  await mkdir(configDir, { recursive: true });
+  await mkdir(configDirectory, { recursive: true });
   await writeFile(appJsonPath, JSON.stringify(appConfig, null, APP_JSON_INDENT));
   log(`[integration-setup:${label}] Enabled alwaysUpdateLinks in ${APP_JSON} (headless rename support).`);
 }
@@ -615,18 +661,18 @@ async function ensureAlwaysUpdateLinks(tempVault: TempVault, label: string): Pro
  * @returns The absolute path to the project root.
  */
 function findProjectRoot(): string {
-  let dir = process.cwd();
+  let directory = process.cwd();
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Loop terminates at filesystem root.
   while (true) {
-    if (existsSync(join(dir, 'package.json'))) {
-      return dir;
+    if (existsSync(join(directory, 'package.json'))) {
+      return directory;
     }
-    const parent = join(dir, '..');
-    if (parent === dir) {
+    const parent = join(directory, '..');
+    if (parent === directory) {
       throw new Error('Could not find project root (no package.json found).');
     }
-    dir = parent;
+    directory = parent;
   }
 }
 
@@ -678,7 +724,7 @@ function registerProcessCleanupHandler(): void {
 
     log(`[integration-teardown] Process exiting with ${String(activeSetups.size)} setup(s) not torn down. Cleaning up...`);
 
-    for (const result of [...activeSetups]) {
+    for (const result of activeSetups) {
       coreTeardown(result).catch((error: unknown) => {
         log(`[integration-teardown:${result.transportLabel}] Process cleanup error (non-fatal): ${errorToString(error)}`);
       });
@@ -691,7 +737,7 @@ function registerProcessCleanupHandler(): void {
     }
 
     log(`[integration-teardown] Unhandled rejection detected. Tearing down ${String(activeSetups.size)} active setup(s)...`);
-    for (const result of [...activeSetups]) {
+    for (const result of activeSetups) {
       coreTeardown(result).catch((error: unknown) => {
         log(`[integration-teardown:${result.transportLabel}] Rejection cleanup error (non-fatal): ${errorToString(error)}`);
       });
@@ -704,14 +750,14 @@ function registerProcessCleanupHandler(): void {
     }
 
     log(`[integration-teardown] Sync cleanup: ${String(activeSetups.size)} orphaned setup(s).`);
-    for (const result of [...activeSetups]) {
+    for (const result of activeSetups) {
       try {
         result.transport.disposeSync?.();
       } catch (error: unknown) {
         log(`[integration-teardown:${result.transportLabel}] Sync transport cleanup error (non-fatal): ${errorToString(error)}`);
       }
       try {
-        rmSync(result.tempVault.path, { force: true, recursive: true });
+        rmSync(result.temporaryVault.path, { force: true, recursive: true });
       } catch (error: unknown) {
         log(`[integration-teardown:${result.transportLabel}] Sync vault cleanup error (non-fatal): ${errorToString(error)}`);
       }
@@ -780,7 +826,7 @@ async function resolveDistPath(projectRoot: string): Promise<string> {
  */
 async function sweepLeftovers(params: SweepLeftoversParams): Promise<void> {
   const { label, phase, transportOptions } = params;
-  if (!resolveShouldSweepLeftovers(transportOptions)) {
+  if (!willSweepLeftovers(transportOptions)) {
     return;
   }
 
@@ -807,7 +853,7 @@ async function sweepLeftovers(params: SweepLeftoversParams): Promise<void> {
  */
 async function teardownAsync(result: CoreSetupResult): Promise<void> {
   try {
-    await result.tempVault.dispose(result.transport);
+    await result.temporaryVault.dispose(result.transport);
   } catch (error: unknown) {
     log(`[integration-teardown:${result.transportLabel}] Vault cleanup error (non-fatal): ${errorToString(error)}`);
   }

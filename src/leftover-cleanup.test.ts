@@ -16,14 +16,14 @@ import {
   filterLeftoverNames,
   OWNED_USER_DATA_DIR_PREFIX,
   resolveLeftoverMaxAgeInMilliseconds,
-  resolveShouldSweepLeftovers,
   sweepDeviceLeftovers,
   sweepHostLeftovers,
-  TEMP_VAULT_DIR_PREFIX
+  TEMP_VAULT_DIR_PREFIX,
+  willSweepLeftovers
 } from './leftover-cleanup.ts';
 
-const HOUR_IN_MILLISECONDS = 3600000;
-const FIXED_NOW_IN_MILLISECONDS = 1000000000000;
+const HOUR_IN_MILLISECONDS = 3_600_000;
+const FIXED_NOW_IN_MILLISECONDS = 1_000_000_000_000;
 const DEVICE_VAULT_COUNT_2 = 2;
 const DEVICE_VAULT_COUNT_3 = 3;
 
@@ -32,14 +32,20 @@ const DEVICE_VAULT_COUNT_3 = 3;
  * records every removal it was asked for.
  */
 interface DeviceDouble {
-  /** The absolute paths `removeDir` was called with, in order. */
+  /**
+  The absolute paths `removeDirectory` was called with, in order.
+  */
   readonly attemptedPaths: string[];
 
-  /** Lists the names still present. */
+  /**
+  Lists the names still present.
+  */
   readonly listNames: () => Promise<readonly string[]>;
 
-  /** Removes one directory, rejecting for the names configured as un-removable. */
-  readonly removeDir: (path: string) => Promise<void>;
+  /**
+  Removes one directory, rejecting for the names configured as un-removable.
+  */
+  readonly removeDirectory: (path: string) => Promise<void>;
 }
 
 const mockReaddir = vi.hoisted(() => vi.fn());
@@ -122,7 +128,7 @@ describe('filterLeftoverNames', () => {
 
   it('should drop blank lines and adb error output', () => {
     expect(filterLeftoverNames({
-      names: ['', '   ', 'ls: /sdcard/Documents: No such file or directory', 'temp-vault-alpha'],
+      names: ['', ' '.repeat(3), 'ls: /sdcard/Documents: No such file or directory', 'temp-vault-alpha'],
       prefixes: [TEMP_VAULT_DIR_PREFIX]
     })).toEqual(['temp-vault-alpha']);
   });
@@ -170,22 +176,22 @@ describe('checkIsLeftoverStale', () => {
   });
 });
 
-describe('resolveShouldSweepLeftovers', () => {
+describe('willSweepLeftovers', () => {
   it('should default to true when the option is omitted', () => {
-    expect(resolveShouldSweepLeftovers(BASE_OPTIONS)).toBe(true);
-    expect(resolveShouldSweepLeftovers(undefined)).toBe(true);
+    expect(willSweepLeftovers(BASE_OPTIONS)).toBe(true);
+    expect(willSweepLeftovers(undefined)).toBe(true);
   });
 
   it('should use the provided value when the option is set', () => {
-    expect(resolveShouldSweepLeftovers({ ...BASE_OPTIONS, shouldSweepLeftovers: false })).toBe(false);
+    expect(willSweepLeftovers({ ...BASE_OPTIONS, shouldSweepLeftovers: false })).toBe(false);
   });
 });
 
 describe('resolveLeftoverMaxAgeInMilliseconds', () => {
   it('should default to 7200000ms when the option is omitted', () => {
-    expect(resolveLeftoverMaxAgeInMilliseconds(BASE_OPTIONS)).toBe(7200000);
-    expect(resolveLeftoverMaxAgeInMilliseconds(undefined)).toBe(7200000);
-    expect(DEFAULT_LEFTOVER_MAX_AGE_IN_MILLISECONDS).toBe(7200000);
+    expect(resolveLeftoverMaxAgeInMilliseconds(BASE_OPTIONS)).toBe(7_200_000);
+    expect(resolveLeftoverMaxAgeInMilliseconds(undefined)).toBe(7_200_000);
+    expect(DEFAULT_LEFTOVER_MAX_AGE_IN_MILLISECONDS).toBe(7_200_000);
   });
 
   it('should use the provided value when the option is set', () => {
@@ -332,7 +338,7 @@ describe('sweepDeviceLeftovers', () => {
    *
    * @param names - The entry names the device starts with.
    * @param unremovableNames - The names whose removal fails, as the emulator's un-expressible entry does.
-   * @returns The `listNames` / `removeDir` pair plus the removal paths attempted, in order.
+   * @returns The `listNames` / `removeDirectory` pair plus the removal paths attempted, in order.
    */
   function createDevice(names: readonly string[], unremovableNames: readonly string[] = []): DeviceDouble {
     const remaining = new Set(names);
@@ -340,7 +346,7 @@ describe('sweepDeviceLeftovers', () => {
     return {
       attemptedPaths,
       listNames: (): Promise<readonly string[]> => Promise.resolve([...remaining]),
-      removeDir: (path: string): Promise<void> => {
+      removeDirectory: (path: string): Promise<void> => {
         attemptedPaths.push(path);
         const name = path.slice(VAULT_BASE_PATH.length);
         if (unremovableNames.includes(name)) {
@@ -399,7 +405,7 @@ describe('sweepDeviceLeftovers', () => {
   it('should not count a directory that survives a removal reporting success', async () => {
     const result = await sweepDeviceLeftovers({
       listNames: (): Promise<readonly string[]> => Promise.resolve(['temp-vault-a']),
-      removeDir: (): Promise<void> => Promise.resolve(),
+      removeDirectory: (): Promise<void> => Promise.resolve(),
       vaultBasePath: VAULT_BASE_PATH
     });
 

@@ -37,10 +37,14 @@ import type { ObsidianVersionDownloads } from './obsidian-metadata.ts';
  * The platform-specific shape of an Obsidian installer asset name.
  */
 interface PlatformInstallerAssetShape {
-  /** Leading token of the asset name: `Obsidian` (Windows/macOS) or `obsidian` (Linux). */
+  /**
+  Leading token of the asset name: `Obsidian` (Windows/macOS) or `obsidian` (Linux).
+   */
   readonly baseName: string;
 
-  /** File extension without the leading dot, e.g. `exe`, `dmg`, `tar.gz`. */
+  /**
+  File extension without the leading dot, e.g. `exe`, `dmg`, `tar.gz`.
+   */
   readonly extension: string;
 
   /**
@@ -69,17 +73,23 @@ const LINUX_ASSET_SHAPE: PlatformInstallerAssetShape = {
   optionalInfixes: []
 };
 
-/** Separator forms tried, hyphen (newer) first, when falling back to templated names. */
+/**
+Separator forms tried, hyphen (newer) first, when falling back to templated names.
+ */
 const ASSET_NAME_SEPARATORS = ['-', '.'] as const;
 
 /**
  * Parameters for {@link buildInstallerAssetNameCandidates}.
  */
 export interface BuildInstallerAssetNameCandidatesParams {
-  /** The platform to build candidate names for. */
+  /**
+  The platform to build candidate names for.
+   */
   readonly platform: NodeJS.Platform;
 
-  /** The concrete `x.y.z` version. */
+  /**
+  The concrete `x.y.z` version.
+   */
   readonly version: string;
 }
 
@@ -87,13 +97,19 @@ export interface BuildInstallerAssetNameCandidatesParams {
  * Parameters for {@link selectInstallerAssetName}.
  */
 export interface SelectInstallerAssetNameParams {
-  /** The release's asset names (e.g. from the GitHub release API). */
+  /**
+  The release's asset names (e.g. from the GitHub release API).
+   */
   readonly assetNames: readonly string[];
 
-  /** The platform whose installer asset to select. */
+  /**
+  The platform whose installer asset to select.
+   */
   readonly platform: NodeJS.Platform;
 
-  /** The concrete `x.y.z` version. */
+  /**
+  The concrete `x.y.z` version.
+   */
   readonly version: string;
 }
 
@@ -101,10 +117,14 @@ export interface SelectInstallerAssetNameParams {
  * Parameters for {@link selectInstallerDownloadUrl}.
  */
 export interface SelectInstallerDownloadUrlParams {
-  /** The version's baked download URLs, or `undefined` when it is absent from the catalog. */
+  /**
+  The version's baked download URLs, or `undefined` when it is absent from the catalog.
+   */
   readonly downloads: ObsidianVersionDownloads | undefined;
 
-  /** The platform whose installer URL to select. */
+  /**
+  The platform whose installer URL to select.
+   */
   readonly platform: NodeJS.Platform;
 }
 
@@ -178,10 +198,10 @@ export function selectInstallerDownloadUrl(params: SelectInstallerDownloadUrlPar
  */
 function buildAssetNamePattern(shape: PlatformInstallerAssetShape, version: string): RegExp {
   const infixGroup = shape.optionalInfixes.length > 0
-    ? `(?:${shape.optionalInfixes.map(escapeRegExp).join('|')})?`
+    ? `(?:${shape.optionalInfixes.map((infix) => escapeRegExp(infix)).join('|')})?`
     : '';
   return new RegExp(
-    `^${escapeRegExp(shape.baseName)}[.-]${escapeRegExp(version)}${infixGroup}\\.${escapeRegExp(shape.extension)}$`
+    String.raw`^${escapeRegExp(shape.baseName)}[.-]${escapeRegExp(version)}${infixGroup}\.${escapeRegExp(shape.extension)}$`
   );
 }
 
@@ -192,7 +212,7 @@ function buildAssetNamePattern(shape: PlatformInstallerAssetShape, version: stri
  * @returns The escaped string.
  */
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**

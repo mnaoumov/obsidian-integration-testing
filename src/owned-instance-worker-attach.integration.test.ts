@@ -4,7 +4,7 @@
  * Regression test for the global-setup → test-worker attach path of the
  * harness-owned desktop CDP instance.
  *
- * Unlike the other harness integration suites (which call `TempVault.register()`
+ * Unlike the other harness integration suites (which call `TemporaryVault.register()`
  * in-worker and thus own the instance inside the worker), this suite owns the
  * instance in the **global setup** process and evals from the **worker**. The
  * worker must therefore:
@@ -32,11 +32,13 @@ import {
 } from 'vitest';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
-/** What the T116 routing probe reads back from the window it ran against. */
+/**
+What the T116 routing probe reads back from the window it ran against.
+*/
 interface VaultProbe {
   basePath: string;
   hasFreshManifest: boolean;
@@ -49,22 +51,22 @@ describe('owned instance worker attach', () => {
     // Context the global setup published (transport options incl. the owned CDP
     // Port, and the temp vault path).
     const basePath = await evalInObsidian({
-      fn({ app }): string {
+      callback({ app }): string {
         return (app.vault.adapter as FileSystemAdapter).getBasePath();
       }
     });
 
-    expect(basePath).toBe(inject('tempVaultPath'));
+    expect(basePath).toBe(inject('temporaryVaultPath'));
   });
 
   it('reuses the attached instance across multiple worker evals', async () => {
     const first = await evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 1;
       }
     });
     const second = await evalInObsidian({
-      fn(): number {
+      callback(): number {
         return 2;
       }
     });
@@ -84,7 +86,7 @@ describe('owned instance worker attach', () => {
  */
 describe('second registered vault routes to its own window', () => {
   const FRESH_PLUGIN_ID = 'second-vault-fixture';
-  const vault = new TempVault();
+  const vault = new TemporaryVault();
 
   beforeAll(async () => {
     vault.populate({
@@ -109,14 +111,14 @@ describe('second registered vault routes to its own window', () => {
 
   it('evals against the freshly-registered vault, not the shared setup vault', async () => {
     const view = await evalInObsidian({
-      args: { pluginId: FRESH_PLUGIN_ID },
-      fn({ app, pluginId }): VaultProbe {
+      callback({ app, pluginId }): VaultProbe {
         return {
           basePath: (app.vault.adapter as FileSystemAdapter).getBasePath(),
-          hasFreshManifest: Boolean(app.plugins.manifests[pluginId]),
+          hasFreshManifest: Object.hasOwn(app.plugins.manifests, pluginId),
           vaultName: app.vault.getName()
         };
       },
+      input: { pluginId: FRESH_PLUGIN_ID },
       vaultPath: vault.path
     });
 
@@ -124,6 +126,6 @@ describe('second registered vault routes to its own window', () => {
     expect(view.basePath).toBe(vault.path);
     expect(view.hasFreshManifest).toBe(true);
     // ...and the shared setup vault is a genuinely different window.
-    expect(view.basePath).not.toBe(inject('tempVaultPath'));
+    expect(view.basePath).not.toBe(inject('temporaryVaultPath'));
   });
 });

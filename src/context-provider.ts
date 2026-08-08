@@ -46,18 +46,18 @@ export function getVaultPath(): string | undefined {
  * Registers a resolver function for transport options. Called by framework
  * adapters at module load time to bridge their native injection mechanisms.
  *
- * @param fn - The resolver function.
+ * @param callback - The resolver function.
  */
-export function setTransportOptionsResolver(fn: TransportOptionsResolver): void {
-  transportOptionsResolver = fn;
+export function setTransportOptionsResolver(callback: TransportOptionsResolver): void {
+  transportOptionsResolver = callback;
 }
 
 /**
  * Registers a resolver function for the vault path. Called by framework
  * adapters at module load time to bridge their native injection mechanisms.
  *
- * @param fn - The resolver function.
+ * @param callback - The resolver function.
  */
-export function setVaultPathResolver(fn: VaultPathResolver): void {
-  vaultPathResolver = fn;
+export function setVaultPathResolver(callback: VaultPathResolver): void {
+  vaultPathResolver = callback;
 }

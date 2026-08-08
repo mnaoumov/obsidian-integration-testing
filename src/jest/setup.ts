@@ -25,7 +25,7 @@ import {
 } from '../context-provider.ts';
 
 interface ObsidianIntegrationTestingGlobal {
-  tempVaultPath?: string | undefined;
+  temporaryVaultPath?: string | undefined;
   transportOptions?: ObsidianTransportOptions | undefined;
 }
 
@@ -36,6 +36,6 @@ declare global {
 /* eslint-enable vars-on-top -- End of `declare global` block. */
 
 setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions);
-setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.tempVaultPath);
+setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVaultPath);
 
 /* v8 ignore stop */

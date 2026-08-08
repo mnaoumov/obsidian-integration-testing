@@ -16,15 +16,15 @@ import {
 } from 'vitest';
 
 import type { EnablePluginResult } from './enable-plugin.ts';
-import type { PopulateFilesParams } from './temp-vault.ts';
+import type { PopulateFilesParams } from './temporary-vault.ts';
 import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 interface CreateManifestParams {
   readonly id: string;
@@ -64,8 +64,8 @@ function createManifest(params: CreateManifestParams): string {
  */
 async function loadPluginAndCheck(params: LoadPluginParams): Promise<PluginLoadTestResult> {
   return evalInObsidian({
-    args: { pluginId: params.pluginId },
-    fn: enablePluginWithErrorCapture,
+    callback: enablePluginWithErrorCapture,
+    input: { pluginId: params.pluginId },
     shouldSkipPreflightChecks: true,
     vaultPath: params.vaultPath
   });
@@ -191,7 +191,7 @@ const TEST_CASES: PluginTestCase[] = [
 ];
 
 describe('vault trust dialog', () => {
-  const vault = new TempVault();
+  const vault = new TemporaryVault();
 
   beforeAll(async () => {
     vault.populate({
@@ -212,7 +212,7 @@ describe('vault trust dialog', () => {
 
   it('should not show "Do you trust the author" dialog after registration', async () => {
     const hasTrustDialog = await evalInObsidian({
-      fn(): boolean {
+      callback(): boolean {
         const modals = document.querySelectorAll('.modal-container');
         for (const modal of modals) {
           if (modal.textContent.includes('Do you trust the author')) {
@@ -229,7 +229,7 @@ describe('vault trust dialog', () => {
 });
 
 describe('plugin load detection', () => {
-  const vault = new TempVault();
+  const vault = new TemporaryVault();
 
   beforeAll(async () => {
     const files: PopulateFilesParams = {
@@ -249,12 +249,12 @@ describe('plugin load detection', () => {
     for (const tc of TEST_CASES) {
       try {
         await evalInObsidian({
-          args: { pluginId: tc.id },
-
-          fn: async ({ app, pluginId }): Promise<void> => {
+          callback: async ({ app, pluginId }): Promise<void> => {
             await app.plugins.disablePlugin(pluginId);
             await app.plugins.uninstallPlugin(pluginId);
           },
+
+          input: { pluginId: tc.id },
           shouldSkipPreflightChecks: true,
           vaultPath: vault.path
         });
@@ -325,7 +325,7 @@ describe('isDesktopOnly check', () => {
 });
 
 describe('obsidianModule extraction', () => {
-  const vault = new TempVault();
+  const vault = new TemporaryVault();
 
   beforeAll(async () => {
     await vault.register();
@@ -337,7 +337,7 @@ describe('obsidianModule extraction', () => {
 
   it('should provide obsidianModule with Plugin class', async () => {
     const hasPluginClass = await evalInObsidian({
-      fn({ obsidianModule }): boolean {
+      callback({ obsidianModule }): boolean {
         return typeof obsidianModule.Plugin === 'function';
       },
       vaultPath: vault.path
@@ -347,7 +347,7 @@ describe('obsidianModule extraction', () => {
 
   it('should provide obsidianModule with Notice class', async () => {
     const hasNoticeClass = await evalInObsidian({
-      fn({ obsidianModule }): boolean {
+      callback({ obsidianModule }): boolean {
         return typeof obsidianModule.Notice === 'function';
       },
       vaultPath: vault.path

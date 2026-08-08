@@ -61,7 +61,7 @@ async function addUpdatedFilesToGit(newVersion: string): Promise<void> {
   await execFromRoot(['git', 'commit', '-m', `chore: release ${newVersion}`, '--allow-empty'], { isQuiet: true });
 }
 
-async function checkGitHubCliInstalled(): Promise<void> {
+async function assertGitHubCliInstalled(): Promise<void> {
   try {
     await execFromRoot('gh --version', { isQuiet: true });
   } catch {
@@ -69,7 +69,7 @@ async function checkGitHubCliInstalled(): Promise<void> {
   }
 }
 
-async function checkGitInstalled(): Promise<void> {
+async function assertGitInstalled(): Promise<void> {
   try {
     await execFromRoot('git --version', { isQuiet: true });
   } catch {
@@ -77,14 +77,18 @@ async function checkGitInstalled(): Promise<void> {
   }
 }
 
-async function checkGitRepoClean(): Promise<void> {
+async function assertGitRepoClean(): Promise<void> {
+  const NOT_CLEAN_MESSAGE = 'Git repository is not clean. Please commit or stash your changes before releasing a new version.';
+
+  let stdout: string;
   try {
-    const stdout = await execFromRoot('git status --porcelain --untracked-files=all', { isQuiet: true });
-    if (stdout) {
-      throw new Error();
-    }
+    stdout = await execFromRoot('git status --porcelain --untracked-files=all', { isQuiet: true });
   } catch {
-    throw new Error('Git repository is not clean. Please commit or stash your changes before releasing a new version.');
+    throw new Error(NOT_CLEAN_MESSAGE);
+  }
+
+  if (stdout) {
+    throw new Error(NOT_CLEAN_MESSAGE);
   }
 }
 
@@ -110,21 +114,17 @@ async function getNewVersion(versionUpdateType: string): Promise<string> {
 async function getReleaseNotes(newVersion: string): Promise<string> {
   const changelogPath = resolvePathFromRootSafe('CHANGELOG.md');
   const content = await readFile(changelogPath, 'utf-8');
-  const newVersionEscaped = newVersion.replace('.', '\\.');
+  const newVersionEscaped = newVersion.replace('.', String.raw`\.`);
   const match = new RegExp(`\n## ${newVersionEscaped}\n\n((.|\n)+?)\n\n##`).exec(content);
   let releaseNotes = match?.[1] ? `${match[1]}\n\n` : '';
 
-  const tags = (await execFromRoot('git tag --sort=-creatordate', { isQuiet: true })).split(/\r?\n/);
+  const tagsOutput = await execFromRoot('git tag --sort=-creatordate', { isQuiet: true });
+  const tags = tagsOutput.split(/\r?\n/);
   const previousVersion = tags[1];
-  let changesUrl: string;
 
   const repoUrl = await execFromRoot('gh repo view --json url -q .url', { isQuiet: true });
 
-  if (previousVersion) {
-    changesUrl = `${repoUrl}/compare/${previousVersion}...${newVersion}`;
-  } else {
-    changesUrl = `${repoUrl}/commits/${newVersion}`;
-  }
+  const changesUrl = previousVersion ? `${repoUrl}/compare/${previousVersion}...${newVersion}` : `${repoUrl}/commits/${newVersion}`;
 
   releaseNotes += `**Full Changelog**: ${changesUrl}`;
   return releaseNotes;
@@ -139,15 +139,17 @@ function getVersionUpdateType(versionUpdateType: string): VersionUpdateType {
     case VersionUpdateType.PreMajor:
     case VersionUpdateType.PreMinor:
     case VersionUpdateType.PrePatch:
-    case VersionUpdateType.PreRelease:
+    case VersionUpdateType.PreRelease: {
       return versionUpdateTypeEnum;
+    }
 
-    default:
+    default: {
       if (/^\d+\.\d+\.\d+(?:-[\w\d.-]+)?$/.test(versionUpdateType)) {
         return VersionUpdateType.Manual;
       }
 
       return VersionUpdateType.Invalid;
+    }
   }
 }
 
@@ -190,8 +192,8 @@ async function publishGitHubRelease(newVersion: string): Promise<void> {
   });
 }
 
-function toFirstLine(str: string): string {
-  return str.split(/\r?\n/).filter(Boolean).slice(0, 1).join('');
+function toFirstLine(string_: string): string {
+  return string_.split(/\r?\n/).filter(Boolean).slice(0, 1).join('');
 }
 
 async function updateChangelog(newVersion: string): Promise<void> {
@@ -210,8 +212,8 @@ async function updateChangelog(newVersion: string): Promise<void> {
 
   const lastTag = (previousChangelogLines[0] ?? '').replaceAll('## ', '');
   const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
-  const commitMessagesStr = await execFromRoot(`git log ${commitRange} --format=%B --first-parent -z`, { isQuiet: true });
-  const commitMessages = commitMessagesStr.split('\0').filter(Boolean).map(toFirstLine);
+  const commitMessagesString = await execFromRoot(`git log ${commitRange} --format=%B --first-parent -z`, { isQuiet: true });
+  const commitMessages = commitMessagesString.split('\0').filter(Boolean).map((message) => toFirstLine(message));
 
   let newChangeLog = `# CHANGELOG\n\n## ${newVersion}\n\n`;
 
@@ -267,9 +269,9 @@ async function updateVersion(versionUpdateType?: string): Promise<void> {
   }
 
   validate(versionUpdateType);
-  await checkGitInstalled();
-  await checkGitRepoClean();
-  await checkGitHubCliInstalled();
+  await assertGitInstalled();
+  await assertGitRepoClean();
+  await assertGitHubCliInstalled();
   await npmRun('format:check');
   await npmRun('spellcheck');
   await npmRun('lint:md');
@@ -347,10 +349,10 @@ export function resolve(...pathSegments: string[]): string {
   return match?.[0] ?? path;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- It makes `editFn` strongly typed.
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- It makes `editFunction` strongly typed.
 async function editJson<T>(
   path: string,
-  editFn: (data: T) => Promisable<void>,
+  editFunction: (data: T) => Promisable<void>,
   options: EditJsonOptions = {}
 ): Promise<void> {
   const {
@@ -360,41 +362,41 @@ async function editJson<T>(
     return;
   }
   const data = await readJson<T>(path);
-  await editFn(data);
+  await editFunction(data);
   await writeJson(path, data);
 }
 
 async function editNpmShrinkWrapJson(
-  editFn: (packageLockJson: PackageLockJson) => Promisable<void>,
+  editFunction: (packageLockJson: PackageLockJson) => Promisable<void>,
   options: EditPackageJsonOptions = {}
 ): Promise<void> {
   const {
     cwd,
     shouldSkipIfMissing
   } = options;
-  await editJson<PackageJson>(getNpmShrinkWrapJsonPath(cwd), editFn, normalizeOptionalProperties<EditJsonOptions>({ shouldSkipIfMissing }));
+  await editJson<PackageJson>(getNpmShrinkWrapJsonPath(cwd), editFunction, normalizeOptionalProperties<EditJsonOptions>({ shouldSkipIfMissing }));
 }
 
 async function editPackageJson(
-  editFn: (packageJson: PackageJson) => Promisable<void>,
+  editFunction: (packageJson: PackageJson) => Promisable<void>,
   options: EditPackageJsonOptions = {}
 ): Promise<void> {
   const {
     cwd,
     shouldSkipIfMissing
   } = options;
-  await editJson<PackageJson>(getPackageJsonPath(cwd), editFn, normalizeOptionalProperties<EditJsonOptions>({ shouldSkipIfMissing }));
+  await editJson<PackageJson>(getPackageJsonPath(cwd), editFunction, normalizeOptionalProperties<EditJsonOptions>({ shouldSkipIfMissing }));
 }
 
 async function editPackageLockJson(
-  editFn: (packageLockJson: PackageLockJson) => Promisable<void>,
+  editFunction: (packageLockJson: PackageLockJson) => Promisable<void>,
   options: EditPackageJsonOptions = {}
 ): Promise<void> {
   const {
     cwd,
     shouldSkipIfMissing
   } = options;
-  await editJson<PackageJson>(getPackageLockJsonPath(cwd), editFn, normalizeOptionalProperties<EditJsonOptions>({ shouldSkipIfMissing }));
+  await editJson<PackageJson>(getPackageLockJsonPath(cwd), editFunction, normalizeOptionalProperties<EditJsonOptions>({ shouldSkipIfMissing }));
 }
 
 function getNpmShrinkWrapJsonPath(cwd?: string): string {
@@ -409,8 +411,8 @@ function getPackageLockJsonPath(cwd?: string): string {
   return ensureNonNullable(resolvePathFromRoot('package-lock.json', cwd), 'Could not determine the package-lock.json path');
 }
 
-function normalizeOptionalProperties<T>(obj: UndefinedOnPartialDeep<T>): T {
-  return obj as T;
+function normalizeOptionalProperties<T>(object: UndefinedOnPartialDeep<T>): T {
+  return object as T;
 }
 
 async function npmRun(command: string): Promise<void> {

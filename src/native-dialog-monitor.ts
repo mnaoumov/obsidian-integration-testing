@@ -33,10 +33,10 @@ export interface NativeDialogEvent {
 /**
  * Known Obsidian dialog window titles that indicate an error or blocking prompt.
  */
-const DIALOG_TITLES = [
+const DIALOG_TITLES = new Set([
   'Error',
   'Vault not found.'
-];
+]);
 
 const POLL_INTERVAL_IN_MILLISECONDS = 500;
 
@@ -59,12 +59,14 @@ export class NativeDialogMonitor {
    * @throws If any dialogs were recorded.
    */
   public assertNoDialogs(): void {
-    if (this.events.length > 0) {
-      const descriptions = this.events
-        .map((e) => `  - "${e.title}" at ${new Date(e.timestamp).toISOString()}`)
-        .join('\n');
-      throw new Error(`Native dialog(s) detected during test:\n${descriptions}`);
+    if (this.events.length === 0) {
+      return;
     }
+
+    const descriptions = this.events
+      .map((dialogEvent) => `  - "${dialogEvent.title}" at ${new Date(dialogEvent.timestamp).toISOString()}`)
+      .join('\n');
+    throw new Error(`Native dialog(s) detected during test:\n${descriptions}`);
   }
 
   /**
@@ -122,10 +124,12 @@ export class NativeDialogMonitor {
     try {
       const titles = await getObsidianWindowTitles();
       for (const title of titles) {
-        if (DIALOG_TITLES.includes(title)) {
-          this.events.push({ timestamp: Date.now(), title });
-          await dismissDialogByTitle(title);
+        if (!DIALOG_TITLES.has(title)) {
+          continue;
         }
+
+        this.events.push({ timestamp: Date.now(), title });
+        await dismissDialogByTitle(title);
       }
     } catch {
       // Process may not be running — ignore.
@@ -156,7 +160,7 @@ async function dismissDialogByTitle(title: string): Promise<void> {
  * @param title - The window title to dismiss.
  */
 async function dismissDialogLinux(title: string): Promise<void> {
-  const escapedTitle = title.replace(/"/g, '\\"');
+  const escapedTitle = title.replaceAll('"', String.raw`\"`);
   await exec(
     `xdotool search --name "${escapedTitle}" windowactivate --sync key Return 2>/dev/null || true`,
     { isQuiet: true }
@@ -169,7 +173,7 @@ async function dismissDialogLinux(title: string): Promise<void> {
  * @param title - The window title to dismiss.
  */
 async function dismissDialogMac(title: string): Promise<void> {
-  const escapedTitle = title.replace(/"/g, '\\"');
+  const escapedTitle = title.replaceAll('"', String.raw`\"`);
   await exec(
     `osascript -e 'tell application "System Events" to tell process "Obsidian" to click button 1 of window "${escapedTitle}"'`,
     { isQuiet: true }
@@ -182,7 +186,7 @@ async function dismissDialogMac(title: string): Promise<void> {
  * @param title - The window title to dismiss.
  */
 async function dismissDialogWindows(title: string): Promise<void> {
-  const escapedTitle = title.replace(/'/g, '\'\'');
+  const escapedTitle = title.replaceAll('\'', '\'\'');
   const script = [
     'Add-Type -TypeDefinition @"',
     'using System; using System.Runtime.InteropServices;',

@@ -3,23 +3,23 @@
  */
 
 import {
-  getTempVault,
+  getTemporaryVault,
   getTransportOptions
 } from './global-setup.ts';
 
 describe('jest global-setup', () => {
-  it('should throw when tempVaultPath is not set', () => {
+  it('should throw when temporaryVaultPath is not set', () => {
     globalThis.__obsidianIntegrationTesting = undefined;
-    expect(() => getTempVault()).toThrow(
-      'globalThis.__obsidianIntegrationTesting.tempVaultPath is not set'
+    expect(() => getTemporaryVault()).toThrow(
+      'globalThis.__obsidianIntegrationTesting.temporaryVaultPath is not set'
     );
   });
 
-  it('should return a TempVault when tempVaultPath is set', () => {
+  it('should return a TemporaryVault when temporaryVaultPath is set', () => {
     globalThis.__obsidianIntegrationTesting = {
-      tempVaultPath: '/tmp/test-vault'
+      temporaryVaultPath: '/tmp/test-vault'
     };
-    const vault = getTempVault();
+    const vault = getTemporaryVault();
     expect(vault.path).toBe('/tmp/test-vault');
   });
 

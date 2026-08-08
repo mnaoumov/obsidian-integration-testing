@@ -25,7 +25,7 @@ const EXTRA_PLUGIN_IDS = ['enable-extra-a', 'enable-extra-b'];
 describe('enableCommunityPlugins', () => {
   it('loads every seeded extra community plugin', async () => {
     const loadedPluginIds = await evalInObsidian({
-      fn({ app }): string[] {
+      callback({ app }): string[] {
         return Object.keys(app.plugins.plugins);
       }
     });
@@ -38,7 +38,7 @@ describe('enableCommunityPlugins', () => {
 
   it('marks every seeded extra community plugin as enabled', async () => {
     const enabledPluginIds = await evalInObsidian({
-      fn({ app }): string[] {
+      callback({ app }): string[] {
         return [...app.plugins.enabledPlugins];
       }
     });

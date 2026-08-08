@@ -11,7 +11,7 @@
 /**
  * Thrown when the owned Obsidian renderer loads but never bootstraps the app —
  * an empty `<body>` with no `window.app` after the boot grace window (see
- * `checkRendererBootState`). The usual cause is an installer/Electron shell too
+ * `resolveRendererBootState`). The usual cause is an installer/Electron shell too
  * old for the pinned Obsidian app version.
  */
 export class RendererFailedToInitializeError extends Error {

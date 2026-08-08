@@ -23,19 +23,7 @@ import type { ObsidianCdpTransportOptions } from './transport-options.ts';
 /**
  * Default for {@link ObsidianCdpTransportOptions.deadBootGraceInMilliseconds}.
  */
-export const DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS = 10000;
-
-/**
- * Parameters for {@link checkRendererBootState}.
- */
-export interface CheckRendererBootStateParams extends RendererBootObservation {
-  /**
-   * Whether the bootstrap grace window has elapsed since the renderer first
-   * reached `document.readyState` `'complete'`. The `'dead'` verdict is withheld
-   * until this is `true` so a genuinely slow boot is never misjudged.
-   */
-  readonly hasGraceElapsed: boolean;
-}
+export const DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS = 10_000;
 
 /**
  * A sample of the owned renderer's bootstrap state, taken from the vault page
@@ -49,18 +37,52 @@ export interface RendererBootObservation {
    */
   readonly bodyChildElementCount: number;
 
-  /** Whether `window.app` is defined in the vault renderer. */
+  /**
+  Whether `window.app` is defined in the vault renderer.
+   */
   readonly hasWindowApp: boolean;
 
-  /** Whether the vault renderer's `document.readyState` is `'complete'`. */
+  /**
+  Whether the vault renderer's `document.readyState` is `'complete'`.
+   */
   readonly isDocumentComplete: boolean;
 }
 
 /**
- * Verdict from {@link checkRendererBootState}: `'dead'` when the renderer has
+ * Verdict from {@link resolveRendererBootState}: `'dead'` when the renderer has
  * terminally failed to initialize, `'pending'` when it may still be booting.
  */
 export type RendererBootVerdict = 'dead' | 'pending';
+
+/**
+ * Parameters for {@link resolveRendererBootState}.
+ */
+export interface ResolveRendererBootStateParams extends RendererBootObservation {
+  /**
+   * Whether the bootstrap grace window has elapsed since the renderer first
+   * reached `document.readyState` `'complete'`. The `'dead'` verdict is withheld
+   * until this is `true` so a genuinely slow boot is never misjudged.
+   */
+  readonly hasGraceElapsed: boolean;
+}
+
+/**
+ * Resolves the dead-boot fast-fail grace window, applying the default when the
+ * option is omitted.
+ *
+ * This bounds how long the owned-vault readiness poll waits — after the renderer
+ * first reaches `document.readyState` `'complete'` — before concluding the boot
+ * is dead (see {@link resolveRendererBootState}). A value of `0` disables fast-fail
+ * entirely, restoring the plain wait-out-the-readiness-timeout behavior.
+ *
+ * @param options - The desktop CDP transport options (or the relevant slice).
+ * @returns The grace window in milliseconds.
+ */
+export function resolveDeadBootGraceInMilliseconds(
+  options?: Pick<ObsidianCdpTransportOptions, 'deadBootGraceInMilliseconds'>
+): number {
+  return options?.deadBootGraceInMilliseconds ?? DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS;
+}
 
 /**
  * Decides whether the owned renderer has terminally failed to initialize.
@@ -75,7 +97,7 @@ export type RendererBootVerdict = 'dead' | 'pending';
  * @param params - The sampled observation plus whether the grace has elapsed.
  * @returns `'dead'` when the renderer is terminally dead, otherwise `'pending'`.
  */
-export function checkRendererBootState(params: CheckRendererBootStateParams): RendererBootVerdict {
+export function resolveRendererBootState(params: ResolveRendererBootStateParams): RendererBootVerdict {
   const { bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete } = params;
 
   if (hasWindowApp) {
@@ -91,22 +113,4 @@ export function checkRendererBootState(params: CheckRendererBootStateParams): Re
   }
 
   return 'pending';
-}
-
-/**
- * Resolves the dead-boot fast-fail grace window, applying the default when the
- * option is omitted.
- *
- * This bounds how long the owned-vault readiness poll waits — after the renderer
- * first reaches `document.readyState` `'complete'` — before concluding the boot
- * is dead (see {@link checkRendererBootState}). A value of `0` disables fast-fail
- * entirely, restoring the plain wait-out-the-readiness-timeout behavior.
- *
- * @param options - The desktop CDP transport options (or the relevant slice).
- * @returns The grace window in milliseconds.
- */
-export function resolveDeadBootGraceInMilliseconds(
-  options?: Pick<ObsidianCdpTransportOptions, 'deadBootGraceInMilliseconds'>
-): number {
-  return options?.deadBootGraceInMilliseconds ?? DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS;
 }

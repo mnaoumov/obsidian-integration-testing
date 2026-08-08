@@ -55,7 +55,7 @@ describe('jsonWithFunctions', () => {
 
   it('should handle arrow functions', () => {
     const result = jsonWithFunctions({
-      fn: (x: number): number => x + 1
+      callback: (x: number): number => x + 1
     });
     expect(result).toContain('=>');
   });

@@ -20,7 +20,7 @@ const noPluginGlobalSetup = createSetup({ installPlugin: false });
 /**
  * Vitest global setup function (plugin-less; no pre-population).
  *
- * Registers an empty temp vault and provides `tempVaultPath` to tests, without
+ * Registers an empty temp vault and provides `temporaryVaultPath` to tests, without
  * copying or enabling any plugin.
  */
 export const setup = noPluginGlobalSetup.setup;
@@ -32,4 +32,4 @@ export const setup = noPluginGlobalSetup.setup;
  */
 export const teardown = noPluginGlobalSetup.teardown;
 
-export { getTempVault } from './global-setup.ts';
+export { getTemporaryVault } from './global-setup.ts';

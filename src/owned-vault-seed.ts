@@ -25,13 +25,19 @@
  * Parameters for {@link buildOwnedObsidianJson}.
  */
 export interface BuildOwnedObsidianJsonParams {
-  /** Last-access timestamp to stamp on the vault entry. */
+  /**
+  Last-access timestamp to stamp on the vault entry.
+   */
   readonly ts: number;
 
-  /** The randomly-generated vault id used as the registry key and `last_open`. */
+  /**
+  The randomly-generated vault id used as the registry key and `last_open`.
+   */
   readonly vaultId: string;
 
-  /** Absolute path to the harness vault folder. */
+  /**
+  Absolute path to the harness vault folder.
+   */
   readonly vaultPath: string;
 }
 
@@ -45,10 +51,14 @@ export interface OwnedObsidianJson {
    */
   readonly last_open: string;
 
-  /** Disables the throwaway instance's self-update. */
+  /**
+  Disables the throwaway instance's self-update.
+   */
   readonly updateDisabled: true;
 
-  /** Vault registry keyed by vault id. */
+  /**
+  Vault registry keyed by vault id.
+   */
   readonly vaults: Readonly<Record<string, OwnedObsidianVaultEntry>>;
 }
 
@@ -56,13 +66,19 @@ export interface OwnedObsidianJson {
  * A single vault entry in the seeded `obsidian.json`.
  */
 export interface OwnedObsidianVaultEntry {
-  /** Per-entry auto-open flag honored by newer Obsidian versions. */
+  /**
+  Per-entry auto-open flag honored by newer Obsidian versions.
+   */
   readonly open: true;
 
-  /** Absolute path to the harness vault folder. */
+  /**
+  Absolute path to the harness vault folder.
+   */
   readonly path: string;
 
-  /** Last-access timestamp. */
+  /**
+  Last-access timestamp.
+   */
   readonly ts: number;
 }
 

@@ -71,6 +71,7 @@ export const config = defineConfig({
           include: ['src/**/*.test.ts'],
           name: 'unit-tests',
           server: {
+            // eslint-disable-next-line unicorn/name-replacements -- `deps` is Vite's own `server.deps` option name.
             deps: {
               inline: ['@obsidian-typings', 'obsidian-dev-utils']
             }

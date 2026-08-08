@@ -8,7 +8,7 @@ import {
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { registerLibResolver } from './lib-registry.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 
 // Augment the injected `lib` bag with the two providers registered below.
 // Same declaration-merging a real provider uses (e.g. obsidian-dev-utils),
@@ -20,28 +20,28 @@ declare module './eval-in-obsidian.ts' {
   }
 }
 
-const tempVault = new TempVault();
+const temporaryVault = new TemporaryVault();
 let vaultPath: string;
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 // Two providers: proves multiple resolvers compose (Object.assign) into one flat `lib` bag.
 registerLibResolver((): object => ({ echo: (value: string): string => value }));
 registerLibResolver((): object => ({ shout: (value: string): string => value.toUpperCase() }));
 
 beforeAll(async () => {
-  await tempVault.register();
-  vaultPath = tempVault.path;
+  await temporaryVault.register();
+  vaultPath = temporaryVault.path;
 }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
 afterAll(async () => {
-  await tempVault.dispose();
+  await temporaryVault.dispose();
 });
 
 describe('lib injection integration', () => {
   it('should expose a registered resolver function on the flat lib bag', async () => {
     const result = await evalInObsidian({
-      fn({ lib }): string {
+      callback({ lib }): string {
         return lib.echo('hello');
       },
       vaultPath
@@ -51,7 +51,7 @@ describe('lib injection integration', () => {
 
   it('should support destructuring the lib bag', async () => {
     const result = await evalInObsidian({
-      fn({ lib: { echo } }): string {
+      callback({ lib: { echo } }): string {
         return echo('world');
       },
       vaultPath
@@ -61,7 +61,7 @@ describe('lib injection integration', () => {
 
   it('should merge multiple resolvers via Object.assign', async () => {
     const result = await evalInObsidian({
-      fn({ lib }): MergeResult {
+      callback({ lib }): MergeResult {
         return { echoed: lib.echo('a'), shouted: lib.shout('b') };
       },
       vaultPath
@@ -70,13 +70,13 @@ describe('lib injection integration', () => {
   });
 
   it('should not expose keys that no resolver provides', async () => {
-    const result = await evalInObsidian({
-      fn({ lib }): boolean {
+    const isNotProvidedKeyAbsent = await evalInObsidian({
+      callback({ lib }): boolean {
         return !('notProvided' in lib);
       },
       vaultPath
     });
-    expect(result).toBe(true);
+    expect(isNotProvidedKeyAbsent).toBe(true);
   });
 });
 

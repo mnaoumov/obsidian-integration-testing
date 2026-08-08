@@ -23,16 +23,20 @@ const PACKAGE_LINE_PREFIX = 'package:';
 /**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.deviceIdleTimeoutInMilliseconds}.
  */
-export const DEFAULT_DEVICE_IDLE_TIMEOUT_IN_MILLISECONDS = 60000;
+export const DEFAULT_DEVICE_IDLE_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 /**
  * Parameters for {@link checkDeviceIdle}.
  */
 export interface CheckDeviceIdleParams {
-  /** Raw stdout of `adb shell getprop init.svc.bootanim`. */
-  readonly bootAnimationProp: string;
+  /**
+  Raw stdout of `adb shell getprop init.svc.bootanim`.
+   */
+  readonly bootAnimationProperty: string;
 
-  /** Raw stdout of `adb shell cmd package list packages`. */
+  /**
+  Raw stdout of `adb shell cmd package list packages`.
+   */
   readonly packageListOutput: string;
 }
 
@@ -49,10 +53,10 @@ export interface CheckDeviceIdleParams {
  * @returns `true` when the guest is idle enough to proceed.
  */
 export function checkDeviceIdle(params: CheckDeviceIdleParams): boolean {
-  const isBootAnimationStopped = params.bootAnimationProp.trim() === BOOT_ANIMATION_STOPPED_STATE;
+  const isBootAnimationStopped = params.bootAnimationProperty.trim() === BOOT_ANIMATION_STOPPED_STATE;
   const isPackageManagerReady = params.packageListOutput
     .split('\n')
-    .some((line) => line.trim().startsWith(PACKAGE_LINE_PREFIX));
+    .some((line) => line.trimStart().startsWith(PACKAGE_LINE_PREFIX));
   return isBootAnimationStopped && isPackageManagerReady;
 }
 

@@ -41,10 +41,14 @@ export const DEFAULT_OBSIDIAN_VERSION_SPECS: readonly string[] = [PUBLIC_LATEST,
  * A requested specifier that could not be resolved and was dropped.
  */
 export interface DroppedVersionSpec {
-  /** Why the specifier could not be resolved. */
+  /**
+  Why the specifier could not be resolved.
+   */
   readonly reason: string;
 
-  /** The specifier as requested. */
+  /**
+  The specifier as requested.
+   */
   readonly spec: string;
 }
 
@@ -52,10 +56,14 @@ export interface DroppedVersionSpec {
  * Parameters for {@link formatVersionMatrixPlan}.
  */
 export interface FormatVersionMatrixPlanParams {
-  /** The de-duplicated matrix that will be run. */
+  /**
+  The de-duplicated matrix that will be run.
+   */
   readonly entries: readonly ObsidianVersionMatrixEntry[];
 
-  /** The specifiers that resolved, in requested order. */
+  /**
+  The specifiers that resolved, in requested order.
+   */
   readonly resolvedSpecs: readonly ResolvedVersionSpec[];
 }
 
@@ -63,13 +71,19 @@ export interface FormatVersionMatrixPlanParams {
  * Parameters for {@link formatVersionMatrixRunHeader}.
  */
 export interface FormatVersionMatrixRunHeaderParams {
-  /** The entry about to run. */
+  /**
+  The entry about to run.
+   */
   readonly entry: ObsidianVersionMatrixEntry;
 
-  /** The entry's zero-based position in the matrix. */
+  /**
+  The entry's zero-based position in the matrix.
+   */
   readonly index: number;
 
-  /** The total number of entries in the matrix. */
+  /**
+  The total number of entries in the matrix.
+   */
   readonly total: number;
 }
 
@@ -83,7 +97,9 @@ export interface ObsidianVersionMatrixEntry {
    */
   readonly specs: readonly string[];
 
-  /** The concrete `x.y.z` version. */
+  /**
+  The concrete `x.y.z` version.
+   */
   readonly version: string;
 }
 
@@ -91,10 +107,14 @@ export interface ObsidianVersionMatrixEntry {
  * A requested specifier paired with the concrete version it resolved to.
  */
 export interface ResolvedVersionSpec {
-  /** The specifier as requested (an `x.y.z` version or a channel alias). */
+  /**
+  The specifier as requested (an `x.y.z` version or a channel alias).
+   */
   readonly spec: string;
 
-  /** The concrete `x.y.z` version it resolved to. */
+  /**
+  The concrete `x.y.z` version it resolved to.
+   */
   readonly version: string;
 }
 
@@ -108,7 +128,9 @@ export interface ResolveRequestedSpecsResult {
    */
   readonly isDefault: boolean;
 
-  /** The specifiers to resolve, in order. */
+  /**
+  The specifiers to resolve, in order.
+   */
   readonly specs: readonly string[];
 }
 
@@ -131,7 +153,9 @@ export interface ResolveVersionSpecsParams {
    */
   readonly shouldTolerateUnresolvableSpecs: boolean;
 
-  /** The requested specifiers, in order. */
+  /**
+  The requested specifiers, in order.
+   */
   readonly specs: readonly string[];
 }
 
@@ -139,10 +163,14 @@ export interface ResolveVersionSpecsParams {
  * The outcome of {@link resolveVersionSpecs}.
  */
 export interface ResolveVersionSpecsResult {
-  /** Specifiers dropped because they could not be resolved (tolerant mode only). */
+  /**
+  Specifiers dropped because they could not be resolved (tolerant mode only).
+   */
   readonly droppedSpecs: readonly DroppedVersionSpec[];
 
-  /** The specifiers that resolved, in requested order. */
+  /**
+  The specifiers that resolved, in requested order.
+   */
   readonly resolvedSpecs: readonly ResolvedVersionSpec[];
 }
 
@@ -150,13 +178,19 @@ export interface ResolveVersionSpecsResult {
  * Parameters for {@link runVersionMatrixEntries}.
  */
 export interface RunVersionMatrixEntriesParams {
-  /** The de-duplicated matrix to run. */
+  /**
+  The de-duplicated matrix to run.
+   */
   readonly entries: readonly ObsidianVersionMatrixEntry[];
 
-  /** Called just before each entry runs, for progress reporting. */
+  /**
+  Called just before each entry runs, for progress reporting.
+   */
   readonly onEntryStart: (params: FormatVersionMatrixRunHeaderParams) => void;
 
-  /** Runs the suites against a single entry, throwing on failure. */
+  /**
+  Runs the suites against a single entry, throwing on failure.
+   */
   readonly run: (entry: ObsidianVersionMatrixEntry) => Promise<void> | void;
 }
 

@@ -65,10 +65,14 @@ import { log } from './log.ts';
  * used to reattach from another process.
  */
 export interface AppiumSessionInfo {
-  /** The device UDID (e.g. `'emulator-5554'`). */
+  /**
+  The device UDID (e.g. `'emulator-5554'`).
+   */
   deviceId: string;
 
-  /** The Appium/WebDriver session ID. */
+  /**
+  The Appium/WebDriver session ID.
+   */
   sessionId: string;
 }
 
@@ -152,18 +156,18 @@ const NO_OUTPUT = '(no output)';
 const APP_STATE_FOREGROUND = 4;
 const WEBVIEW_CONTEXT_PREFIX = 'WEBVIEW_md.obsidian';
 const WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 60000;
+const DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 60_000;
 const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
-const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90000;
+const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90_000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
-const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30000;
+const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 // --- Console capture (Layer 2 of the plugin-load error surfacing, see T88) ---
 const CONSOLE_CAPTURE_MARKER_TAG = 'OIT_CAPTURE';
 const CONSOLE_CAPTURE_TAIL_MAX_LENGTH = 8000;
 const ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS = 5000;
-const LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS = 10000;
+const LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS = 10_000;
 /**
  * `adb logcat -v time` lines look like `MM-DD HH:MM:SS.mmm LEVEL/TAG( PID): message`.
  * Keep only the tags Chromium/WebView routes JS `console.*` output and uncaught
@@ -519,7 +523,7 @@ export class AppiumTransport implements ObsidianTransport {
       );
     }
 
-    await this.removeDeviceVaultDir(deviceVaultPath);
+    await this.removeDeviceVaultDirectory(deviceVaultPath);
   }
 
   /**
@@ -543,7 +547,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     while (Date.now() < deadline) {
       const contexts = await this.browser.getContexts();
-      const obsidianContext = contexts.find((ctx): ctx is string => typeof ctx === 'string' && ctx.startsWith(WEBVIEW_CONTEXT_PREFIX));
+      const obsidianContext = contexts.find((context): context is string => typeof context === 'string' && context.startsWith(WEBVIEW_CONTEXT_PREFIX));
 
       if (obsidianContext) {
         log(`[appium-transport] Found WebView context: ${obsidianContext}`);
@@ -617,7 +621,7 @@ export class AppiumTransport implements ObsidianTransport {
    *
    * @param deviceVaultPath - The device-side vault directory path.
    */
-  private async removeDeviceVaultDir(deviceVaultPath: string): Promise<void> {
+  private async removeDeviceVaultDirectory(deviceVaultPath: string): Promise<void> {
     try {
       log(`[appium-transport] Removing vault directory from device: ${deviceVaultPath}`);
       await exec(
@@ -653,7 +657,7 @@ export class AppiumTransport implements ObsidianTransport {
       try {
         const isReady = await this.browser.execute((): boolean => {
           // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-          const app = window.app as LoadingApp | undefined;
+          const app = globalThis.app as LoadingApp | undefined;
           return !!app?.workspace?.layoutReady;
         });
         if (isReady) {
@@ -693,8 +697,8 @@ function delay(ms: number): Promise<void> {
  */
 function extractVaultName(vaultPath: string): string {
   const normalized = vaultPath.replace(/[\\/]+$/, '');
-  const lastSep = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
-  return normalized.slice(lastSep + 1);
+  const lastSeparator = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  return normalized.slice(lastSeparator + 1);
 }
 
 /* v8 ignore stop */

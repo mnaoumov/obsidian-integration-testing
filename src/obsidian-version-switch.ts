@@ -2,11 +2,11 @@
  * @file
  *
  * Integration-time helpers for provisioning a specific Obsidian **asar** (the
- * app code) into an isolated user-data dir.
+ * app code) into an isolated user-data directory.
  *
  * Obsidian's bootstrap loads the highest of (its shell's bundled
  * `resources/obsidian.asar`, the `obsidian-<version>.asar` files in the
- * user-data dir). So placing an asar here only takes effect when its version is
+ * user-data directory). So placing an asar here only takes effect when its version is
  * **>= the shell's bundled version** (upgrade-only — confirmed by the Phase 0
  * spike). Running an older version requires pinning the installer/shell instead
  * (see `obsidian-installer.ts`).
@@ -65,26 +65,30 @@ const ASAR_FILE_PATTERN = /^obsidian-(?<version>\d+\.\d+\.\d+)\.asar$/;
  * A discovered `obsidian-<version>.asar` file.
  */
 export interface DiscoveredAsar {
-  /** Absolute path to the asar file. */
+  /**
+  Absolute path to the asar file.
+   */
   readonly path: string;
 
-  /** The `x.y.z` version parsed from the file name. */
+  /**
+  The `x.y.z` version parsed from the file name.
+   */
   readonly version: string;
 }
 
 /**
- * Copies an asar file into a user-data dir under its canonical
+ * Copies an asar file into a user-data directory under its canonical
  * `obsidian-<version>.asar` name.
  *
  * @param asarPath - Source asar path.
  * @param version - The asar's version (used for the destination file name).
- * @param userDataDir - Destination user-data dir.
+ * @param userDataDirectory - Destination user-data directory.
  */
-export function copyAsarIntoUserData(asarPath: string, version: string, userDataDir: string): void {
-  mkdirSync(userDataDir, { recursive: true });
-  const dest = join(userDataDir, getVersionAsarFileName(version));
-  copyFileSync(asarPath, dest);
-  log(`[version-switch] Provisioned ${getVersionAsarFileName(version)} into ${userDataDir}.`);
+export function copyAsarIntoUserData(asarPath: string, version: string, userDataDirectory: string): void {
+  mkdirSync(userDataDirectory, { recursive: true });
+  const destination = join(userDataDirectory, getVersionAsarFileName(version));
+  copyFileSync(asarPath, destination);
+  log(`[version-switch] Provisioned ${getVersionAsarFileName(version)} into ${userDataDirectory}.`);
 }
 
 /**
@@ -139,13 +143,13 @@ export async function fetchDesktopReleasesManifest(): Promise<DesktopReleasesMan
 /**
  * Finds the newest `obsidian-<version>.asar` in a directory.
  *
- * @param dir - The directory to scan (e.g. the user's Obsidian config dir).
- * @returns The newest discovered asar, or `undefined` if none / the dir is unreadable.
+ * @param directory - The directory to scan (e.g. the user's Obsidian config directory).
+ * @returns The newest discovered asar, or `undefined` if none / the directory is unreadable.
  */
-export function findNewestAsar(dir: string): DiscoveredAsar | undefined {
+export function findNewestAsar(directory: string): DiscoveredAsar | undefined {
   let entries: string[];
   try {
-    entries = readdirSync(dir);
+    entries = readdirSync(directory);
   } catch {
     return undefined;
   }
@@ -158,7 +162,7 @@ export function findNewestAsar(dir: string): DiscoveredAsar | undefined {
     }
     const version = match.groups?.['version'] ?? '';
     if (!newest || compareVersions(version, newest.version) > 0) {
-      newest = { path: join(dir, entry), version };
+      newest = { path: join(directory, entry), version };
     }
   }
   return newest;

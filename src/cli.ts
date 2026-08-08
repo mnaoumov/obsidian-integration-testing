@@ -95,7 +95,7 @@ function buildOptions(values: ParsedCliValues): ConnectToCdpOptions {
 function parseNumber(flag: string, raw: string): number {
   const value = Number(raw);
   if (!Number.isFinite(value)) {
-    throw new Error(`--${flag} must be a number, got: ${raw}`);
+    throw new TypeError(`--${flag} must be a number, got: ${raw}`);
   }
   return value;
 }
@@ -114,7 +114,7 @@ function waitForShutdownOrInstanceClose(cdpUrl: string): Promise<void> {
     let isSettled = false;
 
     const timer = setInterval(() => {
-      checkAlive().catch(() => {
+      probeAlive().catch(() => {
         // Ignore poll errors.
       });
     }, POLL_INTERVAL_IN_MILLISECONDS);
@@ -122,7 +122,7 @@ function waitForShutdownOrInstanceClose(cdpUrl: string): Promise<void> {
     process.once('SIGINT', settle);
     process.once('SIGTERM', settle);
 
-    async function checkAlive(): Promise<void> {
+    async function probeAlive(): Promise<void> {
       try {
         const response = await fetch(versionUrl);
         if (!response.ok) {

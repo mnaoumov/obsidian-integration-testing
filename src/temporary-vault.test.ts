@@ -7,7 +7,7 @@ import {
 } from 'vitest';
 
 import { noopAsync } from './noop.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 
 const mockMkdirSync = vi.hoisted(() => vi.fn());
 const mockMkdtempSync = vi.hoisted(() => vi.fn<(prefix: string) => string>().mockReturnValue('/tmp/temp-vault-abc'));
@@ -49,15 +49,15 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('TempVault constructor', () => {
+describe('TemporaryVault constructor', () => {
   it('should create a temp directory when no path is provided', () => {
-    const vault = new TempVault();
+    const vault = new TemporaryVault();
     expect(vault.path).toBe('/tmp/temp-vault-abc');
     expect(mockMkdtempSync).toHaveBeenCalled();
   });
 
   it('should use the provided path', () => {
-    const vault = new TempVault('/my/vault');
+    const vault = new TemporaryVault('/my/vault');
     expect(vault.path).toBe('/my/vault');
     expect(mockMkdtempSync).not.toHaveBeenCalled();
   });
@@ -65,7 +65,7 @@ describe('TempVault constructor', () => {
 
 describe('populate', () => {
   it('should write a file with content', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     vault.populate({ 'note.md': '# Hello' });
     expect(mockWriteFileSync).toHaveBeenCalledWith(
       expect.stringMatching(/note\.md$/),
@@ -74,7 +74,7 @@ describe('populate', () => {
   });
 
   it('should create parent directories for nested files', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     vault.populate({ 'a/b/c.md': 'deep' });
     expect(mockMkdirSync).toHaveBeenCalledWith(
       expect.stringMatching(/a.*b$/),
@@ -83,7 +83,7 @@ describe('populate', () => {
   });
 
   it('should create empty folders for paths ending with /', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     vault.populate({ 'empty-dir/': undefined });
     expect(mockMkdirSync).toHaveBeenCalledWith(
       expect.stringMatching(/empty-dir/),
@@ -93,14 +93,14 @@ describe('populate', () => {
   });
 
   it('should throw when folder path has defined content', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     expect(() => {
       vault.populate({ 'bad-dir/': 'not empty' });
     }).toThrow('Folder path "bad-dir/" must have undefined content');
   });
 
   it('should write binary files from Uint8Array', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     const binaryContent = new Uint8Array([0x89, 0x50, 0x4E, 0x47]);
     vault.populate({ 'image.png': binaryContent });
     expect(mockWriteFileSync).toHaveBeenCalledWith(
@@ -110,14 +110,14 @@ describe('populate', () => {
   });
 
   it('should throw when file path has undefined content', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     expect(() => {
       vault.populate({ 'note.md': undefined });
     }).toThrow('File path "note.md" must have defined content; use a trailing "/" for folders');
   });
 
   it('should write multiple files', () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     vault.populate({
       'a.md': 'aaa',
       'b.md': 'bbb'
@@ -130,7 +130,7 @@ describe('populate', () => {
 
 describe('register', () => {
   it('should call registerVault with the vault path', async () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     await vault.register();
     expect(mockRegisterVault).toHaveBeenCalledWith('/vault', undefined);
   });
@@ -138,7 +138,7 @@ describe('register', () => {
 
 describe('dispose', () => {
   it('should unregister and remove the vault directory', async () => {
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     await vault.dispose();
     expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
     expect(mockRm).toHaveBeenCalledWith('/vault', { force: true, recursive: true });
@@ -154,7 +154,7 @@ describe('dispose', () => {
       }
     });
 
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     await vault.dispose();
     expect(mockRm).toHaveBeenCalledTimes(2);
   });
@@ -170,12 +170,12 @@ describe('dispose', () => {
       if (callCount <= 2) {
         return realDateNow();
       }
-      return realDateNow() + 20000;
+      return realDateNow() + 20_000;
     });
 
     mockRm.mockRejectedValue(new Error('EBUSY'));
 
-    const vault = new TempVault('/vault');
+    const vault = new TemporaryVault('/vault');
     await expect(vault.dispose()).rejects.toThrow('EBUSY');
   });
 });
@@ -183,7 +183,7 @@ describe('dispose', () => {
 describe('Symbol.asyncDispose', () => {
   it('should dispose when used with await using', async () => {
     {
-      await using _vault = new TempVault('/vault');
+      await using _vault = new TemporaryVault('/vault');
     }
     expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
     expect(mockRm).toHaveBeenCalled();

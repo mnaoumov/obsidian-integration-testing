@@ -53,17 +53,18 @@ interface MockClassRef {
  * instead of throwing. Non-proxied values are returned as-is.
  *
  * @typeParam T - The type of the object.
- * @param obj - The object to unwrap.
- * @returns The underlying target, or `obj` if it is not a strict proxy.
+ * @param object - The object to unwrap.
+ * @returns The underlying target, or `object` if it is not a strict proxy.
  */
-export function bypassStrictProxy<T>(obj: T): T {
-  if (!isObjectLike(obj)) {
-    return obj;
+export function bypassStrictProxy<T>(object: T): T {
+  if (!isObjectLike(object)) {
+    return object;
   }
-  if (!(STRICT_PROXY_TARGET_SYMBOL in obj)) {
-    return obj;
+  // eslint-disable-next-line unicorn/no-computed-property-existence-check -- `in` is required, not a shorthand: `object` may be a strict proxy, and only `in` routes through its `has` trap. `Object.hasOwn` would ask the target for an own descriptor and miss the marker.
+  if (!(STRICT_PROXY_TARGET_SYMBOL in object)) {
+    return object;
   }
-  return obj[STRICT_PROXY_TARGET_SYMBOL] as T;
+  return object[STRICT_PROXY_TARGET_SYMBOL] as T;
 }
 
 // eslint-disable-next-line @typescript-eslint/unified-signatures -- This overload infers T from mockClass; the `unknown` overload below requires explicit T. They cannot be combined.
@@ -118,6 +119,7 @@ function wrapProxy<T>(value: unknown, mockClass?: MockClassRef): T {
     return value as T;
   }
 
+  // eslint-disable-next-line unicorn/no-computed-property-existence-check -- `in` is required, not a shorthand: `value` may already be a strict proxy, and only `in` routes through its `has` trap. `Object.hasOwn` would ask the target for an own descriptor and re-wrap an already-wrapped value.
   if (STRICT_PROXY_TARGET_SYMBOL in value) {
     return value as T;
   }
@@ -125,41 +127,43 @@ function wrapProxy<T>(value: unknown, mockClass?: MockClassRef): T {
 
   const isClass = !isPlainObject(value);
   const className = mockClass?.name ?? (isClass ? value.constructor.name : '');
-  const mockProto = mockClass ? ensureGenericObject(mockClass.prototype) : null;
+  const mockPrototype = mockClass ? ensureGenericObject(mockClass.prototype) : null;
   const proxiedChildren = isClass ? null : new Map<string | symbol>();
 
   return new Proxy(value, {
-    get(target, prop, receiver): unknown {
+    get(target, property, receiver): unknown {
       // 1. Own properties and prototype chain of the original object.
-      if (prop in target) {
-        if (proxiedChildren?.has(prop)) {
-          return proxiedChildren.get(prop);
+      // eslint-disable-next-line unicorn/no-computed-property-existence-check -- Walking the PROTOTYPE CHAIN is the point, as the comment above says: inherited methods must resolve through the proxy. `Object.hasOwn` would see only own properties and send every inherited member down the "not mocked" path.
+      if (property in target) {
+        if (proxiedChildren?.has(property)) {
+          return proxiedChildren.get(property);
         }
 
-        const val: unknown = Reflect.get(target, prop, receiver);
-        if (proxiedChildren && isPlainObject(val)) {
-          const result = wrapProxy<unknown>(val);
-          proxiedChildren.set(prop, result);
+        const value_: unknown = Reflect.get(target, property, receiver);
+        if (proxiedChildren && isPlainObject(value_)) {
+          const result = wrapProxy<unknown>(value_);
+          proxiedChildren.set(property, result);
           return result;
         }
-        return val;
+        return value_;
       }
 
       // 2. Mock prototype chain (for __ methods on the mock class).
-      if (mockProto && typeof prop === 'string' && prop.endsWith('__') && prop in mockProto) {
-        const val: unknown = mockProto[prop];
-        if (typeof val === 'function') {
-          return val.bind(receiver);
+      // eslint-disable-next-line unicorn/no-computed-property-existence-check -- Walking the mock's PROTOTYPE CHAIN is the point: a `__` method inherited from a mock base class has to resolve here, and `Object.hasOwn` would only see the leaf class's own members.
+      if (mockPrototype && typeof property === 'string' && property.endsWith('__') && property in mockPrototype) {
+        const value_: unknown = mockPrototype[property];
+        if (typeof value_ === 'function') {
+          return value_.bind(receiver);
         }
-        return val;
+        return value_;
       }
 
       // 3. Passthrough props (symbols, then, toJSON, etc.).
-      if (typeof prop === 'symbol' || PASSTHROUGH_PROPS.has(prop)) {
-        return Reflect.get(target, prop, receiver);
+      if (typeof property === 'symbol' || PASSTHROUGH_PROPS.has(property)) {
+        return Reflect.get(target, property, receiver);
       }
 
-      throw new Error(`Property "${prop}" is not mocked in ${className}. To override, assign a value first: mock.${prop} = ...`);
+      throw new Error(`Property "${property}" is not mocked in ${className}. To override, assign a value first: mock.${property} = ...`);
     }
   }) as T;
 }

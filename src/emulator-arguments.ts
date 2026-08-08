@@ -7,10 +7,12 @@
 const DNS_SERVER = '8.8.8.8';
 
 /**
- * Parameters for {@link buildEmulatorArgs}.
+ * Parameters for {@link buildEmulatorArguments}.
  */
-export interface BuildEmulatorArgsParams {
-  /** The Android Virtual Device name. */
+export interface BuildEmulatorArgumentsParams {
+  /**
+  The Android Virtual Device name.
+   */
   readonly avdName: string;
 
   /**
@@ -26,10 +28,10 @@ export interface BuildEmulatorArgsParams {
  * @param params - The emulator argument parameters.
  * @returns The argument array to pass to the emulator binary.
  */
-export function buildEmulatorArgs(params: BuildEmulatorArgsParams): string[] {
-  const args = ['-avd', params.avdName, '-no-snapshot-save', '-dns-server', DNS_SERVER];
+export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): string[] {
+  const emulatorArguments = ['-avd', params.avdName, '-no-snapshot-save', '-dns-server', DNS_SERVER];
   if (params.isHidden) {
-    args.push('-no-window');
+    emulatorArguments.push('-no-window');
   }
-  return args;
+  return emulatorArguments;
 }

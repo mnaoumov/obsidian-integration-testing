@@ -54,13 +54,19 @@ export type InstallerCompatibilityAction = 'silent' | 'throw' | 'warn-nagged' | 
  * Parameters for {@link resolveAsarFallbackAction}.
  */
 export interface ResolveAsarFallbackActionParams {
-  /** Whether a `'fallback'` verdict throws (vs. proceeds with a warning). */
+  /**
+  Whether a `'fallback'` verdict throws (vs. proceeds with a warning).
+   */
   readonly shouldThrowOnSilentAsarFallback: boolean;
 
-  /** Whether a non-throwing fallback verdict is logged. */
+  /**
+  Whether a non-throwing fallback verdict is logged.
+   */
   readonly shouldWarnOnCompatibilityIssues: boolean;
 
-  /** The resolved silent-asar-fallback tier. */
+  /**
+  The resolved silent-asar-fallback tier.
+   */
   readonly tier: AsarFallbackTier;
 }
 
@@ -68,13 +74,19 @@ export interface ResolveAsarFallbackActionParams {
  * Parameters for {@link resolveInstallerCompatibilityAction}.
  */
 export interface ResolveInstallerCompatibilityActionParams {
-  /** Whether an `'unrunnable'` verdict throws (vs. proceeds to launch). */
+  /**
+  Whether an `'unrunnable'` verdict throws (vs. proceeds to launch).
+   */
   readonly shouldThrowOnIncompatibleInstaller: boolean;
 
-  /** Whether a nag / proceeding-unrunnable verdict is logged. */
+  /**
+  Whether a nag / proceeding-unrunnable verdict is logged.
+   */
   readonly shouldWarnOnCompatibilityIssues: boolean;
 
-  /** The resolved installer↔app compatibility tier. */
+  /**
+  The resolved installer↔app compatibility tier.
+   */
   readonly tier: InstallerCompatibilityTier;
 }
 
@@ -128,11 +140,11 @@ export function resolveInstallerCompatibilityAction(params: ResolveInstallerComp
  * Whether an `'unrunnable'` installer↔app pair should fail fast with
  * {@link IncompatibleInstallerVersionError} before launch.
  *
- * @param shouldThrowOnIncompatibleInstaller - The resolved option value (omitted → throw).
+ * @param shouldThrow - The configured option value (omitted → throw).
  * @returns `true` when an unrunnable pin should throw (the default).
  */
-export function resolveShouldThrowOnIncompatibleInstaller(shouldThrowOnIncompatibleInstaller?: boolean): boolean {
-  return shouldThrowOnIncompatibleInstaller ?? true;
+export function willThrowOnIncompatibleInstaller(shouldThrow?: boolean): boolean {
+  return shouldThrow ?? true;
 }
 
 /**
@@ -140,11 +152,11 @@ export function resolveShouldThrowOnIncompatibleInstaller(shouldThrowOnIncompati
  * pin — a silent fallback to the installer's own bundled asar — should fail fast
  * with {@link SilentAsarFallbackError}.
  *
- * @param shouldThrowOnSilentAsarFallback - The resolved option value (omitted → throw).
+ * @param shouldThrow - The configured option value (omitted → throw).
  * @returns `true` when a silent fallback should throw (the default).
  */
-export function resolveShouldThrowOnSilentAsarFallback(shouldThrowOnSilentAsarFallback?: boolean): boolean {
-  return shouldThrowOnSilentAsarFallback ?? true;
+export function willThrowOnSilentAsarFallback(shouldThrow?: boolean): boolean {
+  return shouldThrow ?? true;
 }
 
 /**
@@ -152,9 +164,9 @@ export function resolveShouldThrowOnSilentAsarFallback(shouldThrowOnSilentAsarFa
  * the installer↔app `'nagged'` warning and the runtime-Electron `'nagged'`
  * warning).
  *
- * @param shouldWarnOnCompatibilityIssues - The resolved option value (omitted → warn).
+ * @param shouldWarn - The configured option value (omitted → warn).
  * @returns `true` when the warnings should be emitted (the default).
  */
-export function resolveShouldWarnOnCompatibilityIssues(shouldWarnOnCompatibilityIssues?: boolean): boolean {
-  return shouldWarnOnCompatibilityIssues ?? true;
+export function willWarnOnCompatibilityIssues(shouldWarn?: boolean): boolean {
+  return shouldWarn ?? true;
 }

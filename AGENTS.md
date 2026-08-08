@@ -10,9 +10,9 @@ All entry points are under the `obsidian-integration-testing` package; `…/` be
 
 | Entry point | Purpose |
 | --- | --- |
-| `obsidian-integration-testing` | Main — `evalInObsidian`, `connectToCdp`, `ContextId`, `TempVault`, transports, types |
-| `…/vitest-global-setup-plugin` | Vitest global `setup`/`teardown` + `getTempVault()` — **installs & enables** the built plugin |
-| `…/vitest-global-setup-no-plugin` | Vitest global `setup`/`teardown` + `getTempVault()` — **empty vault**, for non-plugin consumers |
+| `obsidian-integration-testing` | Main — `evalInObsidian`, `connectToCdp`, `ContextId`, `TemporaryVault`, transports, types |
+| `…/vitest-global-setup-plugin` | Vitest global `setup`/`teardown` + `getTemporaryVault()` — **installs & enables** the built plugin |
+| `…/vitest-global-setup-no-plugin` | Vitest global `setup`/`teardown` + `getTemporaryVault()` — **empty vault**, for non-plugin consumers |
 | `…/vitest-setup` | Vitest **per-worker** `setupFiles` entry — registers the context resolvers |
 | `…/vitest/typings` | Opt-in Vitest module augmentations (`ProvidedContext`, `EnvironmentOptions`) |
 | `…/jest-global-setup-plugin` | Jest global setup (default + named) — **installs & enables** the built plugin |
@@ -56,7 +56,7 @@ Desktop (`obsidian-cdp`) defaults to a **harness-owned, isolated instance** (tem
 
 Every setup capability must reach **all three** consumption paths, never just one:
 
-- **Core (`src/global-setup-core.ts`)** — the framework-agnostic primitive. New setup behavior is implemented here first, exposed via `CoreSetupParams` / `CoreSetupResult`, so the **Manual** path (consumers wiring `TempVault` / the core directly) gets it for free.
+- **Core (`src/global-setup-core.ts`)** — the framework-agnostic primitive. New setup behavior is implemented here first, exposed via `CoreSetupParams` / `CoreSetupResult`, so the **Manual** path (consumers wiring `TemporaryVault` / the core directly) gets it for free.
 - **Vitest adapter (`src/vitest/global-setup.ts`)** — threads the capability through `createSetup(options)` and keeps the plain `setup` / `teardown` exports as the default (`createSetup()`) case.
 - **Jest adapter (`src/jest/global-setup.ts`)** — mirrors the Vitest adapter exactly: same `createSetup(options)` factory shape, same `CreateSetupOptions` fields (including thunk-vs-value conventions), same default `setup` / `teardown` exports.
 
@@ -77,7 +77,7 @@ Only the **`android`** scope (`obsidian-android-appium`) takes the lock now; `ge
 ## L8. Trusted keyboard input (`typeIntoEditor`)
 
 Every `evalInObsidian` callback receives a `typeIntoEditor(params: { editor: Editor; text: string })`
-helper as a **base** member of the injected **`lib`** bag (destructure `fn({ lib: { typeIntoEditor } })`),
+helper as a **base** member of the injected **`lib`** bag (destructure `callback({ lib: { typeIntoEditor } })`),
 typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
 (`namespace-bootstrap.ts`, the bag `evalWrapper` builds). See **L16** for the `lib` mechanism. Per **L6**
 it lives once on the Obsidian side, so Vitest / Jest / Manual all inherit it.
@@ -114,7 +114,7 @@ run its obsidian-integration vitest project serially (`fileParallelism: false`, 
 duplication decision (see the Current Task hand-off), dev-utils **keeps** its own copies of the
 trusted-input / `waitUntil` helpers (duplication accepted) and exposes them through its `__merged`
 surface, so they merge onto the base `lib`; its integration tests destructure them from `lib`
-(`async fn({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `args`.
+(`async callback({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `input`.
 
 ## L9. Test workers must register the context resolvers (`vitest-setup` / `jest-setup`)
 
@@ -155,13 +155,13 @@ it).
 ## L10. `connectToCdp` — standalone CDP debugging helper
 
 `connectToCdp(options?)` (`src/connect-to-cdp.ts`, exported from the main entry) is a thin,
-framework-agnostic convenience over `createTransportFromOptions` + `TempVault` + `evalInObsidian`. It
+framework-agnostic convenience over `createTransportFromOptions` + `TemporaryVault` + `evalInObsidian`. It
 launches (or, with `port`, attaches to) a CDP Obsidian instance, opens a vault, bootstraps the runtime
 helper namespace, and returns a disposable `CdpConnection` exposing `port`, `cdpUrl`, `vault`,
-`invoke(expr)` (raw), and `evalInObsidian({ fn, args })` (rich). It targets ad-hoc real-app debugging
+`invoke(expr)` (raw), and `evalInObsidian({ callback, input })` (rich). It targets ad-hoc real-app debugging
 (the R5 / CDP-debugging workflow) rather than test suites.
 
-**Vault-removal safety.** `TempVault.dispose()` unconditionally `rm`s its directory, so a real vault
+**Vault-removal safety.** `TemporaryVault.dispose()` unconditionally `rm`s its directory, so a real vault
 passed by path must never be routed through it. `connectToCdp` encodes this: `dispose()` removes the
 vault dir only when `shouldRemoveVaultOnDispose` is `true`, which **defaults to `true` for an implicit
 temp vault** (no `vault` given) and **`false` when a `vault` path is given** (a real vault is never
@@ -229,7 +229,7 @@ open, a DOM node to appear, a setting to apply). The closure is serialized via `
 **cannot import modules**, so it can't reuse `obsidian-dev-utils`' `retryWithTimeout` / `runWithTimeout`.
 Before this helper, every consumer hand-rolled the same poll loop inside each closure
 (`obsidian-codescript-toolkit` defined a local `waitUntil` per test; `obsidian-advanced-note-composer`'s
-`modal-instructions.desktop.integration.test.ts` hand-rolled one too). Injecting through `CommonArgs`
+`modal-instructions.desktop.integration.test.ts` hand-rolled one too). Injecting through `CommonArguments`
 is the **only** way to share such a helper into the serialized closure — the same mechanism as
 `hoverElement` / `typeIntoEditor` / `moveMouse`.
 
@@ -244,7 +244,7 @@ is the **only** way to share such a helper into the serialized closure — the s
 ### Pending migration (consumer cleanup)
 
 Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUntil` from the `lib` bag
-(destructure `async fn({ app, lib: { waitUntil } }) { … }`). First consumers: `obsidian-advanced-note-composer`
+(destructure `async callback({ app, lib: { waitUntil } }) { … }`). First consumers: `obsidian-advanced-note-composer`
 (`modal-instructions.desktop.integration.test.ts`) and `obsidian-codescript-toolkit`. Each needs its
 `obsidian-integration-testing` dependency bumped to the version that ships this helper.
 
@@ -347,7 +347,7 @@ or OS-level Win32, which is why the move uses Electron remote.
 
 ## L16. Extensible, type-safe `lib` injection (register a whole library into every closure)
 
-Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArgs`, `src/eval-in-obsidian.ts`)
+Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArguments`, `src/eval-in-obsidian.ts`)
 — a single flat bag of shared closure helpers, so a serialized closure can call them
 (`lib.typeIntoEditor({ editor, text })`, `lib.getFileOrNull({ app, … })`) instead of hand-rolling them
 or reaching a `window` global. Two layers compose into it:
@@ -372,7 +372,7 @@ or reaching a `window` global. Two layers compose into it:
 - **Bake + merge.** `ensureNamespaceBootstrapped` threads the registered resolvers into
   `bootstrapNamespace` (serialized as real function literals by the existing `json-with-functions`
   path). `evalWrapper` runs each resolver and `Object.assign`s the results into one `lib` bag added to
-  `fullArgs`. The bag starts from the harness base helpers, then each provider merges on top (later
+  `fullArguments`. The bag starts from the harness base helpers, then each provider merges on top (later
   wins); with no provider it is exactly the base. **Multiple providers compose** (runtime `Object.assign`).
 - **Version gate.** `getBootstrapVersion` / `computeBootstrapVersion` fold the resolver sources into the
   `window.__obsidianIntegrationTesting.version` used for the bootstrap-skip check, so a changed resolver
@@ -383,7 +383,7 @@ or reaching a `window` global. Two layers compose into it:
 the base helpers and is **augmentable**: a provider does
 `declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('…')) {} }`.
 Multiple augmentations merge (like the multiple `Object.assign`s at runtime). Cycle-safe: `lib` is a
-live renderer object injected into `fullArgs` (never JSON-serialized — only `fn`'s return value is),
+live renderer object injected into `fullArguments` (never JSON-serialized — only `callback`'s return value is),
 exactly like `app`, so a back-reference such as `lib.__namespaces` cannot cause a serialization cycle.
 
 Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core namespace bootstrap +
@@ -445,7 +445,7 @@ renderer loads `index.html` (`document.readyState` reaches `complete`) but the a
 timeout before throwing a generic error.
 
 - **Pure detector** — `src/renderer-boot-detection.ts` (unit-tested, not re-exported):
-  `checkRendererBootState({ bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete }) →
+  `resolveRendererBootState({ bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete }) →
   'dead' | 'pending'`. Dead ⇔ the grace has elapsed AND `window.app` is undefined AND the document is
   `complete` AND `<body>` is empty. This is exactly the confirmed incompatible-shell state and is
   **unreachable by a healthy boot** (`window.app` is defined early; a slow boot renders a non-empty
@@ -462,7 +462,7 @@ timeout before throwing a generic error.
   compatibility check now throws `IncompatibleInstallerVersionError` from `resolveOwnedInstanceConfig`
   **before** launch, so this reactive dead-boot fast-fail remains only the **safety net** for combos the
   table cannot preempt (an undetectable Linux shell version → `'unknown'`, or an app version absent from
-  `metadata.json`). Its pure `checkRendererBootState` keeps its unit coverage. There was no dead-boot
+  `metadata.json`). Its pure `resolveRendererBootState` keeps its unit coverage. There was no dead-boot
   *integration* test because the proactive throw always fired first — but **T68 unblocked one**: setting
   `shouldThrowOnIncompatibleInstaller: false` (see L21/L24) makes an `'unrunnable'` pin proceed to launch
   instead of throwing, so a dead-boot integration test can now drive this reactive path and assert
@@ -526,7 +526,7 @@ Measured breakdown (see also the auto-memory `reference_android_appium_cold_cost
 
 In descending value:
 
-1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). `emulator-args.ts`
+1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). `emulator-arguments.ts`
    passes `-no-snapshot-save`, so a fresh CI AVD full-cold-boots every run. Making snapshot load+save an
    opt-in option would let a persistent runner warm-boot — but it changes test-isolation/hermeticity, so
    the default must stay cold; this is a deliberate user tradeoff, not a default change.
@@ -628,7 +628,7 @@ reports `1.1.9`, not `1.13.0` (whereas on installer `1.6.5` it reports `1.13.0`)
 found. **Discriminators:** `obsidianModule.apiVersion` = the running asar (app) version;
 `window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the harness to assert the
 running `apiVersion` matches the requested version (so silent fallbacks are caught, not just dead boots) is
-**now done** as a post-boot runtime verify — see **L25** (`checkAsarFallback` + `SilentAsarFallbackError`).
+**now done** as a post-boot runtime verify — see **L25** (`resolveAsarFallback` + `SilentAsarFallbackError`).
 This did **not** trigger a boot re-audit of the table: with L25's default-on throw a mis-measured floor now
 fails loudly the moment anyone boots that pair, so the empirically-measured `min*` values stand and the
 catalog keeps flowing from `obsidian-versions.json` via `refresh:metadata`.
@@ -661,7 +661,7 @@ below-recommended one, and a machine-readable verdict on the result. It supersed
 dead-boot for table-known combos (see the L18 cross-reference).
 
 - **Pure verdict** — `src/installer-compatibility.ts` (unit-tested; mirrors the `renderer-boot-detection`
-  pure/glue split): `checkInstallerCompatibility({ appVersion, installerVersion, metadata }) →
+  pure/glue split): `resolveInstallerCompatibility({ appVersion, installerVersion, metadata }) →
   InstallerCompatibility` with `tier: 'ok' | 'nagged' | 'unrunnable' | 'unknown'`. `unrunnable` ⇔ installer
   `<` `minRunnableInstallerVersion`; `nagged` ⇔ `≥` run floor but `<` `minRecommendedInstallerVersion` (old
   versions only); `unknown` ⇔ installer version undefined (undetectable Linux shell) or app absent from the
@@ -669,7 +669,7 @@ dead-boot for table-known combos (see the L18 cross-reference).
 - **Distinct error** — `IncompatibleInstallerVersionError`
   (`incompatible-installer-version-error.ts`, exported from the barrel) carries `appVersion` /
   `installerVersion` / `minRunnableInstallerVersion` and a message naming the installer that would work.
-  Thrown from `resolveOwnedInstanceConfig` via the `checkAndReportCompatibility` helper on `'unrunnable'`;
+  Thrown from `resolveOwnedInstanceConfig` via the `resolveAndReportCompatibility` helper on `'unrunnable'`;
   `'nagged'` logs a warning via the warn-don't-throw `log()` channel; `'ok'`/`'unknown'` are silent.
 - **Fail-fast ordering** — the check runs only for the asar-swap-onto-shell case (the only dead-boot risk;
   the downgrade / own-installer paths run the app's own installer, so they always boot and are not checked).
@@ -707,7 +707,7 @@ global Appium). `startAppiumAndEmulator` now closes that gap: when it is about t
   detection probes from themselves triggering an npx download.
 - **Pure/testable split** mirrors `device-readiness.ts` / `appium-session-config.ts`: `src/appium-dependencies.ts`
   holds `checkIsAppiumDriverInstalled` (parses the `--json` driver list; key-presence ⇔ installed, malformed
-  output ⇒ not-installed so the caller installs) and `resolveShouldAutoInstallAppiumDependencies`
+  output ⇒ not-installed so the caller installs) and `willAutoInstallAppiumDependencies`
   (`@default true`), both unit-tested in `appium-dependencies.test.ts`. The `exec` orchestration stays in the
   `v8 ignore` factory.
 - **Windows:** the install/probe commands are passed to `exec` as **strings**, not arrays, so `exec` routes
@@ -716,7 +716,7 @@ global Appium). `startAppiumAndEmulator` now closes that gap: when it is about t
 - Supersedes L19 lever #3 ("pre-provision … driver") for the local/first-run case — provisioning it into a
   CI image is still the faster path when you control the image, but the harness no longer *requires* it.
 
-## L23. Tier-2 runtime Electron nag (`checkElectronCompatibility` + verdict-as-data)
+## L23. Tier-2 runtime Electron nag (`resolveElectronCompatibility` + verdict-as-data)
 
 The runtime companion to L21's offline installer check — deferred item (a) from that section (the parent task
 that shipped L20/L21). L21 compares the resolved **installer** version against installer-version thresholds
@@ -727,7 +727,7 @@ owned instance is actually running, post-boot, and warns when it is below the ap
 never blocks (an old Electron runs but nags) — there is no error tier here, unlike L21's `'unrunnable'`.
 
 - **Pure verdict** — `src/electron-compatibility.ts` (unit-tested; mirrors `installer-compatibility.ts`):
-  `checkElectronCompatibility({ appVersion, actualElectronVersion, metadata }) → ElectronCompatibility` with
+  `resolveElectronCompatibility({ appVersion, actualElectronVersion, metadata }) → ElectronCompatibility` with
   `tier: 'nagged' | 'ok' | 'unknown'`. `nagged` ⇔ `actualElectronVersion < minRecommendedElectronVersion`;
   `unknown` ⇔ the live version was unreadable or the app version carries no recommended Electron in the table.
   Pure `x.y.z` compares (reuses `compareVersions`) — no I/O. `minRecommendedElectronVersion` is keyed by **app**
@@ -749,7 +749,7 @@ never blocks (an old Electron runs but nags) — there is no error tier here, un
   assert on it rather than spying on `console.warn` (the repo has no warn-spy precedent). It is a **separate**
   accessor from L21's `getCompatibility()` because it is only known post-boot, whereas the installer verdict is
   resolved pre-launch and rides on the immutable `OwnedInstanceConfig`.
-- **Barrel** — `checkElectronCompatibility` + `CheckElectronCompatibilityParams` / `ElectronCompatibility` /
+- **Barrel** — `resolveElectronCompatibility` + `CheckElectronCompatibilityParams` / `ElectronCompatibility` /
   `ElectronCompatibilityTier` are exported from the main entry.
 - **Silencing/tuning is via L24's knob** — `shouldWarnOnCompatibilityIssues: false` suppresses this
   runtime-Electron nag alongside the installer nag (the verdict still rides on `getElectronCompatibility()`).
@@ -783,10 +783,10 @@ mode runs neither check.
   never reaches the data surface, it throws first" is qualified accordingly.
 
 - **Pure/testable split** (mirrors `visibility.ts` / `renderer-boot-detection.ts`): `src/compatibility-options.ts`
-  (internal, **not** re-exported) holds `resolveShouldWarnOnCompatibilityIssues` /
-  `resolveShouldThrowOnIncompatibleInstaller` (the `@default true` resolvers, G10q-tested) and
+  (internal, **not** re-exported) holds `willWarnOnCompatibilityIssues` /
+  `willThrowOnIncompatibleInstaller` (the `@default true` resolvers, G10q-tested) and
   `resolveInstallerCompatibilityAction({ tier, shouldThrow, shouldWarn }) → 'throw' | 'warn-unrunnable' |
-  'warn-nagged' | 'silent'` — the pure decision the v8-ignored `transport-factory.checkAndReportCompatibility`
+  'warn-nagged' | 'silent'` — the pure decision the v8-ignored `transport-factory.resolveAndReportCompatibility`
   glue executes (throw / `log` / return the verdict). All branches are unit-tested in
   `compatibility-options.test.ts`.
 - **Coverage honesty** — the `log()` suppression itself lives in v8-ignored glue and is not asserted (the repo
@@ -811,7 +811,7 @@ back (rather than dead-boots) L18 never fires; L25 is what catches it.
 
 - **Pure verdict** — `src/asar-fallback-detection.ts` (unit-tested; mirrors the `renderer-boot-detection` /
   `installer-compatibility` / `electron-compatibility` pure/glue split):
-  `checkAsarFallback({ requestedVersion, runningApiVersion }) → AsarFallback` with
+  `resolveAsarFallback({ requestedVersion, runningApiVersion }) → AsarFallback` with
   `tier: 'match' | 'fallback' | 'unknown'`. `'match'` ⇔ the running version equals the pin; `'fallback'` ⇔ they
   differ (the pin was not honored); `'unknown'` ⇔ no asar was swapped (nothing to verify) or the live version
   was unreadable. Pure `x.y.z` compare (`compareVersions`) — no I/O and **no metadata** (a pin-vs-running
@@ -833,7 +833,7 @@ back (rather than dead-boots) L18 never fires; L25 is what catches it.
   (below); with the default throw it fails first (same data-surface caveat L24 records for `'unrunnable'`).
 - **Knob** — `shouldThrowOnSilentAsarFallback` (`@default true`) is the **third** member of the L24
   compatibility-knob family, on `ObsidianCdpTransportOptions` + `ConnectToCdpOptions`, resolved by the pure,
-  unit-tested `resolveShouldThrowOnSilentAsarFallback` + `resolveAsarFallbackAction({ tier, shouldThrow,
+  unit-tested `willThrowOnSilentAsarFallback` + `resolveAsarFallbackAction({ tier, shouldThrow,
   shouldWarn }) → 'throw' | 'warn' | 'silent'` in `compatibility-options.ts`. When `false`, a fallback no longer
   throws; it warns (gated by the **existing** `shouldWarnOnCompatibilityIssues`, not a new warn knob) and
   surfaces the verdict as data. Owned path only; it rides the existing options channel, so all three consumption
@@ -862,7 +862,7 @@ back (rather than dead-boots) L18 never fires; L25 is what catches it.
 The owned-instance path is usable end-to-end (vault auto-opens, readiness completes, `evalInObsidian`
 runs) on **every installer from 0.6.4 up** — the oldest the harness supports. Getting there took a stack of
 old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-17/18). App-only closures
-(`fn({ app })`) work on the whole range. **`obsidianModule`** resolves wherever the community-plugin registry
+(`callback({ app })`) work on the whole range. **`obsidianModule`** resolves wherever the community-plugin registry
 exists (`plugins.manifests` + `loadPlugin`) — the API **first appears at 0.9.7**, so the module resolves on
 **every version from 0.9.7 up** (0.9.7 needs two partial-API workarounds — undefined `configDir` and absent
 `uninstallPlugin` — see the `getObsidianModule` bullet). It is `null` on the **0.6.4–0.9.6** band, which
@@ -1020,9 +1020,9 @@ global-setup shared vault + any vault a worker registers in-worker), so routing 
 never "there is only one window, use it".
 
 - **`findTargetForVault` matches by probed base path only.** It probes every page target's
-  `app.vault.adapter.getBasePath()` and returns the one that matches `vaultPath` via **`vaultPathsMatch`**
+  `app.vault.adapter.getBasePath()` and returns the one that matches `vaultPath` via **`areVaultPathsMatching`**
   (`src/vault-path-match.ts`, pure + unit-tested — normalizes separator flavor and, on a case-insensitive
-  filesystem, case; on Windows `getBasePath()` and the Node `TempVault` path are backslash-identical, so the
+  filesystem, case; on Windows `getBasePath()` and the Node `TemporaryVault` path are backslash-identical, so the
   normalization is defensive). There is **no `targets.length === 1` shortcut** — returning the sole window
   blindly mis-routes whenever the requested vault's window is not (yet) the one open. A target whose probe
   *throws* is treated as not-ready and skipped (the caller's readiness poll retries); a target whose probe
@@ -1049,7 +1049,7 @@ in-Obsidian operation (e.g. a whole plugin/vault bootstrap) cannot be awaited in
 `pollInObsidian` (`src/poll-in-obsidian.ts`, exported from the barrel) drives it from **Node** instead:
 an optional short `start` closure kicks the work off once, then a short `poll` closure is re-evaluated on
 an interval — each a separate, well-under-30s eval — until the Node-side `until(result)` predicate accepts,
-or a Node-side `timeoutInMilliseconds` (default `120000`) elapses. `args` / `contextId` / `transport` /
+or a Node-side `timeoutInMilliseconds` (default `120000`) elapses. `input` / `contextId` / `transport` /
 `vaultPath` are forwarded to every underlying `evalInObsidian` (a shared `contextId` lets `start` stash
 non-serializable state that `poll` reads). It replaces the per-test hand-rolled `evalInObsidian` + `sleep`
 loop.
@@ -1147,7 +1147,7 @@ teardown, not a sweep.
 the two resolvers are pure, and `sweepHostLeftovers` takes injectable `roots`, so the whole module is
 unit-tested against mocked `node:fs/promises` (**G16** — unit tests never touch the real filesystem) rather
 than hidden from the 100% gate. It also owns the `TEMP_VAULT_DIR_PREFIX` / `OWNED_USER_DATA_DIR_PREFIX` /
-`HARNESS_TEMP_DIR_NAME` constants that `temp-vault.ts` and `transport-factory.ts` now build their paths
+`HARNESS_TEMP_DIR_NAME` constants that `temporary-vault.ts` and `transport-factory.ts` now build their paths
 from, so the sweeper and the creator can never disagree about what the residue is called.
 
 Everything is best-effort: an unreadable root, an entry that cannot be `stat`ed, and a directory another
@@ -1234,7 +1234,7 @@ too heavy a dependency for this harness, and it would put a compile step in ever
 
 **What we use instead.** The one cross-platform resource the kernel reclaims deterministically on process
 death: a socket. `parent-liveness.ts` listens on an ephemeral loopback port **before** the spawn; once the
-vault is ready the transport evaluates `buildParentLivenessWatchdogExpr(port)` in the renderer, which
+vault is ready the transport evaluates `buildParentLivenessWatchdogExpression(port)` in the renderer, which
 `require('node:net')`-connects back. However the harness dies, the kernel closes its end, the renderer sees
 `close`, and the window destroys itself. No polling, no heartbeat interval, no timeout to tune. This is the
 mirror image of `obsidian-dev-utils`' `watchDevInstanceAndStopOnClose`, which stops the dev build when the
@@ -1253,3 +1253,61 @@ destroy/fail-open/fallback branches be driven without a renderer. Only the wirin
 and `transport-desktop-cdp.ts` is `v8 ignore`d. The expression is written in ES5 style (`var`, `function`,
 no optional chaining) for the same reason as `DISMISS_TRUST_DIALOG_EXPR`: it has to parse on the Chromium
 80-era renderers of the oldest supported Obsidian versions (**L26**).
+
+## L34. Lint — `eslint-plugin-unicorn`, ported from `obsidian-dev-utils`
+
+`scripts/eslint-config.ts` is a hand-maintained sibling of `obsidian-dev-utils`' shared config (this repo
+deliberately does **not** depend on ODU — see **L17**), so ODU's new rules are ported here by hand. The
+`unicorn` block mirrors ODU's, with three groups of deviations that are this repo's and must not be "synced
+away":
+
+- **The ES2022 floor is shared, so the same six rules stay off.** `no-array-reverse`, `no-array-sort`,
+  `prefer-array-from-async`, `prefer-iterator-helpers`, `prefer-iterator-to-array`,
+  `prefer-promise-with-resolvers` and `prefer-set-methods` all suggest APIs newer than `lib: ES2022`, which
+  `metadata.json` pins to installer 1.1.9 (**L20**). `prefer-url-can-parse` is off for the matching Node
+  16.16.0 floor. Revisit them together if that floor moves.
+- **Harness-shaped patterns the rule cannot see.** `no-global-object-property-assignment` (installing
+  `__obsidianIntegrationTesting` onto `globalThis`/`window` is what this package *does*),
+  `no-top-level-side-effects` and `no-top-level-assignment-in-function` (the framework setup entry points
+  register their resolvers at import time — **L6** — and the transport cache / cleanup once-guard are module
+  singletons by design), `prefer-await` (fire-and-forget `.catch()` on scheduled work), and
+  `no-nonstandard-builtin-properties` (the rule's `Symbol` table predates `Symbol.asyncDispose`).
+- **Names that are NOT ours to expand.** `unicorn/name-replacements` runs with `checkProperties: true` and NO
+  exemption for this package's own vocabulary — the public surface was renamed to satisfy it rather than
+  configured around (see the breaking renames below). The only escapes are individual sites mirroring a name
+  a *dependency* owns: Obsidian's `PluginManifest.dir` and `Vault.configDir`, Jest's `rootDir`, Vite's
+  `server.deps`, `typescript-eslint`'s `tsconfigRootDir` / `args` / `argsIgnorePattern` / `varsIgnorePattern`.
+  Those carry a scoped disable, because renaming them would simply stop the option being read.
+  `consistent-boolean-name` keeps `check` as a recognized prefix, which validates the `checkIs*` predicate
+  family (`checkIsLockStale`, `checkIsRemovableDirectory`, `checkIsProcessAlive`, ...); the verdict-returning
+  functions that used to collide with it are now `resolve*`.
+
+**Breaking public renames this rule forced** (all consumer plugins must follow):
+
+| Before | After |
+| --- | --- |
+| `evalInObsidian({ fn, args })` / `pollInObsidian({ args })` | `evalInObsidian({ callback, input })` |
+| `CommonArgs` / `ContextArgs` / `ExecArg` | `CommonArguments` / `ContextArguments` / `ExecArgument` |
+| `TempVault` / `getTempVault()` / `tempVaultPath` | `TemporaryVault` / `getTemporaryVault()` / `temporaryVaultPath` |
+| `checkAsarFallback` / `checkElectronCompatibility` / `checkInstallerCompatibility` | `resolveAsarFallback` / `resolveElectronCompatibility` / `resolveInstallerCompatibility` |
+| `InjectPluginParams.sourceDir` | `InjectPluginParams.sourceDirectory` |
+| `OwnedInstanceConfig.userDataDir` | `OwnedInstanceConfig.userDataDirectory` |
+| `IpcSendSyncNamespaceParams.args` | `IpcSendSyncNamespaceParams.channelArguments` |
+
+`fn`/`args` could NOT take the rule's own suggestions: `function` and `arguments` are reserved words and
+cannot be binding names in a module, so the rule falls back to `function_` / `arguments_`. Since consumers
+destructure both inside closures (G76), the names had to be real identifiers — hence `callback` / `input`.
+
+Two contracts deliberately did NOT change, and must not be "fixed" to match: the on-disk leftover-sweep
+prefixes (`TEMP_VAULT_DIR_PREFIX = 'temp-vault-'`, **L31**) — renaming them would orphan existing leftover
+directories — and Electron's `--user-data-dir` switch string. The `evalWrapper` **wire format** between Node
+and the renderer did change (`{ fn, args }` → `{ callback, input }`); that is safe only because
+`getBootstrapVersion()` keys off `LIBRARY_VERSION`, so a stale namespace in a running Obsidian is
+re-bootstrapped on the version bump that ships this.
+
+**Never run `--fix` over `unicorn/name-replacements`** without `tsc` + the full suite behind it: its fixer is
+not reference-aware for enum members, interface members, and parameter properties, and object-literal keys in
+loosely typed positions are not contextually typed, so a rename can leave a dangling reference the compiler
+never sees. The vendored ambient declarations under `scripts/helpers/@types/` are exempt from it (and from
+`prefer-type-literal-last`, which fights `perfectionist/sort-union-types` there in a non-converging fix loop)
+because their names come from a dependency's published schema.

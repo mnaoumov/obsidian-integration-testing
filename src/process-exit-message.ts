@@ -14,16 +14,24 @@
  * Parameters for {@link buildProcessExitMessage}.
  */
 export interface BuildProcessExitMessageParams {
-  /** The process's exit / spawn-failure details. */
+  /**
+  The process's exit / spawn-failure details.
+   */
   readonly exitInfo: ProcessExitInfo;
 
-  /** The captured stdout+stderr tail (empty when none was captured). */
+  /**
+  The captured stdout+stderr tail (empty when none was captured).
+   */
   readonly output: string;
 
-  /** Label for the captured output section (e.g. `"Emulator output"`). */
+  /**
+  Label for the captured output section (e.g. `"Emulator output"`).
+   */
   readonly outputLabel: string;
 
-  /** Human-readable subject of the process (e.g. `"Android emulator"`). */
+  /**
+  Human-readable subject of the process (e.g. `"Android emulator"`).
+   */
   readonly subject: string;
 }
 
@@ -35,13 +43,19 @@ export interface BuildProcessExitMessageParams {
  * `spawnError` to the failure message.
  */
 export interface ProcessExitInfo {
-  /** Exit code, or `null` when terminated by a signal or when it failed to spawn. */
+  /**
+  Exit code, or `null` when terminated by a signal or when it failed to spawn.
+   */
   readonly code: null | number;
 
-  /** Terminating signal, or `null` when it exited normally or failed to spawn. */
+  /**
+  Terminating signal, or `null` when it exited normally or failed to spawn.
+   */
   readonly signal: NodeJS.Signals | null;
 
-  /** The spawn-failure message when the process never started (e.g. `ENOENT`), otherwise absent. */
+  /**
+  The spawn-failure message when the process never started (e.g. `ENOENT`), otherwise absent.
+   */
   readonly spawnError?: string;
 }
 

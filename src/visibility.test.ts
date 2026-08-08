@@ -7,8 +7,8 @@ import {
 import {
   NO_SANDBOX_LAUNCH_FLAG,
   OWNED_HIDDEN_LAUNCH_FLAGS,
-  resolveOwnedHiddenLaunchArgs,
-  resolveSandboxLaunchArgs,
+  resolveOwnedHiddenLaunchArguments,
+  resolveSandboxLaunchArguments,
   shouldHideAppiumConsole,
   shouldHideEmulatorWindow,
   shouldHideObsidianApp
@@ -59,23 +59,23 @@ describe('shouldHideAppiumConsole', () => {
   });
 });
 
-describe('resolveOwnedHiddenLaunchArgs', () => {
-  it('should return no extra args by default when the option is omitted', () => {
-    expect(resolveOwnedHiddenLaunchArgs()).toStrictEqual([]);
-    expect(resolveOwnedHiddenLaunchArgs(undefined)).toStrictEqual([]);
+describe('resolveOwnedHiddenLaunchArguments', () => {
+  it('should return no extra input by default when the option is omitted', () => {
+    expect(resolveOwnedHiddenLaunchArguments()).toStrictEqual([]);
+    expect(resolveOwnedHiddenLaunchArguments(undefined)).toStrictEqual([]);
   });
 
   it('should return the keep-alive flags when explicitly not visible', () => {
-    expect(resolveOwnedHiddenLaunchArgs(false)).toStrictEqual(OWNED_HIDDEN_LAUNCH_FLAGS);
+    expect(resolveOwnedHiddenLaunchArguments(false)).toStrictEqual(OWNED_HIDDEN_LAUNCH_FLAGS);
   });
 
   it('should return a fresh array (not the shared constant) so callers cannot mutate it', () => {
-    const args = resolveOwnedHiddenLaunchArgs(false);
-    expect(args).not.toBe(OWNED_HIDDEN_LAUNCH_FLAGS);
+    const input = resolveOwnedHiddenLaunchArguments(false);
+    expect(input).not.toBe(OWNED_HIDDEN_LAUNCH_FLAGS);
   });
 
-  it('should return no extra args when visible', () => {
-    expect(resolveOwnedHiddenLaunchArgs(true)).toStrictEqual([]);
+  it('should return no extra input when visible', () => {
+    expect(resolveOwnedHiddenLaunchArguments(true)).toStrictEqual([]);
   });
 
   it('should include the occlusion-disable and backgrounding flags', () => {
@@ -86,18 +86,18 @@ describe('resolveOwnedHiddenLaunchArgs', () => {
   });
 });
 
-describe('resolveSandboxLaunchArgs', () => {
-  it('should return no extra args by default when the option is omitted', () => {
-    expect(resolveSandboxLaunchArgs()).toStrictEqual([]);
-    expect(resolveSandboxLaunchArgs(undefined)).toStrictEqual([]);
+describe('resolveSandboxLaunchArguments', () => {
+  it('should return no extra input by default when the option is omitted', () => {
+    expect(resolveSandboxLaunchArguments()).toStrictEqual([]);
+    expect(resolveSandboxLaunchArguments(undefined)).toStrictEqual([]);
   });
 
-  it('should return no extra args when the sandbox is kept', () => {
-    expect(resolveSandboxLaunchArgs(false)).toStrictEqual([]);
+  it('should return no extra input when the sandbox is kept', () => {
+    expect(resolveSandboxLaunchArguments(false)).toStrictEqual([]);
   });
 
   it('should return the no-sandbox flag when the sandbox is disabled', () => {
-    expect(resolveSandboxLaunchArgs(true)).toStrictEqual([NO_SANDBOX_LAUNCH_FLAG]);
+    expect(resolveSandboxLaunchArguments(true)).toStrictEqual([NO_SANDBOX_LAUNCH_FLAG]);
   });
 
   it('should use the standard no-sandbox switch', () => {

@@ -43,10 +43,14 @@ import { createServer } from 'node:net';
  * for the harness process.
  */
 export interface ParentLivenessServer {
-  /** Stops listening and drops every accepted connection. */
+  /**
+  Stops listening and drops every accepted connection.
+   */
   close(): void;
 
-  /** The loopback port the renderer watchdog should connect back to. */
+  /**
+  The loopback port the renderer watchdog should connect back to.
+   */
   readonly port: number;
 }
 
@@ -70,7 +74,7 @@ export const PARENT_LIVENESS_HOST = '127.0.0.1';
  * @param port - The loopback port returned by {@link startParentLivenessServer}.
  * @returns The expression to evaluate, yielding `'armed'`, `'already-armed'`, or `'unavailable'`.
  */
-export function buildParentLivenessWatchdogExpr(port: number): string {
+export function buildParentLivenessWatchdogExpression(port: number): string {
   return `(function() {
   var FLAG = '__obsidianIntegrationTestingParentLiveness';
   if (window[FLAG]) { return 'already-armed'; }

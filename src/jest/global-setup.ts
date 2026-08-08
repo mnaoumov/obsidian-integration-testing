@@ -10,7 +10,7 @@
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
 import type { CoreSetupResult } from '../global-setup-core.ts';
-import type { PopulateFilesParams } from '../temp-vault.ts';
+import type { PopulateFilesParams } from '../temporary-vault.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 import {
@@ -21,19 +21,23 @@ import {
   coreSetup,
   coreTeardown
 } from '../global-setup-core.ts';
-import { TempVault } from '../temp-vault.ts';
+import { TemporaryVault } from '../temporary-vault.ts';
 
 /**
  * Shape of `globalThis.__obsidianIntegrationTesting`.
  *
  * Consumers may pre-populate `transportOptions` before the global setup runs
- * (e.g., via Jest config `globals`). The setup then adds `tempVaultPath`.
+ * (e.g., via Jest config `globals`). The setup then adds `temporaryVaultPath`.
  */
 interface ObsidianIntegrationTestingGlobal {
-  /** Temp vault path, set by the global setup for test workers. */
-  tempVaultPath?: string | undefined;
+  /**
+  Temp vault path, set by the global setup for test workers.
+   */
+  temporaryVaultPath?: string | undefined;
 
-  /** Transport options. Set by the consumer before setup, or by the setup itself. */
+  /**
+  Transport options. Set by the consumer before setup, or by the setup itself.
+   */
   transportOptions?: ObsidianTransportOptions | undefined;
 }
 
@@ -48,7 +52,7 @@ declare global {
 /* eslint-enable vars-on-top -- End of `declare global` block. */
 
 setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions);
-setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.tempVaultPath);
+setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVaultPath);
 
 /**
  * Options for {@link createSetup}.
@@ -115,7 +119,7 @@ export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
 
     globalThis.__obsidianIntegrationTesting = {
       ...globalThis.__obsidianIntegrationTesting,
-      tempVaultPath: setupResult.tempVault.path,
+      temporaryVaultPath: setupResult.temporaryVault.path,
       transportOptions: setupResult.transportOptions
     };
   }
@@ -128,19 +132,19 @@ export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
 /**
  * Returns the temporary vault provided by the global setup.
  *
- * Reads the vault path from `globalThis.__obsidianIntegrationTesting.tempVaultPath`,
+ * Reads the vault path from `globalThis.__obsidianIntegrationTesting.temporaryVaultPath`,
  * which is set by the Jest global setup.
  *
  * @returns The temporary vault.
  */
-export function getTempVault(): TempVault {
-  const tempVaultPath = globalThis.__obsidianIntegrationTesting?.tempVaultPath;
-  if (!tempVaultPath) {
+export function getTemporaryVault(): TemporaryVault {
+  const temporaryVaultPath = globalThis.__obsidianIntegrationTesting?.temporaryVaultPath;
+  if (!temporaryVaultPath) {
     throw new Error(
-      'globalThis.__obsidianIntegrationTesting.tempVaultPath is not set. Did you configure obsidian-integration-testing/jest-global-setup as a Jest globalSetup?'
+      'globalThis.__obsidianIntegrationTesting.temporaryVaultPath is not set. Did you configure obsidian-integration-testing/jest-global-setup as a Jest globalSetup?'
     );
   }
-  return new TempVault(tempVaultPath);
+  return new TemporaryVault(temporaryVaultPath);
 }
 
 /**

@@ -23,20 +23,6 @@ import process from 'node:process';
 const IS_CASE_INSENSITIVE_FILESYSTEM = process.platform === 'win32';
 
 /**
- * Normalizes a vault path for comparison: unifies path separators to `/`, strips
- * any trailing separators, and (on a case-insensitive filesystem) lowercases it.
- *
- * @param path - The path to normalize.
- * @param isCaseInsensitive - Whether to compare case-insensitively. Defaults to
- *   the host filesystem's behavior (case-insensitive on Windows).
- * @returns The normalized path.
- */
-export function normalizeVaultPathForComparison(path: string, isCaseInsensitive = IS_CASE_INSENSITIVE_FILESYSTEM): string {
-  const unifiedSeparators = path.replace(/[\\/]+/g, '/').replace(/\/+$/, '');
-  return isCaseInsensitive ? unifiedSeparators.toLowerCase() : unifiedSeparators;
-}
-
-/**
  * Whether a probed base path and a requested vault path refer to the same vault,
  * comparing via {@link normalizeVaultPathForComparison} so separator-flavor and
  * (on case-insensitive filesystems) case differences do not cause a false miss.
@@ -47,6 +33,20 @@ export function normalizeVaultPathForComparison(path: string, isCaseInsensitive 
  *   the host filesystem's behavior (case-insensitive on Windows).
  * @returns `true` when the two paths refer to the same vault.
  */
-export function vaultPathsMatch(basePath: string, vaultPath: string, isCaseInsensitive = IS_CASE_INSENSITIVE_FILESYSTEM): boolean {
+export function areVaultPathsMatching(basePath: string, vaultPath: string, isCaseInsensitive = IS_CASE_INSENSITIVE_FILESYSTEM): boolean {
   return normalizeVaultPathForComparison(basePath, isCaseInsensitive) === normalizeVaultPathForComparison(vaultPath, isCaseInsensitive);
+}
+
+/**
+ * Normalizes a vault path for comparison: unifies path separators to `/`, strips
+ * any trailing separators, and (on a case-insensitive filesystem) lowercases it.
+ *
+ * @param path - The path to normalize.
+ * @param isCaseInsensitive - Whether to compare case-insensitively. Defaults to
+ *   the host filesystem's behavior (case-insensitive on Windows).
+ * @returns The normalized path.
+ */
+export function normalizeVaultPathForComparison(path: string, isCaseInsensitive = IS_CASE_INSENSITIVE_FILESYSTEM): string {
+  const unifiedSeparators = path.replaceAll(/[\\/]+/g, '/').replace(/\/+$/, '');
+  return isCaseInsensitive ? unifiedSeparators.toLowerCase() : unifiedSeparators;
 }

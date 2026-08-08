@@ -21,12 +21,12 @@ const BASE_OPTIONS: ObsidianAndroidAppiumTransportOptions = {
 
 describe('resolveAppiumStartTimeoutInMilliseconds', () => {
   it('should default to 180000ms when the option is omitted', () => {
-    expect(resolveAppiumStartTimeoutInMilliseconds(BASE_OPTIONS)).toBe(180000);
-    expect(DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS).toBe(180000);
+    expect(resolveAppiumStartTimeoutInMilliseconds(BASE_OPTIONS)).toBe(180_000);
+    expect(DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS).toBe(180_000);
   });
 
   it('should use the provided value when the option is set', () => {
-    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 300000;
+    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 300_000;
     expect(
       resolveAppiumStartTimeoutInMilliseconds({
         ...BASE_OPTIONS,
@@ -38,12 +38,12 @@ describe('resolveAppiumStartTimeoutInMilliseconds', () => {
 
 describe('resolveSessionConnectionRetryTimeoutInMilliseconds', () => {
   it('should default to 180000ms when the option is omitted', () => {
-    expect(resolveSessionConnectionRetryTimeoutInMilliseconds(BASE_OPTIONS)).toBe(180000);
-    expect(DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS).toBe(180000);
+    expect(resolveSessionConnectionRetryTimeoutInMilliseconds(BASE_OPTIONS)).toBe(180_000);
+    expect(DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS).toBe(180_000);
   });
 
   it('should use the provided value when the option is set', () => {
-    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 420000;
+    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 420_000;
     expect(
       resolveSessionConnectionRetryTimeoutInMilliseconds({
         ...BASE_OPTIONS,

@@ -10,22 +10,32 @@
  * Parameters for the registered `evalWrapper` function.
  */
 export interface EvalWrapperNamespaceParams {
-  /** User-supplied arguments to pass to `fn`. */
-  readonly args: Record<string, unknown>;
-  /** Optional context ID for persistent storage. */
+  /**
+  The user function to evaluate.
+   */
+  callback(input: Record<string, unknown>): unknown;
+  /**
+  Optional context ID for persistent storage.
+   */
   readonly contextId?: string;
-  /** The user function to evaluate. */
-  fn(args: Record<string, unknown>): unknown;
+  /**
+  User-supplied arguments to pass to `callback`.
+   */
+  readonly input: Record<string, unknown>;
 }
 
 /**
  * Parameters for {@link ObsidianIntegrationTestingNamespace.ipcSendSync}.
  */
 export interface IpcSendSyncNamespaceParams {
-  /** The IPC arguments. */
-  readonly args: unknown[];
-  /** The IPC channel name. */
+  /**
+  The IPC channel name.
+   */
   readonly channel: string;
+  /**
+  The IPC arguments.
+   */
+  readonly channelArguments: unknown[];
 }
 
 /**
@@ -73,7 +83,7 @@ export interface ObsidianIntegrationTestingNamespace {
    * The top-level wrapper that sets up context, resolves the obsidian module,
    * calls the user's function, and returns a JSON envelope.
    *
-   * @param params - Parameters including the user's function, args, and context ID.
+   * @param params - Parameters including the user's function, input, and context ID.
    * @returns A JSON-stringified result envelope.
    */
   evalWrapper(params: EvalWrapperNamespaceParams): Promise<string>;
@@ -122,8 +132,12 @@ export interface ObsidianIntegrationTestingNamespace {
  * Parameters for {@link ObsidianIntegrationTestingNamespace.setLocalStorageItem}.
  */
 export interface SetLocalStorageItemNamespaceParams {
-  /** The localStorage key. */
+  /**
+  The localStorage key.
+   */
   readonly key: string;
-  /** The localStorage value. */
+  /**
+  The localStorage value.
+   */
   readonly value: string;
 }

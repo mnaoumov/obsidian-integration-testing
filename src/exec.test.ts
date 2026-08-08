@@ -22,6 +22,7 @@ interface MockChild extends EventEmitter {
 }
 
 function createMockChild(): MockChild {
+  // eslint-disable-next-line unicorn/prefer-event-target -- This doubles for a Node `ChildProcess`, which IS an `EventEmitter`; `exec` calls `.on(...)` / `.once(...)` on it, so an `EventTarget` would not satisfy the type or the calls.
   const child = new EventEmitter() as MockChild;
   child.kill = vi.fn();
   child.stdin = new PassThrough();
@@ -41,19 +42,19 @@ const {
 }));
 
 vi.mock('node:child_process', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('node:child_process')>();
+  const module_ = await importOriginal<typeof import('node:child_process')>();
   return {
-    ...mod,
+    ...module_,
     spawn: mockSpawn
   };
 });
 
 vi.mock('node:process', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('node:process')>();
+  const module_ = await importOriginal<typeof import('node:process')>();
   const mockProcess = {
-    ...mod,
-    cwd: (): string => mod.cwd(),
-    env: mod.env,
+    ...module_,
+    cwd: (): string => module_.cwd(),
+    env: module_.env,
     stderr: { write: mockStderrWrite },
     stdout: { write: mockStdoutWrite }
   };
@@ -63,7 +64,7 @@ vi.mock('node:process', async (importOriginal) => {
     get: () => process.platform
   });
   return {
-    ...mod,
+    ...module_,
     default: mockProcess
   };
 });
@@ -77,16 +78,16 @@ describe('toCommandLine', () => {
     [['simple'], 'simple'],
     [['arg1', 'arg2'], 'arg1 arg2'],
     [['hello world'], '"hello world"'],
-    [['say "hi"'], '"say \\"hi\\""'],
+    [['say "hi"'], String.raw`"say \"hi\""`],
     [['line1\nline2'], '"line1\nline2"'],
     [['no-special'], 'no-special'],
     [[''], '""'],
     [['a', 'b c', 'd'], 'a "b c" d'],
     [['path\\'], 'path\\'],
-    [['path with\\spaces\\'], '"path with\\spaces\\\\"'],
-    [['she said, "you had me at hello"'], '"she said, \\"you had me at hello\\""']
-  ])('should convert %j to %j', (args: string[], expected: string) => {
-    expect(toCommandLine(args)).toBe(expected);
+    [['path with\\spaces\\'], String.raw`"path with\spaces\\"`],
+    [['she said, "you had me at hello"'], String.raw`"she said, \"you had me at hello\""`]
+  ])('should convert %j to %j', (input: string[], expected: string) => {
+    expect(toCommandLine(input)).toBe(expected);
   });
 });
 
@@ -123,7 +124,7 @@ describe('exec', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux' });
     try {
-      const longCommand = 'a'.repeat(131073);
+      const longCommand = 'a'.repeat(131_073);
       await expect(exec(longCommand)).rejects.toThrow('Command line is too long');
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -134,8 +135,8 @@ describe('exec', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
-      const longArg = 'a'.repeat(8192);
-      await expect(exec(['echo', longArg])).rejects.toThrow('Command line is too long');
+      const longArgument = 'a'.repeat(8192);
+      await expect(exec(['echo', longArgument])).rejects.toThrow('Command line is too long');
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }
@@ -159,7 +160,7 @@ describe('exec', () => {
     }
   });
 
-  it('should throw when command has newlines but no raw args on Windows', async () => {
+  it('should throw when command has newlines but no raw input on Windows', async () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
@@ -169,17 +170,17 @@ describe('exec', () => {
     }
   });
 
-  it('should reject when more than one ExecArg is provided', async () => {
+  it('should reject when more than one ExecArgument is provided', async () => {
     await expect(
-      exec(['cmd', { batchedArgs: ['a'] }, { batchedArgs: ['b'] }])
-    ).rejects.toThrow('Only one ExecArg with batchedArgs is allowed');
+      exec(['cmd', { batchedArguments: ['a'] }, { batchedArguments: ['b'] }])
+    ).rejects.toThrow('Only one ExecArgument with batchedArguments is allowed');
   });
 
-  it('should expand ExecArg inline when total length is within limit', async () => {
+  it('should expand ExecArgument inline when total length is within limit', async () => {
     const child = createMockChild();
     mockSpawn.mockReturnValue(child);
 
-    const promise = exec(['echo', { batchedArgs: ['a', 'b', 'c'] }], { isQuiet: true });
+    const promise = exec(['echo', { batchedArguments: ['a', 'b', 'c'] }], { isQuiet: true });
 
     child.stdout.push(Buffer.from('a b c'));
     child.stdout.end();
@@ -196,11 +197,11 @@ describe('exec', () => {
     expect(calledCommand).toContain('c');
   });
 
-  it('should split ExecArg into batches when total exceeds limit', async () => {
+  it('should split ExecArgument into batches when total exceeds limit', async () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
-      const longArg = 'x'.repeat(4000);
+      const longArgument = 'x'.repeat(4000);
       const children = [createMockChild(), createMockChild()];
       let callIndex = 0;
       mockSpawn.mockImplementation(() => {
@@ -216,7 +217,7 @@ describe('exec', () => {
         return child;
       });
 
-      const result = await exec(['echo', { batchedArgs: [longArg, longArg, longArg] }], { isQuiet: true });
+      const result = await exec(['echo', { batchedArguments: [longArgument, longArgument, longArgument] }], { isQuiet: true });
 
       expect(mockSpawn).toHaveBeenCalledTimes(2);
       expect(result).toContain('out');
@@ -225,11 +226,11 @@ describe('exec', () => {
     }
   });
 
-  it('should return ExecResult when shouldIncludeDetails is true with batched args that split', async () => {
+  it('should return ExecResult when shouldIncludeDetails is true with batched input that split', async () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
-      const longArg = 'x'.repeat(4000);
+      const longArgument = 'x'.repeat(4000);
       const children = [createMockChild(), createMockChild()];
       let callIndex = 0;
       mockSpawn.mockImplementation(() => {
@@ -245,7 +246,7 @@ describe('exec', () => {
         return child;
       });
 
-      const result = await exec(['echo', { batchedArgs: [longArg, longArg, longArg] }], { isQuiet: true, shouldIncludeDetails: true });
+      const result = await exec(['echo', { batchedArguments: [longArgument, longArgument, longArgument] }], { isQuiet: true, shouldIncludeDetails: true });
 
       expect(result).toEqual({
         exitCode: 0,
@@ -262,9 +263,9 @@ describe('exec', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
-      const hugeArg = 'x'.repeat(8192);
+      const hugeArgument = 'x'.repeat(8192);
       await expect(
-        exec(['echo', { batchedArgs: [hugeArg] }])
+        exec(['echo', { batchedArguments: [hugeArgument] }])
       ).rejects.toThrow('Cannot split');
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
@@ -416,7 +417,9 @@ describe('exec', () => {
     const child = createMockChild();
     mockSpawn.mockReturnValue(child);
     const chunks: Buffer[] = [];
-    child.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
+    child.stdin.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
 
     const promise = exec('cat', { isQuiet: true, stdin: 'input data' });
 

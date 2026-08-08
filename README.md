@@ -31,7 +31,7 @@ export default defineConfig({
 });
 ```
 
-To get Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('tempVaultPath')`), add a side-effect import in your test setup or config:
+To get Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('temporaryVaultPath')`), add a side-effect import in your test setup or config:
 
 ```ts
 import 'obsidian-integration-testing/vitest/typings';
@@ -69,7 +69,7 @@ globalThis.__obsidianIntegrationTesting = {
 };
 ```
 
-After setup, `globalThis.__obsidianIntegrationTesting.tempVaultPath` is available in test workers.
+After setup, `globalThis.__obsidianIntegrationTesting.temporaryVaultPath` is available in test workers.
 
 By default this launches a **harness-owned, isolated `CDP` instance** (a temporary Obsidian that never touches your real config). See [Transport modes](#transport-modes) for version pinning, attaching to a running Obsidian, and mobile.
 
@@ -82,8 +82,8 @@ import { evalInObsidian } from 'obsidian-integration-testing';
 
 // Simple expression
 const sum = await evalInObsidian({
-  args: { a: 2, b: 3 },
-  fn: ({ a, b }) => a + b
+  input: { a: 2, b: 3 },
+  callback: ({ a, b }) => a + b
 });
 // sum === 5
 ```
@@ -95,17 +95,17 @@ Every callback receives `app` (the Obsidian `App` instance) and `obsidianModule`
 ```ts
 // Read the vault config directory
 const configDir = await evalInObsidian({
-  fn: ({ app }) => app.vault.configDir
+  callback: ({ app }) => app.vault.configDir
 });
 
 // Use the obsidian module
 const yaml = await evalInObsidian({
-  fn: ({ obsidianModule }) => obsidianModule.stringifyYaml({ key: 'value' })
+  callback: ({ obsidianModule }) => obsidianModule.stringifyYaml({ key: 'value' })
 });
 
 // Access internal APIs
 const title = await evalInObsidian({
-  fn: ({ app }) => app.title
+  callback: ({ app }) => app.title
 });
 ```
 
@@ -135,7 +135,7 @@ renderer, so no cross-process serialization is needed.
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
 const typed = await evalInObsidian({
-  fn: async ({ app, lib: { typeIntoEditor }, obsidianModule }) => {
+  callback: async ({ app, lib: { typeIntoEditor }, obsidianModule }) => {
     const view = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView);
     const editor = view?.editor;
     if (!editor) {
@@ -150,7 +150,7 @@ const typed = await evalInObsidian({
 // Press special keys / shortcuts (Obsidian `Modifier` names; `'Mod'` = Cmd on macOS, Ctrl elsewhere).
 // A key press has no universal effect, so pair it with `waitUntil` to await the outcome.
 await evalInObsidian({
-  fn: async ({ app, lib: { pressKey, waitUntil }, obsidianModule }) => {
+  callback: async ({ app, lib: { pressKey, waitUntil }, obsidianModule }) => {
     const editor = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView)?.editor;
     editor?.focus();
 
@@ -161,7 +161,7 @@ await evalInObsidian({
 
 // Observe a genuine :hover state (real theme var() values, real compositing).
 await evalInObsidian({
-  fn: async ({ lib: { hoverElement, unhoverElement } }) => {
+  callback: async ({ lib: { hoverElement, unhoverElement } }) => {
     const bar = document.querySelector<HTMLElement>('.minimized-modal-bar');
     if (!bar) {
       return;
@@ -203,7 +203,7 @@ includes `message` when given).
 ```ts
 // Wait until the plugin has opened a Markdown view, then read its editor.
 const value = await evalInObsidian({
-  fn: async ({ app, lib: { waitUntil }, obsidianModule }) => {
+  callback: async ({ app, lib: { waitUntil }, obsidianModule }) => {
     await waitUntil({
       message: 'no active Markdown view',
       predicate: () => Boolean(app.workspace.getActiveViewOfType(obsidianModule.MarkdownView))
@@ -247,7 +247,7 @@ and nothing is rewritten, so it is safe to use everywhere.
 
 ```ts
 const heading = await evalInObsidian({
-  fn: async ({ app, lib: { createNote, waitUntil }, obsidianModule }) => {
+  callback: async ({ app, lib: { createNote, waitUntil }, obsidianModule }) => {
     // Guaranteed on disk before the wait below can depend on it.
     const file = await createNote({ content: '# Title\n', path: 'note.md' });
     await app.workspace.getLeaf().openFile(file);
@@ -294,7 +294,7 @@ declare module 'obsidian-integration-testing' {
 }
 
 const name = await evalInObsidian({
-  fn: ({ lib: { getThing } }) => getThing('a').name
+  callback: ({ lib: { getThing } }) => getThing('a').name
 });
 ```
 
@@ -304,13 +304,13 @@ Arguments are JSON-serialized. You can even pass functions — they are serializ
 
 ```ts
 const result = await evalInObsidian({
-  args: {
+  input: {
     transform(x: number): number {
       return x * 2;
     },
     value: 5
   },
-  fn: ({ transform, value }) => transform(value)
+  callback: ({ transform, value }) => transform(value)
 });
 // result === 10
 ```
@@ -333,7 +333,7 @@ const contextId = new ContextId<Context>();
 beforeEach(async () => {
   await evalInObsidian({
     contextId,
-    fn: async ({ app, context }) => {
+    callback: async ({ app, context }) => {
       context.file = await app.vault.create('test.md', '# Hello');
     }
   });
@@ -342,7 +342,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await evalInObsidian({
     contextId,
-    fn: async ({ app, context: { file } }) => {
+    callback: async ({ app, context: { file } }) => {
       await app.vault.delete(file);
     }
   });
@@ -352,7 +352,7 @@ afterEach(async () => {
 it('should read the file path', async () => {
   const path = await evalInObsidian({
     contextId,
-    fn: ({ context: { file } }) => file.path
+    callback: ({ context: { file } }) => file.path
   });
   expect(path).toBe('test.md');
 });
@@ -360,18 +360,18 @@ it('should read the file path', async () => {
 
 ### Create a temporary vault
 
-Use `TempVault` to create a disposable vault pre-populated with files:
+Use `TemporaryVault` to create a disposable vault pre-populated with files:
 
 ```ts
 import type { TFile } from 'obsidian';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ContextId, evalInObsidian, TempVault } from 'obsidian-integration-testing';
+import { ContextId, evalInObsidian, TemporaryVault } from 'obsidian-integration-testing';
 
 interface Context {
   file: TFile;
 }
 
-const vault = new TempVault();
+const vault = new TemporaryVault();
 
 vault.populate({
   'note.md': '# Hello',
@@ -386,7 +386,7 @@ beforeAll(async () => {
   // Resolve the pre-populated file into a TFile and store it in the context
   await evalInObsidian({
     contextId,
-    fn: async ({ app, context }) => {
+    callback: async ({ app, context }) => {
       const file = app.vault.getFileByPath('note.md');
       if (!file) {
         throw new Error('File not found');
@@ -404,7 +404,7 @@ afterAll(async () => {
 
 it('should read a pre-populated file', async () => {
   const content = await evalInObsidian({
-    fn: ({ app }) => app.vault.adapter.read('note.md'),
+    callback: ({ app }) => app.vault.adapter.read('note.md'),
     vaultPath: vault.path
   });
   expect(content).toBe('# Hello');
@@ -413,35 +413,35 @@ it('should read a pre-populated file', async () => {
 it('should access the TFile from context', async () => {
   const path = await evalInObsidian({
     contextId,
-    fn: ({ context: { file } }) => file.path,
+    callback: ({ context: { file } }) => file.path,
     vaultPath: vault.path
   });
   expect(path).toBe('note.md');
 });
 ```
 
-Both `TempVault` and `ContextId` implement `AsyncDisposable`, so you can use `await using` for automatic cleanup.
+Both `TemporaryVault` and `ContextId` implement `AsyncDisposable`, so you can use `await using` for automatic cleanup.
 
 Parent directories are created automatically. To create an empty folder, use a path ending with `/` and an empty string as content.
 
 ### Test your plugin
 
-Use `getTempVault()` to get the temporary vault created by the global setup:
+Use `getTemporaryVault()` to get the temporary vault created by the global setup:
 
 **Vitest:**
 
 ```ts
 import { describe, expect, it } from 'vitest';
 import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVault } from 'obsidian-integration-testing/vitest-global-setup-plugin';
+import { getTemporaryVault } from 'obsidian-integration-testing/vitest-global-setup-plugin';
 
 describe('my-plugin', () => {
-  const vault = getTempVault();
+  const vault = getTemporaryVault();
 
   it('should be enabled', async () => {
     const isEnabled = await evalInObsidian({
-      args: { pluginId: 'my-plugin' },
-      fn: ({ app, pluginId }) => app.plugins.enabledPlugins.has(pluginId),
+      input: { pluginId: 'my-plugin' },
+      callback: ({ app, pluginId }) => app.plugins.enabledPlugins.has(pluginId),
       vaultPath: vault.path
     });
     expect(isEnabled).toBe(true);
@@ -449,14 +449,14 @@ describe('my-plugin', () => {
 
   it('should create a file', async () => {
     await evalInObsidian({
-      fn: async ({ app }) => {
+      callback: async ({ app }) => {
         await app.vault.create('test.md', '# Hello');
       },
       vaultPath: vault.path
     });
 
     const content = await evalInObsidian({
-      fn: ({ app }) => app.vault.adapter.read('test.md'),
+      callback: ({ app }) => app.vault.adapter.read('test.md'),
       vaultPath: vault.path
     });
     expect(content).toBe('# Hello');
@@ -468,15 +468,15 @@ describe('my-plugin', () => {
 
 ```ts
 import { evalInObsidian } from 'obsidian-integration-testing';
-import { getTempVault } from 'obsidian-integration-testing/jest-global-setup-plugin';
+import { getTemporaryVault } from 'obsidian-integration-testing/jest-global-setup-plugin';
 
 describe('my-plugin', () => {
-  const vault = getTempVault();
+  const vault = getTemporaryVault();
 
   it('should be enabled', async () => {
     const isEnabled = await evalInObsidian({
-      args: { pluginId: 'my-plugin' },
-      fn: ({ app, pluginId }) => app.plugins.enabledPlugins.has(pluginId),
+      input: { pluginId: 'my-plugin' },
+      callback: ({ app, pluginId }) => app.plugins.enabledPlugins.has(pluginId),
       vaultPath: vault.path
     });
     expect(isEnabled).toBe(true);
@@ -548,7 +548,7 @@ export default {
 
 Both files share the same `createSetup` instance (via the common module), so `teardown` cleans up exactly what `setup` created.
 
-**Manual** — when wiring `TempVault` yourself (without a framework global setup), call `vault.populate()` before `vault.register()`, as shown in [Create a temporary vault](#create-a-temporary-vault).
+**Manual** — when wiring `TemporaryVault` yourself (without a framework global setup), call `vault.populate()` before `vault.register()`, as shown in [Create a temporary vault](#create-a-temporary-vault).
 
 ### Seed a plugin's `demo-vault/` and enable extra community plugins
 
@@ -597,7 +597,7 @@ export default defineConfig({
 
 ```ts
 // your.integration.test.ts — read the empty registered vault's path
-import { getTempVault } from 'obsidian-integration-testing/vitest-global-setup-no-plugin';
+import { getTemporaryVault } from 'obsidian-integration-testing/vitest-global-setup-no-plugin';
 ```
 
 For Jest, use `obsidian-integration-testing/jest-global-setup-no-plugin` (`globalSetup`) + `obsidian-integration-testing/jest-global-teardown-no-plugin` (`globalTeardown`). If you also need to pre-populate the empty vault, build the pair yourself with `createSetup({ installPlugin: false, populate })` from the `-plugin` factory and re-export its `setup`/`teardown` (the same wrapper pattern shown above for `populate`).
@@ -624,7 +624,7 @@ For Jest, use `obsidian-integration-testing/jest-global-setup-no-plugin` (`globa
 > **`evalInObsidian` limitations:**
 >
 > - The function is serialized via `toString()` and executed in a separate process. It must be **self-contained** — closures over local variables will not work.
-> - Pass any needed values via `args`. Arguments must be **JSON-serializable** (strings, numbers, booleans, arrays, plain objects). Functions in `args` are supported — they are serialized via `toString()` with the same self-contained constraint.
+> - Pass any needed values via `input`. Arguments must be **JSON-serializable** (strings, numbers, booleans, arrays, plain objects). Functions in `input` are supported — they are serialized via `toString()` with the same self-contained constraint.
 > - The **return value** must also be JSON-serializable. You cannot return functions, class instances, `Map`, `Set`, DOM elements, or other non-serializable values.
 > - Imports (`import`/`require`) are not available inside the function. Use `obsidianModule` to access the `obsidian` API, and `app` to access the Obsidian `App` instance.
 
@@ -637,7 +637,7 @@ Since `evalInObsidian` runs inside a real Obsidian process, you have access to i
 ```ts
 // With obsidian-typings installed — no casts needed
 const title = await evalInObsidian({
-  fn: ({ app }) => app.title
+  callback: ({ app }) => app.title
 });
 ```
 
@@ -651,7 +651,7 @@ declare module 'obsidian' {
 }
 
 const title = await evalInObsidian({
-  fn: ({ app }) => app.title
+  callback: ({ app }) => app.title
 });
 ```
 
@@ -660,12 +660,12 @@ const title = await evalInObsidian({
 ```ts
 const title = await evalInObsidian({
   // @ts-expect-error -- accessing internal API
-  fn: ({ app }) => app.title
+  callback: ({ app }) => app.title
 });
 
 // or
 const title2 = await evalInObsidian({
-  fn: ({ app }) => (app as any).title
+  callback: ({ app }) => (app as any).title
 });
 ```
 
@@ -1125,8 +1125,8 @@ console.log(conn.port, conn.cdpUrl); // the free CDP port the instance was launc
 // Raw expression → normalized string result:
 await conn.invoke('app.vault.getName()');
 
-// Rich, typed path — `fn` runs in the Obsidian renderer with { app, obsidianModule, typeIntoEditor, context }:
-await conn.evalInObsidian({ fn: ({ app }) => app.workspace.getActiveFile()?.path ?? null });
+// Rich, typed path — `callback` runs in the Obsidian renderer with { app, obsidianModule, typeIntoEditor, context }:
+await conn.evalInObsidian({ callback: ({ app }) => app.workspace.getActiveFile()?.path ?? null });
 ```
 
 `connectToCdp` accepts the same version knobs as the transport (`obsidianVersion`, `obsidianInstallerVersion`, `host`, `commandTimeoutInMilliseconds`, both defaulting to your installed Obsidian), plus:

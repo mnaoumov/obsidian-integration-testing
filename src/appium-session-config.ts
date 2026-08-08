@@ -13,12 +13,12 @@ import type { ObsidianAndroidAppiumTransportOptions } from './transport-options.
 /**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.appiumStartTimeoutInMilliseconds}.
  */
-export const DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS = 180000;
+export const DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS = 180_000;
 
 /**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.sessionConnectionRetryTimeoutInMilliseconds}.
  */
-export const DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180000;
+export const DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180_000;
 
 /**
  * Resolves the auto-started Appium server readiness timeout, applying the

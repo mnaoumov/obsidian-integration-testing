@@ -29,7 +29,9 @@ const CDP_OPTIONS: ObsidianCdpTransportOptions = {
   type: 'obsidian-cdp'
 };
 
-/** Builds an {@link EnablePluginResult}, defaulting to the transient swallow signature. */
+/**
+Builds an {@link EnablePluginResult}, defaulting to the transient swallow signature.
+*/
 function makeResult(overrides: Partial<EnablePluginResult> = {}): EnablePluginResult {
   return {
     errorMessage: undefined,
@@ -113,7 +115,7 @@ describe('computeBackoffDelayInMilliseconds', () => {
 
   it('should grow exponentially for later retries', () => {
     expect(computeBackoffDelayInMilliseconds(BASE_DELAY_IN_MILLISECONDS, 2)).toBe(8000);
-    expect(computeBackoffDelayInMilliseconds(BASE_DELAY_IN_MILLISECONDS, 3)).toBe(16000);
+    expect(computeBackoffDelayInMilliseconds(BASE_DELAY_IN_MILLISECONDS, 3)).toBe(16_000);
   });
 
   it('should stay 0 when the base delay is 0', () => {

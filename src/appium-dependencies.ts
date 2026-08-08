@@ -26,7 +26,9 @@ export interface CheckIsAppiumDriverInstalledParams {
    */
   readonly driverListJson: string;
 
-  /** The driver name to look for (e.g. {@link UIAUTOMATOR2_DRIVER_NAME}). */
+  /**
+  The driver name to look for (e.g. {@link UIAUTOMATOR2_DRIVER_NAME}).
+   */
   readonly driverName: string;
 }
 
@@ -55,7 +57,7 @@ export function checkIsAppiumDriverInstalled(params: CheckIsAppiumDriverInstalle
     return false;
   }
 
-  return params.driverName in parsed;
+  return Object.hasOwn(parsed, params.driverName);
 }
 
 /**
@@ -71,7 +73,7 @@ export function checkIsAppiumDriverInstalled(params: CheckIsAppiumDriverInstalle
  * @param options - The Android Appium transport options.
  * @returns Whether missing Appium dependencies may be auto-installed.
  */
-export function resolveShouldAutoInstallAppiumDependencies(
+export function willAutoInstallAppiumDependencies(
   options: ObsidianAndroidAppiumTransportOptions
 ): boolean {
   return options.shouldAutoInstallAppiumDependencies ?? true;

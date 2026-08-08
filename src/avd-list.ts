@@ -13,10 +13,14 @@
  * Parameters for {@link checkAvdExists}.
  */
 export interface CheckAvdExistsParams {
-  /** Raw stdout of `emulator -list-avds` — one AVD name per line. */
+  /**
+  Raw stdout of `emulator -list-avds` — one AVD name per line.
+   */
   readonly avdListOutput: string;
 
-  /** The AVD name to look for. */
+  /**
+  The AVD name to look for.
+   */
   readonly avdName: string;
 }
 

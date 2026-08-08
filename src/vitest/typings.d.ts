@@ -8,7 +8,7 @@
  * `obsidian-integration-testing`.
  *
  * Provides IntelliSense for `environmentOptions.obsidianTransport`
- * and `inject('obsidianTransport')` / `inject('tempVaultPath')`.
+ * and `inject('obsidianTransport')` / `inject('temporaryVaultPath')`.
  */
 
 import type { ObsidianTransportOptions } from '../transport-options.ts';
@@ -36,7 +36,7 @@ declare module 'vitest' {
     /**
      * Path to the temporary vault created by the global setup.
      */
-    tempVaultPath: string;
+    temporaryVaultPath: string;
   }
 }
 

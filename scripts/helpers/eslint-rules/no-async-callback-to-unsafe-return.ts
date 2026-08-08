@@ -10,7 +10,7 @@
  *
  * Example:
  * ```typescript
- * // onClick(fn: (evt: MouseEvent) => any)
+ * // onClick(callback: (evt: MouseEvent) => any)
  * button.onClick(async () => {
  *   await someFn(); // Unhandled rejection if someFn throws
  * });
@@ -102,9 +102,10 @@ function containsPromiseReference(checker: TypeChecker, node: TypeNode): boolean
       symbol = checker.getAliasedSymbol(symbol);
     }
     /* v8 ignore stop */
-    const decl = symbol?.declarations?.[0];
-    if (decl && isTypeAliasDeclaration(decl)) {
-      return containsPromiseReference(checker, decl.type);
+    const declaration = symbol?.declarations?.[0];
+    if (declaration && isTypeAliasDeclaration(declaration)) {
+      // eslint-disable-next-line unicorn/no-useless-recursion -- This is a recursive TREE walk, not a disguised loop: the union branch above fans out over `node.types`, so only this one call happens to be in tail position. Turning it into a loop would leave the function half-recursive and harder to follow.
+      return containsPromiseReference(checker, declaration.type);
     }
   }
 
@@ -135,8 +136,8 @@ function isUnsafeReturnSignature(checker: TypeChecker, sig: Signature): boolean 
   // Check the syntactic return type annotation. If it contains a reference to
   // Promise/PromiseLike (directly or via a type alias), the caller explicitly
   // Handles async returns and should not be flagged.
-  const decl = sig.getDeclaration();
-  const returnTypeNode = decl.type;
+  const declaration = sig.getDeclaration();
+  const returnTypeNode = declaration.type;
   assertNonNullable(returnTypeNode, 'Signature declarations with any/unknown return always have a return type annotation');
 
   return !containsPromiseReference(checker, returnTypeNode);
@@ -151,9 +152,9 @@ export const noAsyncCallbackToUnsafeReturn: Rule.RuleModule = {
       CallExpression(node: Rule.Node): void {
         const callNode = node as TSESTree.CallExpression;
 
-        for (let i = 0; i < callNode.arguments.length; i++) {
-          const arg = callNode.arguments[i];
-          if (!arg || !isAsyncFunctionNode(arg)) {
+        for (let index = 0; index < callNode.arguments.length; index++) {
+          const argument = callNode.arguments[index];
+          if (!argument || !isAsyncFunctionNode(argument)) {
             continue;
           }
 
@@ -161,17 +162,17 @@ export const noAsyncCallbackToUnsafeReturn: Rule.RuleModule = {
           const calleeType = checker.getTypeAtLocation(tsCalleeNode);
 
           for (const sig of calleeType.getCallSignatures()) {
-            const param = sig.getParameters()[i];
-            if (!param) {
+            const parameter = sig.getParameters()[index];
+            if (!parameter) {
               continue;
             }
 
-            const paramType = checker.getTypeOfSymbol(param);
+            const parameterType = checker.getTypeOfSymbol(parameter);
 
-            if (hasUnsafeReturnCallSignature(checker, paramType)) {
+            if (hasUnsafeReturnCallSignature(checker, parameterType)) {
               context.report({
                 messageId: MESSAGE_ID,
-                node: arg
+                node: argument
               });
               break;
             }
@@ -185,7 +186,7 @@ export const noAsyncCallbackToUnsafeReturn: Rule.RuleModule = {
       description: 'Disallow passing async functions as callbacks to parameters with `any` or `unknown` return type'
     },
     messages: {
-      [MESSAGE_ID]: 'Async function passed as callback to a parameter with `any`/`unknown` return type. This may cause unhandled promise rejections. Wrap the call: `(...args) => { yourAsyncFn(...args); }`.'
+      [MESSAGE_ID]: 'Async function passed as callback to a parameter with `any`/`unknown` return type. This may cause unhandled promise rejections. Wrap the call: `(...input) => { yourAsyncFn(...input); }`.'
     },
     schema: [],
     type: 'problem'

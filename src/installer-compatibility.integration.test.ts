@@ -30,7 +30,7 @@ describe('proactive installer compatibility', () => {
       obsidianInstallerVersion: UNRUNNABLE_INSTALLER_VERSION,
       obsidianVersion: UNRUNNABLE_ASAR_VERSION,
       type: 'obsidian-cdp'
-    }).catch((caught: unknown) => caught);
+    }).catch((error_: unknown) => error_);
 
     expect(error).toBeInstanceOf(IncompatibleInstallerVersionError);
     if (!(error instanceof IncompatibleInstallerVersionError)) {

@@ -10,7 +10,7 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 /**
  * Wraps a {@link ContextOf} extraction into an object with a `context` property.
  */
-export interface ContextArgs<TContextId extends ContextId<unknown> | undefined = undefined> {
+export interface ContextArguments<TContextId extends ContextId<unknown> | undefined = undefined> {
   context: ContextOf<TContextId>;
 }
 
@@ -47,9 +47,8 @@ export class ContextId<_Context> implements AsyncDisposable {
    */
   public async dispose(vaultPath?: string): Promise<void> {
     await evalInObsidian({
-      args: { id: this.id },
       /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process. Covered by integration tests. */
-      fn({ id }): void {
+      callback({ id }): void {
         interface IntegrationTestingContexts {
           contexts: Record<string, unknown>;
         }
@@ -58,15 +57,16 @@ export class ContextId<_Context> implements AsyncDisposable {
         }
 
         // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
-        const holder = window as unknown as Partial<IntegrationTestingHolder>;
+        const holder = globalThis as unknown as Partial<IntegrationTestingHolder>;
         if (holder.__obsidianIntegrationTesting?.contexts) {
           // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- No other way.
           delete holder.__obsidianIntegrationTesting.contexts[id];
         }
       },
+      input: { id: this.id },
       /* v8 ignore stop */
       shouldSkipPreflightChecks: true,
-      ...(vaultPath === undefined ? {} : { vaultPath })
+      ...(vaultPath !== undefined && { vaultPath })
     });
   }
 

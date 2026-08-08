@@ -18,7 +18,7 @@ import { existsSync } from 'node:fs';
 import process from 'node:process';
 
 import type {
-  ContextArgs,
+  ContextArguments,
   ContextId
 } from './context-id.ts';
 import type { GenerateNamespaceCallParams } from './generate-function-call.ts';
@@ -40,9 +40,9 @@ interface EvalErrorEnvelope {
 /**
  * Discriminated envelope returned by the registered `evalWrapper` from inside the Obsidian process.
  *
- * - `EvalErrorEnvelope` — `fn` threw; `value` is the serialized error.
- * - `EvalUndefinedEnvelope` — `fn` returned `undefined`.
- * - `EvalValueEnvelope` — `fn` returned a JSON-serializable value.
+ * - `EvalErrorEnvelope` — `callback` threw; `value` is the serialized error.
+ * - `EvalUndefinedEnvelope` — `callback` returned `undefined`.
+ * - `EvalValueEnvelope` — `callback` returned a JSON-serializable value.
  */
 type EvalResultEnvelope =
   | EvalErrorEnvelope
@@ -62,7 +62,7 @@ const NO_OUTPUT = '(no output)';
 /**
  * Common arguments automatically provided to every {@link evalInObsidian} callback.
  */
-export interface CommonArgs {
+export interface CommonArguments {
   /**
    * The Obsidian {@link App} instance.
    */
@@ -88,7 +88,7 @@ export interface CommonArgs {
 }
 
 /**
- * Parameters for {@link CommonArgs.createNote}.
+ * Parameters for {@link CommonArguments.createNote}.
  */
 export interface CreateNoteParams {
   /**
@@ -106,12 +106,11 @@ export interface CreateNoteParams {
 /**
  * Parameters for {@link evalInObsidian}.
  */
-export interface EvalInObsidianParams<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined> {
+export interface EvalInObsidianParams<Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined> {
   /**
-   * Additional arguments to pass to the function. Values may include functions —
-   * they are serialized via `toString()`.
+   * The function to evaluate in the Obsidian context.
    */
-  readonly args?: Args;
+  callback(input: CommonArguments & ContextArguments<TContextId> & Input): Promisable<Result>;
 
   /**
    * A {@link ContextId} linking this call to a persistent store on `window`
@@ -123,9 +122,10 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
   readonly contextId?: TContextId;
 
   /**
-   * The function to evaluate in the Obsidian context.
+   * Additional arguments to pass to the function. Values may include functions —
+   * they are serialized via `toString()`.
    */
-  fn(args: Args & CommonArgs & ContextArgs<TContextId>): Promisable<Result>;
+  readonly input?: Input;
 
   /**
    * Skips pre-flight checks (vault registration, CLI availability).
@@ -153,7 +153,7 @@ export interface EvalInObsidianParams<Args extends GenericObject, Result, TConte
 export type GenericObject = Record<string, unknown>;
 
 /**
- * Parameters for {@link CommonArgs.hoverElement}.
+ * Parameters for {@link CommonArguments.hoverElement}.
  */
 export interface HoverElementParams {
   /**
@@ -166,7 +166,7 @@ export interface HoverElementParams {
 
 /**
  * The shared library bag injected into every {@link evalInObsidian} callback as
- * {@link CommonArgs.lib}.
+ * {@link CommonArguments.lib}.
  *
  * Two layers compose into this one bag. The **base** — the harness-provided
  * renderer-driving helpers declared below (the trusted-input primitives and
@@ -352,7 +352,7 @@ export interface Lib {
 }
 
 /**
- * Parameters for {@link CommonArgs.moveMouse}.
+ * Parameters for {@link CommonArguments.moveMouse}.
  */
 export interface MoveMouseParams {
   /**
@@ -367,7 +367,7 @@ export interface MoveMouseParams {
 }
 
 /**
- * Parameters for {@link CommonArgs.pressKey}.
+ * Parameters for {@link CommonArguments.pressKey}.
  */
 export interface PressKeyParams {
   /**
@@ -376,7 +376,7 @@ export interface PressKeyParams {
    * (`'Up'` / `'Down'` / `'Left'` / `'Right'`), or a printable character
    * (`'a'`, `'1'`). The produced character (when the key inserts text) is the
    * literal `key` value; case-correct text belongs to
-   * {@link CommonArgs.typeIntoEditor}, not a key-press primitive.
+   * {@link CommonArguments.typeIntoEditor}, not a key-press primitive.
    */
   readonly key: string;
 
@@ -392,7 +392,7 @@ export interface PressKeyParams {
 }
 
 /**
- * Parameters for {@link CommonArgs.typeIntoEditor}.
+ * Parameters for {@link CommonArguments.typeIntoEditor}.
  */
 export interface TypeIntoEditorParams {
   /**
@@ -402,14 +402,14 @@ export interface TypeIntoEditorParams {
   readonly editor: Editor;
 
   /**
-   * The text to type. Each code point is pressed via {@link CommonArgs.pressKey}
+   * The text to type. Each code point is pressed via {@link CommonArguments.pressKey}
    * (a trusted `keyDown` → `char` → `keyUp`), exactly as a real user typing.
    */
   readonly text: string;
 }
 
 /**
- * Parameters for {@link CommonArgs.unhoverElement}.
+ * Parameters for {@link CommonArguments.unhoverElement}.
  */
 export interface UnhoverElementParams {
   /**
@@ -422,7 +422,7 @@ export interface UnhoverElementParams {
 }
 
 /**
- * Parameters for {@link CommonArgs.waitUntil}.
+ * Parameters for {@link CommonArguments.waitUntil}.
  */
 export interface WaitUntilParams {
   /**
@@ -459,22 +459,22 @@ export interface WaitUntilParams {
  * Evaluates a function inside the running Obsidian instance
  * via the active transport and returns the parsed result.
  *
- * The function receives an args object that includes `app`, `obsidianModule`,
- * `context`, and any additional `args` passed by the caller.
+ * The function receives an input object that includes `app`, `obsidianModule`,
+ * `context`, and any additional `input` passed by the caller.
  * It is serialized via `toString()` and invoked as an IIFE.
  * The function must be self-contained — closures over local variables will not work.
- * Pass any needed values as `args` — they are JSON-serialized and deserialized on the Obsidian side.
+ * Pass any needed values as `input` — they are JSON-serialized and deserialized on the Obsidian side.
  *
  * The result is `JSON.stringify`'d on the Obsidian side and parsed back.
  *
  * @param params - The parameters for the function to evaluate.
- * @returns A {@link Promise} that resolves to the return value of `fn`.
+ * @returns A {@link Promise} that resolves to the return value of `callback`.
  */
-export async function evalInObsidian<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
-  params: EvalInObsidianParams<Args, Result, TContextId>
+export async function evalInObsidian<Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+  params: EvalInObsidianParams<Input, Result, TContextId>
 ): Promise<Result> {
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- `fn` can be unbound.
-  const { args = {}, contextId, fn, shouldSkipPreflightChecks = false, transport: transportOverride, vaultPath } = params;
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- `callback` can be unbound.
+  const { callback, contextId, input = {}, shouldSkipPreflightChecks = false, transport: transportOverride, vaultPath } = params;
   const cwd = vaultPath ?? getVaultPath() ?? process.cwd();
 
   // Check: Vault path exists on disk.
@@ -491,24 +491,24 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
   await ensureNamespaceBootstrapped(transport, cwd);
 
   const namespaceCallParams: GenerateNamespaceCallParams = {
-    args,
-    fn,
+    callback,
+    input,
     ...(contextId !== undefined && { contextId: String(contextId) })
   };
 
   const expression = generateNamespaceCall(namespaceCallParams);
 
-  const resultStr = await transport.evaluate(expression, { cwd });
+  const resultString = await transport.evaluate(expression, { cwd });
 
-  if (resultStr === '' || resultStr === NO_OUTPUT) {
+  if (resultString === '' || resultString === NO_OUTPUT) {
     return undefined as Result;
   }
 
   let envelope: EvalResultEnvelope;
   try {
-    envelope = JSON.parse(resultStr) as EvalResultEnvelope;
+    envelope = JSON.parse(resultString) as EvalResultEnvelope;
   } catch {
-    throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${resultStr}`);
+    throw new Error(`evalInObsidian: Obsidian returned non-JSON output: ${resultString}`);
   }
 
   if ('type' in envelope) {
@@ -517,7 +517,7 @@ export async function evalInObsidian<Args extends GenericObject, Result, TContex
       // So Vitest's source-map resolver won't extract "/" as the file path and crash
       // With EISDIR when it tries to readFileSync on the root directory.
       const sanitizedDetail = envelope.value
-        .replace(/\(https?:\/\/localhost\/:(?<line>\d)/g, '(obsidian-webview:$<line>');
+        .replaceAll(/\(https?:\/\/localhost\/:(?<line>\d)/g, '(obsidian-webview:$<line>');
       throw new Error(`evalInObsidian: Error inside Obsidian:\n${sanitizedDetail}`);
     }
 

@@ -28,12 +28,12 @@ import type { ObsidianCdpTransportOptions } from './transport-options.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import {
   resolveLeftoverMaxAgeInMilliseconds,
-  resolveShouldSweepLeftovers,
-  sweepHostLeftovers
+  sweepHostLeftovers,
+  willSweepLeftovers
 } from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
 
@@ -97,16 +97,16 @@ export interface CdpConnection extends AsyncDisposable {
 
   /**
    * Evaluates a self-contained function inside Obsidian via the rich helper
-   * path, receiving `{ app, lib, obsidianModule, context }` plus any `args`
+   * path, receiving `{ app, lib, obsidianModule, context }` plus any `input`
    * (shared helpers like `typeIntoEditor` / `waitUntil` live on `lib`). Mirrors
    * the top-level `evalInObsidian`, with the transport and vault path pre-bound
    * to this connection.
    *
-   * @param params - The evaluation parameters (`fn`, optional `args`/`contextId`).
-   * @returns A {@link Promise} that resolves to the return value of `fn`.
+   * @param params - The evaluation parameters (`callback`, optional `input`/`contextId`).
+   * @returns A {@link Promise} that resolves to the return value of `callback`.
    */
-  evalInObsidian<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
-    params: Except<EvalInObsidianParams<Args, Result, TContextId>, 'transport' | 'vaultPath'>
+  evalInObsidian<Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+    params: Except<EvalInObsidianParams<Input, Result, TContextId>, 'transport' | 'vaultPath'>
   ): Promise<Result>;
 
   /**
@@ -127,7 +127,7 @@ export interface CdpConnection extends AsyncDisposable {
   /**
    * The opened vault. Exposes `path` and `populate(...)` for seeding files.
    */
-  readonly vault: TempVault;
+  readonly vault: TemporaryVault;
 }
 
 /**
@@ -289,7 +289,7 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   const transportOptions = buildCdpTransportOptions(options);
   await sweepLeftovers(transportOptions);
   const transport = await createTransportFromOptions(transportOptions);
-  const vault = new TempVault(options?.vault);
+  const vault = new TemporaryVault(options?.vault);
   const shouldRemoveVaultOnDispose = options?.shouldRemoveVaultOnDispose ?? (options?.vault === undefined);
 
   // Registering the vault is what launches the owned instance (provisions the
@@ -321,10 +321,10 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
       }
     },
 
-    async evalInObsidian<Args extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
-      params: Except<EvalInObsidianParams<Args, Result, TContextId>, 'transport' | 'vaultPath'>
+    async evalInObsidian<Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+      params: Except<EvalInObsidianParams<Input, Result, TContextId>, 'transport' | 'vaultPath'>
     ): Promise<Result> {
-      return evalInObsidian<Args, Result, TContextId>({ ...params, transport, vaultPath: vault.path });
+      return evalInObsidian<Input, Result, TContextId>({ ...params, transport, vaultPath: vault.path });
     },
 
     async invoke(expression: string): Promise<string> {
@@ -406,7 +406,7 @@ function resolveEndpoint(transport: unknown, options: ConnectToCdpOptions | unde
  * @param transportOptions - The resolved transport options (source of the sweep knobs).
  */
 async function sweepLeftovers(transportOptions: ObsidianCdpTransportOptions): Promise<void> {
-  if (!resolveShouldSweepLeftovers(transportOptions)) {
+  if (!willSweepLeftovers(transportOptions)) {
     return;
   }
 

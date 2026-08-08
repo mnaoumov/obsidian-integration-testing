@@ -43,7 +43,7 @@ export type PopulateFileContent = string | Uint8Array | undefined;
 
 /**
  * A map of vault-relative paths to their content, used by
- * {@link TempVault.populate}.
+ * {@link TemporaryVault.populate}.
  *
  * Paths ending with `/` denote folders and **must** have an `undefined` value.
  * All other paths are written as files.
@@ -51,7 +51,7 @@ export type PopulateFileContent = string | Uint8Array | undefined;
 export type PopulateFilesParams = Record<string, PopulateFileContent>;
 
 const RM_RETRY_DELAY_IN_MILLISECONDS = 500;
-const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
+const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10_000;
 
 /**
  * A temporary Obsidian vault for integration tests.
@@ -59,7 +59,7 @@ const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10000;
  * Creates a temp directory and registers it in the running Obsidian instance
  * so that the Obsidian CLI can target it via `cwd`.
  */
-export class TempVault {
+export class TemporaryVault {
   /**
    * The absolute path to the temporary vault.
    */
@@ -163,15 +163,15 @@ export class TempVault {
   /**
    * Recursively reads all files from a directory into a flat map.
    *
-   * @param dir - The directory to read.
+   * @param directory - The directory to read.
    * @returns A map of relative file paths to content buffers.
    */
-  private async collectFiles(dir: string): Promise<Record<string, Uint8Array>> {
+  private async collectFiles(directory: string): Promise<Record<string, Uint8Array>> {
     const result: Record<string, Uint8Array> = {};
-    const entries = await readdir(dir, { withFileTypes: true });
+    const entries = await readdir(directory, { withFileTypes: true });
 
     for (const entry of entries) {
-      const fullPath = join(dir, entry.name);
+      const fullPath = join(directory, entry.name);
       const relativePath = relative(this.path, fullPath);
 
       if (entry.isDirectory()) {

@@ -15,26 +15,26 @@ import {
 } from 'vitest';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
-import { TempVault } from './temp-vault.ts';
+import { TemporaryVault } from './temporary-vault.ts';
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 // Generous overall budget: the connectivity check retries a flaky public
 // Endpoint several times with backoff before giving up.
-const FETCH_TIMEOUT_IN_MILLISECONDS = 60000;
+const FETCH_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 interface NetworkCheckResult {
   readonly status: number;
   readonly textLength: number;
 }
 
-const tempVault = new TempVault();
+const temporaryVault = new TemporaryVault();
 
 beforeAll(async () => {
-  await tempVault.register();
+  await temporaryVault.register();
 }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
 
 afterAll(async () => {
-  await tempVault.dispose();
+  await temporaryVault.dispose();
 });
 
 describe('emulator network connectivity', () => {
@@ -42,7 +42,7 @@ describe('emulator network connectivity', () => {
     // One retrying request exercises DNS, the HTTPS handshake, status, and body.
     // `httpbin.org` intermittently drops requests, so we retry with backoff.
     const result = await evalInObsidian({
-      fn: async (): Promise<NetworkCheckResult> => {
+      callback: async (): Promise<NetworkCheckResult> => {
         const MAX_ATTEMPTS = 5;
         const RETRY_DELAY_IN_MILLISECONDS = 1500;
         const PER_ATTEMPT_TIMEOUT_IN_MILLISECONDS = 8000;
@@ -62,7 +62,7 @@ describe('emulator network connectivity', () => {
         }
         throw lastError instanceof Error ? lastError : new Error(String(lastError));
       },
-      vaultPath: tempVault.path
+      vaultPath: temporaryVault.path
     });
 
     expect(result.status).toBe(200);

@@ -18,7 +18,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import type { PopulateFilesParams } from './temp-vault.ts';
+import type { PopulateFilesParams } from './temporary-vault.ts';
 
 import { readDemoVaultTree } from './demo-vault-tree.ts';
 import { ensureNonNullable } from './type-guards.ts';
@@ -71,7 +71,7 @@ export interface BuildDemoVaultPopulateParams {
 export interface InjectPluginParams {
   /**
    * Overlay written as `.obsidian/plugins/<pluginId>/data.json` (JSON, 2-space indent). Omit to keep whatever
-   * `data.json` (if any) already lives in {@link InjectPluginParams.sourceDir}.
+   * `data.json` (if any) already lives in {@link InjectPluginParams.sourceDirectory}.
    */
   readonly data?: unknown;
 
@@ -86,7 +86,8 @@ export interface InjectPluginParams {
    *
    * @default `<demoVaultPath>/.obsidian/plugins/<pluginId>`
    */
-  readonly sourceDir?: string;
+
+  readonly sourceDirectory?: string;
 }
 
 /**
@@ -94,7 +95,7 @@ export interface InjectPluginParams {
  * files, and every injected plugin's binaries (+ optional `data.json`).
  *
  * @param params - The {@link BuildDemoVaultPopulateParams}.
- * @returns The populate map, ready to hand to a global setup's `populate` or {@link TempVault.populate}.
+ * @returns The populate map, ready to hand to a global setup's `populate` or {@link TemporaryVault.populate}.
  */
 export function buildDemoVaultPopulate(params: BuildDemoVaultPopulateParams): PopulateFilesParams {
   const { demoVaultPath, excludedNames, injectPlugins = [], obsidianConfigFiles = DEFAULT_OBSIDIAN_CONFIG_FILES } = params;
@@ -124,17 +125,17 @@ export function buildDemoVaultPopulate(params: BuildDemoVaultPopulateParams): Po
  */
 function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: PopulateFilesParams): void {
   const { data, pluginId } = plugin;
-  const sourceDir = plugin.sourceDir ?? join(demoVaultPath, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
+  const sourceDirectory = plugin.sourceDirectory ?? join(demoVaultPath, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
   const pluginPrefix = `${OBSIDIAN_CONFIG_DIR}/${PLUGINS_DIR}/${pluginId}`;
 
-  const fileNames = existsSync(sourceDir)
-    ? readdirSync(sourceDir, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name)
+  const fileNames = existsSync(sourceDirectory)
+    ? readdirSync(sourceDirectory, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name)
     : [];
 
   for (const requiredFile of [MAIN_JS, MANIFEST_JSON]) {
     if (!fileNames.includes(requiredFile)) {
       throw new Error(
-        `Community plugin "${pluginId}" is not installed in the demo vault (${join(sourceDir, requiredFile)} missing). `
+        `Community plugin "${pluginId}" is not installed in the demo vault (${join(sourceDirectory, requiredFile)} missing). `
           + 'Open demo-vault/ in Obsidian once so demo-vault-helper installs it, then re-run.'
       );
     }
@@ -145,7 +146,7 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
     if (fileName === DATA_JSON && data !== undefined) {
       continue;
     }
-    map[`${pluginPrefix}/${fileName}`] = readFileSync(join(sourceDir, fileName));
+    map[`${pluginPrefix}/${fileName}`] = readFileSync(join(sourceDirectory, fileName));
   }
 
   if (data !== undefined) {

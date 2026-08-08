@@ -20,18 +20,23 @@ export function jsonWithFunctions(value: unknown): string {
   const functionMap = new Map<string, string>();
 
   const JSON_INDENT = 2;
-  const json = JSON.stringify(value, (_key: string, val: unknown): JSONValueF<unknown> => {
-    if (typeof val === 'function') {
+  const json = JSON.stringify(value, (_key: string, value_: unknown): JSONValueF<unknown> => {
+    if (typeof value_ === 'function') {
       const placeholder = `__fn_${String(functionMap.size)}__`;
-      functionMap.set(placeholder, getFunctionExpressionString(val));
+      functionMap.set(placeholder, getFunctionExpressionString(value_));
       return placeholder;
     }
-    return val as JSONValueF<unknown>;
+    return value_ as JSONValueF<unknown>;
   }, JSON_INDENT);
 
   let result = json;
-  for (const [placeholder, fnSource] of functionMap) {
-    result = result.replace(`"${placeholder}"`, fnSource);
+  for (const [placeholder, functionSource] of functionMap) {
+    /*
+     * The replacer FUNCTION is required, not cosmetic: `fnSource` is arbitrary user function source, and a
+     * string replacement would read any `$&` / `$'` / `` $` `` inside it as a substitution pattern and silently
+     * corrupt the serialized function.
+     */
+    result = result.replace(`"${placeholder}"`, () => functionSource);
   }
 
   return result;
