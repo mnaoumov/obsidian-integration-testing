@@ -8,9 +8,17 @@
     "mechanical test exists — it is reported for manual review on every run instead of going quiet. Every exact pin must",
     "have an entry here, and every entry must correspond to a real pin; the script errors on either mismatch.",
     "The caret-ranged overrides (glob, js-yaml, markdown-it, readdir-glob, test-exclude, tmp) are swept automatically and",
-    "are deliberately not listed. Modeled on obsidian-dev-utils/pinned-versions.json; rule G100."
+    "are deliberately not listed. An advisory-driven override is the exception — it is listed even when caret-ranged,",
+    "because the sweep only keeps it current, it never reports that the advisory it answers is gone and the override with",
+    "it. Modeled on obsidian-dev-utils/pinned-versions.json; rule G100."
   ],
   "pins": {
+    "brace-expansion": {
+      "section": "overrides",
+      "why": "GHSA-rgw5-rvv9-x895 (high, DoS via unbounded intermediate arrays) covers 4.0.0 - 5.0.8; 5.0.9 is the fix. It lives in the tree exactly once, under eslint-plugin-import-x -> minimatch@10.2.5, which declares ^5.0.5 and therefore happily resolves the vulnerable 5.0.8. Nothing in package.json depends on brace-expansion directly, so no direct upgrade can reach it and the override is the only lever (G100 step 2). Kept caret-ranged so the sweep carries it forward.",
+      "check": "node -e \"process.stdout.write(require('minimatch/package.json').dependencies['brace-expansion'])\"",
+      "expect": "^5.0.5"
+    },
     "webdriverio": {
       "section": "dependencies",
       "why": "No justification left. It was pinned in 647edb5 so patch-package could apply patches/webdriverio+9.27.0.patch, whose filename embeds the exact version; b65f32f ('chore: stop patching') deleted every patch. Until the unused-devDependency cleanup it also anchored @wdio/protocols and @wdio/types, which had to match the exact versions webdriverio declares — both are gone now, so nothing else in package.json is tied to this version. 9.30.0 is published.",
