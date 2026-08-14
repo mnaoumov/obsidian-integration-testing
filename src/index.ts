@@ -77,6 +77,17 @@ export type {
   ResolveInstallerCompatibilityParams
 } from './installer-compatibility.ts';
 export { resolveInstallerCompatibility } from './installer-compatibility.ts';
+export type {
+  ComputeLabelBandParams,
+  LabelBandGeometry,
+  LabelScreenshotOptions
+} from './label-screenshot.ts';
+export {
+  buildLabelSvg,
+  computeLabelBand,
+  escapeSvgText,
+  labelScreenshot
+} from './label-screenshot.ts';
 export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';
 export type {
