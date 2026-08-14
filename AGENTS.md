@@ -1363,10 +1363,3 @@ cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that 
   answers an unattended `fetch` with 403. Same rewrite `scripts/helpers/markdownlint.ts` gives linkinator.
 - **linkinator skips `docs/**`** — in-site links are base-absolute (`/obsidian-integration-testing/...`) and
   only resolve once Astro has built them; `docs-link-check.ts` validates those against the built output.
-
-### Open follow-up
-
-`scripts/helpers/markdownlint.ts` carries a **temporary** `--skip` for
-`https://mnaoumov.dev/obsidian-integration-testing/`: the README links there and the site 404s until the
-first Pages deploy. Enable it (repo Settings → Pages → Source: **GitHub Actions**, then dispatch
-`build-pages.yml`, which otherwise only fires on a published release) and delete the `--skip`.
