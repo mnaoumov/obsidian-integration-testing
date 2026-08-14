@@ -63,6 +63,8 @@
     "Keymap",
     "keyup",
     "khtml",
+    "linecap",
+    "linejoin",
     "linkinator",
     "linkpath",
     "Linkpath",
