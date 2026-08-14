@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 10.3.0
+
+- feat: caption a screenshot with a label band
+
 ## 10.2.0
 
 - test: exclude the unreachable optional-peer branches from coverage
