@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 10.3.2
+
+- fix: deepen the label band so it clears the status row entirely
+
 ## 10.3.1
 
 - fix: make the label band cover the chrome it sits over
