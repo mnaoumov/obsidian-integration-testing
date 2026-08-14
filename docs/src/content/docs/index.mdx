@@ -1,0 +1,93 @@
+---
+title: Obsidian Integration Testing
+description: Run your plugin's tests inside a real, running Obsidian.
+template: splash
+editUrl: false
+lastUpdated: false
+hero:
+    title: Obsidian Integration Testing
+    tagline: Run your plugin's tests inside a real, running Obsidian — desktop or Android.
+    image:
+        alt: Obsidian Integration Testing logo
+        file: ../../assets/favicon.svg
+    actions:
+        - text: Get started
+          link: /obsidian-integration-testing/guides/getting-started/
+          icon: rocket
+        - text: API reference
+          link: /obsidian-integration-testing/api/
+          icon: open-book
+          variant: secondary
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components'
+
+## Features
+
+<CardGrid stagger>
+    <Card title="A real Obsidian, not a mock" icon="rocket">
+        Tests run against a live Obsidian process, so they exercise the real `App`, the real vault, the real
+        workspace — including the internal APIs no mock reproduces.
+    </Card>
+
+    <Card title="Isolated by default" icon="approve-check">
+        The harness launches and owns a throwaway Obsidian in its own `--user-data-dir`. Your config, your
+        vault registry and your running window are never touched.
+    </Card>
+
+    <Card title="Desktop and Android" icon="laptop">
+        The same test code runs over `CDP` against Obsidian Desktop and over Appium against Obsidian Mobile
+        on an Android emulator or device.
+    </Card>
+
+    <Card title="Vitest and Jest" icon="puzzle">
+        Ready-made global setups for both runners, plus a manual path for tools that are not plugins at all.
+    </Card>
+
+    <Card title="Trusted user input" icon="pencil">
+        Type, press keys and hover through Chromium's real input pipeline, so focus and `:hover` behave the
+        way they do for a human — no `isTrusted: false` false positives.
+    </Card>
+
+    <Card title="Version pinning" icon="setting">
+        Pin the app version, the installer shell, or run the whole suite across the supported range with
+        `runObsidianVersionMatrix`.
+    </Card>
+</CardGrid>
+
+## Guides
+
+<CardGrid stagger>
+    <Card title="Getting started" icon="rocket">
+        [Install the package and write your first test](./guides/getting-started/) against a real Obsidian.
+    </Card>
+    <Card title="Writing tests" icon="open-book">
+        [How `evalInObsidian` works](./guides/writing-tests/) — arguments, results, context, internal APIs.
+    </Card>
+    <Card title="Simulating user input" icon="pencil">
+        [Trusted keyboard and pointer input](./guides/user-input/), and waiting for the effect to settle.
+    </Card>
+    <Card title="The lib bag" icon="puzzle">
+        [Share helpers with your callbacks](./guides/lib/) instead of hand-rolling them in every closure.
+    </Card>
+    <Card title="Vaults and fixtures" icon="document">
+        [Temporary vaults, fixture files and demo-vault seeding](./guides/vaults/).
+    </Card>
+    <Card title="Transport modes" icon="setting">
+        [The owned `CDP` instance](./guides/transports/) — version pinning, visibility, attaching.
+    </Card>
+    <Card title="Android testing" icon="mobile-android">
+        [Obsidian Mobile over Appium](./guides/android/), including the AVD provisioning that decides
+        whether your runs are stable.
+    </Card>
+    <Card title="Version matrix" icon="random">
+        [Run the suites across the supported version range](./guides/version-matrix/) without double-running
+        a converged one.
+    </Card>
+    <Card title="Leftover cleanup" icon="close">
+        [What a dead run leaks](./guides/leftover-cleanup/), and how the sweeps deal with it.
+    </Card>
+    <Card title="Ad-hoc debugging" icon="warning">
+        [`connectToCdp` and the CLI](./guides/debugging/) for reproducing behavior outside a test run.
+    </Card>
+</CardGrid>
