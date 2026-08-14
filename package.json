@@ -227,6 +227,7 @@
     "obsidian": "^1.13.1",
     "satori": "^0.29.0",
     "semver": "^7.8.5",
+    "sharp": "^0.35.3",
     "starlight-github-alerts": "^0.4.0",
     "ts-jest": "^29.4.12",
     "ts-morph": "^28.0.0",
@@ -241,6 +242,12 @@
   },
   "peerDependencies": {
     "obsidian": "^1.12.3",
+    "sharp": "^0.35.3",
     "type-fest": "^5.6.0"
+  },
+  "peerDependenciesMeta": {
+    "sharp": {
+      "optional": true
+    }
   }
 }
