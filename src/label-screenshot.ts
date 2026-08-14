@@ -98,10 +98,10 @@ const MINIMUM_FONT_SIZE_IN_PIXELS = 18;
  * Height derived from the caption alone is too shallow on a tall frame: on a
  * 900x1600 phone it came to 68px and sliced through the status row it was meant
  * to cover, clipping the text mid-line. This floor makes the band deep enough to
- * swallow that row whole, and is inert on a wide frame where the caption-derived
+ * swallow that row whole (120px on a 900x1600 phone), and is inert on a wide frame where the caption-derived
  * height is already the larger of the two.
  */
-const MINIMUM_HEIGHT_RATIO = 0.06;
+const MINIMUM_HEIGHT_RATIO = 0.075;
 
 /**
  * Divisor that turns a span into its midpoint, for centering the caption.
