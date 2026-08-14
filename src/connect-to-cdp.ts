@@ -16,6 +16,7 @@
 import type { Except } from 'type-fest';
 
 import type { AsarFallback } from './asar-fallback-detection.ts';
+import type { CaptureScreenshotParams } from './capture-screenshot.ts';
 import type { ContextId } from './context-id.ts';
 import type { ElectronCompatibility } from './electron-compatibility.ts';
 import type {
@@ -58,6 +59,19 @@ export interface CdpConnection extends AsyncDisposable {
    * otherwise it throws `SilentAsarFallbackError` before the connection is created.
    */
   readonly asarFallback?: AsarFallback | undefined;
+
+  /**
+   * Captures a PNG screenshot of this connection's Obsidian window, with the
+   * vault path pre-bound.
+   *
+   * Pass `widthInPixels` + `heightInPixels` to pin the viewport for the duration
+   * of the capture, so the emitted PNG is exactly that size whatever size the
+   * window happens to be.
+   *
+   * @param params - The exact size to capture at. Omit to capture the window at its natural size.
+   * @returns A {@link Promise} that resolves to the raw PNG bytes.
+   */
+  captureScreenshot(params?: Except<CaptureScreenshotParams, 'cwd'>): Promise<Uint8Array>;
 
   /**
    * The base CDP URL, e.g. `http://localhost:51888`.
@@ -308,6 +322,17 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
     ...(asarFallback && { asarFallback }),
     ...(compatibility && { compatibility }),
     ...(electronCompatibility && { electronCompatibility }),
+
+    async captureScreenshot(params?: Except<CaptureScreenshotParams, 'cwd'>): Promise<Uint8Array> {
+      // Every transport `connectToCdp` builds is a DesktopCdpTransport, which
+      // Implements the optional method — but the interface still types it
+      // Optional, so the absence is reported rather than silently thrown at.
+      if (!transport.captureScreenshot) {
+        throw new Error('connectToCdp: this transport cannot capture screenshots.');
+      }
+
+      return transport.captureScreenshot({ ...params, cwd: vault.path });
+    },
 
     async dispose(): Promise<void> {
       try {

@@ -50,12 +50,17 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { CaptureScreenshotParams } from './capture-screenshot.ts';
 import type {
   ConsoleCaptureHandle,
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
 
+import {
+  decodeBase64Png,
+  isPng
+} from './capture-screenshot.ts';
 import { exec } from './exec.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
@@ -265,6 +270,29 @@ export class AppiumTransport implements ObsidianTransport {
       { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS }
     );
     return { marker };
+  }
+
+  /**
+   * Captures a PNG screenshot of the device's screen.
+   *
+   * The image is always the device's native framebuffer — there is no mobile
+   * equivalent of the desktop viewport override, so
+   * {@link CaptureScreenshotParams.widthInPixels} /
+   * {@link CaptureScreenshotParams.heightInPixels} are ignored. Size a mobile
+   * capture by choosing an AVD whose screen geometry already matches what the
+   * image has to be.
+   *
+   * @param _params - Capture parameters. Ignored on mobile: `cwd` does not select a window (vault targeting is via localStorage), and the size cannot be overridden.
+   * @returns The raw PNG bytes.
+   * @throws Error if the driver returns data that is not a PNG.
+   */
+  public async captureScreenshot(_params: CaptureScreenshotParams): Promise<Uint8Array> {
+    const bytes = decodeBase64Png(await this.browser.takeScreenshot());
+    if (!isPng(bytes)) {
+      throw new Error('Appium screenshot error: takeScreenshot returned data that is not a PNG.');
+    }
+
+    return bytes;
   }
 
   /**
