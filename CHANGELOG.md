@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 10.3.1
+
+- fix: make the label band cover the chrome it sits over
+
 ## 10.3.0
 
 - feat: caption a screenshot with a label band
