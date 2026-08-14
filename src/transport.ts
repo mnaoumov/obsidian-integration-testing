@@ -4,6 +4,8 @@
  * Defines the transport interface for communicating with a running Obsidian instance.
  */
 
+import type { CaptureScreenshotParams } from './capture-screenshot.ts';
+
 /**
  * An opaque handle identifying a console-capture window opened by
  * {@link ObsidianTransport.beginConsoleCapture} and consumed by
@@ -42,6 +44,21 @@ export interface ObsidianTransport {
    * @returns An opaque handle to pass to {@link ObsidianTransport.readConsoleCaptureSince}, or `undefined` when unsupported.
    */
   beginConsoleCapture?(): Promise<ConsoleCaptureHandle | undefined>;
+
+  /**
+   * Captures a PNG screenshot of the running Obsidian instance.
+   *
+   * Optional and platform-specific, like the other members here. Implemented by
+   * {@link DesktopCdpTransport} (CDP `Page.captureScreenshot`, optionally with
+   * the viewport pinned to an exact size) and by {@link AppiumTransport}
+   * (`takeScreenshot`, always the device's native framebuffer — the size knobs
+   * are ignored, so a mobile capture is sized by choosing an AVD with the wanted
+   * screen geometry).
+   *
+   * @param params - Which window to capture, and the exact size to capture it at.
+   * @returns A {@link Promise} that resolves to the raw PNG bytes.
+   */
+  captureScreenshot?(params: CaptureScreenshotParams): Promise<Uint8Array>;
 
   /**
    * Disposes of transport resources (e.g. WebSocket connections, Appium sessions).

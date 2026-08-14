@@ -29,6 +29,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { AsarFallback } from './asar-fallback-detection.ts';
+import type { CaptureScreenshotParams } from './capture-screenshot.ts';
 import type { ElectronCompatibility } from './electron-compatibility.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { OwnedObsidianInstance } from './obsidian-instance.ts';
@@ -39,6 +40,11 @@ import type {
 } from './transport.ts';
 
 import { resolveAsarFallback } from './asar-fallback-detection.ts';
+import {
+  buildDeviceMetricsOverride,
+  decodeBase64Png,
+  isPng
+} from './capture-screenshot.ts';
 import { resolveAsarFallbackAction } from './compatibility-options.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { resolveElectronCompatibility } from './electron-compatibility.ts';
@@ -221,6 +227,10 @@ interface CdpResponse {
 }
 
 interface CdpResponseResult {
+  /**
+   * The base64-encoded image returned by `Page.captureScreenshot`.
+   */
+  readonly data?: string;
   readonly exceptionDetails?: CdpExceptionDetails;
   readonly result?: CdpValue;
 }
@@ -338,6 +348,52 @@ export class DesktopCdpTransport implements ObsidianTransport {
     // Attach mode connects to the configured port; no port is hardcoded.
     this.cdpPort = cdpPort ?? 0;
     this.cdpUrl = cdpPort === undefined ? '' : `http://${cdpHost}:${String(cdpPort)}`;
+  }
+
+  /**
+   * Captures a PNG screenshot of the Obsidian window showing the given vault.
+   *
+   * When a size is requested the viewport is pinned to it with
+   * `Emulation.setDeviceMetricsOverride` for the duration of the capture, so the
+   * emitted PNG is exactly that size whatever size the window happens to be —
+   * and the override is always cleared afterwards, including when the capture
+   * throws, so a failed capture cannot leave the window stuck at the override.
+   *
+   * @param params - Which vault window to capture, and the exact size to capture it at.
+   * @returns The raw PNG bytes.
+   * @throws Error if CDP returns no image data, or data that is not a PNG.
+   */
+  public async captureScreenshot(params: CaptureScreenshotParams): Promise<Uint8Array> {
+    const ws = await this.ensureConnection(params.cwd);
+    const deviceMetricsOverride = buildDeviceMetricsOverride(params);
+    if (deviceMetricsOverride) {
+      await this.sendCommand(ws, 'Emulation.setDeviceMetricsOverride', deviceMetricsOverride);
+    }
+
+    try {
+      const response = await this.sendCommand(ws, 'Page.captureScreenshot', {
+        // The override already sizes the viewport, so capturing beyond it would
+        // Re-introduce the scroll height the override exists to pin down.
+        captureBeyondViewport: false,
+        format: 'png'
+      });
+
+      const data = response.result?.data;
+      if (data === undefined) {
+        throw new Error('CDP screenshot error: Page.captureScreenshot returned no image data.');
+      }
+
+      const bytes = decodeBase64Png(data);
+      if (!isPng(bytes)) {
+        throw new Error('CDP screenshot error: Page.captureScreenshot returned data that is not a PNG.');
+      }
+
+      return bytes;
+    } finally {
+      if (deviceMetricsOverride) {
+        await this.sendCommand(ws, 'Emulation.clearDeviceMetricsOverride', {});
+      }
+    }
   }
 
   /**

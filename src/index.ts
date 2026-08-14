@@ -11,6 +11,16 @@ export type {
 } from './asar-fallback-detection.ts';
 export { resolveAsarFallback } from './asar-fallback-detection.ts';
 export type {
+  CaptureScreenshotParams,
+  PngDimensions
+} from './capture-screenshot.ts';
+export {
+  buildDeviceMetricsOverride,
+  decodeBase64Png,
+  isPng,
+  readPngDimensions
+} from './capture-screenshot.ts';
+export type {
   CdpConnection,
   ConnectToCdpOptions
 } from './connect-to-cdp.ts';
