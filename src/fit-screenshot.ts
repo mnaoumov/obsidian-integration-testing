@@ -234,6 +234,7 @@ export async function fitScreenshotToCanvas(bytes: Uint8Array, options: FitScree
   const sourceWidthInPixels = metadata.width;
   const sourceHeightInPixels = metadata.height;
 
+  /* v8 ignore next 3 -- Defensive: `sharp` rejects a non-image before it can report metadata without dimensions, so this branch is unreachable from a test. */
   if (sourceWidthInPixels === undefined || sourceHeightInPixels === undefined) {
     throw new Error('fitScreenshotToCanvas: could not read the source image dimensions.');
   }
@@ -281,11 +282,13 @@ async function importSharp(): Promise<SharpFactory> {
     const factory: unknown = sharpModule.default;
     return factory as SharpFactory;
   } catch (error: unknown) {
+    /* v8 ignore start -- Reached only when the optional peer is absent, which it never is in this package's own test run. */
     throw new Error(
       'fitScreenshotToCanvas needs the optional peer dependency "sharp". '
         + 'Install it in the consuming project (npm i -D sharp).',
       { cause: error }
     );
+    /* v8 ignore stop */
   }
 }
 
