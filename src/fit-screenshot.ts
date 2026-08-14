@@ -17,6 +17,8 @@
  * native binaries that every other consumer would pay for.
  */
 
+import { importSharp } from './sharp-loader.ts';
+
 /**
  * Parameters for {@link computeFitToCanvas}.
  */
@@ -92,48 +94,6 @@ export interface FitToCanvasGeometry {
    * Width the source is scaled to, in pixels.
    */
   readonly scaledWidthInPixels: number;
-}
-
-/**
- * A layer passed to `sharp`'s `composite`.
- */
-interface SharpCompositeLayer {
-  readonly input: Buffer;
-  readonly left: number;
-  readonly top: number;
-}
-
-/**
- * The `sharp` entry point this module uses, described structurally so the module
- * type-checks against the optional peer rather than depending on its types.
- */
-type SharpFactory = (input: Uint8Array) => SharpInstance;
-
-/**
- * One `sharp` pipeline.
- */
-interface SharpInstance {
-  blur(this: void, sigma: number): SharpInstance;
-  composite(this: void, layers: SharpCompositeLayer[]): SharpInstance;
-  metadata(this: void): Promise<SharpMetadata>;
-  png(this: void): SharpInstance;
-  resize(this: void, width: number, height: number, options?: SharpResizeOptions): SharpInstance;
-  toBuffer(this: void): Promise<Buffer>;
-}
-
-/**
- * The subset of `sharp`'s metadata this module reads.
- */
-interface SharpMetadata {
-  readonly height?: number | undefined;
-  readonly width?: number | undefined;
-}
-
-/**
- * The subset of `sharp`'s resize options this module sets.
- */
-interface SharpResizeOptions {
-  readonly fit: 'cover' | 'fill';
 }
 
 /**
@@ -229,7 +189,7 @@ export async function fitScreenshotToCanvas(bytes: Uint8Array, options: FitScree
     canvasWidthInPixels
   } = options;
 
-  const sharp = await importSharp();
+  const sharp = await importSharp('fitScreenshotToCanvas');
   const metadata = await sharp(bytes).metadata();
   const sourceWidthInPixels = metadata.width;
   const sourceHeightInPixels = metadata.height;
@@ -267,29 +227,6 @@ export async function fitScreenshotToCanvas(bytes: Uint8Array, options: FitScree
     .toBuffer();
 
   return new Uint8Array(composed);
-}
-
-/**
- * Loads `sharp` on demand, so importing this module does not require it.
- *
- * @returns A {@link Promise} that resolves to the `sharp` factory.
- * @throws Error naming the missing optional peer dependency.
- */
-async function importSharp(): Promise<SharpFactory> {
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- `sharp` is an OPTIONAL peer, so it must be loaded lazily: a static import would drag its native binaries into every consumer of this package's index.
-    const sharpModule = await import('sharp');
-    const factory: unknown = sharpModule.default;
-    return factory as SharpFactory;
-  } catch (error: unknown) {
-    /* v8 ignore start -- Reached only when the optional peer is absent, which it never is in this package's own test run. */
-    throw new Error(
-      'fitScreenshotToCanvas needs the optional peer dependency "sharp". '
-        + 'Install it in the consuming project (npm i -D sharp).',
-      { cause: error }
-    );
-    /* v8 ignore stop */
-  }
 }
 
 /**
