@@ -20,6 +20,8 @@ import eslint from '@eslint/js';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `plugin` is too confusing.
 import stylistic from '@stylistic/eslint-plugin';
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript';
+// eslint-disable-next-line import-x/no-rename-default -- The default export name `plugin` is too confusing.
+import astro from 'eslint-plugin-astro';
 import { flatConfigs as eslintPluginImportXFlatConfigs } from 'eslint-plugin-import-x';
 // eslint-disable-next-line import-x/no-rename-default, import-x/no-named-as-default -- The default export name `index` is too confusing.
 import jsdoc from 'eslint-plugin-jsdoc';
@@ -37,14 +39,22 @@ import { obsidianDevUtilsPlugin } from './helpers/eslint-rules/obsidian-dev-util
 import { getRootFolder } from './helpers/root.ts';
 
 const rootConfigFiles = [
+  'astro.config.ts',
   'commitlint.config.ts',
   'eslint.config.mts',
   'vitest.config.ts'
 ];
-const sourceFiles = ['src/**/*.ts'];
+const sourceFiles = ['src/**/*.ts', 'docs/**/*.ts'];
 const scriptFiles = ['scripts/**/*.ts'];
 const testFiles = ['**/*.test.ts'];
 const allFiles = [...sourceFiles, ...scriptFiles, ...rootConfigFiles];
+
+/*
+ * `astro.config.ts` is deliberately outside the root `tsconfig.json`'s `include` (it is bundler-resolved
+ * ESM, unlike the `node16` library), so the project service cannot type it. `tsconfig.astro.json` is the
+ * one-file project that covers it.
+ */
+const ASTRO_CONFIG_TSCONFIG = './tsconfig.astro.json';
 
 /**
  * Build ESLint configurations.
@@ -56,8 +66,12 @@ const allFiles = [...sourceFiles, ...scriptFiles, ...rootConfigFiles];
  */
 export const configs = defineConfig(
   ...getGitIgnoreConfigs(),
+  ...getAstroConfigs(),
   ...getEslintConfigs(),
   ...getTseslintConfigs(),
+  // Must follow `getTseslintConfigs`: it re-enables `projectService` for every file, which conflicts
+  // With the one-file `project` this needs.
+  ...getAstroConfigTypeCheckingConfigs(),
   ...getStylisticConfigs(),
   ...getImportXConfigs(),
   ...getPerfectionistConfigs(),
@@ -69,6 +83,25 @@ export const configs = defineConfig(
   ...getNoRestrictedSyntaxRulesConfigs(),
   ...getTsdocsConfigs()
 );
+
+function getAstroConfigs(): Linter.Config[] {
+  // eslint-disable-next-line import-x/no-named-as-default-member -- `configs` is the plugin's configuration namespace.
+  return defineConfig(astro.configs.recommended);
+}
+
+function getAstroConfigTypeCheckingConfigs(): Linter.Config[] {
+  return defineConfig({
+    files: ['astro.config.ts'],
+    languageOptions: {
+      parserOptions: {
+        project: ASTRO_CONFIG_TSCONFIG,
+        projectService: false,
+        // eslint-disable-next-line unicorn/name-replacements -- `tsconfigRootDir` is a `typescript-eslint` parser option name.
+        tsconfigRootDir: getRootFolder() ?? ''
+      }
+    }
+  });
+}
 
 function getEslintCommentsConfigs(): Linter.Config[] {
   return defineConfig([

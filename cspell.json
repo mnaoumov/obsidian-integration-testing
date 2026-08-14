@@ -1,10 +1,17 @@
 {
   "version": "0.2",
   "ignorePaths": [
+    ".astro",
     ".husky",
     "coverage",
     "dist",
+    "docs/dist",
+    "docs/public/og",
+    "docs/src/content/docs/api",
+    "docs/src/components",
+    "docs/src/styles",
     "patches",
+    "scripts/docs-gen",
     "scripts/helpers/@types/markdownlint-cli2-config-schema.d.ts",
     "tsconfig.tsbuildinfo"
   ],
@@ -75,6 +82,7 @@
     "ncrypto",
     "netsim",
     "nobrowse",
+    "npmjs",
     "nsis",
     "obsidianmd",
     "offref",
@@ -91,6 +99,7 @@
     "preminor",
     "prepatch",
     "Promisable",
+    "resvg",
     "sdcard",
     "setuid",
     "Sidedock",
