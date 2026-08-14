@@ -83,12 +83,25 @@ const FONT_SIZE_RATIO = 0.034;
 const BAND_HEIGHT_RATIO = 2.2;
 
 /**
- * Opacity of the band, dark enough to carry light text over any Obsidian theme
- * while the frame beneath stays faintly visible rather than looking cut off.
+ * Opacity of the band. Near-opaque on purpose: the band exists partly to COVER
+ * the chrome along the bottom of the frame, and at 0.82 a status bar legibly
+ * bled through behind the caption, which looked like a mistake rather than a
+ * design.
  */
-const BAND_OPACITY = 0.82;
+const BAND_OPACITY = 0.94;
 
 const MINIMUM_FONT_SIZE_IN_PIXELS = 18;
+
+/**
+ * Floor on band height as a fraction of image HEIGHT.
+ *
+ * Height derived from the caption alone is too shallow on a tall frame: on a
+ * 900x1600 phone it came to 68px and sliced through the status row it was meant
+ * to cover, clipping the text mid-line. This floor makes the band deep enough to
+ * swallow that row whole, and is inert on a wide frame where the caption-derived
+ * height is already the larger of the two.
+ */
+const MINIMUM_HEIGHT_RATIO = 0.06;
 
 /**
  * Divisor that turns a span into its midpoint, for centering the caption.
@@ -134,7 +147,9 @@ export function computeLabelBand(params: ComputeLabelBandParams): LabelBandGeome
   }
 
   const fontSizeInPixels = Math.max(MINIMUM_FONT_SIZE_IN_PIXELS, Math.round(imageWidthInPixels * FONT_SIZE_RATIO));
-  const heightInPixels = Math.min(imageHeightInPixels, Math.round(fontSizeInPixels * BAND_HEIGHT_RATIO));
+  const captionHeightInPixels = Math.round(fontSizeInPixels * BAND_HEIGHT_RATIO);
+  const flooredHeightInPixels = Math.max(captionHeightInPixels, Math.round(imageHeightInPixels * MINIMUM_HEIGHT_RATIO));
+  const heightInPixels = Math.min(imageHeightInPixels, flooredHeightInPixels);
 
   return {
     fontSizeInPixels,
