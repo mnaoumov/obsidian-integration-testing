@@ -33,9 +33,9 @@ describe('computeLabelBand', () => {
 
   it('should deepen the band on a tall frame, so it covers the status row it sits over', () => {
     // Caption-derived height on a 900x1600 phone is 68px, which sliced through
-    // The status row; the floor takes it to 96px.
+    // The status row; the floor takes it to 120px.
     const mobile = computeLabelBand(MOBILE);
-    expect(mobile.heightInPixels).toBe(96);
+    expect(mobile.heightInPixels).toBe(120);
     // On a wide frame the caption-derived height already wins, so the floor is inert.
     const desktop = computeLabelBand(DESKTOP);
     expect(desktop.heightInPixels).toBe(90);
