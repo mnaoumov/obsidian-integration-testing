@@ -10,6 +10,8 @@ export type {
   ResolveAsarFallbackParams
 } from './asar-fallback-detection.ts';
 export { resolveAsarFallback } from './asar-fallback-detection.ts';
+export type { CaptureObsidianScreenshotOptions } from './capture-obsidian-screenshot.ts';
+export { captureObsidianScreenshot } from './capture-obsidian-screenshot.ts';
 export type {
   CaptureScreenshotParams,
   PngDimensions
