@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 10.2.0
+
+- test: exclude the unreachable optional-peer branches from coverage
+- feat: fit a screenshot onto a canvas of a different aspect ratio
+- build: check the docs-site links for real now that the site is served
+
 ## 10.1.0
 
 - feat: resolve the transport for a screenshot from the test context
