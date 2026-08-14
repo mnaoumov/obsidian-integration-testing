@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 10.1.0
+
+- feat: resolve the transport for a screenshot from the test context
+- feat: add screenshot capture to both transports
+- docs: draw an original favicon instead of repainting the dev-utils one
+- docs: publish an Astro + Starlight documentation site
+- chore: take the automated metadata.json refreshes
+- chore: update libs
+
 ## 10.0.0
 
 - refactor!: eslint unicorn
