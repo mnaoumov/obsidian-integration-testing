@@ -1,0 +1,18 @@
+/**
+ * @file
+ *
+ * Shared types for the API reference components.
+ *
+ * Unlike obsidian-typings, this package has no official/unofficial axis, so there
+ * is no `ApiStatus` enum here. This module is kept as the shared home for
+ * cross-component API types.
+ */
+
+/**
+A rendered API parameter.
+ */
+export interface ParameterInfo {
+  description: string;
+  name: string;
+  type: string;
+}

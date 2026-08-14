@@ -35,5 +35,8 @@
     "./scripts/**/*.ts",
     "./src/**/*.ts",
     "./vitest.config.ts"
+  ],
+  "exclude": [
+    "./scripts/docs-gen/**/*.ts"
   ]
 }

@@ -31,11 +31,12 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 
 - `npm run build` — clean, type-check, generate `src/index.ts` barrel, build ESM+CJS via esbuild, emit `.d.mts`/`.d.cts` declarations.
 - Output lands in `dist/lib/esm/` and `dist/lib/cjs/`.
-- `src/index.ts` is the manually maintained barrel file.
+- `src/index.ts` is the manually maintained barrel file. It is also the definition of "public" for the API reference (**L35**): a name is documented iff it is re-exported there.
+- `npm run docs:build` — the Astro + Starlight documentation site under `docs/` (**L35**), built and deployed separately from the library.
 
 ## L3. Testing
 
-- Unit tests: `npm run test` (Vitest, `--project unit-tests`).
+- Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:docs-generator` — the second covers the vendored docs generator, see **L35**).
 - Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs two projects: `integration-tests` (each suite registers its vault in-worker) and `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics.
 - Cross-platform CI validation (manual `workflow_dispatch`, since each run downloads a multi-hundred-MB asset): `.github/workflows/validate-installer-path.yml` validates installer download+extract on ubuntu/macos/windows (opt-in via `OBSIDIAN_TEST_INSTALLER_DOWNLOAD=1`); `.github/workflows/validate-installer-boot.yml` validates the owned-instance **boot** from a pinned installer (`OBSIDIAN_TEST_INSTALLER_BOOT=1`, launches Electron under `xvfb` + `--no-sandbox` on Linux) and, in a Linux-only step, the asar-swap version-pin regression (`OBSIDIAN_TEST_ASAR_SWAP=1` — symlinks a newer cached shell under a versionless dir on `PATH` so shell-version detection returns `undefined`, then asserts an older pinned `obsidianVersion` actually runs). Both pass `GITHUB_TOKEN` so the release-asset API isn't rate-limited to the anonymous quota (which 403s on shared runner IPs → templated-name fallback).
@@ -1311,3 +1312,61 @@ loosely typed positions are not contextually typed, so a rename can leave a dang
 never sees. The vendored ambient declarations under `scripts/helpers/@types/` are exempt from it (and from
 `prefer-type-literal-last`, which fights `perfectionist/sort-union-types` there in a non-converging fix loop)
 because their names come from a dependency's published schema.
+
+## L35. Documentation site (`docs/`) — an Astro + Starlight copy-sync of `obsidian-dev-utils`
+
+The user-facing docs are an Astro + Starlight site under `docs/`, served at
+`https://mnaoumov.dev/obsidian-integration-testing/`. `README.md` is now only an overview plus links into
+it (G59 "split when too big"; this repo is tooling, not a plugin, so `docs/` is the right destination).
+
+- `npm run docs:build` — generate the API reference, generate the OG cards, `astro build`, then the link
+  check. `docs:dev` runs the generator plus a foreground dev server; `docs:preview` serves the last build.
+- `.github/workflows/build-pages.yml` deploys it: a published **release** dispatches the workflow again on
+  `main` (the `github-pages` environment refuses a deploy from a tag), which builds and deploys. It caches
+  the two slow artifacts (the ts-morph markdown, the satori PNGs) keyed by the sources that determine them.
+- **Generated, gitignored, never edited by hand:** `docs/src/content/docs/api/`,
+  `docs/src/generated-sidebar.json`, `docs/public/og/`, `docs/dist/`, `.astro/`.
+- `scripts/docs-gen/**` is excluded from the root `tsconfig.json` (it has its own, bundler-resolved) and
+  from dprint + cspell, so the vendored copy stays byte-comparable with ODU's. It IS linted, and its unit
+  tests run in the `unit-tests:docs-generator` Vitest project (`npm test` runs it alongside `unit-tests`).
+
+### The copy is a sync, not a fork — four deliberate divergences
+
+`scripts/docs-gen/**`, `astro.config.ts`, the `docs-*.ts` scripts and `docs/src/{components,styles,
+content.config.ts,route-data.ts}` are copied from `obsidian-dev-utils` (same hand-sync discipline as
+**L17**; this repo must not depend on ODU, and ODU depends on *this* package, so the edge would be a
+cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that way. What differs:
+
+1. **`api-doc-constants.ts`** — `BASE_PATH`, the new `PACKAGE_NAME` / `PUBLIC_API_ENTRY_FILE`, a pruned
+   `GENERIC_TYPE_PARAMS`, and a `TS_GLOBAL_TYPES` map scoped to what this package's signatures actually
+   mention (Node built-ins, WebdriverIO's `Browser`, Puppeteer's `CDPSession`) instead of ODU's CodeMirror
+   and Obsidian-UI entries.
+2. **`api-doc-source-processing.ts` — entry discovery follows the barrel, not the file tree.** ODU exports
+   one subpath per module, so it walks `src`. Here `src/` also holds the co-located `*.test.ts` suites and
+   modules that exist only for the runner adapters, and only `src/index.ts` is public — so
+   `findEntryFiles` / `findPublicApiNames` parse that barrel's re-exports, and `computeCacheHash` hashes it
+   (a re-export added there changes the output with no entry file touched).
+3. **`generate-api-docs.ts`** — filters the collected types down to the barrel's names, *after*
+   `resolveInheritedMembers`, so a public class still inherits from an internal base class.
+4. **`getImportStatement()`** — every documented name is imported from the package root; the namespace only
+   groups the reference by source module, it is not an import subpath.
+
+### Incidental fixes the port forced
+
+- **`js-yaml` override `^5.2.3` → `4.3.1`** — js-yaml 5 is ESM-only with no default export, so `astro build`
+  died on import. The `^5.2.3` came from an update sweep, not a requirement; ODU pins the same `4.3.1`.
+- **`scripts/helpers/exec.ts` gained an `env` option** — `docs:dev` needs `ASTRO_DEV_BACKGROUND=1`, and
+  `CHILD_ENV` snapshots `process.env` at module load, so setting it in the script would not have reached
+  the child.
+- **`src/type-guards.ts` gained `assertNever`** — the vendored `link-check.ts` imports ODU's.
+- **`docs-link-check.ts` rewrites `npmjs.com/package/x` → `registry.npmjs.org/x`** before fetching; npmjs
+  answers an unattended `fetch` with 403. Same rewrite `scripts/helpers/markdownlint.ts` gives linkinator.
+- **linkinator skips `docs/**`** — in-site links are base-absolute (`/obsidian-integration-testing/...`) and
+  only resolve once Astro has built them; `docs-link-check.ts` validates those against the built output.
+
+### Open follow-up
+
+`scripts/helpers/markdownlint.ts` carries a **temporary** `--skip` for
+`https://mnaoumov.dev/obsidian-integration-testing/`: the README links there and the site 404s until the
+first Pages deploy. Enable it (repo Settings → Pages → Source: **GitHub Actions**, then dispatch
+`build-pages.yml`, which otherwise only fires on a published release) and delete the `--skip`.

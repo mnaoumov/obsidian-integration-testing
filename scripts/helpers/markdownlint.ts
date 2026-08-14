@@ -22,6 +22,10 @@ export async function lint(params?: LintParams): Promise<void> {
     : await toArray(glob(['**/*.md'], {
       exclude: [
         '.git/**',
+        // The docs site's pages link by SITE path (`/obsidian-integration-testing/guides/…`), which only
+        // Resolves once Astro has built them; `scripts/docs-link-check.ts` validates those against the
+        // Built output instead. Checking them as filesystem-relative paths here would 404 every one.
+        'docs/**',
         'dist/**',
         'node_modules/**'
       ]
@@ -29,6 +33,15 @@ export async function lint(params?: LintParams): Promise<void> {
   await execFromRoot([
     'npx',
     'linkinator',
+    /*
+     * TEMPORARY — delete this `--skip` once the docs site is live. The README points at
+     * https://mnaoumov.dev/obsidian-integration-testing/, which 404s until GitHub Pages serves the first
+     * `build-pages.yml` deploy (repo Settings -> Pages -> Source: GitHub Actions, then dispatch it).
+     * Those pages are not unchecked in the meantime: `scripts/docs-link-check.ts` validates every one of
+     * them against the built site on each `docs:build`.
+     */
+    '--skip',
+    String.raw`^https://mnaoumov\.dev/obsidian-integration-testing/`,
     '--retry',
     '--retry-errors',
     '--retry-errors-count',

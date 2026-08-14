@@ -5,6 +5,7 @@ import {
 } from 'vitest';
 
 import {
+  assertNever,
   assertNonNullable,
   castTo,
   ensureGenericObject,
@@ -16,6 +17,12 @@ interface Boxed {
 }
 
 const TEST_VALUE = 42;
+
+describe('assertNever', () => {
+  it('should throw naming the value that reached the unreachable branch', () => {
+    expect(() => assertNever(castTo<never>('unexpected'))).toThrow('Unhandled value: unexpected');
+  });
+});
 
 describe('castTo', () => {
   it('should return the same value', () => {

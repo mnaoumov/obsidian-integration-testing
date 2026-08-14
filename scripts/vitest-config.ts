@@ -8,6 +8,8 @@ import {
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
 const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
+const DOCS_GENERATOR_TEST_FILES = 'scripts/docs-gen/**/*.test.ts';
+const DOCS_SITE_TEST_FILES = 'docs/src/**/*.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 // The owned-instance worker-attach regression suite runs in its own project: it
@@ -76,6 +78,18 @@ export const config = defineConfig({
               inline: ['@obsidian-typings', 'obsidian-dev-utils']
             }
           }
+        }
+      },
+      {
+        test: {
+          environment: 'node',
+          exclude: [...SHARED_EXCLUDE],
+          include: [DOCS_GENERATOR_TEST_FILES, DOCS_SITE_TEST_FILES],
+          name: 'unit-tests:docs-generator',
+          // Rendering an OG image to a bitmap (satori + resvg) and building a ts-morph Project are
+          // Genuinely slow. Under the full aggregate they lose the CPU race and the default 5000 ms
+          // Times them out.
+          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }
       },
       {

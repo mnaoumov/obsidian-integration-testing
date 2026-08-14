@@ -3,4 +3,4 @@ import { execFromRoot } from './helpers/root.ts';
 
 exitIfScriptDisabled();
 
-await execFromRoot('vitest run --project unit-tests');
+await execFromRoot('vitest run --project unit-tests --project unit-tests:docs-generator');

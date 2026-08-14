@@ -14,6 +14,16 @@ export type GenericObject = Record<string, unknown>;
 type NullableConstraint<T> = null extends T ? unknown : undefined extends T ? unknown : never;
 
 /**
+ * Asserts that a branch is unreachable, so an unhandled `switch` case becomes a compile error.
+ *
+ * @param value - The value whose type must have been narrowed to `never` by the preceding branches.
+ * @throws Always, naming the value that reached the branch at runtime.
+ */
+export function assertNever(value: never): never {
+  throw new Error(`Unhandled value: ${String(value)}`);
+}
+
+/**
  * Asserts that a value is not `null` or `undefined`, narrowing its type in place.
  *
  * Only callable when `T` includes `null` or `undefined`. Passing an already non-nullable type is a compile error.

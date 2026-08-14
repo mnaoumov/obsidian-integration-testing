@@ -15,6 +15,10 @@ export interface ExecDetailedOptions extends ExecOption {
 
 export interface ExecOption {
   readonly cwd?: string;
+  /**
+   * Extra environment variables for the child, layered on top of the parent's own environment.
+   */
+  readonly env?: Readonly<Record<string, string>>;
   readonly isQuiet?: boolean;
   readonly shouldIgnoreExitCode?: boolean;
   readonly shouldIncludeDetails?: boolean;
@@ -112,6 +116,7 @@ function commandEscapeCommandLine(commandLine: string): string {
 function execString(command: string, options: ExecOption = {}, rawArguments?: string[]): Promise<ExecResult | string> {
   const {
     cwd = process.cwd(),
+    env = {},
     isQuiet: quiet = false,
     shouldIgnoreExitCode: ignoreExitCode = false,
     shouldIncludeDetails = false,
@@ -119,7 +124,7 @@ function execString(command: string, options: ExecOption = {}, rawArguments?: st
   } = options;
 
   return new Promise((resolve, reject) => {
-    const child = spawnViaShell(command, cwd, rawArguments);
+    const child = spawnViaShell(command, cwd, env, rawArguments);
 
     let stdout = '';
     let stderr = '';
@@ -265,7 +270,13 @@ function isExecArgument(part: CommandPart): part is ExecArgument {
   return typeof part === 'object' && 'batchedArguments' in part;
 }
 
-function spawnViaShell(command: string, cwd: string, rawArguments?: string[]): ChildProcessWithoutNullStreams {
+function spawnViaShell(
+  command: string,
+  cwd: string,
+  extraEnv: Readonly<Record<string, string>>,
+  rawArguments?: string[]
+): ChildProcessWithoutNullStreams {
+  const env = { ...CHILD_ENV, ...extraEnv };
   if (process.platform === 'win32' && command.includes('\n')) {
     if (!rawArguments) {
       throw new Error('Commands containing newlines cannot be executed through cmd.exe on Windows. Pass an argument array instead of a string.');
@@ -276,7 +287,7 @@ function spawnViaShell(command: string, cwd: string, rawArguments?: string[]): C
     }
     return spawn(program, commandArguments, {
       cwd,
-      env: CHILD_ENV,
+      env,
       stdio: 'pipe'
     });
   }
