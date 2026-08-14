@@ -60,6 +60,15 @@ export type {
   WaitUntilParams
 } from './eval-in-obsidian.ts';
 export { evalInObsidian } from './eval-in-obsidian.ts';
+export type {
+  ComputeFitToCanvasParams,
+  FitScreenshotToCanvasOptions,
+  FitToCanvasGeometry
+} from './fit-screenshot.ts';
+export {
+  computeFitToCanvas,
+  fitScreenshotToCanvas
+} from './fit-screenshot.ts';
 export type { IncompatibleInstallerVersionErrorConstructorParams } from './incompatible-installer-version-error.ts';
 export { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 export type {
