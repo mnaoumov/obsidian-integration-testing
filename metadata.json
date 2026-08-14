@@ -5265,5 +5265,32 @@
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/obsidian-1.13.4.tar.gz"
     }
+  },
+  "1.13.5": {
+    "channel": "catalyst",
+    "changelogUrl": "https://obsidian.md/changelog/2026-08-05-desktop-v1.13.5/",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.13.5.asar.gz"
+    }
+  },
+  "1.13.6": {
+    "channel": "catalyst",
+    "changelogUrl": "https://obsidian.md/changelog/2026-08-07-desktop-v1.13.6/",
+    "downloads": {
+      "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/obsidian-1.13.6.asar.gz",
+      "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.dmg",
+      "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.exe",
+      "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/obsidian-1.13.6.tar.gz"
+    }
+  },
+  "1.13.7": {
+    "channel": "catalyst",
+    "changelogUrl": "https://obsidian.md/changelog/2026-08-11-desktop-v1.13.7/",
+    "downloads": {
+      "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian-1.13.7.asar.gz",
+      "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.dmg",
+      "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.exe",
+      "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian-1.13.7.tar.gz"
+    }
   }
 }
