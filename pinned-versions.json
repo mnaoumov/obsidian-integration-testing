@@ -7,7 +7,7 @@
     "means the condition that justified the pin has changed and the pin should be re-examined. `check: null` means no",
     "mechanical test exists — it is reported for manual review on every run instead of going quiet. Every exact pin must",
     "have an entry here, and every entry must correspond to a real pin; the script errors on either mismatch.",
-    "The caret-ranged overrides (glob, js-yaml, markdown-it, readdir-glob, test-exclude, tmp) are swept automatically and",
+    "The caret-ranged overrides (glob, markdown-it, readdir-glob, test-exclude, tmp) are swept automatically and",
     "are deliberately not listed. An advisory-driven override is the exception — it is listed even when caret-ranged,",
     "because the sweep only keeps it current, it never reports that the advisory it answers is gone and the override with",
     "it. Modeled on obsidian-dev-utils/pinned-versions.json; rule G100."
@@ -44,6 +44,19 @@
       "why": "Live in the tree exactly once, under webdriverio → archiver → archiver-utils, which asks for ^4.17.15. The override forces the newest 4.x across every copy rather than whatever old release the transitive range resolves to. Its justification is simply 'this is the newest lodash', so it goes stale the moment a newer one publishes.",
       "check": "npm view lodash version",
       "expect": "4.18.1"
+    },
+    "js-yaml": {
+      "section": "overrides",
+      "why": "Astro and Starlight `import yaml from 'js-yaml'`, and js-yaml 5 is ESM-only with NO default export - hoisting 5.x into their subtree makes `npm run docs:build` die on 'The requested module js-yaml does not provide an export named default' before it reads a single page. The override exists to keep the whole tree off the vulnerable 3.x line, and 4.3.1 does that just as well while staying loadable; it is also what the other js-yaml consumers here (cosmiconfig under @commitlint/load, @istanbuljs/load-nyc-config under jest, markdownlint-cli2) resolve to. The check records the range astro itself asks for: when astro moves to 5.x, this pin can be dropped. Same pin and same reason as obsidian-dev-utils and obsidian-test-mocks.",
+      "check": "node -e \"process.stdout.write(require('astro/package.json').dependencies['js-yaml'])\"",
+      "expect": "^4.3.0"
+    },
+    "@puppeteer/browsers": {
+      "section": "overrides",
+      "why": "Clears GHSA-jmr9-qjv8-65gv (extract-zip unvalidated symlink path traversal, 8 high advisories) and nothing else. extract-zip is vulnerable at every published version, so there is no patched version to override it to, and the direct dependency cannot be bumped either: webdriverio is declared here, but even the newest 9.30.1 still reaches extract-zip through @wdio/utils -> @puppeteer/browsers ^2.x, so lifting the webdriverio pin above would not clear it. @puppeteer/browsers@3 replaced extract-zip with modern-tar, so forcing 3.x on @wdio/utils - the only consumer left on 2.x - removes the subtree entirely. It also dedupes: puppeteer-core already brings 3.2.0 into this tree, so the override collapses two copies into one rather than adding anything. The major bump is safe because @wdio/utils imports only install, canDownload, resolveBuildId, detectBrowserPlatform, Browser, ChromeReleaseChannel, computeExecutablePath and the InstallOptions type, all still exported by 3.x with compatible signatures, and both packages are ESM-only. NEVER take the `npm audit fix --force` remedy here: it downgrades webdriverio past the version this harness drives (rule G100). Mirrors the same override in obsidian-dev-utils.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/@wdio/utils/package.json','utf8')).dependencies['@puppeteer/browsers'])\"",
+      "expect": "^2.2.0",
+      "manualCheck": "The check reads @wdio/utils's own declared range, not a version, because that range is what makes the override necessary. When it moves to ^3 or later, @wdio/utils no longer pulls extract-zip on its own and this override can be deleted along with this entry. A `require('@wdio/utils/package.json')` check would not work - its exports map does not expose package.json - hence the readFileSync form, which resolves relative to the package root the sweep runs from."
     }
   }
 }

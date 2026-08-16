@@ -20,7 +20,9 @@
     "jest-config - imported by jest.config.ts and scripts/metadata-global-setup.ts.",
     "linkinator - run as a CLI by scripts/helpers/markdownlint.ts to check links.",
     "markdownlint-cli2 - run as a CLI by scripts/helpers/markdownlint.ts and configured by .markdownlint-cli2.mjs.",
-    "nano-staged - .husky/pre-commit runs it; configured by .nano-staged.mjs and scripts/nano-staged-config.ts."
+    "nano-staged - .husky/pre-commit runs it; configured by .nano-staged.mjs and scripts/nano-staged-config.ts.",
+    "typedoc-plugin-mdn-links - never imported: scripts/docs-gen/helpers/api-doc-link-rendering.ts reads its shipped",
+    "  data file by path (node_modules/typedoc-plugin-mdn-links/data/web-api.json) to resolve Web API links."
   ],
   "ignores": [
     "@commitlint/cli",
@@ -34,6 +36,7 @@
     "jest-config",
     "linkinator",
     "markdownlint-cli2",
-    "nano-staged"
+    "nano-staged",
+    "typedoc-plugin-mdn-links"
   ]
 }
