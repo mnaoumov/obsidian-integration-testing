@@ -1363,3 +1363,26 @@ cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that 
   answers an unattended `fetch` with 403. Same rewrite `scripts/helpers/markdownlint.ts` gives linkinator.
 - **linkinator skips `docs/**`** — in-site links are base-absolute (`/obsidian-integration-testing/...`) and
   only resolve once Astro has built them; `docs-link-check.ts` validates those against the built output.
+
+## L36. Security overrides (`extract-zip` GHSA-jmr9-qjv8-65gv)
+
+`extract-zip` is vulnerable at **every** published version — the advisory range is `*` and `2.0.1` is the
+newest release — so there is nothing to override it *to*. It arrives through this package's own
+`webdriverio` dependency:
+
+```text
+webdriverio → @wdio/utils → @puppeteer/browsers@2.x → extract-zip
+```
+
+Lifting the exact `webdriverio` pin would not help either: the newest `@wdio/utils` (`9.30.1`) still
+declares `@puppeteer/browsers: ^2.2.0`. So the fix goes one level up — `overrides.@puppeteer/browsers` →
+`^3.2.0`, whose `3.x` line replaced `extract-zip` with `modern-tar`. That drops the vulnerable subtree
+entirely and **dedupes**: `puppeteer-core` already pulls `3.2.0` here. Verified rather than assumed —
+`@wdio/utils` imports exactly `install`, `canDownload`, `resolveBuildId`, `detectBrowserPlatform`,
+`Browser`, `ChromeReleaseChannel` and `computeExecutablePath`, all still exported by the installed `3.2.0`,
+and both packages are ESM-only.
+
+**Never take `npm audit fix --force` here** — its remedy downgrades `webdriverio` past the version this
+harness drives (G100). **Remove the override** when `@wdio/utils` moves to `@puppeteer/browsers@^3` itself;
+the `check` in [`pinned-versions.json`](pinned-versions.json) watches exactly that. Same override and same
+reasoning as ODU's "Security overrides (`extract-zip` …)"; keep the two in step.
