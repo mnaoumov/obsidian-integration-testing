@@ -34,6 +34,7 @@ import type { PopulateFilesParams } from './temporary-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { DesktopOnlyPluginSkipError } from './desktop-only-plugin-skip-error.ts';
 import {
   enablePluginWithErrorCapture,
   getGenericPluginLoadFailureMessage
@@ -57,6 +58,7 @@ import { TemporaryVault } from './temporary-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
+import { checkIsMobileTransport } from './transport-options.ts';
 
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DIST_DEV = 'dist/dev';
@@ -238,6 +240,31 @@ interface EnablePluginInVaultParams {
 }
 
 /**
+ * Parameters for {@link skipIfDesktopOnly}.
+ */
+interface SkipIfDesktopOnlyParams {
+  /**
+  Short label for log messages.
+   */
+  readonly label: string;
+
+  /**
+  The project root to resolve the built plugin's manifest from.
+   */
+  readonly projectRoot: string;
+
+  /**
+  Whether a plugin is being installed at all -- there is nothing to check when the vault stays empty.
+   */
+  readonly shouldInstallPlugin: boolean;
+
+  /**
+  The resolved transport options, whose discriminant says whether this run is mobile.
+   */
+  readonly transportOptions: ObsidianTransportOptions;
+}
+
+/**
  * Parameters for {@link sweepLeftovers}.
  */
 interface SweepLeftoversParams {
@@ -283,6 +310,13 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
 
   const transportOptions = resolveIntegrationTransportOptions(params?.transportOptions);
   const label = transportOptions.type;
+  const shouldInstallPlugin = params?.installPlugin !== false;
+
+  // Before the lock, the sweep and above all the transport: creating a mobile transport boots the AVD and
+  // Auto-starts Appium (~70 s) only to reach the same conclusion from `transport.isMobile` further down.
+  // Neither input needs a device -- the manifest is on disk and the discriminant already says mobile.
+  await skipIfDesktopOnly({ label, projectRoot, shouldInstallPlugin, transportOptions });
+
   const lockScope = getLockScope(transportOptions);
 
   let lock: SetupLock | undefined;
@@ -303,7 +337,6 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     log(`[integration-setup:${label}] Transport created: ${transport.constructor.name}`);
 
     log(`[integration-setup:${label}] Project root: ${projectRoot}`);
-    const shouldInstallPlugin = params?.installPlugin !== false;
 
     temporaryVault = new TemporaryVault();
     log(`[integration-setup:${label}] Created temp vault: ${temporaryVault.path}`);
@@ -488,10 +521,11 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
 
+  // The same refusal {@link skipIfDesktopOnly} already made before the transport existed. Kept as the
+  // Backstop for any caller that reaches here another way, and throwing the same type so both paths read
+  // Identically in the log.
   if (transport.isMobile && manifestJson.isDesktopOnly) {
-    throw new Error(
-      `Plugin "${pluginId}" has isDesktopOnly: true in manifest.json. Mobile integration tests cannot run for desktop-only plugins.`
-    );
+    throw new DesktopOnlyPluginSkipError(pluginId);
   }
 
   const mainJs = join(distPath, MAIN_JS);
@@ -810,6 +844,43 @@ async function resolveDistPath(projectRoot: string): Promise<string> {
   }
 
   throw new Error('No build found. Run `npm run build` or `npm run dev` first.');
+}
+
+/**
+ * Refuses a mobile run for a desktop-only plugin, before anything costly has happened.
+ *
+ * A no-op unless a plugin is being installed onto a mobile transport. Otherwise reads `manifest.json`
+ * out of the newer dist folder — no device, no lock, no sweep. When there is no readable build the check
+ * simply does not fire: a missing or malformed build is a different problem, and {@link resolveDistPath}
+ * downstream already reports it in its own words.
+ *
+ * @param params - The transport label, project root, transport options and whether a plugin is installed.
+ * @throws {DesktopOnlyPluginSkipError} When the manifest says `isDesktopOnly: true`.
+ */
+async function skipIfDesktopOnly(params: SkipIfDesktopOnlyParams): Promise<void> {
+  const { label, projectRoot, shouldInstallPlugin, transportOptions } = params;
+
+  if (!shouldInstallPlugin || !checkIsMobileTransport(transportOptions)) {
+    return;
+  }
+
+  let manifestJson: PluginManifest;
+  try {
+    const distPath = await resolveDistPath(projectRoot);
+    manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
+  } catch {
+    return;
+  }
+
+  if (!manifestJson.isDesktopOnly) {
+    return;
+  }
+
+  log(
+    `[integration-setup:${label}] SKIPPED: "${manifestJson.id}" is desktop-only (isDesktopOnly: true), `
+      + 'so it has no mobile integration tests to run. No emulator was booted and no Appium server was started.'
+  );
+  throw new DesktopOnlyPluginSkipError(manifestJson.id);
 }
 
 /**

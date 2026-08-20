@@ -469,3 +469,17 @@ export interface ObsidianCdpTransportOptions {
 export type ObsidianTransportOptions =
   | ObsidianAndroidAppiumTransportOptions
   | ObsidianCdpTransportOptions;
+
+/**
+ * Whether these options describe a mobile transport.
+ *
+ * The same fact as {@link ObsidianTransport.isMobile}, but knowable from the options alone — so a caller
+ * can act on it before paying for a device. Reading it off a live transport means booting the emulator
+ * and the Appium session first, which is ~70 s to learn something the discriminant already says.
+ *
+ * @param options - The resolved transport options.
+ * @returns `true` for a mobile transport, `false` for desktop.
+ */
+export function checkIsMobileTransport(options: ObsidianTransportOptions): boolean {
+  return options.type === 'obsidian-android-appium';
+}

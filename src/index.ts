@@ -43,6 +43,7 @@ export type {
 export { buildDemoVaultPopulate } from './demo-vault-populate.ts';
 export type { ReadDemoVaultTreeParams } from './demo-vault-tree.ts';
 export { readDemoVaultTree } from './demo-vault-tree.ts';
+export { DesktopOnlyPluginSkipError } from './desktop-only-plugin-skip-error.ts';
 export type {
   ElectronCompatibility,
   ElectronCompatibilityTier,
@@ -129,6 +130,7 @@ export type {
   ObsidianCdpTransportOptions,
   ObsidianTransportOptions
 } from './transport-options.ts';
+export { checkIsMobileTransport } from './transport-options.ts';
 export type {
   ObsidianTransport,
   TransportEvalOptions

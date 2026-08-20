@@ -17,14 +17,20 @@ import {
 
 import type { EnablePluginResult } from './enable-plugin.ts';
 import type { PopulateFilesParams } from './temporary-vault.ts';
-import type { ObsidianTransport } from './transport.ts';
 
 import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
+import { checkIsMobileTransport } from './transport-options.ts';
 
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
+
+const ANDROID_TRANSPORT_OPTIONS = {
+  appiumUrl: 'http://localhost:4723',
+  avdName: 'obsidian_test',
+  type: 'obsidian-android-appium'
+} as const;
 
 interface CreateManifestParams {
   readonly id: string;
@@ -296,31 +302,34 @@ describe('plugin load detection', () => {
 });
 
 describe('isDesktopOnly check', () => {
-  it('should reject mobile transport for desktop-only plugins', async () => {
-    const transport = await getOrCreateTransport(inject('obsidianTransport'));
+  // These cases exercise `checkIsMobileTransport`, the predicate the setup now consults BEFORE creating a
+  // Transport, rather than re-deriving mobile-ness from a live one. That ordering is the whole point: the
+  // Old call site read `transport.isMobile`, which meant booting the AVD and Appium (~70 s) to learn what
+  // The options already said, then tearing it all down again.
+  it('should reject mobile transport for desktop-only plugins', () => {
     const manifest = JSON.parse(createManifest({ id: 'desktop-only', isDesktopOnly: true })) as ManifestCheckParams;
 
-    const mockMobileTransport: ObsidianTransport = {
-      ...transport,
-      isMobile: true
-    };
-
-    const shouldReject = mockMobileTransport.isMobile && manifest.isDesktopOnly;
+    const shouldReject = checkIsMobileTransport(ANDROID_TRANSPORT_OPTIONS) && manifest.isDesktopOnly;
     expect(shouldReject).toBe(true);
   });
 
   it('should allow mobile transport for non-desktop-only plugins', () => {
     const manifest = JSON.parse(createManifest({ id: 'cross-platform', isDesktopOnly: false })) as ManifestCheckParams;
 
-    // Non-desktop-only plugins should not be rejected regardless of transport.
-    expect(manifest.isDesktopOnly).toBe(false);
+    const shouldReject = checkIsMobileTransport(ANDROID_TRANSPORT_OPTIONS) && manifest.isDesktopOnly;
+    expect(shouldReject).toBe(false);
   });
 
   it('should allow desktop transport for desktop-only plugins', async () => {
-    const transport = await getOrCreateTransport(inject('obsidianTransport'));
+    const manifest = JSON.parse(createManifest({ id: 'desktop-only', isDesktopOnly: true })) as ManifestCheckParams;
 
-    // The default desktop transport should not be mobile.
-    expect(transport.isMobile).toBe(false);
+    const shouldReject = checkIsMobileTransport({ type: 'obsidian-cdp' }) && manifest.isDesktopOnly;
+    expect(shouldReject).toBe(false);
+
+    // And the predicate still agrees with the live transport it replaced -- if these two ever diverge the
+    // Setup skips the wrong runs, which is the one way this shortcut could be silently wrong.
+    const transport = await getOrCreateTransport(inject('obsidianTransport'));
+    expect(transport.isMobile).toBe(checkIsMobileTransport({ type: 'obsidian-cdp' }));
   });
 });
 
