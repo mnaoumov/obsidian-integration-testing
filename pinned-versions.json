@@ -13,24 +13,12 @@
     "it. Modeled on obsidian-dev-utils/pinned-versions.json; rule G100."
   ],
   "pins": {
-    "brace-expansion": {
+    "@puppeteer/browsers": {
       "section": "overrides",
-      "why": "GHSA-rgw5-rvv9-x895 (high, DoS via unbounded intermediate arrays) covers 4.0.0 - 5.0.8; 5.0.9 is the fix. It lives in the tree exactly once, under eslint-plugin-import-x -> minimatch@10.2.5, which declares ^5.0.5 and therefore happily resolves the vulnerable 5.0.8. Nothing in package.json depends on brace-expansion directly, so no direct upgrade can reach it and the override is the only lever (G100 step 2). Kept caret-ranged so the sweep carries it forward.",
-      "check": "node -e \"process.stdout.write(require('minimatch/package.json').dependencies['brace-expansion'])\"",
-      "expect": "^5.0.5"
-    },
-    "webdriverio": {
-      "section": "dependencies",
-      "why": "No justification left. It was pinned in 647edb5 so patch-package could apply patches/webdriverio+9.27.0.patch, whose filename embeds the exact version; b65f32f ('chore: stop patching') deleted every patch. Until the unused-devDependency cleanup it also anchored @wdio/protocols and @wdio/types, which had to match the exact versions webdriverio declares — both are gone now, so nothing else in package.json is tied to this version. 9.30.0 is published.",
-      "check": null,
-      "expect": null,
-      "manualCheck": "Move it to a caret range (^9.30.0 or newer) so the sweep maintains it, `npm install`, then run `npm run build:compile:typescript`, `npm test`, and — because this is the transport dependency the Android/Appium path drives — `npm run test:integration` against a real device, which the unit suites cannot cover. If that is green, delete this entry along with the pin."
-    },
-    "typescript": {
-      "section": "devDependencies",
-      "why": "typescript-eslint peer-requires >=4.8.4 <6.1.0, so type-aware ESLint cannot run on TypeScript 7 — which is already published as latest, so the caret sweep would drift straight onto it. Held at the newest 6.x. Propagates to the whole tree via overrides.typescript = $typescript. obsidian-dev-utils pins the same version for the same reason and records the underlying tsgo detail.",
-      "check": "node -e \"process.stdout.write(require('typescript-eslint/package.json').peerDependencies.typescript)\"",
-      "expect": ">=4.8.4 <6.1.0"
+      "why": "Clears GHSA-jmr9-qjv8-65gv (extract-zip unvalidated symlink path traversal, 8 high advisories) and nothing else. extract-zip is vulnerable at every published version, so there is no patched version to override it to, and the direct dependency cannot be bumped either: webdriverio is declared here, but even the newest 9.30.1 still reaches extract-zip through @wdio/utils -> @puppeteer/browsers ^2.x, so lifting the webdriverio pin above would not clear it. @puppeteer/browsers@3 replaced extract-zip with modern-tar, so forcing 3.x on @wdio/utils - the only consumer left on 2.x - removes the subtree entirely. It also dedupes: puppeteer-core already brings 3.2.0 into this tree, so the override collapses two copies into one rather than adding anything. The major bump is safe because @wdio/utils imports only install, canDownload, resolveBuildId, detectBrowserPlatform, Browser, ChromeReleaseChannel, computeExecutablePath and the InstallOptions type, all still exported by 3.x with compatible signatures, and both packages are ESM-only. NEVER take the `npm audit fix --force` remedy here: it downgrades webdriverio past the version this harness drives (rule G100). Mirrors the same override in obsidian-dev-utils.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/@wdio/utils/package.json','utf8')).dependencies['@puppeteer/browsers'])\"",
+      "expect": "^2.2.0",
+      "manualCheck": "The check reads @wdio/utils's own declared range, not a version, because that range is what makes the override necessary. When it moves to ^3 or later, @wdio/utils no longer pulls extract-zip on its own and this override can be deleted along with this entry. A `require('@wdio/utils/package.json')` check would not work - its exports map does not expose package.json - hence the readFileSync form, which resolves relative to the package root the sweep runs from."
     },
     "@sinonjs/fake-timers": {
       "section": "overrides",
@@ -39,11 +27,18 @@
       "expect": null,
       "manualCheck": "Confirm the dependent set first: `npm ls @sinonjs/fake-timers --all` currently shows exactly one path (jest-config → jest-environment-node → @jest/fake-timers), so there is no second consumer left to reconcile. Then drop the override, `npm install`, and run `npm run test:jest` plus `npm test`. If green, delete the override; if the Jest fake-timer suites break on 15.x, replace this entry's why with the concrete failure."
     },
-    "lodash": {
+    "brace-expansion": {
       "section": "overrides",
-      "why": "Live in the tree exactly once, under webdriverio → archiver → archiver-utils, which asks for ^4.17.15. The override forces the newest 4.x across every copy rather than whatever old release the transitive range resolves to. Its justification is simply 'this is the newest lodash', so it goes stale the moment a newer one publishes.",
-      "check": "npm view lodash version",
-      "expect": "4.18.1"
+      "why": "GHSA-rgw5-rvv9-x895 (high, DoS via unbounded intermediate arrays) covers 4.0.0 - 5.0.8; 5.0.9 is the fix. It lives in the tree exactly once, under eslint-plugin-import-x -> minimatch@10.2.5, which declares ^5.0.5 and therefore happily resolves the vulnerable 5.0.8. Nothing in package.json depends on brace-expansion directly, so no direct upgrade can reach it and the override is the only lever (G100 step 2). Kept caret-ranged so the sweep carries it forward.",
+      "check": "node -e \"process.stdout.write(require('minimatch/package.json').dependencies['brace-expansion'])\"",
+      "expect": "^5.0.5"
+    },
+    "deepmerge-ts": {
+      "section": "overrides",
+      "why": "Clears GHSA-ggr8-5vv4-36mx (deepmerge-ts stack exhaustion when merging recursive object graphs), patched in 8.0.0. Reached only transitively, through webdriverio -> @wdio/config / @wdio/utils / webdriver, and no direct bump gets there: every wdio package still declares deepmerge-ts@^7.0.3, the newest release included. NEVER take the `npm audit fix --force` remedy: it downgrades obsidian-integration-testing from 10.x to 1.1.2 (rule G100). The forced major is safe for these consumers. 8.0.0 breaks by renaming the mergeInfo system and aligning the customization shorthand, and a scan of the whole installed tree found only two bindings in use, `deepmerge` and `deepmergeCustom`. Both `deepmergeCustom` shapes present were run against 7.1.6 and 8.0.1 and produce identical output: @wdio/config's `mergeArrays` handler, which reads `meta.key` and returns `utils.actions.defaultMerge`, and webdriver's `deepmergeCustom({ mergeArrays: false })`. Mirrors the same override in obsidian-dev-utils.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/@wdio/utils/package.json','utf8')).dependencies['deepmerge-ts'])\"",
+      "expect": "^7.0.3",
+      "manualCheck": "The check reads the range @wdio/utils declares, not a version, because that range is what forces the override. When it moves to ^8 or later the override and this entry can both go. Before lifting it, re-run the deepmergeCustom probe rather than trusting the range alone: @wdio/config passes a handler that reads `meta.key`, and that is precisely the API 8.0.0 renamed, so a regression there would be silent rather than a crash."
     },
     "js-yaml": {
       "section": "overrides",
@@ -51,12 +46,24 @@
       "check": "node -e \"process.stdout.write(require('astro/package.json').dependencies['js-yaml'])\"",
       "expect": "^4.3.0"
     },
-    "@puppeteer/browsers": {
+    "lodash": {
       "section": "overrides",
-      "why": "Clears GHSA-jmr9-qjv8-65gv (extract-zip unvalidated symlink path traversal, 8 high advisories) and nothing else. extract-zip is vulnerable at every published version, so there is no patched version to override it to, and the direct dependency cannot be bumped either: webdriverio is declared here, but even the newest 9.30.1 still reaches extract-zip through @wdio/utils -> @puppeteer/browsers ^2.x, so lifting the webdriverio pin above would not clear it. @puppeteer/browsers@3 replaced extract-zip with modern-tar, so forcing 3.x on @wdio/utils - the only consumer left on 2.x - removes the subtree entirely. It also dedupes: puppeteer-core already brings 3.2.0 into this tree, so the override collapses two copies into one rather than adding anything. The major bump is safe because @wdio/utils imports only install, canDownload, resolveBuildId, detectBrowserPlatform, Browser, ChromeReleaseChannel, computeExecutablePath and the InstallOptions type, all still exported by 3.x with compatible signatures, and both packages are ESM-only. NEVER take the `npm audit fix --force` remedy here: it downgrades webdriverio past the version this harness drives (rule G100). Mirrors the same override in obsidian-dev-utils.",
-      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/@wdio/utils/package.json','utf8')).dependencies['@puppeteer/browsers'])\"",
-      "expect": "^2.2.0",
-      "manualCheck": "The check reads @wdio/utils's own declared range, not a version, because that range is what makes the override necessary. When it moves to ^3 or later, @wdio/utils no longer pulls extract-zip on its own and this override can be deleted along with this entry. A `require('@wdio/utils/package.json')` check would not work - its exports map does not expose package.json - hence the readFileSync form, which resolves relative to the package root the sweep runs from."
+      "why": "Live in the tree exactly once, under webdriverio → archiver → archiver-utils, which asks for ^4.17.15. The override forces the newest 4.x across every copy rather than whatever old release the transitive range resolves to. Its justification is simply 'this is the newest lodash', so it goes stale the moment a newer one publishes.",
+      "check": "npm view lodash version",
+      "expect": "4.18.1"
+    },
+    "typescript": {
+      "section": "devDependencies",
+      "why": "typescript-eslint peer-requires >=4.8.4 <6.1.0, so type-aware ESLint cannot run on TypeScript 7 — which is already published as latest, so the caret sweep would drift straight onto it. Held at the newest 6.x. Propagates to the whole tree via overrides.typescript = $typescript. obsidian-dev-utils pins the same version for the same reason and records the underlying tsgo detail.",
+      "check": "node -e \"process.stdout.write(require('typescript-eslint/package.json').peerDependencies.typescript)\"",
+      "expect": ">=4.8.4 <6.1.0"
+    },
+    "webdriverio": {
+      "section": "dependencies",
+      "why": "No justification left. It was pinned in 647edb5 so patch-package could apply patches/webdriverio+9.27.0.patch, whose filename embeds the exact version; b65f32f ('chore: stop patching') deleted every patch. Until the unused-devDependency cleanup it also anchored @wdio/protocols and @wdio/types, which had to match the exact versions webdriverio declares — both are gone now, so nothing else in package.json is tied to this version. 9.30.0 is published.",
+      "check": null,
+      "expect": null,
+      "manualCheck": "Move it to a caret range (^9.30.0 or newer) so the sweep maintains it, `npm install`, then run `npm run build:compile:typescript`, `npm test`, and — because this is the transport dependency the Android/Appium path drives — `npm run test:integration` against a real device, which the unit suites cannot cover. If that is green, delete this entry along with the pin."
     }
   }
 }

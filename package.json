@@ -165,6 +165,7 @@
     "@puppeteer/browsers": "^3.2.0",
     "@sinonjs/fake-timers": "13.0.5",
     "brace-expansion": "^5.0.9",
+    "deepmerge-ts": "^8.0.0",
     "eslint-plugin-import": "$eslint-plugin-import-x",
     "glob": "^13.0.6",
     "js-yaml": "4.3.1",
