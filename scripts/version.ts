@@ -14,8 +14,9 @@ import {
   join,
   resolve as resolvePosix
 } from 'node:path/posix';
-import process, { loadEnvFile } from 'node:process';
+import process from 'node:process';
 import { createInterface } from 'node:readline/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   inc,
   prerelease
@@ -39,6 +40,12 @@ interface NpmPackResult {
 }
 
 const DEFAULT_PREID = 'beta';
+
+/*
+The workflow that publishes to npm. Its filename is load-bearing twice over: npm's Trusted Publisher
+configuration authorizes a run by this exact name, and this script polls for the run the release starts.
+*/
+const PUBLISH_WORKFLOW_FILE_NAME = 'publish-npm.yml';
 
 enum VersionUpdateType {
   Invalid = 'invalid',
@@ -122,12 +129,16 @@ async function getReleaseNotes(newVersion: string): Promise<string> {
   const tags = tagsOutput.split(/\r?\n/);
   const previousVersion = tags[1];
 
-  const repoUrl = await execFromRoot('gh repo view --json url -q .url', { isQuiet: true });
+  const repoUrl = await getRepoUrl();
 
   const changesUrl = previousVersion ? `${repoUrl}/compare/${previousVersion}...${newVersion}` : `${repoUrl}/commits/${newVersion}`;
 
   releaseNotes += `**Full Changelog**: ${changesUrl}`;
   return releaseNotes;
+}
+
+async function getRepoUrl(): Promise<string> {
+  return await execFromRoot('gh repo view --json url -q .url', { isQuiet: true });
 }
 
 function getVersionUpdateType(versionUpdateType: string): VersionUpdateType {
@@ -164,6 +175,21 @@ function isPreRelease(version: string): boolean {
 async function main(): Promise<void> {
   const [, , versionUpdateType] = process.argv;
   await updateVersion(versionUpdateType);
+}
+
+/**
+ * Parses `gh run list --json`, treating unusable output as "no runs yet".
+ *
+ * `gh run list --workflow <file>` errors outright until GitHub has seen that workflow at least once, and the
+ * first release after the publish workflow lands hits exactly that window. Keep polling instead of failing a
+ * release that is otherwise complete.
+ */
+function parseWorkflowRuns(runListOutput: string): WorkflowRun[] {
+  try {
+    return JSON.parse(runListOutput) as WorkflowRun[];
+  } catch {
+    return [];
+  }
 }
 
 async function publishGitHubRelease(newVersion: string): Promise<void> {
@@ -286,15 +312,7 @@ async function updateVersion(versionUpdateType?: string): Promise<void> {
   await addGitTag(newVersion);
   await gitPush();
   await publishGitHubRelease(newVersion);
-  const envPath = resolvePathFromRoot('.env');
-  if (envPath && existsSync(envPath)) {
-    loadEnvFile(envPath);
-  }
-  const npmEnv = process.env as Partial<NpmEnv>;
-  await execFromRoot(['npm', 'config', 'set', `//registry.npmjs.org/:_authToken=${npmEnv.NPM_TOKEN ?? ''}`]);
-
-  const tag = isPreRelease(newVersion) ? 'beta' : 'latest';
-  await execFromRoot(['npm', 'publish', '--tag', tag]);
+  await watchNpmPublishWorkflow(newVersion);
 }
 
 async function updateVersionInFiles(newVersion: string): Promise<void> {
@@ -322,6 +340,71 @@ function validate(versionUpdateType: string): void {
   }
 }
 
+/**
+ * Resolves the id of the `publish-npm.yml` run started by the release that was just published, or `null`
+ * when no run shows up in time.
+ *
+ * The run is matched by the commit the tag points at rather than by branch: a `release`-triggered run
+ * reports the tag it came from, and a re-run of a failed publish keeps the same head SHA.
+ */
+async function waitForPublishWorkflowRunId(newVersion: string): Promise<null | string> {
+  const POLL_ATTEMPT_COUNT = 24;
+  const POLL_INTERVAL_IN_MILLISECONDS = 5000;
+  const RUN_LIST_LIMIT = '20';
+
+  const commitSha = await execFromRoot(['git', 'rev-list', '-n', '1', newVersion], { isQuiet: true });
+
+  for (let attempt = 0; attempt < POLL_ATTEMPT_COUNT; attempt++) {
+    const runListOutput = await execFromRoot([
+      'gh',
+      'run',
+      'list',
+      '--workflow',
+      PUBLISH_WORKFLOW_FILE_NAME,
+      '--limit',
+      RUN_LIST_LIMIT,
+      '--json',
+      'databaseId,headSha'
+    ], {
+      isQuiet: true,
+      shouldIgnoreExitCode: true
+    });
+
+    const runs = parseWorkflowRuns(runListOutput);
+    const run = runs.find((candidate) => candidate.headSha === commitSha);
+    if (run) {
+      return String(run.databaseId);
+    }
+
+    await sleep(POLL_INTERVAL_IN_MILLISECONDS);
+  }
+
+  return null;
+}
+
+/**
+ * Follows the npm publish to completion so a failed publish fails this script too.
+ *
+ * Publishing moved to GitHub Actions when the long-lived `NPM_TOKEN` was replaced by a Trusted Publisher:
+ * npm mints its short-lived credential from the workflow's OIDC token, which only a supported CI runner can
+ * produce, so there is nothing left here to publish with. Without this wait a broken publish would be
+ * invisible and the release would look complete.
+ */
+async function watchNpmPublishWorkflow(newVersion: string): Promise<void> {
+  const repoUrl = await getRepoUrl();
+  const runId = await waitForPublishWorkflowRunId(newVersion);
+
+  if (!runId) {
+    console.warn(
+      `Could not find a ${PUBLISH_WORKFLOW_FILE_NAME} run for ${newVersion}. Check ${repoUrl}/actions/workflows/${PUBLISH_WORKFLOW_FILE_NAME} and start it manually if needed.`
+    );
+    return;
+  }
+
+  console.log(`Publishing to npm: ${repoUrl}/actions/runs/${runId}`);
+  await execFromRoot(['gh', 'run', 'watch', runId, '--exit-status']);
+}
+
 await main();
 
 interface EditJsonOptions {
@@ -333,12 +416,13 @@ interface EditPackageJsonOptions {
   readonly shouldSkipIfMissing?: boolean;
 }
 
-interface NpmEnv {
-  NPM_TOKEN: string;
-}
-
 interface PackageLockJson extends Partial<PackageJson> {
   packages?: Record<string, PackageJson>;
+}
+
+interface WorkflowRun {
+  readonly databaseId: number;
+  readonly headSha: string;
 }
 
 export function resolve(...pathSegments: string[]): string {

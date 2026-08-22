@@ -1,0 +1,84 @@
+name: Publish to npm
+
+# Publishes the package to npm through a Trusted Publisher (OIDC) instead of a long-lived NPM_TOKEN.
+# The token used to sit in the releaser's local `.env`, and `scripts/version.ts` wrote it into the user
+# npmrc right before `npm publish`. Trusted publishing only works from a supported CI runner, so the
+# publish step lives here and the local release script now stops after creating the GitHub release
+# (it then watches this run, so a failed publish still fails `npm run version`).
+#
+# npm-side setup, done once at https://www.npmjs.com/package/obsidian-integration-testing/access:
+#   Publisher:            GitHub Actions
+#   Organization or user: mnaoumov
+#   Repository:           obsidian-integration-testing
+#   Workflow filename:    publish-npm.yml   <- this file's name; renaming the file breaks publishing
+#   Environment:          (leave empty)
+# Afterwards set "Require two-factor authentication and disallow tokens" so the retired token cannot
+# publish any more, and revoke it on npmjs.com.
+
+on:
+  release:
+    types: [published]
+  # Manual recovery for a tag whose release-triggered run failed. A failed run can also just be re-run
+  # from the Actions UI, which replays the original release payload.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to publish (e.g. 10.3.2)
+        required: true
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Mints the OIDC token npm exchanges for a short-lived, package-scoped publish credential.
+      # Without it the publish falls back to looking for a token and fails.
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1. Whichever npm the pinned Node ships with is incidental,
+      # so state the floor explicitly rather than depend on it.
+      - name: Ensure npm supports trusted publishing
+        run: npm install --global npm@^11.5.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `dist/` is gitignored, so the published tarball has to be built here. Rebuilding in CI is also what
+      # makes the provenance attestation honest: it attests what this workflow built from this commit.
+      - name: Build
+        run: npm run build
+
+      # `beta` for a prerelease version (`x.y.z-beta.n`), `latest` otherwise - the same rule
+      # `scripts/version.ts` applied while it still published locally.
+      - name: Resolve dist-tag
+        id: dist-tag
+        run: |
+          version="$(node --print 'require("./package.json").version')"
+          case "$version" in
+            *-*) tag=beta ;;
+            *) tag=latest ;;
+          esac
+          echo "Publishing $version with dist-tag $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # No NODE_AUTH_TOKEN: npm detects the Actions OIDC environment and exchanges the id-token itself.
+      # `--provenance` is passed explicitly - it is documented as automatic for an OIDC publish, but is
+      # cheap to state and covers the reports of it not being applied on its own.
+      - name: Publish
+        run: npm publish --tag ${{ steps.dist-tag.outputs.tag }} --provenance

@@ -1386,3 +1386,39 @@ and both packages are ESM-only.
 harness drives (G100). **Remove the override** when `@wdio/utils` moves to `@puppeteer/browsers@^3` itself;
 the `check` in [`pinned-versions.json`](pinned-versions.json) watches exactly that. Same override and same
 reasoning as ODU's "Security overrides (`extract-zip` …)"; keep the two in step.
+
+## L37. Release — npm publishes from CI through a Trusted Publisher, not from a token
+
+`npm run version <major|minor|patch|premajor|preminor|prepatch|prerelease|x.y.z>` still drives the release
+from the developer machine: it runs the full gate (`format:check`, `spellcheck`, `lint:md`, `build`, `lint`,
+`test:coverage`), bumps `package.json` + `package-lock.json`, rewrites `CHANGELOG.md`, commits, tags, pushes,
+and creates the GitHub release with the `npm pack` tarball attached.
+
+What it no longer does is publish. It used to read `NPM_TOKEN` out of the gitignored `.env`, write it into
+the user npmrc via `npm config set //registry.npmjs.org/:_authToken=…`, and run `npm publish --tag …`. That
+long-lived token is replaced by a **Trusted Publisher** (OIDC): npm exchanges the workflow's short-lived
+`id-token` for a package-scoped publish credential, so **there is no token to hold and publishing is only
+possible from CI** — no local fallback exists, by design.
+
+`.github/workflows/publish-npm.yml` does it, on `release: published`. It checks out the release tag,
+installs, **rebuilds** (`dist/` is gitignored, and rebuilding is what makes the provenance attestation
+honest — it attests what the workflow built from that commit), derives the dist-tag the way the script used
+to (`beta` for an `x.y.z-…` prerelease, else `latest`), and publishes with `--provenance`. Two things are
+load-bearing:
+
+- `permissions: id-token: write` on the job — without it npm has no OIDC token to exchange and falls back to
+  looking for a credential it will not find.
+- **The workflow's filename.** npm authorizes the publisher by *file name*, not path
+  (`obsidian-integration-testing` → Settings → Trusted Publisher → workflow `publish-npm.yml`), and
+  `scripts/version.ts` polls `gh run list --workflow publish-npm.yml` for the run to watch. Renaming the file
+  breaks publishing in both places; `PUBLISH_WORKFLOW_FILE_NAME` is the script's half of that contract.
+
+The script does not fire-and-forget: `watchNpmPublishWorkflow` finds the run by the **commit the tag points
+at** (a `release`-triggered run reports the tag rather than `main`, and a re-run keeps the head SHA), then
+`gh run watch --exit-status` follows it, so a failed publish fails `npm run version` instead of leaving a
+tagged release that silently never reached npm. If the run cannot be found within two minutes it warns with
+the Actions URL rather than failing — the release itself is already good, and the workflow can be re-run or
+dispatched with the tag as input.
+
+Sibling repos (`obsidian-test-mocks`, and ODU's shared `src/script-utils/npm-publish.ts`) still publish with
+`NPM_TOKEN`; this repo is the first one moved.
