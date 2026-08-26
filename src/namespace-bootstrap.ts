@@ -8,10 +8,13 @@
 
 import type {
   App,
+  Modifier,
   TFile
 } from 'obsidian';
 
 import type {
+  ClickElementParams,
+  ClickMouseParams,
   CreateNoteParams,
   HoverElementParams,
   MoveMouseParams,
@@ -339,7 +342,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       // The injected `lib` bag: base helpers from the harness, then providers on top.
       // Resolvers run in-renderer (they read renderer globals a provider published).
       // Rebuilding per eval keeps `lib` fresh and tolerant of a late-loaded provider.
-      const lib = { createNote, hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
+      const lib = { clickElement, clickMouse, createNote, hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
       for (const resolveLib of this.libResolvers) {
         Object.assign(lib, resolveLib());
       }
@@ -503,17 +506,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
   }
 
-  function pressKey(pressParams: PressKeyParams): void {
-    const { key, modifiers = [] } = pressParams;
-
+  // Maps Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
+  // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
+  // Shared by every trusted-input helper, so a key press and a click cannot disagree on `'Mod'`.
+  function toElectronModifiers(modifiers: readonly Modifier[]): ElectronModifier[] {
     // 'Mod' is Obsidian's platform-agnostic modifier: Cmd (meta) on macOS, Ctrl elsewhere.
     // Reading `Platform.isMacOS` off the resolved obsidian module is safe here:
-    // `evalWrapper` always resolves that module before any callback (and thus `pressKey`) can run.
+    // `evalWrapper` always resolves that module before any callback can run.
     const isMacOS = (ns.obsidianModule as ObsidianModuleWithPlatform).Platform.isMacOS;
 
-    // Map Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
-    // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
-    const electronModifiers = modifiers.map((modifier): ElectronModifier => {
+    return modifiers.map((modifier): ElectronModifier => {
       switch (modifier) {
         case 'Alt': {
           return 'alt';
@@ -537,7 +539,59 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         }
       }
     });
+  }
 
+  function clickMouse(clickParams: ClickMouseParams): void {
+    const SINGLE_CLICK_COUNT = 1;
+
+    const { button = 'left', modifiers = [], x, y } = clickParams;
+
+    const electronModifiers = toElectronModifiers(modifiers);
+    const roundedX = Math.round(x);
+    const roundedY = Math.round(y);
+    const webContents = globalThis.electron.remote.getCurrentWebContents();
+
+    // A trusted click is mouseMove -> mouseDown -> mouseUp at one point.
+    // Chromium synthesizes the `click` (or `contextmenu`) DOM event from that sequence.
+    // The leading move is what puts the pointer over the hit-test target before the button goes down.
+    webContents.sendInputEvent({ modifiers: electronModifiers, type: 'mouseMove', x: roundedX, y: roundedY });
+    webContents.sendInputEvent({
+      button,
+      clickCount: SINGLE_CLICK_COUNT,
+      modifiers: electronModifiers,
+      type: 'mouseDown',
+      x: roundedX,
+      y: roundedY
+    });
+    webContents.sendInputEvent({
+      button,
+      clickCount: SINGLE_CLICK_COUNT,
+      modifiers: electronModifiers,
+      type: 'mouseUp',
+      x: roundedX,
+      y: roundedY
+    });
+  }
+
+  function clickElement(clickParams: ClickElementParams): void {
+    const CENTER_DIVISOR = 2;
+
+    const { button = 'left', element, modifiers = [] } = clickParams;
+
+    // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`.
+    const rect = element.getBoundingClientRect();
+    clickMouse({
+      button,
+      modifiers,
+      x: rect.left + rect.width / CENTER_DIVISOR,
+      y: rect.top + rect.height / CENTER_DIVISOR
+    });
+  }
+
+  function pressKey(pressParams: PressKeyParams): void {
+    const { key, modifiers = [] } = pressParams;
+
+    const electronModifiers = toElectronModifiers(modifiers);
     const webContents = globalThis.electron.remote.getCurrentWebContents();
 
     // A trusted key press is keyDown -> char -> keyUp: keyDown fires `keydown`, char fires

@@ -60,6 +60,63 @@ interface EvalValueEnvelope {
 const NO_OUTPUT = '(no output)';
 
 /**
+ * Parameters for {@link CommonArguments.clickElement}.
+ */
+export interface ClickElementParams {
+  /**
+   * The mouse button to press.
+   *
+   * @default `'left'`
+   */
+  readonly button?: MouseButton;
+
+  /**
+   * The element to click. The pointer is moved to its center. This is a live
+   * renderer DOM node — the callback runs in-renderer, so no cross-process
+   * serialization is needed (same as {@link TypeIntoEditorParams.editor}).
+   */
+  readonly element: HTMLElement;
+
+  /**
+   * The modifier keys to hold, using Obsidian's {@link Modifier} names. `'Mod'`
+   * resolves per-platform (Cmd on macOS, Ctrl elsewhere).
+   *
+   * @default `[]`
+   */
+  readonly modifiers?: readonly Modifier[];
+}
+
+/**
+ * Parameters for {@link CommonArguments.clickMouse}.
+ */
+export interface ClickMouseParams {
+  /**
+   * The mouse button to press.
+   *
+   * @default `'left'`
+   */
+  readonly button?: MouseButton;
+
+  /**
+   * The modifier keys to hold, using Obsidian's {@link Modifier} names. `'Mod'`
+   * resolves per-platform (Cmd on macOS, Ctrl elsewhere).
+   *
+   * @default `[]`
+   */
+  readonly modifiers?: readonly Modifier[];
+
+  /**
+   * The x coordinate (web-contents DIP) to click at.
+   */
+  readonly x: number;
+
+  /**
+   * The y coordinate (web-contents DIP) to click at.
+   */
+  readonly y: number;
+}
+
+/**
  * Common arguments automatically provided to every {@link evalInObsidian} callback.
  */
 export interface CommonArguments {
@@ -73,7 +130,8 @@ export interface CommonArguments {
    *
    * Never empty: the harness pre-populates a **base** set of renderer-driving
    * helpers (trusted input — `typeIntoEditor` / `pressKey` / `moveMouse` /
-   * `hoverElement` / `unhoverElement` — and `waitUntil`), and provider packages
+   * `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement` — and
+   * `waitUntil`), and provider packages
    * (chiefly `obsidian-dev-utils`) `Object.assign` their whole renderer-safe
    * library on top via {@link registerLibResolver}. A serialized closure reaches
    * every shared helper through `lib` — `lib.typeIntoEditor({ editor, text })`,
@@ -186,6 +244,52 @@ export interface HoverElementParams {
  * ```
  */
 export interface Lib {
+  /**
+   * Clicks the center of an element using **trusted** Electron pointer input.
+   *
+   * The element-relative counterpart of {@link Lib.clickMouse}, mirroring the
+   * {@link Lib.moveMouse} / {@link Lib.hoverElement} split. Use
+   * {@link Lib.clickMouse} directly when the point to click is **not** the
+   * element's center — the markdown editor's margin, for instance, lies inside
+   * `cm.scrollDOM` but outside `.cm-sizer`, so no element's center lands on it.
+   *
+   * Synchronous: injecting the trusted click does no real awaiting, so the
+   * caller does not need to `await` it.
+   *
+   * @param params - The element to click, the button to press and any modifiers
+   *   to hold.
+   */
+  clickElement(this: void, params: ClickElementParams): void;
+
+  /**
+   * Clicks at the given web-contents coordinates using **trusted** Electron
+   * pointer input, so Chromium synthesizes a real `click` (or `contextmenu`,
+   * for the right button) with `isTrusted === true`.
+   *
+   * This is what `element.dispatchEvent(new MouseEvent('click'))` cannot do:
+   * Obsidian and CodeMirror gate on `isTrusted`, so a dispatched event silently
+   * exercises nothing while the test still passes whatever weaker assertion it
+   * makes. Obsidian 1.13.7's markdown viewport (margin) menu, for example,
+   * opens from a `cm.scrollDOM` `contextmenu` listener guarded by
+   * `e.isTrusted`, which a dispatched event never gets past.
+   *
+   * It is the low-level primitive: a single trusted `mouseMove` → `mouseDown` →
+   * `mouseUp` at one point, with no waiting for any effect (callers poll their
+   * own readiness signal). The leading move is what puts the pointer over the
+   * hit-test target before the button goes down. Prefer
+   * {@link Lib.clickElement} for element-relative clicks.
+   *
+   * A real context menu actually opens, so a suite driving a right click must
+   * close it (or remove the leftover `.menu` element) before the next test.
+   *
+   * Synchronous: injecting the trusted click does no real awaiting, so the
+   * caller does not need to `await` it.
+   *
+   * @param params - The web-contents DIP coordinates to click at, the button to
+   *   press and any modifiers to hold.
+   */
+  clickMouse(this: void, params: ClickMouseParams): void;
+
   /**
    * Creates a note and does not return until its content is verifiably on
    * disk, rewriting it if it is not.
@@ -350,6 +454,12 @@ export interface Lib {
    */
   waitUntil(this: void, params: WaitUntilParams): Promise<void>;
 }
+
+/**
+ * The mouse button a trusted click presses, in Electron's `sendInputEvent`
+ * spelling.
+ */
+export type MouseButton = 'left' | 'middle' | 'right';
 
 /**
  * Parameters for {@link CommonArguments.moveMouse}.

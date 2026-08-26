@@ -174,9 +174,9 @@ The whole module is integration-time glue (spawns Obsidian / CDP), so — like `
 `bin/obsidian-integration-testing.mjs`, wired via `package.json` `bin`) wraps it for when an external
 tool must attach to a printed port.
 
-## L11. Trusted pointer input (`moveMouse` / `hoverElement` / `unhoverElement`)
+## L11. Trusted pointer input (`moveMouse` / `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement`)
 
-Every `evalInObsidian` callback also gets a trusted-pointer trio as **base** members of the injected
+Every `evalInObsidian` callback also gets a trusted-pointer set as **base** members of the injected
 **`lib`** bag (alongside `typeIntoEditor`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into
 the base `lib` in the in-process namespace (`namespace-bootstrap.ts`); see **L16**. Per **L6** they live
 once on the Obsidian side, so Vitest / Jest / Manual all inherit them. This is the pointer analog of L8's
@@ -193,15 +193,34 @@ faithful trigger is a **trusted** pointer move, injected via Electron's
 `getFocusedWebContents`, since headless CI has no OS focus), through the same local `sendInputEvent`
 interface, widened to also accept a `mouseMove` input.
 
-Three helpers over one shared internal move, so the primitive and the conveniences never diverge:
+The same reasoning applies to a **click**, and for a harder reason than `:hover`: Obsidian's own
+listeners routinely gate on `e.isTrusted`, so a dispatched `MouseEvent` does not merely render
+differently — it does **nothing at all**, while the test still passes whatever weaker assertion it
+makes. Obsidian 1.13.7's markdown viewport (margin) menu is the worked example: its `cm.scrollDOM`
+`contextmenu` listener is `if (!e.defaultPrevented && e.isTrusted && …)`, so a dispatched `contextmenu`
+leaves the handler count at 0 and the test looks "untestable" rather than wrong. A trusted
+`mouseMove` → `mouseDown` → `mouseUp` at the same point makes Chromium synthesize the real `click` /
+`contextmenu`; verified against a live Obsidian 1.13.7 on 2026-08-24.
+
+Five helpers over one shared internal move, so the primitives and the conveniences never diverge:
 
 - **`moveMouse({ x, y })`** — the raw primitive. Injects a single trusted move at the given web-contents
   DIP coordinates and does **not** poll (callers poll their own readiness signal). Use it directly when
   an element-relative target does not fit (e.g. a full-viewport element with no point outside its box).
+- **`clickMouse({ x, y, button?, modifiers? })`** — the raw click primitive: trusted `mouseMove` →
+  `mouseDown` → `mouseUp` at one point, no polling. Coordinate-based because the point to click is often
+  **not** any element's center — the editor margin lies inside `cm.scrollDOM` but outside `.cm-sizer`,
+  so it is reachable only by coordinates (with `readableLineLength` on, aim at
+  `(scrollRect.left + sizerRect.left) / 2`). `modifiers` takes Obsidian's `Modifier` names and shares
+  `pressKey`'s mapping, so `'Mod'` cannot mean two different things.
 - **`hoverElement({ element })`** — moves to the element's center, then **polls** (not a fixed delay)
   until `element.matches(':hover')`, so it is robust under shared-instance load.
 - **`unhoverElement({ element })`** — moves to a point just outside the element's bounding box, then
   polls until `!element.matches(':hover')`.
+- **`clickElement({ element, button?, modifiers? })`** — clicks the element's center via `clickMouse`.
+
+A right click opens a **real** menu, so a suite that drives one must close it (`menu.hide()` in the
+handler, and/or remove leftover `.menu` elements) or it leaks into the next test.
 
 ### Consumer responsibility: serialize pointer-dependent integration files
 
@@ -399,17 +418,25 @@ up dev-utils' copies (they `Object.assign` over the harness base when the provid
 registered) and so non-closure/production code can `import` them. The synced set (with its dev-utils
 mirror module):
 
-| Harness member (`namespace-bootstrap.ts`)                                        | dev-utils mirror module     |
-|----------------------------------------------------------------------------------|-----------------------------|
-| `typeIntoEditor`, `pressKey`, `moveMouse`, `hoverElement`, `unhoverElement`      | `desktop-trusted-input.ts`  |
-| `ensureLayoutReady`                                                              | `workspace.ts`              |
-| `errorToString`                                                                  | `error.ts`                  |
+| Harness member (`namespace-bootstrap.ts`)                                                                 | dev-utils mirror module    |
+|-----------------------------------------------------------------------------------------------------------|----------------------------|
+| `typeIntoEditor`, `pressKey`, `moveMouse`, `clickMouse`, `hoverElement`, `unhoverElement`, `clickElement` | `desktop-trusted-input.ts` |
+| `ensureLayoutReady`                                                                                       | `workspace.ts`             |
+| `errorToString`                                                                                           | `error.ts`                 |
 
 Notes on the set:
 
-- **`pressKey` / `moveMouse` are synchronous (`void`)** — their bodies only inject trusted
-  `sendInputEvent` calls, so both copies must keep the `void` signature (a `Promise<void>` on one side
-  would break the `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation).
+- **`pressKey` / `moveMouse` / `clickMouse` / `clickElement` are synchronous (`void`)** — their bodies
+  only inject trusted `sendInputEvent` calls, so both copies must keep the `void` signature (a
+  `Promise<void>` on one side would break the
+  `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation). `clickElement` is
+  synchronous even though its element-relative sibling `hoverElement` is not: `hoverElement` awaits only
+  because it polls `:hover`, and a click has no equivalent state to poll. Deliberately it does **not**
+  hover first — an element that never matches `:hover` (covered by an overlay, say) would then cost the
+  full 5 s timeout on every click.
+- **The Obsidian-`Modifier` → Electron-modifier mapping lives in ONE `toElectronModifiers` helper per
+  copy**, shared by `pressKey` and `clickMouse`, so a key press and a click cannot disagree on what
+  `'Mod'` resolves to. Added 2026-08-26 with the click helpers (T599-P21).
 - **`moveMouseTo` was folded into `moveMouse`** (rounding + `sendInputEvent` inlined); `hoverElement` /
   `unhoverElement` call `moveMouse({ x, y })` directly. There is no separate `moveMouseTo` to sync.
 - **`waitUntil` is NOT synced** — dev-utils reuses its own `retryWithTimeout` instead of duplicating a
