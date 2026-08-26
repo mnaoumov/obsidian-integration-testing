@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 10.4.0
+
+- feat(lib): add trusted clickMouse and clickElement to the lib bag
+- chore: update libs
+- build: add tslib as an explicit devDependency
+- ci: publish to npm from GitHub Actions via a Trusted Publisher
+- chore: update libs
+- fix: override deepmerge-ts to clear GHSA-ggr8-5vv4-36mx
+- perf: skip a desktop-only plugin's mobile setup before the device boots
+- chore: teach cspell the advisory wording
+- docs: record the extract-zip security override
+- chore: update libs
+
 ## 10.3.2
 
 - fix: deepen the label band so it clears the status row entirely
