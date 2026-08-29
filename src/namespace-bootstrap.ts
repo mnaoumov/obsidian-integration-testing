@@ -18,6 +18,7 @@ import type {
   CreateNoteParams,
   HoverElementParams,
   MoveMouseParams,
+  OpenSettingsTabParams,
   PressKeyParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
@@ -255,6 +256,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
 
   /**
+   * Default maximum time (in ms) {@link openSettingsTab} waits for the settings
+   * modal to open and for the requested tab to render, when the caller does not
+   * override it.
+   */
+  const SETTINGS_TAB_TIMEOUT_IN_MILLISECONDS = 5000;
+
+  /**
    * Default interval (in ms) between {@link waitUntil} predicate checks when the
    * caller does not override it.
    */
@@ -342,7 +350,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       // The injected `lib` bag: base helpers from the harness, then providers on top.
       // Resolvers run in-renderer (they read renderer globals a provider published).
       // Rebuilding per eval keeps `lib` fresh and tolerant of a late-loaded provider.
-      const lib = { clickElement, clickMouse, createNote, hoverElement, moveMouse, pressKey, typeIntoEditor, unhoverElement, waitUntil };
+      const lib = {
+        clickElement,
+        clickMouse,
+        createNote,
+        hoverElement,
+        moveMouse,
+        openSettingsTab,
+        pressKey,
+        typeIntoEditor,
+        unhoverElement,
+        waitUntil
+      };
       for (const resolveLib of this.libResolvers) {
         Object.assign(lib, resolveLib());
       }
@@ -671,6 +690,61 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     // Unreachable: the loop either returns or throws on its last iteration.
     throw new Error(`createNote could not write "${path}".`);
+  }
+
+  async function openSettingsTab(openParams: OpenSettingsTabParams): Promise<string[]> {
+    const { tabId, timeoutInMilliseconds = SETTINGS_TAB_TIMEOUT_IN_MILLISECONDS } = openParams;
+
+    const setting = ns.app.setting;
+
+    /*
+     * The one step that makes any of this work, and it MUST happen before `open()`.
+     * `containerEl` is built at startup and is never in the document, and `open()` does not attach it —
+     * So the modal builds into a detached tree, `open()` returns without throwing, and the document the
+     * Caller then reads (or screenshots) is untouched. Attaching afterwards is too late: whatever the
+     * Modal rendered on open has already gone into the detached container, so the modal ends up on
+     * Screen showing the wrong thing while looking entirely successful.
+     */
+    if (!document.body.contains(setting.containerEl)) {
+      document.body.append(setting.containerEl);
+    }
+
+    // Both lists are populated before `open()`, so an unknown id can be rejected up front — with the
+    // Ids that DO exist — instead of spending the whole timeout looking exactly like the modal-does-
+    // Not-render symptom this helper exists to rule out. Plugin tabs live in `pluginTabs`, not
+    // `settingTabs`, so both are searched.
+    const knownTabs = [...setting.settingTabs, ...setting.pluginTabs];
+    if (knownTabs.every((tab) => tab.id !== tabId)) {
+      throw new Error(
+        `openSettingsTab: no settings tab with id "${tabId}". Available ids: ${knownTabs.map((tab) => tab.id).join(', ')}.`
+      );
+    }
+
+    setting.open();
+    setting.openTabById(tabId);
+
+    // Poll the modal's own state rather than sleeping: a fixed delay is either too short on a loaded
+    // Machine or wasted time. A rendered tab is the requested one AND has content.
+    await waitUntil({
+      message: `the "${tabId}" settings tab to render`,
+      predicate: () => {
+        const currentTab = setting.activeTab;
+        if (!currentTab) {
+          return false;
+        }
+        return currentTab.id === tabId && currentTab.containerEl.childElementCount > 0;
+      },
+      timeoutInMilliseconds
+    });
+
+    const activeTab = setting.activeTab;
+    if (!activeTab) {
+      throw new Error('openSettingsTab: the settings modal reported no active tab after it rendered.');
+    }
+
+    // Not every tab renders `.setting-item-name` rows (Hotkeys does not), so an empty array is a valid
+    // Answer here — the render itself was already proven by the poll above.
+    return [...activeTab.containerEl.querySelectorAll('.setting-item-name')].map((nameEl) => nameEl.textContent);
   }
 
   async function waitUntil(waitParams: WaitUntilParams): Promise<void> {

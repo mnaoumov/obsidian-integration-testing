@@ -11,6 +11,7 @@ import {
 
 import { ContextId } from './context-id.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { openObsidianSettingsTab } from './open-obsidian-settings-tab.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
 interface AbArguments {
@@ -26,6 +27,13 @@ interface CreateNoteProbe {
 interface CreateNoteRepairProbe {
   content: string;
   modifyCallCount: number;
+}
+
+interface SettingsTabProbe {
+  activeTabId: string;
+  isContainerAttached: boolean;
+  names: string[];
+  targetTabId: string;
 }
 
 const temporaryVault = new TemporaryVault();
@@ -462,6 +470,96 @@ ${name}`;
         },
         vaultPath
       })).rejects.toThrow('createNote could not write "create-note-hopeless.md": expected 11 characters, the vault holds 0 after 3 repair attempts.');
+    });
+  });
+
+  // `app.setting.open()` on its own renders into a DETACHED container, so every test here asserts
+  // Against the live document rather than against `open()` not throwing.
+  describe('openSettingsTab', () => {
+    it('should attach the container and render the requested tab', async () => {
+      const result = await evalInObsidian({
+        async callback({ app, lib: { openSettingsTab } }): Promise<SettingsTabProbe> {
+          const setting = app.setting;
+          // Take a real id off the running instance instead of hard-coding a core one, so this holds
+          // Across every Obsidian version the harness supports.
+          const targetTabId = setting.settingTabs[0]?.id ?? '';
+          const names = await openSettingsTab({ tabId: targetTabId });
+          const probe = {
+            activeTabId: setting.activeTab?.id ?? '',
+            isContainerAttached: document.body.contains(setting.containerEl),
+            names,
+            targetTabId
+          };
+          setting.close();
+          return probe;
+        },
+        vaultPath
+      });
+
+      expect(result.targetTabId).not.toBe('');
+      expect(result.activeTabId).toBe(result.targetTabId);
+      expect(result.isContainerAttached).toBe(true);
+      expect(result.names.length).toBeGreaterThan(0);
+    });
+
+    it('should re-open after the modal was closed', async () => {
+      const result = await evalInObsidian({
+        async callback({ app, lib: { openSettingsTab } }): Promise<SettingsTabProbe> {
+          const setting = app.setting;
+          const targetTabId = setting.settingTabs[0]?.id ?? '';
+
+          await openSettingsTab({ tabId: targetTabId });
+          setting.close();
+
+          const names = await openSettingsTab({ tabId: targetTabId });
+          const probe = {
+            activeTabId: setting.activeTab?.id ?? '',
+            isContainerAttached: document.body.contains(setting.containerEl),
+            names,
+            targetTabId
+          };
+          setting.close();
+          return probe;
+        },
+        vaultPath
+      });
+
+      expect(result.activeTabId).toBe(result.targetTabId);
+      expect(result.isContainerAttached).toBe(true);
+      expect(result.names.length).toBeGreaterThan(0);
+    });
+
+    it('should fail fast for an unknown tab id, listing the ids that exist', async () => {
+      await expect(evalInObsidian({
+        async callback({ app, lib: { openSettingsTab } }): Promise<void> {
+          try {
+            await openSettingsTab({ tabId: 'no-such-tab' });
+          } finally {
+            app.setting.close();
+          }
+        },
+        vaultPath
+      })).rejects.toThrow('openSettingsTab: no settings tab with id "no-such-tab". Available ids: ');
+    });
+
+    it('should open a tab through the Node-side entry point', async () => {
+      const targetTabId = await evalInObsidian({
+        callback({ app }): string {
+          return app.setting.settingTabs[0]?.id ?? '';
+        },
+        vaultPath
+      });
+
+      const names = await openObsidianSettingsTab({ tabId: targetTabId, vaultPath });
+
+      expect(names.length).toBeGreaterThan(0);
+
+      await evalInObsidian({
+        callback({ app }): void {
+          app.setting.close();
+        },
+        vaultPath
+      });
     });
   });
 

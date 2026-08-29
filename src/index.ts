@@ -51,10 +51,15 @@ export type {
 } from './electron-compatibility.ts';
 export { resolveElectronCompatibility } from './electron-compatibility.ts';
 export type {
+  ClickElementParams,
+  ClickMouseParams,
+  CreateNoteParams,
   EvalInObsidianParams,
   HoverElementParams,
   Lib,
+  MouseButton,
   MoveMouseParams,
+  OpenSettingsTabParams,
   PressKeyParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
@@ -101,6 +106,8 @@ export {
   CATALYST_LATEST,
   PUBLIC_LATEST
 } from './obsidian-version.ts';
+export type { OpenObsidianSettingsTabOptions } from './open-obsidian-settings-tab.ts';
+export { openObsidianSettingsTab } from './open-obsidian-settings-tab.ts';
 export type { PollInObsidianParams } from './poll-in-obsidian.ts';
 export { pollInObsidian } from './poll-in-obsidian.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';

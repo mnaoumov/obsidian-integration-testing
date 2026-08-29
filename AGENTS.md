@@ -442,6 +442,9 @@ Notes on the set:
 - **`waitUntil` is NOT synced** — dev-utils reuses its own `retryWithTimeout` instead of duplicating a
   poll loop, and the harness keeps `waitUntil` as its own self-contained base helper (its integration
   suite depends on it).
+- **`openSettingsTab` is NOT synced** (added 2026-08-29 with **L38**, T664-P2) — same reasoning as
+  `waitUntil`. It drives a modal purely to make it *observable to a test*; no production code has a reason
+  to `import` it, which is the only thing the dev-utils copies buy.
 - **`destroyCurrentWindow` / `ipcSendSync` are NOT synced** — they are transport/Electron-only harness
   primitives (see their `// intentionally not migrated` TSDoc in `namespace-bootstrap.ts`), not
   general-purpose utilities.
@@ -1449,3 +1452,45 @@ dispatched with the tag as input.
 
 Sibling repos (`obsidian-test-mocks`, and ODU's shared `src/script-utils/npm-publish.ts`) still publish with
 `NPM_TOKEN`; this repo is the first one moved.
+
+## L38. Settings modal — attach the container BEFORE opening (`openSettingsTab`)
+
+`app.setting.open()` on its own does **nothing observable** from a test. `app.setting.containerEl` is built
+at startup and is never in the document, and `open()` does not attach it — so the modal builds into a
+detached tree, `open()` returns without throwing, and the document a test then reads (or screenshots) is
+untouched. Two plugins concluded from exactly this that the settings tab **cannot** be captured and wrote
+the impossibility down (`obsidian-backlink-full-path`, `obsidian-frontmatter-markdown-links`); the
+diagnosis was right and the conclusion was not.
+
+The fix is one step, and **its order is load-bearing**: append `containerEl` to `document.body` **before**
+`open()`. Attaching afterwards is too late — whatever the modal rendered on open has already gone into the
+detached container, so it ends up on screen showing the wrong thing while looking entirely successful. That
+is a convincing-looking wrong answer, which is why the harness owns the recipe instead of each plugin
+copying it.
+
+Two layers, the same split as `captureObsidianScreenshot` (Node-side) over the renderer-side `lib` bag:
+
+- **`lib.openSettingsTab({ tabId, timeoutInMilliseconds? })`** — a **base** `lib` member
+  (`namespace-bootstrap.ts`, typed on `Lib` in `src/eval-in-obsidian.ts`; see **L16**), for a callback that
+  also probes the rendered DOM.
+- **`openObsidianSettingsTab({ tabId, timeoutInMilliseconds?, transport?, vaultPath? })`**
+  (`src/open-obsidian-settings-tab.ts`) — the context-resolving Node-side entry point a screenshot suite
+  calls before `captureObsidianScreenshot`.
+
+Both resolve to the `.setting-item-name` texts the tab rendered — the proof it rendered, and what a caller
+asserts on. A tab that legitimately renders no such rows (Hotkeys) gives an empty array.
+
+Three behaviors worth knowing, all measured against a live instance rather than assumed:
+
+- **`tabId` is REQUIRED, not optional.** `open()` alone leaves `activeTab === null` and draws **zero** rows
+  on a harness-owned instance: the modal restores the profile's last tab, and an isolated profile has never
+  opened one. An optional `tabId` would therefore hand back an empty modal — the very symptom being ruled
+  out — so the API refuses to express it.
+- **An unknown id fails fast, listing the ids that exist**, instead of spending the whole timeout looking
+  identical to the does-not-render symptom. Both `settingTabs` (core) and `pluginTabs` (plugins) are
+  searched — a plugin's tab is **not** in `settingTabs`.
+- **Readiness is polled, never slept.** The recipe was found with a blind `sleep(500)`; the modal's own
+  `activeTab.id` + `activeTab.containerEl.childElementCount` are real signals, so the helper waits on those.
+
+`app.setting.close()` is the counterpart. Obsidian leaves the container attached on close, and the attach is
+a `contains` check, so re-opening simply works.

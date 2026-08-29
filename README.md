@@ -17,7 +17,7 @@ Full documentation lives at **[mnaoumov.dev/obsidian-integration-testing](https:
 - [Getting started](https://mnaoumov.dev/obsidian-integration-testing/guides/getting-started/) — install, wire up Vitest or Jest, first assertion.
 - [Writing tests](https://mnaoumov.dev/obsidian-integration-testing/guides/writing-tests/) — how `evalInObsidian` executes a callback, arguments, results, `ContextId`, internal APIs.
 - [Simulating user input](https://mnaoumov.dev/obsidian-integration-testing/guides/user-input/) — trusted keyboard and pointer events, and `waitUntil`.
-- [The `lib` bag](https://mnaoumov.dev/obsidian-integration-testing/guides/lib/) — inject your own helpers into callbacks; `createNote`.
+- [The `lib` bag](https://mnaoumov.dev/obsidian-integration-testing/guides/lib/) — inject your own helpers into callbacks; `createNote`, `openSettingsTab`.
 - [Vaults and fixtures](https://mnaoumov.dev/obsidian-integration-testing/guides/vaults/) — temporary vaults, pre-populating files, seeding a plugin's `demo-vault/`, non-plugin consumers.
 - [Transport modes](https://mnaoumov.dev/obsidian-integration-testing/guides/transports/) — version pinning, window visibility, attaching to a running Obsidian, multi-platform runs.
 - [Android testing](https://mnaoumov.dev/obsidian-integration-testing/guides/android/) — Appium setup, AVD provisioning, troubleshooting.
