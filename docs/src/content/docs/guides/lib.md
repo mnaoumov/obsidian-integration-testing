@@ -1,6 +1,6 @@
 ---
 title: The `lib` bag
-description: Share your own helpers with serialized callbacks, and write notes that actually reach disk with `createNote`.
+description: Share your own helpers with serialized callbacks, write notes that actually reach disk, and open a settings tab that renders.
 sidebar:
     order: 3
 ---
@@ -11,7 +11,7 @@ populate with their whole (renderer-safe) library, so closures call shared helpe
 hand-rolling them.
 
 `lib` is `{}` until a provider registers a resolver. The harness's own
-[trusted-input helpers](/obsidian-integration-testing/guides/user-input/) and the two below arrive the
+[trusted-input helpers](/obsidian-integration-testing/guides/user-input/) and the ones below arrive the
 same way.
 
 ## Register a resolver
@@ -96,7 +96,49 @@ const heading = await evalInObsidian({
 Whether `modify` / `process` writes can be lost the same way is **not** measured — only `create` was
 stressed — so a content assertion that fails elsewhere may share this cause.
 
+## `openSettingsTab` — a settings tab that actually renders
+
+**Use `lib.openSettingsTab({ tabId })` — never a bare `app.setting.open()` — to put a settings tab on
+screen.** `app.setting.open()` on its own does nothing a test can observe: `app.setting.containerEl` is
+built at startup and is never in the document, and `open()` does not attach it, so the modal builds into a
+detached tree. `open()` returns without throwing and the document you then read, or screenshot, is
+untouched. Plugins have concluded from this that the settings tab cannot be captured at all.
+
+It can. The container just has to be appended to `document.body` **before** `open()` — and the order is the
+whole trick. Attaching afterwards is too late: whatever the modal rendered on open has already gone into
+the detached container, so the modal appears on screen showing the wrong thing while looking entirely
+successful. `openSettingsTab` does it in the right order for you, then waits until the requested tab has
+genuinely rendered, and resolves to the setting names it drew.
+
+```ts
+import { captureObsidianScreenshot, openObsidianSettingsTab } from 'obsidian-integration-testing';
+
+// From the test body — the usual case for a screenshot suite.
+const names = await openObsidianSettingsTab({ tabId: 'my-plugin-id' });
+expect(names).toContain('Should handle renames');
+await captureObsidianScreenshot();
+
+// From inside a callback that also probes the rendered DOM.
+const hasToggle = await evalInObsidian({
+  callback: async ({ lib: { openSettingsTab } }) => {
+    await openSettingsTab({ tabId: 'my-plugin-id' });
+    return Boolean(document.querySelector('.setting-item .checkbox-container'));
+  }
+});
+```
+
+`tabId` is **required**, and that is deliberate. Opening the modal without naming a tab renders nothing at
+all on a test instance: the modal restores whichever tab the profile last used, and a harness-owned profile
+has never opened one — so `activeTab` stays `null` and no row is drawn. An id that matches no tab is
+rejected immediately, listing the ids that do exist, rather than spending the whole timeout looking exactly
+like the modal-does-not-render symptom. Both core tabs and plugin tabs are searched.
+
+A tab that legitimately draws no `.setting-item-name` rows (Hotkeys, for instance) resolves to an empty
+array; the render itself has still been waited for. Close the modal again with `app.setting.close()` — the
+attach is idempotent, so the tab can simply be re-opened afterwards.
+
 ## Related
 
 - [`registerLibResolver` API reference](/obsidian-integration-testing/api/lib-registry/registerLibResolver/)
 - [`Lib` API reference](/obsidian-integration-testing/api/eval-in-obsidian/Lib/)
+- [`openObsidianSettingsTab` API reference](/obsidian-integration-testing/api/open-obsidian-settings-tab/openObsidianSettingsTab/)

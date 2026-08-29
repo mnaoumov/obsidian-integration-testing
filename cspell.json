@@ -52,6 +52,7 @@
     "Errno",
     "ESRCH",
     "evals",
+    "frontmatter",
     "funcs",
     "getprop",
     "getwindowname",

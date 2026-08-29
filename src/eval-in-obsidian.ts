@@ -130,8 +130,8 @@ export interface CommonArguments {
    *
    * Never empty: the harness pre-populates a **base** set of renderer-driving
    * helpers (trusted input — `typeIntoEditor` / `pressKey` / `moveMouse` /
-   * `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement` — and
-   * `waitUntil`), and provider packages
+   * `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement` — plus
+   * `waitUntil`, `createNote` and `openSettingsTab`), and provider packages
    * (chiefly `obsidian-dev-utils`) `Object.assign` their whole renderer-safe
    * library on top via {@link registerLibResolver}. A serialized closure reaches
    * every shared helper through `lib` — `lib.typeIntoEditor({ editor, text })`,
@@ -361,6 +361,37 @@ export interface Lib {
   moveMouse(this: void, params: MoveMouseParams): void;
 
   /**
+   * Opens Obsidian's settings modal on a given tab, and does not return until
+   * that tab has actually rendered.
+   *
+   * **This exists because `app.setting.open()` on its own does not work from a
+   * test.** `app.setting.containerEl` is built at startup but is never in the
+   * document, and `open()` does not attach it — so the modal builds into a
+   * detached tree, `open()` returns without throwing, and a screenshot taken
+   * afterwards shows the untouched document. That is what made the settings tab
+   * look impossible to capture, and got recorded as such in two plugins.
+   *
+   * The fix is one step, and its **order is load-bearing**: the container is
+   * appended to `document.body` **before** `open()`. Attaching afterwards is too
+   * late — whatever the modal drew on open has already gone into the detached
+   * container, so it ends up on screen showing the wrong thing. That failure
+   * looks like success until the captured frame is examined, which is the trap
+   * this helper exists to remove.
+   *
+   * Re-attaching is idempotent, so a tab closed with `app.setting.close()` can
+   * simply be re-opened.
+   *
+   * @param params - The tab to open and how long to wait for it to render.
+   * @returns A {@link Promise} resolving to the names of the setting rows the
+   *   tab rendered — both the proof it rendered and what a caller asserts on. A
+   *   tab that legitimately renders no `.setting-item-name` rows (Hotkeys, say)
+   *   resolves to an empty array.
+   * @throws Error if no tab carries {@link OpenSettingsTabParams.tabId}, or if
+   *   the tab does not render within the timeout.
+   */
+  openSettingsTab(this: void, params: OpenSettingsTabParams): Promise<string[]>;
+
+  /**
    * Presses a single key (optionally with modifiers) using **trusted** Electron
    * keyboard input, firing the full real key pipeline —
    * `keydown` → `keypress` → `beforeinput` → `input` → `keyup`.
@@ -474,6 +505,31 @@ export interface MoveMouseParams {
    * The y coordinate (web-contents DIP) to move the pointer to.
    */
   readonly y: number;
+}
+
+/**
+ * Parameters for {@link Lib.openSettingsTab}.
+ */
+export interface OpenSettingsTabParams {
+  /**
+   * The id of the settings tab to open — a plugin id for a plugin's own tab, or
+   * a core tab id (`'editor'`, `'hotkeys'`, …).
+   *
+   * Required, because opening the modal without naming a tab renders **nothing**
+   * on a harness-owned instance: the modal restores the last tab the profile
+   * used, and an isolated profile has never opened one, so `activeTab` stays
+   * `null` and no row is drawn. An unknown id is rejected immediately, listing
+   * the ids that do exist.
+   */
+  readonly tabId: string;
+
+  /**
+   * The maximum time to wait for the modal to open and for the requested tab to
+   * render its content.
+   *
+   * @default `5000`
+   */
+  readonly timeoutInMilliseconds?: number;
 }
 
 /**
