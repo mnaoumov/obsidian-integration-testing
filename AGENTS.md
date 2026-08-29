@@ -239,7 +239,7 @@ pending-migration note, it uses the shipped helper rather than any local stopgap
 ## L12. Reusable async wait (`waitUntil`)
 
 Every `evalInObsidian` callback also gets a `waitUntil(params: WaitUntilParams)` helper as a **base**
-member of the injected **`lib`** bag (alongside `typeIntoEditor` / the pointer trio), typed on `Lib`
+member of the injected **`lib`** bag (alongside `typeIntoEditor` / the L11 pointer set), typed on `Lib`
 (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
 (`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
 all inherit it.
@@ -373,7 +373,8 @@ Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArguments`, 
 or reaching a `window` global. Two layers compose into it:
 
 - a **base** the harness itself seeds — the renderer-driving helpers of L8/L11/L12/L14
-  (`typeIntoEditor` / `pressKey` / `moveMouse` / `hoverElement` / `unhoverElement` / `waitUntil`), so
+  (`typeIntoEditor` / `pressKey` / `moveMouse` / `clickMouse` / `hoverElement` / `unhoverElement` /
+  `clickElement` / `waitUntil` / `createNote` / `openSettingsTab`), so
   `lib` is never empty and the harness stays self-contained (no dev-utils dependency; it tests them
   itself); and
 - **provider additions** — a provider package `Object.assign`s its **whole real** renderer-safe library
