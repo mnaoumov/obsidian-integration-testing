@@ -14,7 +14,9 @@ produces.
 The in-page alternatives quietly give false results:
 
 - `dispatchEvent(new KeyboardEvent(...))` and `new MouseEvent(...)` are untrusted (`isTrusted: false`), so
-  CodeMirror ignores the keystroke and `:hover` never takes effect.
+  CodeMirror ignores the keystroke and `:hover` never takes effect. Obsidian's own listeners gate on
+  `e.isTrusted` too, so a dispatched click does not merely look different — it does **nothing at all**,
+  while the test still passes whatever weaker assertion it makes.
 - `execCommand('insertText')` mutates the selection **even when the editor is not focused**, which turns a
   real focus bug into a passing test.
 
@@ -24,13 +26,15 @@ nodes — the callback already runs in the renderer, so nothing is serialized.
 
 ## The helpers
 
-| Helper                             | Purpose                                                                                                                                                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `typeIntoEditor({ editor, text })` | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                                |
-| `pressKey({ key, modifiers })`     | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). **Synchronous**; does **not** poll — pair with `waitUntil`. |
-| `hoverElement({ element })`        | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                                                                                                                                         |
-| `unhoverElement({ element })`      | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`.                                                                                                                       |
-| `moveMouse({ x, y })`              | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. **Synchronous**; does **not** poll.                                                                                           |
+| Helper                                         | Purpose                                                                                                                                                                                                                          |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `typeIntoEditor({ editor, text })`             | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                                  |
+| `pressKey({ key, modifiers })`                 | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). **Synchronous**; does **not** poll — pair with `waitUntil`. |
+| `hoverElement({ element })`                    | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                                                                                                                                           |
+| `unhoverElement({ element })`                  | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`.                                                                                                                         |
+| `clickElement({ element, button, modifiers })` | Clicks `element`'s center with optional `button` / `modifiers`, so Chromium synthesizes a real `click` (or `contextmenu`). **Synchronous**; does **not** poll — pair with `waitUntil`.                                           |
+| `moveMouse({ x, y })`                          | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. **Synchronous**; does **not** poll.                                                                                             |
+| `clickMouse({ x, y, button, modifiers })`      | Low-level primitive: one trusted `mouseMove` → `mouseDown` → `mouseUp` at the given web-contents DIP coordinates. **Synchronous**; does **not** poll.                                                                            |
 
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
@@ -79,6 +83,48 @@ await evalInObsidian({
   }
 });
 ```
+
+Clicking splits the same way hovering does. `clickElement({ element })` is the element-relative one — it
+clicks the element's center. `clickMouse({ x, y })` is the coordinate primitive underneath it, for a
+point that is **no element's center**: the markdown editor's margin, for instance, lies inside
+`cm.scrollDOM` but outside `.cm-sizer`, so nothing you can query has a center on it. Both accept
+`button` (`'left'`, `'middle'`, `'right'`) and `modifiers` in Obsidian's `Modifier` names — the same
+mapping `pressKey` uses, so `'Mod'` cannot mean two different things — and both are synchronous, so pair
+them with `waitUntil` to await the outcome:
+
+```ts
+await evalInObsidian({
+  callback: async ({ app, lib: { clickElement, clickMouse, waitUntil }, obsidianModule }) => {
+    const view = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView);
+    const action = view?.containerEl.querySelector<HTMLElement>('.view-action');
+    const sizer = view?.editor.cm.scrollDOM.querySelector<HTMLElement>('.cm-sizer');
+    if (!view || !action || !sizer) {
+      return;
+    }
+
+    clickElement({ element: action }); // synchronous; a real trusted left click
+    await waitUntil({ predicate: () => Boolean(document.querySelector('.menu')) });
+    document.querySelector('.menu')?.remove();
+
+    // The editor margin: inside `cm.scrollDOM`, outside `.cm-sizer` — reachable only by coordinates.
+    const scrollRect = view.editor.cm.scrollDOM.getBoundingClientRect();
+    const sizerRect = sizer.getBoundingClientRect();
+    clickMouse({
+      button: 'right',
+      x: (scrollRect.left + sizerRect.left) / 2,
+      y: sizerRect.top + 20 // just below the top edge of the text
+    });
+    await waitUntil({
+      message: 'the margin context menu did not open',
+      predicate: () => Boolean(document.querySelector('.menu'))
+    });
+  }
+});
+```
+
+A right click opens a **real** context menu, and it stays open. A suite that drives one must close it —
+`menu.hide()` from your own handler, or removing the leftover `.menu` element — before the next test, or
+the menu still on screen swallows the click that test makes.
 
 :::caution[Serialize focus- and pointer-dependent test files]
 Trusted input targets the single shared window's **global** focus and pointer, so test files that depend
