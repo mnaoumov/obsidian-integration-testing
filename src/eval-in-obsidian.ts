@@ -245,7 +245,8 @@ export interface HoverElementParams {
  */
 export interface Lib {
   /**
-   * Clicks the center of an element using **trusted** Electron pointer input.
+   * Clicks the center of an element using **trusted** pointer input — Electron's
+   * `sendInputEvent` on desktop, a CDP touch tap in the WebView on mobile.
    *
    * The element-relative counterpart of {@link Lib.clickMouse}, mirroring the
    * {@link Lib.moveMouse} / {@link Lib.hoverElement} split. Use
@@ -253,13 +254,15 @@ export interface Lib {
    * element's center — the markdown editor's margin, for instance, lies inside
    * `cm.scrollDOM` but outside `.cm-sizer`, so no element's center lands on it.
    *
-   * Synchronous: injecting the trusted click does no real awaiting, so the
-   * caller does not need to `await` it.
+   * **Must be awaited.** On mobile the injection is a round-trip to the host —
+   * the renderer cannot produce a trusted event itself — so a missing `await`
+   * would let the assertion run before the click landed.
    *
    * @param params - The element to click, the button to press and any modifiers
    *   to hold.
+   * @returns A {@link Promise} that resolves once the click has been injected.
    */
-  clickElement(this: void, params: ClickElementParams): void;
+  clickElement(this: void, params: ClickElementParams): Promise<void>;
 
   /**
    * Clicks at the given web-contents coordinates using **trusted** Electron
@@ -282,13 +285,20 @@ export interface Lib {
    * A real context menu actually opens, so a suite driving a right click must
    * close it (or remove the leftover `.menu` element) before the next test.
    *
-   * Synchronous: injecting the trusted click does no real awaiting, so the
-   * caller does not need to `await` it.
+   * **On mobile** the button model does not survive the port: touch has no
+   * buttons, so `'left'` (the default) is a **tap**, `'right'` is the
+   * **long-press** that opens Obsidian Mobile's context menu, and `'middle'`
+   * throws — there is no gesture for it, and inventing one would be worse than
+   * saying so. The coordinates are CSS pixels in the WebView's own viewport,
+   * which is what CDP takes, so `devicePixelRatio` never enters the picture.
+   *
+   * **Must be awaited** — see {@link Lib.clickElement}.
    *
    * @param params - The web-contents DIP coordinates to click at, the button to
    *   press and any modifiers to hold.
+   * @returns A {@link Promise} that resolves once the click has been injected.
    */
-  clickMouse(this: void, params: ClickMouseParams): void;
+  clickMouse(this: void, params: ClickMouseParams): Promise<void>;
 
   /**
    * Creates a note and does not return until its content is verifiably on
@@ -332,6 +342,12 @@ export interface Lib {
    * shared-instance load. It targets the single shared window's **global**
    * pointer, so only one element is hovered at a time.
    *
+   * **Desktop only — it throws on mobile**, deliberately: touch input has no
+   * hover state, so there is nothing faithful to inject. A silent no-op would
+   * leave a test asserting against a hover that never happened, which is the
+   * exact false-confidence failure trusted input exists to prevent. Branch on
+   * `Platform.isDesktopApp`, or drive the element with {@link Lib.clickElement}.
+   *
    * @param params - The element to hover.
    * @returns A {@link Promise} that resolves once the element matches `:hover`.
    */
@@ -353,12 +369,15 @@ export interface Lib {
    * element-relative moves; use `moveMouse` directly when an element-relative
    * target does not fit (e.g. an element spanning the full viewport width).
    *
-   * Synchronous: injecting the trusted move does no real awaiting, so the caller
-   * does not need to `await` it.
+   * **Desktop only — it throws on mobile**, for the same reason as
+   * {@link Lib.hoverElement}: there is no touch pointer to move.
+   *
+   * **Must be awaited** — see {@link Lib.clickElement}.
    *
    * @param params - The web-contents DIP coordinates to move to.
+   * @returns A {@link Promise} that resolves once the move has been injected.
    */
-  moveMouse(this: void, params: MoveMouseParams): void;
+  moveMouse(this: void, params: MoveMouseParams): Promise<void>;
 
   /**
    * Opens Obsidian's settings modal on a given tab, and does not return until
@@ -413,12 +432,19 @@ export interface Lib {
    * expected effect via {@link Lib.waitUntil}. It targets the single shared
    * window's **global** focus, so only the DOM-focused element receives the key.
    *
-   * Synchronous: injecting the trusted key press does no real awaiting, so the
-   * caller does not need to `await` it.
+   * **On mobile** the same sequence is injected through the WebView's debugger
+   * (`Input.dispatchKeyEvent`), which is equally trusted. Named keys (`'Enter'`,
+   * `'Escape'`, `'Tab'`, `'Backspace'`, `'Delete'`, the arrows) and single
+   * printable characters are supported; any other multi-character name throws
+   * rather than pressing nothing.
+   *
+   * **Must be awaited** — see {@link Lib.clickElement}.
    *
    * @param params - The key to press and any modifiers to hold.
+   * @returns A {@link Promise} that resolves once the key press has been
+   *   injected.
    */
-  pressKey(this: void, params: PressKeyParams): void;
+  pressKey(this: void, params: PressKeyParams): Promise<void>;
 
   /**
    * Types text into a CodeMirror {@link Editor} using **trusted** Electron
@@ -454,6 +480,9 @@ export interface Lib {
    * an element spans the full viewport (no point outside its box is reachable),
    * use {@link Lib.moveMouse} directly to move the pointer to a known empty
    * coordinate instead.
+   *
+   * **Desktop only — it throws on mobile**, for the same reason as
+   * {@link Lib.hoverElement}.
    *
    * @param params - The element to move the pointer away from.
    * @returns A {@link Promise} that resolves once the element no longer matches

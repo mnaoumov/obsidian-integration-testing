@@ -51,19 +51,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { CaptureScreenshotParams } from './capture-screenshot.ts';
+import type { MobileInputEnvelope } from './mobile-input.ts';
 import type {
   ConsoleCaptureHandle,
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
+import type { WebViewCdpConnection } from './webview-cdp.ts';
 
 import {
   decodeBase64Png,
   isPng
 } from './capture-screenshot.ts';
+import { errorToString } from './error-to-string.ts';
 import { exec } from './exec.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
+import {
+  buildResolveInputExpression,
+  MOBILE_INPUT_BINDING_NAME,
+  toCdpInputCommands
+} from './mobile-input.ts';
+import { connectToWebViewCdp } from './webview-cdp.ts';
 
 /**
  * Session connection info returned by {@link AppiumTransport.getSessionInfo},
@@ -217,6 +226,20 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly browser: Browser;
   private readonly deviceId: string;
   /**
+   * The `process.on('exit')` handler that tears the channel down when nothing else will.
+   */
+  private disposeInputChannelOnExit: (() => void) | null = null;
+  /**
+   * The host half of the trusted-input channel: a CDP connection to the WebView, independent of the
+   * Appium session, opened lazily on first evaluate and reused (see **L39**).
+   */
+  private inputChannel: null | WebViewCdpConnection = null;
+  /**
+   * Set once the trusted-input channel is known not to be openable here (iOS, a remote hub, no local
+   * `adb`), so the attempt is not repeated on every evaluate.
+   */
+  private isInputChannelUnavailable = false;
+  /**
    * Tracks whether the driver is currently switched to the WebView context.
    *
    * Set to `true` after a successful `switchContext(WEBVIEW_md.obsidian)`.
@@ -303,9 +326,25 @@ export class AppiumTransport implements ObsidianTransport {
    * deletion so the session remains available for the owning process.
    */
   public async dispose(): Promise<void> {
+    await this.disposeInputChannel();
+
     if (this.isSessionOwner) {
       await this.browser.deleteSession();
     }
+  }
+
+  /**
+   * Synchronous teardown for `process.on('exit')` handlers.
+   *
+   * Only the trusted-input channel needs it: the Appium session is the owning process's to end, and an
+   * abrupt exit is exactly when the async {@link AppiumTransport.dispose} never runs — which would strand
+   * the adb port forward on the device.
+   */
+  public disposeSync(): void {
+    const channel = this.inputChannel;
+    this.inputChannel = null;
+    this.unregisterInputChannelExitHandler();
+    channel?.disposeSync();
   }
 
   /**
@@ -320,6 +359,7 @@ export class AppiumTransport implements ObsidianTransport {
    */
   public async evaluate(expression: string, _options: TransportEvalOptions): Promise<string> {
     await this.ensureWebViewContext();
+    await this.ensureInputChannel();
 
     try {
       const result = await this.browser.execute<null | string | undefined, []>(
@@ -555,6 +595,79 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Closes the trusted-input channel, if one is open.
+   */
+  private async disposeInputChannel(): Promise<void> {
+    const channel = this.inputChannel;
+    this.inputChannel = null;
+    this.unregisterInputChannelExitHandler();
+    await channel?.dispose();
+  }
+
+  /**
+   * Opens the trusted-input channel if it is not already open, and re-opens it if the WebView went away.
+   *
+   * Installs a `Runtime.addBinding` function on the page and services every call to it for the life of the
+   * connection. The binding is exposed on *every* execution context of the page, so it survives the
+   * `location.reload()` that {@link AppiumTransport.registerVault} performs; only a full app restart, which
+   * destroys the WebView target, needs the reconnect below.
+   */
+  private async ensureInputChannel(): Promise<void> {
+    if (this.inputChannel?.isOpen || this.isInputChannelUnavailable) {
+      return;
+    }
+
+    // The channel is reachable only over local `adb`, so it does not exist on iOS or against a remote hub
+    // (BrowserStack). Those are supported transports, so this stays **best-effort**: a run that never
+    // Drives input must not fail because the channel could not be opened. A run that *does* drive input
+    // Gets a legible error from the renderer's own guard, which names the missing channel.
+    if (this.platform !== 'android') {
+      this.isInputChannelUnavailable = true;
+      return;
+    }
+
+    await this.disposeInputChannel();
+
+    try {
+      const connection = await connectToWebViewCdp({ appId: this.appId, deviceId: this.deviceId });
+      await connection.send('Runtime.enable');
+      await connection.send('Runtime.addBinding', { name: MOBILE_INPUT_BINDING_NAME });
+      connection.on('Runtime.bindingCalled', (params: Record<string, unknown>) => {
+        if (params['name'] !== MOBILE_INPUT_BINDING_NAME) {
+          return;
+        }
+
+        const payload = params['payload'];
+        // Deliberately not awaited: this runs while the renderer's `Execute Script` is still pending, and
+        // That is the whole point — the request is serviced concurrently and answered by resolving the
+        // Renderer's promise over this same socket. It handles its own failures, so nothing reaches here.
+        this.handleInputRequest(connection, typeof payload === 'string' ? payload : '').catch(() => {
+          // Unreachable: `handleInputRequest` never rejects.
+        });
+      });
+
+      this.inputChannel = connection;
+
+      // Self-cleaning, deliberately: this transport can be created straight from a test worker, with no
+      // `coreSetup` owning its lifecycle and therefore nothing that ever calls `dispose`/`disposeSync` —
+      // Which is how a run leaves its adb port forward stranded on the device (observed 2026-08-30). The
+      // Handler is removed again on disposal so reconnects do not stack listeners.
+      this.disposeInputChannelOnExit = (): void => {
+        connection.disposeSync();
+      };
+      process.once('exit', this.disposeInputChannelOnExit);
+
+      log('[appium-transport] Trusted-input channel open.');
+    } catch (error: unknown) {
+      // Give up for the life of the transport rather than paying an `adb` round-trip on every eval.
+      // A socket that merely *closed* after a successful connect is a different case — `isOpen` is false
+      // There while this flag stays unset, so the reconnect above still runs.
+      this.isInputChannelUnavailable = true;
+      log(`[appium-transport] Trusted input is unavailable on this device: ${errorToString(error)}`);
+    }
+  }
+
+  /**
    * Switches the driver to the `WEBVIEW_md.obsidian` context.
    *
    * If the context was already verified (cached via {@link isInWebViewContext}),
@@ -608,6 +721,38 @@ export class AppiumTransport implements ObsidianTransport {
    */
   private getDeviceVaultPath(vaultPath: string): string {
     return `${this.vaultBasePath}${extractVaultName(vaultPath)}`;
+  }
+
+  /**
+   * Services one input request from the renderer: inject, then resolve the renderer's promise.
+   *
+   * Every failure path still resolves that promise — with an error message the renderer re-throws — because
+   * a request that is silently dropped would hang the closure until the whole run times out, and report
+   * nothing about why.
+   *
+   * @param connection - The channel the request arrived on.
+   * @param payload - The raw JSON payload the binding was called with.
+   */
+  private async handleInputRequest(connection: WebViewCdpConnection, payload: string): Promise<void> {
+    let requestId = '';
+    try {
+      const { id, request } = JSON.parse(payload) as MobileInputEnvelope;
+      requestId = id;
+      await connection.sendAll(toCdpInputCommands(request));
+      await connection.send('Runtime.evaluate', { expression: buildResolveInputExpression(id) });
+    } catch (error: unknown) {
+      const message = errorToString(error);
+      log(`[appium-transport] Trusted input failed: ${message}`);
+      if (!requestId) {
+        return;
+      }
+
+      try {
+        await connection.send('Runtime.evaluate', { expression: buildResolveInputExpression(requestId, message) });
+      } catch {
+        // The socket is gone; the renderer's own timeout is the remaining backstop.
+      }
+    }
   }
 
   /**
@@ -671,6 +816,19 @@ export class AppiumTransport implements ObsidianTransport {
     } catch (error: unknown) {
       log(`[appium-transport] Vault directory removal failed (non-fatal): ${String(error)}`);
     }
+  }
+
+  /**
+   * Drops the `process.on('exit')` handler that would otherwise close an already-closed channel, and would
+   * stack a listener per reconnect.
+   */
+  private unregisterInputChannelExitHandler(): void {
+    if (!this.disposeInputChannelOnExit) {
+      return;
+    }
+
+    process.off('exit', this.disposeInputChannelOnExit);
+    this.disposeInputChannelOnExit = null;
   }
 
   /**

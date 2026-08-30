@@ -36,8 +36,25 @@ import {
   getBootstrapVersion,
   getRegisteredLibResolvers
 } from './lib-registry.ts';
+import {
+  MOBILE_INPUT_BINDING_NAME,
+  MOBILE_INPUT_TIMEOUT_IN_MILLISECONDS
+} from './mobile-input.ts';
 
 interface BootstrapNamespaceParams {
+  /**
+   * The name of the host-installed `Runtime.addBinding` function the mobile trusted-input path calls.
+   *
+   * Passed in as data because the bootstrap closure may not read outer scope (**L15**), so it cannot
+   * import {@link MOBILE_INPUT_BINDING_NAME} directly.
+   */
+  readonly inputBindingName: string;
+
+  /**
+   * How long the mobile trusted-input path waits for the host to answer one request.
+   */
+  readonly inputTimeoutInMilliseconds: number;
+
   readonly libResolvers: LibResolver[];
   readonly version: string;
 }
@@ -73,6 +90,8 @@ export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, 
   }
 
   const bootstrapExpression = generateFunctionCall(bootstrapNamespace, {
+    inputBindingName: MOBILE_INPUT_BINDING_NAME,
+    inputTimeoutInMilliseconds: MOBILE_INPUT_TIMEOUT_IN_MILLISECONDS,
     libResolvers: [...getRegisteredLibResolvers()],
     version: bootstrapVersion
   });
@@ -160,6 +179,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     pollVaultBasePath(): Promise<string>;
 
     /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is the renderer end of the
+     * mobile trusted-input channel (**L39**) — the host calls it over CDP to answer a request this
+     * closure is awaiting, so it is meaningless outside the harness.
+     *
+     * @param id - The request id being answered.
+     * @param errorMessage - Why the injection failed, or `null` on success.
+     */
+    resolveInput(id: string, errorMessage: null | string): void;
+
+    /**
      * Intentionally NOT migrated to `obsidian-dev-utils`: niche/trivial — a
      * one-line `localStorage.setItem` wrapper used only by the harness.
      */
@@ -231,6 +260,34 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   interface ObsidianPlatform {
     isMacOS: boolean;
+    isMobile: boolean;
+  }
+
+  /**
+   * A trusted-input request handed to the host over the `Runtime.addBinding` channel.
+   *
+   * Structurally identical to `MobileInputRequest` in `mobile-input.ts`, redeclared here because this
+   * closure is serialized via `toString()` and cannot import (**L15**). The two are one wire format; change
+   * them together.
+   */
+  type MobileInputRequest = MobileKeyInputRequest | MobilePointerInputRequest;
+
+  interface MobileKeyInputRequest {
+    readonly key: string;
+    readonly kind: 'key';
+    readonly modifiers: readonly string[];
+  }
+
+  interface MobilePointerInputRequest {
+    readonly kind: 'longPress' | 'tap';
+    readonly modifiers: readonly string[];
+    readonly x: number;
+    readonly y: number;
+  }
+
+  interface PendingInput {
+    reject(error: Error): void;
+    resolve(): void;
   }
 
   /**
@@ -298,6 +355,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const existingObsidianModule = holder.__obsidianIntegrationTesting?.obsidianModule;
   // Warn at most once per bootstrap that `obsidianModule` is `null` on this version.
   let hasWarnedMissingObsidianModule = false;
+
+  // In-flight mobile input requests, keyed by request id, awaiting the host's answer via `resolveInput`.
+  const pendingInputs = new Map<string, PendingInput>();
+  let nextInputId = 0;
 
   const ns: IntegrationTestingNamespace = {
     get app() {
@@ -487,6 +548,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       return JSON.stringify(basePath);
     },
 
+    resolveInput(this: IntegrationTestingNamespace, id: string, errorMessage: null | string): void {
+      const pending = pendingInputs.get(id);
+      if (!pending) {
+        return;
+      }
+
+      pendingInputs.delete(id);
+      if (errorMessage === null) {
+        pending.resolve();
+        return;
+      }
+
+      pending.reject(new Error(errorMessage));
+    },
+
     async setLocalStorageItem(this: IntegrationTestingNamespace, params): Promise<void> {
       await this.ensureLayoutReady();
       localStorage.setItem(params.key, params.value);
@@ -515,7 +591,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Typing is pressing each character key in turn: `pressKey` injects the same trusted
     // `keyDown` -> `char` -> `keyUp` a real user produces — text lands only if the editor holds focus.
     for (const char of text) {
-      pressKey({ key: char });
+      await pressKey({ key: char });
     }
 
     // Poll until the document reflects the input or the timeout elapses, instead of a fixed settle.
@@ -523,6 +599,60 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     while (editor.getValue() === valueBeforeTyping && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
     }
+  }
+
+  // True when this closure is running in Obsidian Mobile rather than the Electron desktop app.
+  // Reading `Platform` off the resolved obsidian module is safe here: `evalWrapper` always resolves that
+  // Module before any callback can run, which is the same guarantee `toElectronModifiers` relies on.
+  function checkIsMobile(): boolean {
+    return (ns.obsidianModule as ObsidianModuleWithPlatform).Platform.isMobile;
+  }
+
+  // Hands one trusted-input request to the host and waits for it to be injected.
+  //
+  // Mobile has no in-renderer route to a trusted event at all — `dispatchEvent` and `element.click()` are
+  // `isTrusted === false` by spec — so the injection has to happen from the Node side, over a CDP
+  // Connection independent of the Appium session that is currently blocked awaiting this very closure
+  // (see L39). `bindingName` is a host-installed global; calling it delivers the request, and the host
+  // Answers by calling `ns.resolveInput`.
+  async function requestHostInput(request: MobileInputRequest): Promise<void> {
+    const bindingName = bootstrapParams.inputBindingName;
+    // eslint-disable-next-line no-restricted-syntax -- Approved cast: the binding is installed by the host at runtime via `Runtime.addBinding`, so it cannot be declared on `Window`.
+    const binding = (globalThis as unknown as Record<string, unknown>)[bindingName] as ((payload: string) => void) | undefined;
+    if (typeof binding !== 'function') {
+      throw new TypeError(
+        `Trusted input is unavailable: the host has not installed the \`${bindingName}\` channel. `
+          + 'On mobile these helpers require the obsidian-integration-testing Appium transport.'
+      );
+    }
+
+    nextInputId++;
+    const id = String(nextInputId);
+
+    await new Promise<void>((resolve, reject) => {
+      pendingInputs.set(id, { reject, resolve });
+      globalThis.setTimeout(() => {
+        if (!pendingInputs.has(id)) {
+          return;
+        }
+
+        pendingInputs.delete(id);
+        reject(new Error(`The host did not service the trusted input request within ${String(bootstrapParams.inputTimeoutInMilliseconds)}ms.`));
+      }, bootstrapParams.inputTimeoutInMilliseconds);
+
+      binding(JSON.stringify({ id, request }));
+    });
+  }
+
+  // A pointer helper that has no touch analog is a hard error, never a silent no-op: `:hover` does not
+  // Exist on touch, so a test that "hovered" and then asserted would pass while exercising nothing —
+  // Exactly the false-confidence failure the trusted-input work exists to end.
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
+  function throwUnsupportedOnMobile(helperName: string): never {
+    throw new Error(
+      `\`${helperName}\` has no meaning on mobile: touch input has no hover state. `
+        + 'Branch on `Platform.isDesktopApp`, or drive the element with `clickElement` instead.'
+    );
   }
 
   // Maps Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
@@ -560,7 +690,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     });
   }
 
-  function clickMouse(clickParams: ClickMouseParams): void {
+  async function clickMouse(clickParams: ClickMouseParams): Promise<void> {
     const SINGLE_CLICK_COUNT = 1;
 
     const { button = 'left', modifiers = [], x, y } = clickParams;
@@ -568,6 +698,24 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const electronModifiers = toElectronModifiers(modifiers);
     const roundedX = Math.round(x);
     const roundedY = Math.round(y);
+
+    if (checkIsMobile()) {
+      // Touch has no buttons. A left click is a tap; a right click is the long-press that opens Obsidian
+      // Mobile's context menu, so it is hidden behind the same name rather than a separate helper. A
+      // Middle click has no gesture at all, and inventing one would be worse than saying so.
+      if (button === 'middle') {
+        throw new Error('`clickMouse({ button: \'middle\' })` has no meaning on mobile: touch input has no middle button.');
+      }
+
+      await requestHostInput({
+        kind: button === 'right' ? 'longPress' : 'tap',
+        modifiers: electronModifiers,
+        x: roundedX,
+        y: roundedY
+      });
+      return;
+    }
+
     const webContents = globalThis.electron.remote.getCurrentWebContents();
 
     // A trusted click is mouseMove -> mouseDown -> mouseUp at one point.
@@ -592,14 +740,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     });
   }
 
-  function clickElement(clickParams: ClickElementParams): void {
+  async function clickElement(clickParams: ClickElementParams): Promise<void> {
     const CENTER_DIVISOR = 2;
 
     const { button = 'left', element, modifiers = [] } = clickParams;
 
-    // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`.
+    // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`, and equal CDP's
+    // Page coordinates in the mobile WebView — so neither path needs a device-pixel conversion.
     const rect = element.getBoundingClientRect();
-    clickMouse({
+    await clickMouse({
       button,
       modifiers,
       x: rect.left + rect.width / CENTER_DIVISOR,
@@ -607,10 +756,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     });
   }
 
-  function pressKey(pressParams: PressKeyParams): void {
+  async function pressKey(pressParams: PressKeyParams): Promise<void> {
     const { key, modifiers = [] } = pressParams;
 
     const electronModifiers = toElectronModifiers(modifiers);
+
+    if (checkIsMobile()) {
+      await requestHostInput({ key, kind: 'key', modifiers: electronModifiers });
+      return;
+    }
+
     const webContents = globalThis.electron.remote.getCurrentWebContents();
 
     // A trusted key press is keyDown -> char -> keyUp: keyDown fires `keydown`, char fires
@@ -625,9 +780,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     const { element } = hoverParams;
 
+    if (checkIsMobile()) {
+      throwUnsupportedOnMobile('hoverElement');
+    }
+
     // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`.
     const rect = element.getBoundingClientRect();
-    moveMouse({ x: rect.left + rect.width / CENTER_DIVISOR, y: rect.top + rect.height / CENTER_DIVISOR });
+    await moveMouse({ x: rect.left + rect.width / CENTER_DIVISOR, y: rect.top + rect.height / CENTER_DIVISOR });
 
     // Poll until the real `:hover` state has actually taken, instead of a fixed settle.
     const startTime = Date.now();
@@ -636,7 +795,12 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
   }
 
-  function moveMouse(moveParams: MoveMouseParams): void {
+  // eslint-disable-next-line @typescript-eslint/require-await -- Async to match its mobile-capable siblings and to keep one `Promise<void>` shape across the trusted-input set; the desktop body is genuinely synchronous.
+  async function moveMouse(moveParams: MoveMouseParams): Promise<void> {
+    if (checkIsMobile()) {
+      throwUnsupportedOnMobile('moveMouse');
+    }
+
     const webContents = globalThis.electron.remote.getCurrentWebContents();
     webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(moveParams.x), y: Math.round(moveParams.y) });
   }
@@ -647,13 +811,17 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     const { element } = unhoverParams;
 
+    if (checkIsMobile()) {
+      throwUnsupportedOnMobile('unhoverElement');
+    }
+
     // Move to a point just outside the element's box.
     // When flush against the viewport's left edge, use just past the right edge.
     // A full-viewport-width element should use `moveMouse` directly instead.
     const rect = element.getBoundingClientRect();
     const x = rect.left >= OUTSIDE_OFFSET_IN_PIXELS ? rect.left - OUTSIDE_OFFSET_IN_PIXELS : rect.right + OUTSIDE_OFFSET_IN_PIXELS;
     const y = rect.top + rect.height / CENTER_DIVISOR;
-    moveMouse({ x, y });
+    await moveMouse({ x, y });
 
     // Poll until the real `:hover` state has actually cleared, instead of a fixed settle.
     const startTime = Date.now();

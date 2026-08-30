@@ -77,6 +77,10 @@ Only the **`android`** scope (`obsidian-android-appium`) takes the lock now; `ge
 
 ## L8. Trusted keyboard input (`typeIntoEditor`)
 
+> **Not desktop-only.** Everything below describes the Electron path. The same helper is trusted on Android
+> too, through a CDP channel to the WebView — see **L39** for the mechanism and its consequences (the
+> helpers are `Promise<void>`, and the `await` matters).
+
 Every `evalInObsidian` callback receives a `typeIntoEditor(params: { editor: Editor; text: string })`
 helper as a **base** member of the injected **`lib`** bag (destructure `callback({ lib: { typeIntoEditor } })`),
 typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
@@ -175,6 +179,11 @@ The whole module is integration-time glue (spawns Obsidian / CDP), so — like `
 tool must attach to a printed port.
 
 ## L11. Trusted pointer input (`moveMouse` / `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement`)
+
+> **Not desktop-only, but not uniform either.** `clickMouse` / `clickElement` are trusted on Android too
+> (**L39**): the default and `'left'` become a tap, `'right'` a long-press, `'middle'` throws. The three
+> pointer-*move* helpers — `moveMouse`, `hoverElement`, `unhoverElement` — **throw** on mobile, because
+> touch has no hover state. All of them are `Promise<void>`; the `await` matters.
 
 Every `evalInObsidian` callback also gets a trusted-pointer set as **base** members of the injected
 **`lib`** bag (alongside `typeIntoEditor`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into
@@ -288,6 +297,11 @@ under-provisioned emulator (too few vCPUs/RAM, or missing hardware acceleration)
 suppression as symptom relief, not a root-cause fix.
 
 ## L14. Trusted key press (`pressKey`)
+
+> **Not desktop-only.** On Android the same `rawKeyDown` → `char` → `keyUp` sequence is injected through the
+> WebView's debugger (**L39**), equally trusted. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`,
+> `Delete`, the arrows) and single printable characters are supported; any other multi-character name
+> throws rather than pressing nothing. It is `Promise<void>`; the `await` matters.
 
 Every `evalInObsidian` callback also gets a `pressKey(params: PressKeyParams)` helper as a **base**
 member of the injected **`lib`** bag (alongside `typeIntoEditor` / the pointer trio / `waitUntil`),
@@ -427,14 +441,19 @@ mirror module):
 
 Notes on the set:
 
-- **`pressKey` / `moveMouse` / `clickMouse` / `clickElement` are synchronous (`void`)** — their bodies
-  only inject trusted `sendInputEvent` calls, so both copies must keep the `void` signature (a
-  `Promise<void>` on one side would break the
-  `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation). `clickElement` is
-  synchronous even though its element-relative sibling `hoverElement` is not: `hoverElement` awaits only
-  because it polls `:hover`, and a click has no equivalent state to poll. Deliberately it does **not**
-  hover first — an element that never matches `:hover` (covered by an overlay, say) would then cost the
-  full 5 s timeout on every click.
+- **`pressKey` / `moveMouse` / `clickMouse` / `clickElement` are `Promise<void>`** — superseding the former
+  "must stay synchronous (`void`)" rule, which held only while the helpers were Electron-only. The mobile
+  path (**L39**) injects from the Node side, so the renderer must await a round-trip; the declared `Lib`
+  type is what makes `no-floating-promises` force the `await` at call sites instead of letting a missing one
+  race the assertion. The `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation
+  is unaffected either way — `() => Promise<void>` is assignable to `() => void`. `clickElement` still does
+  no *polling* of its own, unlike its element-relative sibling `hoverElement`: `hoverElement` polls
+  `:hover`, and a click has no equivalent state to poll. Deliberately it does **not** hover first — an
+  element that never matches `:hover` (covered by an overlay, say) would then cost the full 5 s timeout on
+  every click.
+- **`moveMouse` / `hoverElement` / `unhoverElement` throw on mobile; `clickMouse({ button: 'middle' })`
+  throws too** — touch has no hover state and no middle button, and a silent no-op would recreate the
+  false-confidence failure these helpers exist to end. `button: 'right'` maps to a long-press. See **L39**.
 - **The Obsidian-`Modifier` → Electron-modifier mapping lives in ONE `toElectronModifiers` helper per
   copy**, shared by `pressKey` and `clickMouse`, so a key press and a click cannot disagree on what
   `'Mod'` resolves to. Added 2026-08-26 with the click helpers (T599-P21).
@@ -1539,3 +1558,69 @@ Three behaviors worth knowing, all measured against a live instance rather than 
 
 `app.setting.close()` is the counterpart. Obsidian leaves the container attached on close, and the attach is
 a `contains` check, so re-opening simply works.
+
+## L39. Trusted input on mobile — a CDP channel to the WebView, not Appium actions
+
+The trusted-input helpers of **L8** / **L11** / **L14** work on Android too. This section is the *why* of
+the mechanism; the helper semantics live with each helper.
+
+### Why the obvious route does not work
+
+Every helper runs **in the renderer**, inside the `lib` bag `evalWrapper` builds. On desktop that is fine:
+`electron.remote` bridges into the main process in-band, so `sendInputEvent` is one synchronous call away.
+On Android there is **no in-page route to a trusted event at all** — `dispatchEvent` and `element.click()`
+are `isTrusted === false` by spec — so the injection has to happen on the **Node** side, and the renderer
+has to reach it *mid-closure*.
+
+That rules out Appium's own W3C actions, which is not a preference but a measured constraint:
+`AppiumTransport.evaluate` runs the whole closure inside one W3C **Execute Script**, and Execute Script
+awaits the promise it returns. While a closure sits waiting on `lib.clickElement(...)`, the WebDriver
+session is **busy** and cannot be asked to do anything else. Native injection is also slow
+(`switchContext` ~17s, **L19**) and would need a CSS-px → device-px mapping — `devicePixelRatio` plus the
+WebView's offset under the status bar — that nothing here computes.
+
+### What it does instead
+
+`AppiumTransport` opens its **own** CDP connection to the WebView (`src/webview-cdp.ts`), independent of
+the Appium session:
+
+1. `adb forward` a free port to the app's `localabstract:webview_devtools_remote_<pid>` socket, then the
+   usual `/json` endpoint lists the page targets. The WebView's debugger is provably enabled — the
+   existing `switchContext('WEBVIEW_md.obsidian')` already depends on it.
+2. `Runtime.addBinding` installs a function on the page. The renderer computes the target rect, calls it
+   with a JSON request, and awaits.
+3. `Runtime.bindingCalled` arrives on **our** socket while chromedriver's Execute Script is still pending
+   on **its** socket, so there is no contention. The host injects `Input.dispatchTouchEvent` /
+   `dispatchKeyEvent`, then resolves the renderer's promise with a concurrent `Runtime.evaluate`.
+
+**CDP takes CSS pixels in the page's own viewport**, so the device-pixel mapping never has to be written —
+the single biggest reason this route is cheaper than the native one.
+
+Measured on a live emulator (2026-08-30) before any of it was built: a CDP touch pair produces
+`pointerdown` / `touchstart` / `pointerup` / `touchend` / `click`, **every one `isTrusted: true`**;
+`bindingCalled` does fire while an awaited evaluate is pending; and a second CDP client attaches happily
+alongside a live Appium session. `src/mobile-trusted-input.android.integration.test.ts` re-asserts the
+`isTrusted` half on every run, because that property is the entire point and no weaker observation implies
+it.
+
+### Consequences worth knowing
+
+- **The helpers are `Promise<void>`, and the `await` is load-bearing.** `pressKey` / `moveMouse` /
+  `clickMouse` / `clickElement` stopped being synchronous when the mobile round-trip was added; the
+  declared `Lib` type says so, so `no-floating-promises` forces the `await` rather than letting a missing
+  one race the assertion. This supersedes **L17**'s former "must stay synchronous (`void`)" note.
+- **The channel is BEST-EFFORT and its absence is not fatal.** It exists only over local `adb`, so there is
+  none on iOS or against a remote hub (BrowserStack). `ensureInputChannel` logs and gives up rather than
+  failing a run that never drives input; a run that *does* gets a legible error from the renderer's own
+  guard, naming the missing channel. A run must never fail because of infrastructure it did not use.
+- **The wire format is declared twice on purpose.** `MobileInputRequest` lives in `src/mobile-input.ts` and
+  is redeclared inside the bootstrap closure, which is serialized via `toString()` and may not reference
+  outer scope (**L15**). The binding name and the request timeout are instead passed *into* the closure as
+  bootstrap params, so those two stay single-sourced. Change the redeclared types together.
+- **`middle` clicks and hovers throw on mobile, deliberately.** Touch has no middle button and no hover
+  state. A silent no-op would leave a test asserting against something that never happened — the exact
+  false-confidence failure trusted input exists to end — so the helper says so instead.
+- **Long-press is Obsidian's own gesture, not Android's.** Obsidian Mobile implements it in JavaScript on a
+  `touchstart` timer, so the 600ms dwell has to clear *its* threshold. A synthetic element with no such
+  handler will not produce a `contextmenu` from a dwell, which is why long-press has to be verified against
+  a real Obsidian element rather than a probe `div`.
