@@ -316,8 +316,10 @@ export function parseForwardedPort(forwardList: string, deviceId: string, socket
  * @returns The socket name, e.g. `webview_devtools_remote_18056`.
  */
 export function parseWebViewDevtoolsSocketName(procNetUnix: string, pid: string): string {
-  const names = [...new Set([...procNetUnix.matchAll(/@(?<name>webview_devtools_remote_\w+)/g)]
-    .map((match) => match.groups?.['name'] ?? ''))].filter(Boolean);
+  const names = [
+    ...new Set([...procNetUnix.matchAll(/@(?<name>webview_devtools_remote_\w+)/g)]
+      .map((match) => match.groups?.['name'] ?? ''))
+  ].filter(Boolean);
 
   if (names.length === 0) {
     throw new Error(

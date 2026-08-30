@@ -50,7 +50,7 @@ describe('parseForwardedPort', () => {
  */
 function procNetUnix(...socketNames: string[]): string {
   const header = 'Num       RefCount Protocol Flags    Type St Inode Path\n';
-  const noise = '0000000000000000: 00000002 00000000 00010000 0001 01 12345 /dev/socket/logdw\n';
+  const noise = '0000000000000000: 00000002 00000000 00010000 0001 01 12345 /dev/socket/property_service\n';
   const rows = socketNames.flatMap((name) => [
     `0000000000000000: 00000002 00000000 00010000 0001 01 22222 @${name}\n`,
     `0000000000000000: 00000003 00000000 00000000 0001 03 33333 @${name}\n`
