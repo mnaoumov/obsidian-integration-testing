@@ -387,7 +387,7 @@ function getCachedShellExePath(shellDirectory: string): string {
  * Resolves the ordered installer asset download URLs to try for a version.
  *
  * The version's exact installer URL baked into the `metadata.json` catalog
- * (from upstream `obsidian-versions.json`) is used directly when present,
+ * (from the `obsidianmd/obsidian-releases` assets) is used directly when present,
  * avoiding any network lookup. Otherwise the release's real asset list is
  * queried so the platform-correct asset is picked regardless of the historical
  * dot-vs-hyphen naming; if that call too is unavailable it falls back to trying

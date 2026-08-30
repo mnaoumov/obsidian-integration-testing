@@ -151,6 +151,7 @@
     "lint:fix": "jiti scripts/lint-fix.ts",
     "lint:md": "jiti scripts/lint-md.ts",
     "lint:md:fix": "jiti scripts/lint-md-fix.ts",
+    "merge:runtime-versions": "jiti scripts/merge-runtime-versions.ts",
     "prepare": "jiti scripts/prepare.ts",
     "refresh:metadata": "jiti scripts/refresh-metadata.ts",
     "spellcheck": "jiti scripts/spellcheck.ts",

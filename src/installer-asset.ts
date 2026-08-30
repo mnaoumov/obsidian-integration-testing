@@ -25,7 +25,7 @@
  * 32-bit / arm64 / all-users sibling assets are deliberately rejected.
  *
  * When the version is present in the baked `metadata.json` catalog (from
- * upstream `obsidian-versions.json`), its exact installer URL is already known;
+ * the `obsidianmd/obsidian-releases` release assets), its exact installer URL is already known;
  * {@link selectInstallerDownloadUrl} picks the platform-correct one and the
  * downloader uses it directly, skipping the release-API lookup and the
  * name-templating fallback entirely.

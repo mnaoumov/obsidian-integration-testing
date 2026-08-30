@@ -36,11 +36,12 @@ import {
   parseVersionSpec,
   resolveVersionFromManifest
 } from './obsidian-version.ts';
+import { buildCatalystAsarUrl } from './release-catalog.ts';
 
 /**
  * Browser User-Agent required to fetch asar packages from
  * `releases.obsidian.md` (the endpoint is Cloudflare-gated against non-browser
- * clients). Matches the UA documented in the obsidian-versions repo.
+ * clients). The same UA the catalog refresh sends when probing the CDN.
  */
 const DOWNLOAD_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.183 Safari/537.36';
 
@@ -49,13 +50,6 @@ const DOWNLOAD_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebK
  * assets under `.../download/v<version>/obsidian-<version>.asar.gz`.
  */
 const PUBLIC_ASAR_RELEASE_BASE_URL = 'https://github.com/obsidianmd/obsidian-releases/releases/download';
-
-/**
- * Base URL for **catalyst** (early access / insider) release asars, served from
- * the Obsidian CDN as `.../release/obsidian-<version>.asar.gz`. Public versions
- * are NOT hosted here (the CDN returns an empty body for them).
- */
-const CATALYST_ASAR_RELEASE_BASE_URL = 'https://releases.obsidian.md/release';
 
 const CACHE_ROOT = join(tmpdir(), 'obsidian-integration-testing');
 const ASAR_CACHE_DIR = join(CACHE_ROOT, 'asar-cache');
@@ -219,8 +213,8 @@ async function downloadAndDecompressAsar(url: string): Promise<Buffer> {
 /**
  * Returns the candidate `.asar.gz` download URLs for a concrete version.
  *
- * The version's exact URL baked into the `metadata.json` catalog (from upstream
- * `obsidian-versions.json`) is tried first when present; the hand-rolled public
+ * The version's exact URL baked into the `metadata.json` catalog (from the
+ * `obsidianmd/obsidian-releases` assets) is tried first when present; the hand-rolled public
  * (GitHub) and catalyst (CDN) guesses follow as a fallback for versions absent
  * from the catalog (or a stale catalog).
  *
@@ -231,7 +225,7 @@ function getAsarDownloadUrls(version: string): string[] {
   const asarGzFileName = `${getVersionAsarFileName(version)}.gz`;
   const fallbackUrls = [
     `${PUBLIC_ASAR_RELEASE_BASE_URL}/v${version}/${asarGzFileName}`,
-    `${CATALYST_ASAR_RELEASE_BASE_URL}/${asarGzFileName}`
+    buildCatalystAsarUrl(version)
   ];
 
   const bakedUrl = getVersionMetadata(version)?.downloads?.asar;
