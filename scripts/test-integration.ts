@@ -12,5 +12,7 @@ await execFromRoot([
   '--project',
   'integration-tests:bare-attach',
   '--project',
-  'integration-tests:enable-community-plugins'
+  'integration-tests:enable-community-plugins',
+  '--project',
+  'integration-tests:failed-setup'
 ]);

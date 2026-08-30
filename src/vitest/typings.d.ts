@@ -11,6 +11,7 @@
  * and `inject('obsidianTransport')` / `inject('temporaryVaultPath')`.
  */
 
+import type { IntegrationSetupFailedErrorConstructorParams } from '../integration-setup-failed-error.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 // eslint-disable-next-line import-x/no-unassigned-import -- Forces module resolution so declare module augmentations merge correctly.
@@ -27,11 +28,12 @@ declare module 'vitest' {
     obsidianTransport?: ObsidianTransportOptions;
 
     /**
-     * Serialized error message from global setup failure.
-     * Present only when setup failed — tests should check this
-     * before attempting to use the temp vault or transport.
+     * The global setup's failure, serialized for the workers. Present only when
+     * setup failed; the per-worker setup file registers it as the setup-error
+     * resolver, and `getOrCreateTransport` throws it rather than let a worker
+     * build a transport the project never asked for.
      */
-    setupError?: string;
+    setupError?: IntegrationSetupFailedErrorConstructorParams;
 
     /**
      * Path to the temporary vault created by the global setup.

@@ -30,6 +30,14 @@ const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.
 // Asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
 const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
 
+// The failed-setup regression suite (T726) runs in its own project because its global setup must FAIL:
+// It attaches to a CDP port nothing can serve, so every test in it runs in the state a worker is left in
+// After a real setup failure. Port 1 is refused outright by `fetch`, so the failure is instant and never
+// Touches the network -- and an `obsidian-cdp` transport takes no setup lock, unlike an Appium one, so
+// This project stays hermetic and safe inside the default aggregate.
+const FAILED_SETUP_TEST_FILE = 'src/failed-setup-fail-fast.integration.test.ts';
+const UNREACHABLE_CDP_PORT = 1;
+
 // The mobile trusted-input suite runs in its own project because it is the only one that needs a real
 // Android emulator through Appium (see L39). Keeping it out of the default `integration-tests` aggregate is
 // Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator.
@@ -114,6 +122,7 @@ export const config = defineConfig({
             OWNED_ATTACH_TEST_FILE,
             BARE_ATTACH_TEST_FILE,
             ENABLE_COMMUNITY_PLUGINS_TEST_FILE,
+            FAILED_SETUP_TEST_FILE,
             ANDROID_TRUSTED_INPUT_TEST_FILE,
             DESKTOP_TRUSTED_INPUT_TEST_FILE
           ],
@@ -148,6 +157,28 @@ export const config = defineConfig({
           include: [BARE_ATTACH_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:bare-attach',
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
+          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+        }
+      },
+      {
+        test: {
+          environment: 'node',
+          // The whole point of this project: a global setup that FAILS. It points the standard
+          // Plugin-less setup at a CDP port nothing serves, so `registerVault` throws and the adapter
+          // Stores the failure instead of publishing a transport.
+          environmentOptions: {
+            obsidianTransport: {
+              port: UNREACHABLE_CDP_PORT,
+              type: 'obsidian-cdp'
+            }
+          },
+          exclude: SHARED_EXCLUDE,
+          fileParallelism: false,
+          globalSetup: ['./src/vitest/global-setup-no-plugin.ts'],
+          include: [FAILED_SETUP_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:failed-setup',
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
           testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }
