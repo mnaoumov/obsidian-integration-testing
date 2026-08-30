@@ -27,6 +27,10 @@ export type {
   ConnectToCdpOptions
 } from './connect-to-cdp.ts';
 export { connectToCdp } from './connect-to-cdp.ts';
+export type {
+  ContextArguments,
+  ContextOf
+} from './context-id.ts';
 export { ContextId } from './context-id.ts';
 export type {
   TransportOptionsResolver,
@@ -53,8 +57,10 @@ export { resolveElectronCompatibility } from './electron-compatibility.ts';
 export type {
   ClickElementParams,
   ClickMouseParams,
+  CommonArguments,
   CreateNoteParams,
   EvalInObsidianParams,
+  GenericObject,
   HoverElementParams,
   Lib,
   MouseButton,
@@ -128,7 +134,8 @@ export { AppiumTransport } from './transport-appium.ts';
 export type {
   DesktopCdpTransportConfig,
   OwnedInstanceAsar,
-  OwnedInstanceConfig
+  OwnedInstanceConfig,
+  OwnedInstanceEndpoint
 } from './transport-desktop-cdp.ts';
 export { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 export { createTransportFromOptions } from './transport-factory.ts';
@@ -139,6 +146,7 @@ export type {
 } from './transport-options.ts';
 export { checkIsMobileTransport } from './transport-options.ts';
 export type {
+  ConsoleCaptureHandle,
   ObsidianTransport,
   TransportEvalOptions
 } from './transport.ts';
