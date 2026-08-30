@@ -57,6 +57,7 @@ import {
   willThrowOnSilentAsarFallback,
   willWarnOnCompatibilityIssues
 } from './compatibility-options.ts';
+import { getSetupError } from './context-provider.ts';
 import {
   checkDeviceIdle,
   resolveDeviceIdleTimeoutInMilliseconds
@@ -65,6 +66,7 @@ import { buildEmulatorArguments } from './emulator-arguments.ts';
 import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { resolveInstallerCompatibility } from './installer-compatibility.ts';
+import { IntegrationSetupFailedError } from './integration-setup-failed-error.ts';
 import { killProcessTree } from './kill-process-tree.ts';
 import {
   HARNESS_TEMP_DIR_NAME,
@@ -1290,10 +1292,24 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
  * The transport is cached per worker process so WebSocket/Appium sessions
  * are reused across calls within the same test worker.
  *
- * @param options - Transport configuration. Defaults to CLI transport.
+ * This is the single entry point every worker-side caller uses for the **ambient**
+ * transport, so it is also where a failed global setup is turned into a failing test.
+ * A failed setup publishes no transport options, and `undefined` options mean the owned
+ * **desktop** CDP default — so without this guard an Android project's suite would run
+ * on desktop and then die on an unrelated CDP error, hiding the real cause (**L9**).
+ * The setup path itself is unaffected: `coreSetup` builds its transport through
+ * {@link createTransportFromOptions} with explicit options.
+ *
+ * @param options - Transport configuration. Defaults to an owned desktop CDP transport.
  * @returns The cached or newly created transport.
+ * @throws {IntegrationSetupFailedError} When this project's global setup failed.
  */
 export async function getOrCreateTransport(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
+  const setupError = getSetupError();
+  if (setupError) {
+    throw new IntegrationSetupFailedError(setupError);
+  }
+
   if (cachedTransport) {
     return cachedTransport;
   }

@@ -7,13 +7,32 @@ import {
 import type { ObsidianTransportOptions } from './transport-options.ts';
 
 import {
+  getSetupError,
   getTransportOptions,
   getVaultPath,
+  setSetupErrorResolver,
   setTransportOptionsResolver,
   setVaultPathResolver
 } from './context-provider.ts';
 
 describe('context-provider', () => {
+  describe('getSetupError', () => {
+    it('should return undefined when no resolver is registered', () => {
+      setSetupErrorResolver(() => undefined);
+      expect(getSetupError()).toBeUndefined();
+    });
+
+    it('should return the value from the registered resolver', () => {
+      const setupError = {
+        errorName: 'WebDriverError',
+        message: 'WebDriverError: Could not find a connected Android device in 20000ms',
+        transportLabel: 'obsidian-android-appium'
+      };
+      setSetupErrorResolver(() => setupError);
+      expect(getSetupError()).toBe(setupError);
+    });
+  });
+
   describe('getTransportOptions', () => {
     it('should return undefined when no resolver is registered', () => {
       setTransportOptionsResolver(() => undefined);

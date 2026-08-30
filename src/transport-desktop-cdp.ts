@@ -919,8 +919,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * Fetches the list of page-type targets from the CDP `/json` endpoint.
    *
    * @returns The list of page targets.
+   * @throws {Error} When no CDP endpoint is configured yet.
    */
   private async getPageTargets(): Promise<CdpTarget[]> {
+    if (!this.cdpUrl) {
+      // An owned instance picks its port at launch, so before `registerVault` there is no endpoint and
+      // `this.cdpUrl` is still empty -- which used to make this a `fetch('/json')` and fail with
+      // `Failed to parse URL from /json`, an error naming neither the transport nor what went wrong.
+      // A transport in this state is always a symptom of something upstream (a failed global setup, a
+      // Worker with no registered resolvers -- L9), so say so rather than report a malformed URL.
+      throw new Error(
+        'No CDP endpoint configured: the owned Obsidian instance has not been launched yet, and no `port` '
+          + 'was given to attach to a running one. A test worker in this state usually means its global setup '
+          + 'failed, or the project is missing the per-worker setup file in `setupFiles`.'
+      );
+    }
+
     const response = await fetch(`${this.cdpUrl}/json`);
     const targets = await response.json() as CdpTarget[];
     return targets.filter((t) => t.type === 'page');

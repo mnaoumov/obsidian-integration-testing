@@ -33,10 +33,12 @@ export type {
 } from './context-id.ts';
 export { ContextId } from './context-id.ts';
 export type {
+  SetupErrorResolver,
   TransportOptionsResolver,
   VaultPathResolver
 } from './context-provider.ts';
 export {
+  setSetupErrorResolver,
   setTransportOptionsResolver,
   setVaultPathResolver
 } from './context-provider.ts';
@@ -89,6 +91,8 @@ export type {
   ResolveInstallerCompatibilityParams
 } from './installer-compatibility.ts';
 export { resolveInstallerCompatibility } from './installer-compatibility.ts';
+export type { IntegrationSetupFailedErrorConstructorParams } from './integration-setup-failed-error.ts';
+export { IntegrationSetupFailedError } from './integration-setup-failed-error.ts';
 export type {
   ComputeLabelBandParams,
   LabelBandGeometry,

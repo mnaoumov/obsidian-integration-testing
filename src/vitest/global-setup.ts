@@ -18,6 +18,7 @@ import type { PopulateFilesParams } from '../temporary-vault.ts';
 import type { ObsidianTransportOptions } from '../transport-options.ts';
 
 import {
+  setSetupErrorResolver,
   setTransportOptionsResolver,
   setVaultPathResolver
 } from '../context-provider.ts';
@@ -26,9 +27,11 @@ import {
   coreSetup,
   coreTeardown
 } from '../global-setup-core.ts';
+import { IntegrationSetupFailedError } from '../integration-setup-failed-error.ts';
 import { log } from '../log.ts';
 import { TemporaryVault } from '../temporary-vault.ts';
 
+setSetupErrorResolver(() => inject('setupError'));
 setTransportOptionsResolver(() => inject('obsidianTransport'));
 setVaultPathResolver(() => inject('temporaryVaultPath'));
 
@@ -98,11 +101,18 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
         transportOptions
       });
     } catch (error: unknown) {
-      // Catch setup errors so that other projects' tests can still run.
-      // Individual tests in this project will fail with the stored error
-      // When they try to inject the temp vault path.
-      log(`[integration-setup:${label}] Setup failed (tests for this project will be skipped): ${errorToString(error)}`);
-      project.provide('setupError', errorToString(error));
+      // Catch setup errors so that other projects' tests can still run. Every test in THIS project
+      // Then fails with the stored error: `getOrCreateTransport` reads it through the setup-error
+      // Resolver and throws before it can build a transport. Without that a worker gets no options
+      // At all and silently rebuilds the owned DESKTOP default, whatever platform this project asked
+      // For -- which is how an Android run came to report nine `Failed to parse URL from /json`
+      // Failures while the real cause sat once, far above, in this log (see AGENTS.md L9).
+      log(`[integration-setup:${label}] Setup failed (every test in this project will fail with this error): ${errorToString(error)}`);
+      project.provide('setupError', {
+        errorName: error instanceof Error ? error.name : 'Error',
+        message: errorToString(error),
+        transportLabel: label
+      });
       return;
     }
 
@@ -122,9 +132,9 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
  */
 export function getTemporaryVault(): TemporaryVault {
   const temporaryVaultPath = inject('temporaryVaultPath');
-  const setupErrorMessage = inject('setupError');
-  if (setupErrorMessage) {
-    throw new Error(`Integration setup failed — cannot get temp vault: ${setupErrorMessage}`);
+  const setupError = inject('setupError');
+  if (setupError) {
+    throw new IntegrationSetupFailedError(setupError);
   }
   return new TemporaryVault(temporaryVaultPath);
 }

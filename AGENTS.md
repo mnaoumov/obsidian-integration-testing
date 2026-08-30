@@ -37,7 +37,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 ## L3. Testing
 
 - Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:docs-generator` — the second covers the vendored docs generator, see **L35**).
-- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs four projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); and `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded).
+- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs five projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded); and `integration-tests:failed-setup` (the T726 regression suite — its global setup is wired to FAIL by attaching to a CDP port nothing serves, and the worker asserts it fails with that cause rather than falling back to a transport nobody asked for; hermetic, launches nothing, ~3 s).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics.
 - Cross-platform CI validation (manual `workflow_dispatch`, since each run downloads a multi-hundred-MB asset): `.github/workflows/validate-installer-path.yml` validates installer download+extract on ubuntu/macos/windows (opt-in via `OBSIDIAN_TEST_INSTALLER_DOWNLOAD=1`); `.github/workflows/validate-installer-boot.yml` validates the owned-instance **boot** from a pinned installer (`OBSIDIAN_TEST_INSTALLER_BOOT=1`, launches Electron under `xvfb` + `--no-sandbox` on Linux) and, in a Linux-only step, the asar-swap version-pin regression (`OBSIDIAN_TEST_ASAR_SWAP=1` — symlinks a newer cached shell under a versionless dir on `PATH` so shell-version detection returns `undefined`, then asserts an older pinned `obsidianVersion` actually runs). Both pass `GITHUB_TOKEN` so the release-asset API isn't rate-limited to the anonymous quota (which 403s on shared runner IPs → templated-name fallback). A third workflow, `.github/workflows/collect-runtime-versions.yml`, runs the same boot path on a **schedule** rather than on demand — it is the automation that keeps `metadata.json`'s `runtimeVersions` current (see **L20**), and unlike the two validators it commits its result.
 
@@ -156,6 +156,52 @@ auto-chosen port — attach to a fixed `port` via the transport options in `glob
 default must also add `obsidian-integration-testing/vitest-setup` to its integration project's
 `setupFiles` (best done once in the shared `obsidian-dev-utils` vitest config so the fleet inherits
 it).
+
+### A FAILED global setup rides the same channel — and used to wear the same mask (T726)
+
+`fetch('/json')` has a second cause, and it is not a misconfiguration: the resolvers are registered
+correctly, but the global setup **failed**, so it published nothing for them to read. The adapter
+caught the failure (deliberately — other projects must still run), logged it, and stored it in
+`provide('setupError')` — which **only `getTemporaryVault()` read**. A test going straight to
+`evalInObsidian` never touched it, so `getTransportOptions()` returned `undefined`, and `undefined`
+means the owned **desktop** CDP default. Observed 2026-08-30 in `obsidian-link-picker`: an Appium setup
+failure (the device was not found) produced nine `Failed to parse URL from /json` failures in an
+`integration-tests:android` project, each one a **desktop** transport, while the real cause sat once,
+far above, in the setup log. The `[1/9]` headline named neither Appium, nor the device, nor the setup.
+
+The failure now travels the same worker channel as everything else:
+
+1. **Publish it.** On failure the Vitest adapter provides `setupError` as
+   `{ errorName, message, transportLabel }` — the transport the project was configured for, plus the
+   original error's `name` and message (the error object itself does not survive the trip to a worker).
+2. **Register the resolver.** `setSetupErrorResolver` sits beside the other two in `vitest/setup.ts`
+   (the per-worker file — the registration that matters) and `vitest/global-setup.ts`.
+3. **Throw before building anything.** `getOrCreateTransport` — the single ambient-transport entry all
+   four worker-side callers share — throws `IntegrationSetupFailedError` ahead of the cache check, so no
+   transport of the wrong platform is ever constructed. `coreSetup` is unaffected: it builds its own
+   transport through `createTransportFromOptions` with explicit options and passes an explicit
+   `transportOverride` into every `TemporaryVault` call.
+4. **Refuse the nonsense fetch.** `getPageTargets` now throws "No CDP endpoint configured …" when
+   `cdpUrl` is still empty, instead of `fetch`ing a bare path. Not a fix for either cause — a guard so
+   the mask can never be the reported error again.
+
+Consequences worth knowing:
+
+- **Tests FAIL, they do not skip.** A skip turns a dead emulator into a green run. The failure carries
+  the original message, so all nine reports name the real cause.
+- **This changes the `DesktopOnlyPluginSkipError` path too** — that error's own docstring calls a failing
+  global setup "the test runner's only way to skip a project's tests", but it never skipped: it fell
+  through to desktop and re-ran the mobile suite there. It now fails, carrying its own already-explicit
+  message. `errorName` keeps the two distinguishable in a worker.
+- Jest needs no counterpart: `jest/global-setup.ts` does not catch, and a throwing Jest `globalSetup`
+  aborts the run before a worker starts.
+
+**Regression suite:** `integration-tests:failed-setup` (`src/failed-setup-fail-fast.integration.test.ts`).
+Its global setup is wired to fail — the standard plugin-less setup attaching to CDP port `1`, which `fetch`
+refuses outright, so the failure is instant, offline, and takes no setup lock (only Appium transports do,
+and taking the shared `android` lock in the default aggregate would serialize against every other repo's
+Android run). Against the pre-fix code all three of its tests fail with `Failed to parse URL from /json` —
+which is the point: it reproduces the reported symptom, not just the fix.
 
 ## L10. `connectToCdp` — standalone CDP debugging helper
 

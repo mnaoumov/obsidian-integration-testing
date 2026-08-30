@@ -170,6 +170,22 @@ The Android setup fails fast, rather than spinning out a timeout, when the toolc
   nvm-managed Node). Add it to `PATH` (see `npm config get prefix`), or set
   `shouldAutoInstallAppiumDependencies: false` and install Appium yourself.
 
+### "Integration setup for transport ... failed, so its tests cannot run"
+
+Every test in the project reports this when the project's global setup failed — the device was not
+found, Appium never came up, the vault could not be pushed. It is not the defect itself: the cause is
+the `Original error:` it quotes, and the setup logged it once, in full, above the first test.
+
+Only that project is affected; other projects in the same run still execute. Nothing in the failed
+project runs against Obsidian, which is the point — with no transport published, a worker would
+otherwise build the default **desktop** instance and an Android suite would quietly prove itself on
+desktop, then fail on an unrelated CDP error naming neither the device nor the setup.
+
+A related message, `No CDP endpoint configured: the owned Obsidian instance has not been launched
+yet`, means a worker reached the desktop transport with nothing prepared for it — either that same
+failed setup, or an integration project missing `obsidian-integration-testing/vitest-setup` from its
+`setupFiles`.
+
 ### "Obsidian layout did not become ready"
 
 Registering a vault reloads the page, triggering a full Obsidian re-init — reopen the vault and reload
