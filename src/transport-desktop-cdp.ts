@@ -212,6 +212,21 @@ export interface OwnedInstanceConfig {
   readonly userDataDirectory: string;
 }
 
+/**
+ * The CDP endpoint of a launched, harness-owned instance.
+ */
+export interface OwnedInstanceEndpoint {
+  /**
+  CDP host (e.g. `'localhost'`).
+   */
+  readonly host: string;
+
+  /**
+  The free CDP port the owned instance was launched on.
+   */
+  readonly port: number;
+}
+
 interface CdpExceptionDetails {
   exception?: CdpExceptionObject;
   text: string;
@@ -246,21 +261,6 @@ interface CdpTarget {
 interface CdpValue {
   type: string;
   value?: unknown;
-}
-
-/**
- * The CDP endpoint of a launched, harness-owned instance.
- */
-interface OwnedInstanceEndpoint {
-  /**
-  CDP host (e.g. `'localhost'`).
-   */
-  readonly host: string;
-
-  /**
-  The free CDP port the owned instance was launched on.
-   */
-  readonly port: number;
 }
 
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 30_000;
