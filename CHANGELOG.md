@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 11.0.0
+
+- feat(metadata)!: per-target changelogUrl object and baked Android apk URLs
+- docs(agents): fix the barrel contradiction and guard it with a test
+- docs(user-input): document the trusted clickMouse and clickElement helpers
+- feat(lib): open a settings tab that actually renders
+- chore: update libs
+
 ## 10.4.0
 
 - feat(lib): add trusted clickMouse and clickElement to the lib bag
