@@ -1995,7 +1995,7 @@
     "ecmaScriptVersion": "ES2021"
   },
   "0.12.16": {
-    "channel": "public",
+    "channel": "catalyst",
     "changelogUrl": {
       "desktopCatalyst": "https://obsidian.md/changelog/2021-09-14-desktop-v0.12.16/"
     }
@@ -3734,7 +3734,7 @@
     }
   },
   "1.3.7": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2023-07-31-desktop-v1.3.7/",
       "desktopCatalyst": "https://obsidian.md/changelog/2023-06-26-desktop-v1.3.7/"
@@ -3839,7 +3839,7 @@
     }
   },
   "1.4.5": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2023-08-31-desktop-v1.4.5/",
       "desktopCatalyst": "https://obsidian.md/changelog/2023-08-30-desktop-v1.4.5/",
@@ -3898,7 +3898,10 @@
       "mobileCatalyst": "https://obsidian.md/changelog/2023-08-30-mobile-v1.4.8/"
     },
     "minRecommendedElectronVersion": "21.0.0",
-    "minRunnableInstallerVersion": "0.14.5"
+    "minRunnableInstallerVersion": "0.14.5",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.4.8.asar.gz"
+    }
   },
   "1.4.9": {
     "channel": "catalyst",
@@ -4065,7 +4068,7 @@
     "ecmaScriptVersion": "ES2023"
   },
   "1.4.14": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2023-09-26-desktop-v1.4.14/",
       "desktopCatalyst": "https://obsidian.md/changelog/2023-09-22-desktop-v1.4.14/",
@@ -4281,7 +4284,7 @@
     }
   },
   "1.5.8": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2024-02-22-desktop-v1.5.8/",
       "desktopCatalyst": "https://obsidian.md/changelog/2024-02-21-desktop-v1.5.8/",
@@ -4346,7 +4349,7 @@
     }
   },
   "1.5.11": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2024-03-19-desktop-v1.5.11/",
       "desktopCatalyst": "https://obsidian.md/changelog/2024-03-13-desktop-v1.5.11/",
@@ -4453,7 +4456,7 @@
     }
   },
   "1.6.2": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2024-06-07-desktop-v1.6.2/",
       "desktopCatalyst": "https://obsidian.md/changelog/2024-06-04-desktop-v1.6.2/",
@@ -4608,7 +4611,7 @@
     }
   },
   "1.6.7": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2024-07-18-desktop-v1.6.7/",
       "desktopCatalyst": "https://obsidian.md/changelog/2024-07-11-desktop-v1.6.7/",
@@ -4907,7 +4910,7 @@
     }
   },
   "1.8.3": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2025-01-30-desktop-v1.8.3/",
       "desktopCatalyst": "https://obsidian.md/changelog/2025-01-28-desktop-v1.8.3/",
@@ -6039,7 +6042,7 @@
     }
   },
   "1.13.4": {
-    "channel": "catalyst",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2026-07-30-desktop-v1.13.4/",
       "desktopCatalyst": "https://obsidian.md/changelog/2026-07-27-desktop-v1.13.4/",
@@ -6052,7 +6055,41 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/obsidian-1.13.4.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "node": "24.18.0",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.9",
+      "ares": "1.34.6",
+      "brotli": "1.2.0",
+      "cldr": "48.0",
+      "icu": "78.2",
+      "llhttp": "9.4.2",
+      "merve": "1.2.2",
+      "modules": "148",
+      "napi": "10",
+      "nbytes": "0.1.4",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.69.0",
+      "nghttp3": "",
+      "ngtcp2": "",
+      "openssl": "0.0.0",
+      "simdjson": "4.6.4",
+      "simdutf": "7.7.0",
+      "sqlite": "3.53.1",
+      "tz": "2025c",
+      "undici": "7.28.0",
+      "unicode": "17.0",
+      "uv": "1.52.1",
+      "uvwasi": "0.0.23",
+      "v8": "15.0.245.15-electron.0",
+      "zlib": "1.3.2.1-motley",
+      "zstd": "1.6.0",
+      "electron": "43.1.1",
+      "chrome": "150.0.7871.114"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.13.5": {
     "channel": "catalyst",
@@ -6065,7 +6102,7 @@
     }
   },
   "1.13.6": {
-    "channel": "catalyst",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2026-08-10-desktop-v1.13.6/",
       "desktopCatalyst": "https://obsidian.md/changelog/2026-08-07-desktop-v1.13.6/",
@@ -6078,10 +6115,44 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/obsidian-1.13.6.tar.gz"
-    }
+    },
+    "runtimeVersions": {
+      "node": "24.18.1",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.9",
+      "ares": "1.34.6",
+      "brotli": "1.2.0",
+      "cldr": "48.0",
+      "icu": "78.2",
+      "llhttp": "9.4.3",
+      "merve": "1.2.2",
+      "modules": "148",
+      "napi": "10",
+      "nbytes": "0.1.4",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.69.0",
+      "nghttp3": "",
+      "ngtcp2": "",
+      "openssl": "0.0.0",
+      "simdjson": "4.6.4",
+      "simdutf": "7.7.0",
+      "sqlite": "3.53.1",
+      "tz": "2025c",
+      "undici": "7.29.0",
+      "unicode": "17.0",
+      "uv": "1.52.1",
+      "uvwasi": "0.0.23",
+      "v8": "15.0.245.23-electron.0",
+      "zlib": "1.3.2.1-motley",
+      "zstd": "1.6.0",
+      "electron": "43.3.0",
+      "chrome": "150.0.7871.212"
+    },
+    "ecmaScriptVersion": "ES2024"
   },
   "1.13.7": {
-    "channel": "catalyst",
+    "channel": "public+catalyst",
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2026-08-12-desktop-v1.13.7/",
       "desktopCatalyst": "https://obsidian.md/changelog/2026-08-11-desktop-v1.13.7/",
@@ -6094,6 +6165,41 @@
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.exe",
       "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian-1.13.7.tar.gz"
-    }
+    },
+    "minRecommendedInstallerVersion": "1.1.9",
+    "runtimeVersions": {
+      "node": "24.18.1",
+      "acorn": "8.16.0",
+      "ada": "3.4.4",
+      "amaro": "1.1.9",
+      "ares": "1.34.6",
+      "brotli": "1.2.0",
+      "cldr": "48.0",
+      "icu": "78.2",
+      "llhttp": "9.4.3",
+      "merve": "1.2.2",
+      "modules": "148",
+      "napi": "10",
+      "nbytes": "0.1.4",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.69.0",
+      "nghttp3": "",
+      "ngtcp2": "",
+      "openssl": "0.0.0",
+      "simdjson": "4.6.4",
+      "simdutf": "7.7.0",
+      "sqlite": "3.53.1",
+      "tz": "2025c",
+      "undici": "7.29.0",
+      "unicode": "17.0",
+      "uv": "1.52.1",
+      "uvwasi": "0.0.23",
+      "v8": "15.0.245.23-electron.0",
+      "zlib": "1.3.2.1-motley",
+      "zstd": "1.6.0",
+      "electron": "43.3.0",
+      "chrome": "150.0.7871.212"
+    },
+    "ecmaScriptVersion": "ES2024"
   }
 }

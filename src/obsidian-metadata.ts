@@ -21,9 +21,19 @@
  * The concrete JS runtime versions an installer's Electron shell ships — the
  * **entire** `process.versions` object, read empirically by booting that
  * installer over CDP (see `scripts/collect-runtime-versions.ts`). Absent for
- * versions not yet collected (or that could not be booted). Electron bundles the
- * same runtime on every OS for a given Electron version, so these are
- * platform-invariant.
+ * versions not yet collected (or that could not be booted).
+ *
+ * **These are the WINDOWS (`.exe`) values, and that matters.** A given Electron
+ * version does bundle the same Node / V8 / Chromium everywhere — but the Electron
+ * version itself is a property of the *installer*, not of the release, and two
+ * installers of the same Obsidian version can differ: `1.12.4` shipped Electron
+ * `39.6.0` in its `.exe` and `39.7.0` in every other installer, and `1.8.10`
+ * shipped `34.2.0` vs `34.5.2`. This field carries one flat value, measured on
+ * the `.exe` — the installer that, with the `.dmg`, is published for all 106
+ * installer-bearing releases. So a consumer pinning a macOS or Linux installer
+ * should treat `electron` as accurate to the patch only for the 104 releases
+ * where the platforms agree. The collection workflow boots all three platforms
+ * and reports any new divergence.
  *
  * The index signature carries every key `process.versions` exposes for that
  * Electron build — beyond the four well-known ones below, that typically includes
@@ -100,8 +110,9 @@ export interface ObsidianVersionChangelogUrls {
 
 /**
  * The pre-resolved asset download URLs for a version, baked into `metadata.json`
- * from the upstream `obsidian-versions.json` catalog (see the `metadata.json`
- * section in `CLAUDE.md`).
+ * from the `obsidianmd/obsidian-releases` release assets — plus, for catalyst
+ * builds, the `releases.obsidian.md` CDN, which publishes no listing and so is
+ * probed (see the `metadata.json` section in `CLAUDE.md`).
  *
  * These are the exact URLs the version's assets are published at, so the
  * integration-time download paths can skip the GitHub release-API lookup and the
@@ -174,7 +185,7 @@ export interface ObsidianVersionMetadata {
 
   /**
    * The pre-resolved asset download URLs for the version, baked from the
-   * upstream `obsidian-versions.json` catalog. Absent for versions not present
+   * `obsidianmd/obsidian-releases` release assets. Absent for versions not present
    * in the catalog (the caller then falls back to hand-rolled resolution).
    */
   readonly downloads?: ObsidianVersionDownloads;

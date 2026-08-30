@@ -39,7 +39,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 - Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:docs-generator` — the second covers the vendored docs generator, see **L35**).
 - Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs four projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); and `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics.
-- Cross-platform CI validation (manual `workflow_dispatch`, since each run downloads a multi-hundred-MB asset): `.github/workflows/validate-installer-path.yml` validates installer download+extract on ubuntu/macos/windows (opt-in via `OBSIDIAN_TEST_INSTALLER_DOWNLOAD=1`); `.github/workflows/validate-installer-boot.yml` validates the owned-instance **boot** from a pinned installer (`OBSIDIAN_TEST_INSTALLER_BOOT=1`, launches Electron under `xvfb` + `--no-sandbox` on Linux) and, in a Linux-only step, the asar-swap version-pin regression (`OBSIDIAN_TEST_ASAR_SWAP=1` — symlinks a newer cached shell under a versionless dir on `PATH` so shell-version detection returns `undefined`, then asserts an older pinned `obsidianVersion` actually runs). Both pass `GITHUB_TOKEN` so the release-asset API isn't rate-limited to the anonymous quota (which 403s on shared runner IPs → templated-name fallback).
+- Cross-platform CI validation (manual `workflow_dispatch`, since each run downloads a multi-hundred-MB asset): `.github/workflows/validate-installer-path.yml` validates installer download+extract on ubuntu/macos/windows (opt-in via `OBSIDIAN_TEST_INSTALLER_DOWNLOAD=1`); `.github/workflows/validate-installer-boot.yml` validates the owned-instance **boot** from a pinned installer (`OBSIDIAN_TEST_INSTALLER_BOOT=1`, launches Electron under `xvfb` + `--no-sandbox` on Linux) and, in a Linux-only step, the asar-swap version-pin regression (`OBSIDIAN_TEST_ASAR_SWAP=1` — symlinks a newer cached shell under a versionless dir on `PATH` so shell-version detection returns `undefined`, then asserts an older pinned `obsidianVersion` actually runs). Both pass `GITHUB_TOKEN` so the release-asset API isn't rate-limited to the anonymous quota (which 403s on shared runner IPs → templated-name fallback). A third workflow, `.github/workflows/collect-runtime-versions.yml`, runs the same boot path on a **schedule** rather than on demand — it is the automation that keeps `metadata.json`'s `runtimeVersions` current (see **L20**), and unlike the two validators it commits its result.
 
 ## L4. Peer dependencies
 
@@ -638,7 +638,7 @@ so read an old `mobile` value as "the mobile changelog that happens to carry thi
 a hand-entered `desktop` URL that actually points at `v1.4.5` / `v1.5.3`; three (`1.1.8-E21`, `1.2.4`,
 `1.6.3-e30`) carry no `changelogUrl` at all.
 
-**`downloads` — baked asset URLs (superset from upstream `obsidian-versions.json`).** Each version carries
+**`downloads` — baked asset URLs, resolved from Obsidian's own release assets.** Each version carries
 an optional `downloads` object with the *exact* published URLs for the assets this harness downloads:
 `asar` (the `obsidian-<ver>.asar.gz`), the x64 desktop installers `exe` (Windows) / `dmg` (macOS
 universal) / `tar` (Linux), and the Android `apk`. `asar` is present for every catalogued version; the
@@ -661,14 +661,50 @@ installer download paths (`obsidian-version-switch.ts` `getAsarDownloadUrls`, `o
 `resolveInstallerAssetUrls`) try the baked URL **first**, so the common path needs no GitHub release-API
 call and no dot-vs-hyphen asset-name guessing — the hand-rolled URL guesses (`installer-asset.ts`) remain
 the fallback for versions absent from the catalog. `src/installer-asset.ts` `selectInstallerDownloadUrl`
-picks the platform-correct URL (pure, unit-tested). The catalog is refreshed by
-`scripts/refresh-metadata.ts` (`npm run refresh:metadata`): it downloads **both** upstream sources — the
-`obsidian-versions.json` catalog (`jesse-r-s-hines/wdio-obsidian-service`) and `obsidian.md/changelog.xml`
-— then writes the table back byte-stably (rerun ⇒ no diff). Commit the result. The download merge is
-**additive**: it never overwrites our own empirically-measured `channel`/`min*` fields. `changelogUrl` is
-the one field the script **owns** — the feed is the authoritative publisher of every changelog page, so
-each version the feed knows has its whole `changelogUrl` object rewritten from it (versions the feed has
-no page for keep whatever they carry). The byte-stable read/write
+picks the platform-correct URL (pure, unit-tested).
+
+**The catalog depends on NO third-party source — it reads Obsidian's own endpoints.** We publish
+`metadata.json` as a public runtime feed, so a stalled upstream must not be able to freeze it; it
+previously tracked `jesse-r-s-hines/wdio-obsidian-service`'s `obsidian-versions.json`, and that
+dependency was removed by T717. `scripts/refresh-metadata.ts` (`npm run refresh:metadata`, daily
+via `.github/workflows/refresh-metadata.yml`) reads three sources, each authoritative for one part of an
+entry, then writes the table back byte-stably (rerun ⇒ no diff — verified). Commit the result.
+
+- **`obsidianmd/obsidian-releases` GitHub Releases API → `downloads`.** Two paginated requests cover all
+  172 releases, assets inline. The release's *real* asset list is matched by `src/release-catalog.ts`
+  `selectReleaseDownloads`, which reuses `selectInstallerAssetName` so the dot-vs-hyphen era needs no
+  guessing and the 32-bit / arm64 / AppImage / deb / snap siblings are left behind. Verified to reproduce
+  all 168 previously-catalogued GitHub URLs byte-for-byte. Two tags — `v1.1.8-E21` and `v1.6.3-e30` —
+  publish assets carrying the *base* version (`Obsidian.1.1.8.exe`), so they deliberately match nothing.
+- **`obsidian.md/changelog.xml` → `changelogUrl` and `channel`.** The feed is the authoritative publisher
+  of every changelog page, so each version it knows has its whole `changelogUrl` object rewritten from it.
+- **`desktop-releases.json` → `minRecommendedInstallerVersion`,** captured for the current public and
+  catalyst releases. **Additive only** — the manifest reports only the *latest* release's floor, so this
+  captures each new one as it ships and never overwrites a historical value measured here.
+
+**Catalyst asars are probed, and a `200` is not enough.** They are served from `releases.obsidian.md`,
+which publishes no listing, so a feed-known version with no GitHub release gets its URL constructed
+(`buildCatalystAsarUrl`) and probed. For a version it does not host the CDN answers **`200` with
+`content-length: 0`** — measured 2026-08-30 on `0.0.3` / `0.1.0` / `0.3.0` — so the probe requires a
+non-empty body, exactly as `downloadAndDecompressAsar` already rejects an "empty response body". A
+status-only check invents download URLs for versions that have none, and the CDN's intermittent `502`
+(seen on `1.2`) made two consecutive runs disagree. Only versions with no `downloads` are probed, so a
+steady-state run makes no requests.
+
+**`channel` is derived from PUBLICATION, not from the feed's title marker.** The feed tags each entry
+`(Public)` or `(Early access)`, but through the pre-1.0 era it tagged *everything* early-access — the whole
+app was — so 61 versions that shipped as ordinary GitHub releases carry only a catalyst page. Trusting the
+marker relabels a large slice of public history as catalyst. A GitHub release is unambiguous the other way
+round: catalyst builds are served only from the CDN, never as release assets. So `resolveReleaseChannel`
+reads a GitHub release as public, and records `public+catalyst` only when the feed carries **both** desktop
+pages — the shape all ten pre-existing `public+catalyst` entries have. Against the 325 recorded values this
+rule reproduces every one except **12 genuine drifts** it corrects: eight `public` and three `catalyst`
+entries that carry both pages became `public+catalyst` (incl. `1.13.4` / `1.13.6` / `1.13.7`, stale because
+`channel` was previously written only for *new* versions and never revisited), and `0.12.16` — a GitHub
+release with **zero assets**, `prerelease: true` and no downloads anywhere — became `catalyst`.
+
+The download merge is **additive**: it never overwrites our own empirically-measured `min*` /
+`available` / `runtimeVersions` fields. The byte-stable read/write
 (`readMetadataTable` / `writeMetadataTable` / `serializeTable`, sorted via `compareVersions`, 2-space,
 trailing newline) lives in `scripts/helpers/metadata-io.ts`, shared by both catalog scripts so their
 output stays byte-identical.
@@ -681,18 +717,44 @@ varies by Electron version) — read from a real `process.versions` by booting t
 plus a derived `ecmaScriptVersion` string (e.g. `'ES2022'`). Unlike `minRecommendedElectronVersion` (the
 app's hardcoded *minimum*, not the bundled version), these are the *actual* bundled versions, so a consumer
 pinning an installer knows offline which ES level a serialized `evalInObsidian` closure may safely use.
-Collected by `scripts/collect-runtime-versions.ts` (`npm run collect:runtime-versions`): opt-in and heavy
-(each version is a multi-hundred-MB installer download + boot over CDP via `connectToCdp`), so it is a
-manual script, run incrementally (`--only` / `--from` / `--to` / `--force`) and **additive** (never
-overwrites `channel` / `downloads` / `min*`; writes after each version so a long run is resumable). It boots
-each version pinning both the asar and the installer to that version (matched pair → clean boot), reads
+Collected by `scripts/collect-runtime-versions.ts` (`npm run collect:runtime-versions`), which boots each
+version pinning both the asar and the installer to that version (matched pair → clean boot), reads
 `JSON.stringify(process.versions)`, and derives the ES edition from the Chromium major via the pure,
 unit-tested `src/ecmascript-version.ts` `deriveEcmaScriptVersion` (a curated Chromium-major → ES-year
-breakpoint table). Electron bundles the same Node/V8/Chromium on every OS for a given Electron version, so a
-single-platform run is authoritative for all platforms — no per-OS matrix. Versions that dead-boot (an
-installer too old to render) are logged and skipped. It runs under jiti, which lacks the `OBSIDIAN_METADATA`
-`define` global, so the script calls the shared `defineObsidianMetadataGlobal()` (the same shim the test
-runners get via `metadata-global-setup.ts`) before dynamically importing `connectToCdp`.
+breakpoint table). It is **incremental** — only versions with no `runtimeVersions` are collected, which in
+steady state is none — and **additive** (never overwrites `channel` / `downloads` / `min*`; writes after
+each version so a long run is resumable). Versions that dead-boot (an installer too old to render) are
+logged and skipped. It runs under jiti, which lacks the `OBSIDIAN_METADATA` `define` global, so the script
+calls the shared `defineObsidianMetadataGlobal()` (the same shim the test runners get via
+`metadata-global-setup.ts`) before dynamically importing `connectToCdp`. `--out` writes a per-platform
+fragment instead of the catalog, and `--disable-sandbox` is what lets it boot on Linux CI.
+
+**The field is only ever populated for versions that ship a desktop installer, which is 106 of the 325 —
+not a coverage gap.** A catalyst asar-only release has no Electron shell to boot, so `runtimeVersions` is
+structurally inapplicable to it. Reading "103 of 325" as a broken pipeline is the mistake T717 was
+opened on; the real gap was three versions.
+
+**CORRECTION (2026-08-30): the Electron version is a property of the INSTALLER, not of the release.** This
+section previously claimed "Electron bundles the same Node/V8/Chromium on every OS for a given Electron
+version, so a single-platform run is authoritative for all platforms — no per-OS matrix." The first half is
+true; the conclusion is not, because two installers of the *same* Obsidian version can bundle *different
+Electron builds*: **`1.12.4` shipped Electron `39.6.0` in its `.exe` and `39.7.0` in every other
+installer**, and **`1.8.10` shipped `34.2.0` vs `34.5.2`** (2 of 106). The table keeps **one flat
+`runtimeVersions`**, measured on **Windows (`.exe`)** — the reference platform, because `exe`/`dmg` are
+published for all 106 installer-bearing releases while `tar` covers only 92 (0.6.4–0.8.15 shipped AppImage
+and snap instead), and because all 103 pre-existing values were measured there. So our `1.12.4` reads
+`39.6.0` and deliberately differs from any source that flattens to `39.7.0`.
+
+**`.github/workflows/collect-runtime-versions.yml` is what keeps the field current.** Before it, the field
+was only ever filled by someone remembering to run the script by hand on a desktop — which is exactly why
+it stalled three releases behind. The workflow boots each not-yet-collected installer on a runner matrix
+and `scripts/merge-runtime-versions.ts` (`npm run merge:runtime-versions`) folds the per-platform fragments
+into the catalog: the Windows value wins the flat field, and **every cross-platform disagreement is logged
+by version and platform** — that report is the entire reason the matrix boots three platforms rather than
+one, since the flat field cannot represent the divergence. Because divergence is rare, the **daily**
+schedule runs Windows alone and the **full matrix runs weekly** and on `workflow_dispatch`. It reuses the
+setup `validate-installer-boot.yml` already proves works on all three runners (xvfb + `libnss3` /
+`libgbm1` / `libgtk-3-0` on Linux, `GITHUB_TOKEN` against the anonymous release-API 403).
 
 Two installer-floor fields:
 
@@ -708,7 +770,8 @@ Two installer-floor fields:
   exception — see the caveat); apps older than `0.6.4` are left unset (no older installer exists to run
   them — asar-swap is upgrade-only, so an app needs an installer ≤ itself).
 - **`minRecommendedInstallerVersion`** — the tier-2 recommended min (Obsidian's own guidance); equals
-  `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement).
+  `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement, checked while that catalog was still
+  a source — see the independence note above). New values now come from `desktop-releases.json`.
 
 **Silent-fallback caveat (`1.13.0`; corrected 2026-07-13 via CDP —
 [wdio-obsidian-service#78](https://github.com/jesse-r-s-hines/wdio-obsidian-service/issues/78)).** The
@@ -726,10 +789,10 @@ running `apiVersion` matches the requested version (so silent fallbacks are caug
 **now done** as a post-boot runtime verify — see **L25** (`resolveAsarFallback` + `SilentAsarFallbackError`).
 This did **not** trigger a boot re-audit of the table: with L25's default-on throw a mis-measured floor now
 fails loudly the moment anyone boots that pair, so the empirically-measured `min*` values stand and the
-catalog keeps flowing from `obsidian-versions.json` via `refresh:metadata`.
+catalog keeps flowing via `refresh:metadata`.
 
 Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is
-filled from `obsidian-versions.json` for completeness — it matches our recorded values 52/52). `—` = not
+filled from what `wdio-obsidian-service` recorded, for completeness — it matched our values 52/52). `—` = not
 determined (no asar in the source folder, or not recorded upstream):
 
 | App-version range | `minRunnableInstallerVersion` | `minRecommendedInstallerVersion` |
@@ -949,7 +1012,7 @@ back (rather than dead-boots) L18 never fires; L25 is what catches it.
 - **`metadata.json` was deliberately NOT re-audited** by a boot campaign (a scoping decision): with the
   default-on runtime throw a mis-measured floor now fails loudly the moment anyone boots that pair (including the
   CI boot suites), so the empirically-measured `min*` values stand as-is and the catalog data keeps flowing from
-  `obsidian-versions.json` via `refresh:metadata` (L20). This resolves the "harden the boot-floor measurement"
+  `refresh:metadata` (L20). This resolves the "harden the boot-floor measurement"
   follow-up L20 tracked.
 
 ## L26. Full usability of old Obsidian versions down to 0.6.4 (auto-open + readiness + closures)

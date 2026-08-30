@@ -1,0 +1,185 @@
+name: Collect Runtime Versions
+
+# Boots each newly-released Obsidian installer over CDP and records the
+# `process.versions` its Electron shell ships into metadata.json
+# (`runtimeVersions` + the derived `ecmaScriptVersion`). This is the automation
+# behind a field that was previously only ever filled by running
+# `npm run collect:runtime-versions` by hand on a desktop — which is why it had
+# stalled three releases behind.
+#
+# Only versions with no `runtimeVersions` yet are collected, so the usual run
+# measures nothing and exits in seconds; a run costs a real installer download
+# plus an app boot ONLY when a new installer has shipped (about 106 times in
+# Obsidian's whole history).
+#
+# Why a matrix. The Electron version is a property of the INSTALLER, not of the
+# release: 1.12.4 shipped Electron 39.6.0 in its .exe and 39.7.0 in every other
+# installer, and 1.8.10 shipped 34.2.0 vs 34.5.2. metadata.json stores one flat
+# value, measured on Windows (the reference installer), and the other two
+# platforms exist so a divergence is REPORTED by the merge step instead of
+# silently lost. Since divergence is rare, the daily schedule runs Windows alone
+# and the full matrix runs weekly.
+#
+# Booting Electron needs a display (xvfb on Linux; the macOS/Windows runners have
+# a desktop session) and, on Linux CI, the Chromium sandbox disabled — hence
+# `--disable-sandbox`. This mirrors validate-installer-boot.yml, which already
+# proves this exact path works on all three runners.
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # daily 07:00 UTC, an hour after Refresh Metadata catalogues new releases
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: 'Space-separated versions to collect (default: every not-yet-collected version)'
+        required: false
+        type: string
+      shouldForce:
+        description: 'Recollect versions that already have runtimeVersions'
+        default: false
+        type: boolean
+
+permissions:
+  contents: write # push the updated metadata.json to main
+
+concurrency: # never overlap two collection runs — they would race on metadata.json
+  group: collect-runtime-versions
+  cancel-in-progress: false
+
+jobs:
+  # Resolves which runners this run uses: Windows alone on the daily schedule,
+  # all three on the weekly slot and on manual dispatch.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      runners: ${{ steps.pick.outputs.runners }}
+    steps:
+      - name: Pick the runner set
+        id: pick
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%u)" != "1" ]; then
+            echo 'runners=["windows-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runners=["windows-latest","macos-latest","ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  collect:
+    needs: plan
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # one platform failing must not lose the others' measurements
+      matrix:
+        os: ${{ fromJSON(needs.plan.outputs.runners) }}
+    runs-on: ${{ matrix.os }}
+    env:
+      HUSKY: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # xvfb gives Electron a virtual display; libnss3/libgbm1/libgtk-3-0 are the
+      # Chromium/Electron runtime libraries most often absent on a headless runner
+      # (their package names are stable across Ubuntu releases, unlike the t64 set).
+      - name: Install Linux display and Electron runtime deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libgbm1 libgtk-3-0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Collect process.versions
+        env:
+          # Authenticate the release-asset API call (avoids the anonymous 403).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Dispatch inputs reach the script through the environment, never through
+          # `${{ }}` interpolation into the shell — interpolation would splice the
+          # input straight into the command line.
+          INPUT_SHOULD_FORCE: ${{ inputs.shouldForce }}
+          INPUT_VERSIONS: ${{ inputs.versions }}
+        shell: bash
+        run: |
+          ARGS=""
+          for version in $INPUT_VERSIONS; do
+            ARGS="$ARGS --only $version"
+          done
+          if [ "$INPUT_SHOULD_FORCE" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+
+          CMD="npm run collect:runtime-versions -- --out fragment.json $ARGS"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a $CMD --disable-sandbox
+          else
+            $CMD
+          fi
+
+      - name: Upload the fragment
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-versions-${{ runner.os }}
+          path: fragment.json
+          if-no-files-found: error
+
+  merge:
+    needs: collect
+    if: ${{ !cancelled() }} # merge whatever the surviving platforms measured
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download the fragments
+        uses: actions/download-artifact@v4
+        with:
+          pattern: runtime-versions-*
+          path: fragments
+
+      # The merge step names each fragment by platform so the Windows one can win
+      # the flat field and any divergence can be reported against its platform.
+      - name: Merge into metadata.json
+        shell: bash
+        run: |
+          ARGS=""
+          for os in Windows macOS Linux; do
+            path="fragments/runtime-versions-$os/fragment.json"
+            if [ -f "$path" ]; then
+              ARGS="$ARGS --fragment $(echo "$os" | tr '[:upper:]' '[:lower:]')=$path"
+            fi
+          done
+          if [ -z "$ARGS" ]; then
+            echo "No fragments were produced — nothing to merge."
+            exit 0
+          fi
+          npm run merge:runtime-versions -- $ARGS
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- metadata.json; then
+            echo "metadata.json unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metadata.json
+          git commit -m "chore: collect runtime versions"
+          git push
