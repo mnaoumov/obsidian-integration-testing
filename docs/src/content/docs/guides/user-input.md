@@ -5,9 +5,10 @@ sidebar:
     order: 2
 ---
 
-The `lib` bag every callback receives provides helpers that inject **trusted** input at the Chromium level,
-through Electron's `webContents.sendInputEvent` — the kind of event only the browser or the OS normally
-produces.
+The `lib` bag every callback receives provides helpers that inject **trusted** input at the Chromium level —
+the kind of event only the browser or the OS normally produces. On desktop they go through Electron's
+`webContents.sendInputEvent`; on Android, through the WebView's own debugger. See
+[On mobile](#on-mobile) for what changes there.
 
 ## Why trusted input matters
 
@@ -29,12 +30,12 @@ nodes — the callback already runs in the renderer, so nothing is serialized.
 | Helper                                         | Purpose                                                                                                                                                                                                                          |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typeIntoEditor({ editor, text })`             | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                                  |
-| `pressKey({ key, modifiers })`                 | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). **Synchronous**; does **not** poll — pair with `waitUntil`. |
+| `pressKey({ key, modifiers })`                 | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
 | `hoverElement({ element })`                    | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`.                                                                                                                                           |
 | `unhoverElement({ element })`                  | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`.                                                                                                                         |
-| `clickElement({ element, button, modifiers })` | Clicks `element`'s center with optional `button` / `modifiers`, so Chromium synthesizes a real `click` (or `contextmenu`). **Synchronous**; does **not** poll — pair with `waitUntil`.                                           |
-| `moveMouse({ x, y })`                          | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. **Synchronous**; does **not** poll.                                                                                             |
-| `clickMouse({ x, y, button, modifiers })`      | Low-level primitive: one trusted `mouseMove` → `mouseDown` → `mouseUp` at the given web-contents DIP coordinates. **Synchronous**; does **not** poll.                                                                            |
+| `clickElement({ element, button, modifiers })` | Clicks `element`'s center with optional `button` / `modifiers`, so Chromium synthesizes a real `click` (or `contextmenu`). Does **not** poll — pair with `waitUntil`.                                           |
+| `moveMouse({ x, y })`                          | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. Does **not** poll. **Desktop only.**                                                                                             |
+| `clickMouse({ x, y, button, modifiers })`      | Low-level primitive: one trusted `mouseMove` → `mouseDown` → `mouseUp` at the given web-contents DIP coordinates. Does **not** poll.                                                                            |
 
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
@@ -167,6 +168,27 @@ const value = await evalInObsidian({
 For waits longer than one eval may take, use
 [`pollInObsidian`](/obsidian-integration-testing/guides/writing-tests/#wait-longer-than-one-eval-may-take)
 instead.
+
+## On mobile
+
+These helpers work on Android as well, but not all of them, and not identically. **Every one of them returns
+a promise — `await` it.** A missing `await` used to be harmless on desktop; on mobile the injection is a
+round-trip to the test host, so without it your assertion runs before the input has landed.
+
+| Helper                                              | On Android                                                                                                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clickElement` / `clickMouse` (default or `'left'`) | A **tap**.                                                                                                                                                     |
+| `clickMouse({ button: 'right' })`                   | A **long-press** — the gesture that opens Obsidian Mobile's context menu.                                                                                      |
+| `clickMouse({ button: 'middle' })`                  | **Throws.** Touch has no middle button.                                                                                                                        |
+| `pressKey` / `typeIntoEditor`                       | Work. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, arrows) and single printable characters; any other multi-character name throws.             |
+| `moveMouse` / `hoverElement` / `unhoverElement`     | **Throw.** Touch input has no hover state.                                                                                                                     |
+
+The three that throw do so deliberately rather than doing nothing quietly: a hover that silently no-ops
+would leave a test asserting against a state that never existed, which is precisely the false-confidence
+problem trusted input exists to solve. Branch on `Platform.isDesktopApp` when a suite runs on both.
+
+Coordinates on mobile are CSS pixels in the WebView's own viewport — the same numbers
+`getBoundingClientRect()` reports — so there is no device-pixel-ratio conversion to do.
 
 ## Related
 

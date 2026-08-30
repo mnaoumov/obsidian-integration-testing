@@ -30,6 +30,20 @@ const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.
 // Asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
 const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
 
+// The mobile trusted-input suite runs in its own project because it is the only one that needs a real
+// Android emulator through Appium (see L39). Keeping it out of the default `integration-tests` aggregate is
+// Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator.
+const ANDROID_TRUSTED_INPUT_TEST_FILE = 'src/mobile-trusted-input.android.integration.test.ts';
+
+// Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
+// Single shared window's GLOBAL focus and pointer, so pointer-dependent files cannot run against each
+// Other — which the default `integration-tests` project does not guarantee.
+const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/trusted-input.desktop.integration.test.ts';
+
+// An emulator run is 140-200s cold (L19), and every step before the first assertion — boot, Appium session,
+// Vault push, app restart — happens inside the hooks.
+const ANDROID_TIMEOUT_IN_MILLISECONDS = 300_000;
+
 // Inject the per-version compatibility table into `obsidian-metadata.ts` under
 // Test, the same way the esbuild build does via `define`. Two mechanisms are
 // Needed because Vitest's per-project `define` reaches the unit-test project but
@@ -95,7 +109,14 @@ export const config = defineConfig({
       {
         test: {
           environment: 'node',
-          exclude: [...SHARED_EXCLUDE, OWNED_ATTACH_TEST_FILE, BARE_ATTACH_TEST_FILE, ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
+          exclude: [
+            ...SHARED_EXCLUDE,
+            OWNED_ATTACH_TEST_FILE,
+            BARE_ATTACH_TEST_FILE,
+            ENABLE_COMMUNITY_PLUGINS_TEST_FILE,
+            ANDROID_TRUSTED_INPUT_TEST_FILE,
+            DESKTOP_TRUSTED_INPUT_TEST_FILE
+          ],
           include: [INTEGRATION_TEST_FILES],
           name: 'integration-tests',
           setupFiles: [METADATA_SETUP_FILE],
@@ -141,6 +162,33 @@ export const config = defineConfig({
           maxWorkers: 1,
           name: 'integration-tests:enable-community-plugins',
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
+          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+        }
+      },
+      {
+        test: {
+          environment: 'node',
+          exclude: SHARED_EXCLUDE,
+          // One emulator, one Appium server, and trusted input targets the app's GLOBAL focus and pointer,
+          // So these files cannot run against each other (the same reason L8/L11 give consumers).
+          fileParallelism: false,
+          hookTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS,
+          include: [ANDROID_TRUSTED_INPUT_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:android-trusted-input',
+          setupFiles: [METADATA_SETUP_FILE, './scripts/android-transport-setup.ts'],
+          testTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS
+        }
+      },
+      {
+        test: {
+          environment: 'node',
+          exclude: SHARED_EXCLUDE,
+          fileParallelism: false,
+          include: [DESKTOP_TRUSTED_INPUT_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:desktop-trusted-input',
+          setupFiles: [METADATA_SETUP_FILE],
           testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
         }
       }
