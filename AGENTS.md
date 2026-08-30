@@ -579,7 +579,8 @@ command-latency burst vs session establishment).
 ## L20. `metadata.json` — per-version installer-floor table (`minRunnableInstallerVersion`)
 
 Repo-root `metadata.json` is a per-Obsidian-desktop-version data table (one `"x.y.z"` key per release):
-`channel`, optional `available`, `changelogUrl`, per-version `downloads` (baked asset URLs — see below),
+`channel`, optional `available`, `changelogUrl` (per-target changelog pages — see below), per-version
+`downloads` (baked asset URLs — see below),
 per-version `runtimeVersions` + `ecmaScriptVersion` (empirically-collected shell runtime — see below), and
 installer/Electron compatibility knobs. It is a
 **data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is
@@ -592,20 +593,63 @@ paths — plus the byte-stable catalog read/write — sources the table from
 does not depend on the invocation directory; `readMetadataJsonText` for the `define` callers,
 `defineObsidianMetadataGlobal` for the global). The usual format/lint/spellcheck gates apply.
 
+**`changelogUrl` — one page per publication target, from Obsidian's own changelog feed.** Obsidian
+publishes a *separate* changelog page per platform (desktop / mobile) and per channel (public / catalyst
+"early access"), each at its own dated slug, so `changelogUrl` is an object with four optional keys —
+`desktop`, `desktopCatalyst`, `mobile`, `mobileCatalyst` — carrying only the pages the feed actually
+published for that version (the catalyst page typically predates the public one by about a day). It
+replaces the single string plus the `changelogUrl_catalyst` sibling that preceded it: that string silently
+mixed channels (105 of the 322 stored values were the public page, 210 the catalyst one, depending only on
+which channel the version happened to be scraped from) and never represented mobile at all.
+
+The source is `https://obsidian.md/changelog.xml` — one Atom feed, no pagination, covering every release
+from `desktop-v0.0.1` on. Derivation rule, established empirically: **version and platform come from the
+link slug (`/changelog/<date>-<desktop|mobile>-v<version>/`), channel from the title's trailing
+`(Public)` / `(Early access)`.** Two entries carry a typo'd version in their title (`Obsidian 1.0.4
+Mobile` links `…-mobile-v0.1.4/`; `Obsidian 0.6.0 Desktop` links `…-desktop-v0.6.1/`), so trusting the
+title collapses those onto the wrong key; the slug rule yields zero collisions. Entries with no
+`-v<version>` slug (the Publish and Sync changelogs) are skipped.
+
+**Caveat — a pre-1.4.8 `mobile` page is a different release than the `desktop` page beside it.** Until
+**1.4.8** (2023-09-05) the mobile app ran its own version line, so same-keyed pages document unrelated
+releases (mobile `1.4.5` shipped 2023-05-23, desktop `1.4.5` 2023-08-31; gaps across `1.0.0`–`1.4.6` run
+93–471 days). From 1.4.8 on the two lines track within days. The table is keyed by *desktop* app version,
+so read an old `mobile` value as "the mobile changelog that happens to carry this version number", not as
+"the mobile notes for this release". Two entries (`1.4`, `1.5`) have no feed page of their own and retain
+a hand-entered `desktop` URL that actually points at `v1.4.5` / `v1.5.3`; three (`1.1.8-E21`, `1.2.4`,
+`1.6.3-e30`) carry no `changelogUrl` at all.
+
 **`downloads` — baked asset URLs (superset from upstream `obsidian-versions.json`).** Each version carries
 an optional `downloads` object with the *exact* published URLs for the assets this harness downloads:
-`asar` (the `obsidian-<ver>.asar.gz`), and the x64 desktop installers `exe` (Windows) / `dmg` (macOS
-universal) / `tar` (Linux). `asar` is present for every catalogued version; the installer keys are present
-only for versions that ship a public desktop installer (catalyst builds are `asar`-only). The asar and
+`asar` (the `obsidian-<ver>.asar.gz`), the x64 desktop installers `exe` (Windows) / `dmg` (macOS
+universal) / `tar` (Linux), and the Android `apk`. `asar` is present for every catalogued version; the
+installer keys are present only for versions that ship a public desktop installer (catalyst builds are
+`asar`-only). `apk` is the *public* Android build, published as a GitHub release asset named uniformly
+`Obsidian-<ver>.apk` — it first appears at **1.5.8** and is hyphenated from the start, so unlike the
+desktop installers it has no dot-separator era to guess around. **Nothing consumes `apk` yet** (the Appium
+transport runs an already-installed APK and takes no `obsidianVersion`), so it is deliberate groundwork;
+`selectInstallerDownloadUrl` stays desktop-only and is not extended for it.
+
+**There is deliberately no catalyst APK key, because there is no catalyst APK URL.** Unlike the desktop
+catalyst asar (`releases.obsidian.md/release/obsidian-<ver>.asar.gz`), the mobile catalyst build is not
+published at a URL at all — Obsidian distributes it through a Discord-gated channel: join their Discord,
+claim the badge, and `#insider-welcome` carries the per-device download instructions
+([Early access versions](https://obsidian.md/help/early-access)). That is why every sibling path probed on
+`releases.obsidian.md` returns the non-existence signature and why the public Android build contains no
+update endpoint to reveal a pattern. So what the table carries for a catalyst mobile build is its
+**changelog** (`changelogUrl.mobileCatalyst`); for the build itself, follow the link above. The asar and
 installer download paths (`obsidian-version-switch.ts` `getAsarDownloadUrls`, `obsidian-installer.ts`
 `resolveInstallerAssetUrls`) try the baked URL **first**, so the common path needs no GitHub release-API
 call and no dot-vs-hyphen asset-name guessing — the hand-rolled URL guesses (`installer-asset.ts`) remain
 the fallback for versions absent from the catalog. `src/installer-asset.ts` `selectInstallerDownloadUrl`
 picks the platform-correct URL (pure, unit-tested). The catalog is refreshed by
-`scripts/refresh-metadata.ts` (`npm run refresh:metadata`): it downloads the upstream
-`obsidian-versions.json` (`jesse-r-s-hines/wdio-obsidian-service`) and **additively** merges its download
-URLs in — never overwriting our own empirically-measured `channel`/`changelogUrl*`/`min*` fields — then
-writes the table back byte-stably (rerun ⇒ no diff). Commit the result. The byte-stable read/write
+`scripts/refresh-metadata.ts` (`npm run refresh:metadata`): it downloads **both** upstream sources — the
+`obsidian-versions.json` catalog (`jesse-r-s-hines/wdio-obsidian-service`) and `obsidian.md/changelog.xml`
+— then writes the table back byte-stably (rerun ⇒ no diff). Commit the result. The download merge is
+**additive**: it never overwrites our own empirically-measured `channel`/`min*` fields. `changelogUrl` is
+the one field the script **owns** — the feed is the authoritative publisher of every changelog page, so
+each version the feed knows has its whole `changelogUrl` object rewritten from it (versions the feed has
+no page for keep whatever they carry). The byte-stable read/write
 (`readMetadataTable` / `writeMetadataTable` / `serializeTable`, sorted via `compareVersions`, 2-space,
 trailing newline) lives in `scripts/helpers/metadata-io.ts`, shared by both catalog scripts so their
 output stays byte-identical.

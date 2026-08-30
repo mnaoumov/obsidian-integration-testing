@@ -2,102 +2,137 @@
   "0.0.1": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-03-30-desktop-v0.0.1/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-03-30-desktop-v0.0.1/"
+    }
   },
   "0.0.2": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-04-02-desktop-v0.0.2/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-04-02-desktop-v0.0.2/"
+    }
   },
   "0.0.3": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-04-05-desktop-v0.0.3/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-04-05-desktop-v0.0.3/"
+    }
   },
   "0.1.0": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-04-10-desktop-v0.1.0/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-04-10-desktop-v0.1.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2021-05-31-mobile-v0.1.0/"
+    }
   },
   "0.2.0": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-04-13-desktop-v0.2.0/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-04-13-desktop-v0.2.0/"
+    }
   },
   "0.3.0": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-04-21-desktop-v0.3.0/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-04-21-desktop-v0.3.0/"
+    }
   },
   "0.4.0": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-04-27-desktop-v0.4.0/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-04-27-desktop-v0.4.0/"
+    }
   },
   "0.4.1": {
     "channel": "public",
     "available": false,
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-04-desktop-v0.4.1/"
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-04-desktop-v0.4.1/"
+    }
   },
   "0.5.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-10-desktop-v0.5.0/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-10-desktop-v0.5.0/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.0/obsidian-0.5.0.asar.gz"
     }
   },
   "0.5.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-13-desktop-v0.5.1/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-13-desktop-v0.5.1/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.1/obsidian-0.5.1.asar.gz"
     }
   },
   "0.5.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-15-desktop-v0.5.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-15-desktop-v0.5.2/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.2/obsidian-0.5.2.asar.gz"
     }
   },
   "0.5.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-15-desktop-v0.5.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-15-desktop-v0.5.3/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.3/obsidian-0.5.3.asar.gz"
     }
   },
   "0.6.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-18-desktop-v0.6.0/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-18-desktop-v0.6.0/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.0/obsidian-0.6.0.asar.gz"
     }
   },
   "0.6.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-22-desktop-v0.6.1/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-22-desktop-v0.6.1/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.1/obsidian-0.6.1.asar.gz"
     }
   },
   "0.6.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-22-desktop-v0.6.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-22-desktop-v0.6.2/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.2/obsidian-0.6.2.asar.gz"
     }
   },
   "0.6.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-24-desktop-v0.6.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-24-desktop-v0.6.3/"
+    },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.3/obsidian-0.6.3.asar.gz"
     }
   },
   "0.6.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-24-desktop-v0.6.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-24-desktop-v0.6.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.4/obsidian-0.6.4.asar.gz",
@@ -126,7 +161,9 @@
   },
   "0.6.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-05-29-desktop-v0.6.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-05-29-desktop-v0.6.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.5/obsidian-0.6.5.asar.gz",
@@ -155,7 +192,9 @@
   },
   "0.6.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-01-desktop-v0.6.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-06-01-desktop-v0.6.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.6/obsidian-0.6.6.asar.gz"
@@ -163,7 +202,9 @@
   },
   "0.6.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-02-desktop-v0.6.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-06-02-desktop-v0.6.7/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.7/obsidian-0.6.7.asar.gz",
@@ -192,7 +233,9 @@
   },
   "0.7.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-09-desktop-v0.7.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-06-09-desktop-v0.7.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.0/obsidian-0.7.0.asar.gz"
@@ -200,7 +243,9 @@
   },
   "0.7.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-10-desktop-v0.7.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-06-10-desktop-v0.7.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.1/obsidian-0.7.1.asar.gz"
@@ -208,7 +253,9 @@
   },
   "0.7.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-13-desktop-v0.7.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-06-13-desktop-v0.7.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.2/obsidian-0.7.2.asar.gz"
@@ -216,7 +263,9 @@
   },
   "0.7.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-14-desktop-v0.7.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-06-14-desktop-v0.7.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.3/obsidian-0.7.3.asar.gz",
@@ -245,7 +294,9 @@
   },
   "0.7.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-06-20-desktop-v0.7.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-06-20-desktop-v0.7.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.4/obsidian-0.7.4.asar.gz",
@@ -274,7 +325,9 @@
   },
   "0.7.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-07-01-desktop-v0.7.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-07-01-desktop-v0.7.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.5/obsidian-0.7.5.asar.gz"
@@ -282,7 +335,9 @@
   },
   "0.7.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-07-02-desktop-v0.7.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-07-02-desktop-v0.7.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.6/obsidian-0.7.6.asar.gz",
@@ -311,7 +366,9 @@
   },
   "0.8.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-07-14-desktop-v0.8.0/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-07-14-desktop-v0.8.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.0/obsidian-0.8.0.asar.gz",
@@ -340,7 +397,9 @@
   },
   "0.8.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-07-21-desktop-v0.8.1/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-07-21-desktop-v0.8.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.1/obsidian-0.8.1.asar.gz",
@@ -369,7 +428,9 @@
   },
   "0.8.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-07-30-desktop-v0.8.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-07-30-desktop-v0.8.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.2/obsidian-0.8.2.asar.gz",
@@ -398,7 +459,9 @@
   },
   "0.8.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-10-desktop-v0.8.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-08-10-desktop-v0.8.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.3/obsidian-0.8.3.asar.gz"
@@ -406,7 +469,9 @@
   },
   "0.8.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-12-desktop-v0.8.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-08-12-desktop-v0.8.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.4/obsidian-0.8.4.asar.gz",
@@ -435,7 +500,9 @@
   },
   "0.8.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-21-desktop-v0.8.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-08-21-desktop-v0.8.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.5/obsidian-0.8.5.asar.gz"
@@ -443,7 +510,9 @@
   },
   "0.8.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-24-desktop-v0.8.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-08-24-desktop-v0.8.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.6/obsidian-0.8.6.asar.gz"
@@ -451,7 +520,9 @@
   },
   "0.8.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-24-desktop-v0.8.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-08-24-desktop-v0.8.7/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.7/obsidian-0.8.7.asar.gz"
@@ -459,7 +530,9 @@
   },
   "0.8.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-24-desktop-v0.8.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-08-24-desktop-v0.8.8/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.8/obsidian-0.8.8.asar.gz"
@@ -467,7 +540,9 @@
   },
   "0.8.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-31-desktop-v0.8.9/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-08-31-desktop-v0.8.9/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.9/obsidian-0.8.9.asar.gz",
@@ -496,7 +571,9 @@
   },
   "0.8.10": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-08-31-desktop-v0.8.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-08-31-desktop-v0.8.10/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.10/obsidian-0.8.10.asar.gz"
@@ -504,7 +581,9 @@
   },
   "0.8.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-01-desktop-v0.8.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-09-01-desktop-v0.8.11/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.11/obsidian-0.8.11.asar.gz"
@@ -512,7 +591,9 @@
   },
   "0.8.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-07-desktop-v0.8.12/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-09-07-desktop-v0.8.12/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.12/obsidian-0.8.12.asar.gz",
@@ -541,7 +622,9 @@
   },
   "0.8.13": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-07-desktop-v0.8.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-09-07-desktop-v0.8.13/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.13/obsidian-0.8.13.asar.gz"
@@ -549,7 +632,9 @@
   },
   "0.8.14": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-10-desktop-v0.8.14/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-09-10-desktop-v0.8.14/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.14/obsidian-0.8.14.asar.gz",
@@ -578,7 +663,9 @@
   },
   "0.8.15": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-14-desktop-v0.8.15/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-09-14-desktop-v0.8.15/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.15/obsidian-0.8.15.asar.gz",
@@ -607,7 +694,9 @@
   },
   "0.9.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-21-desktop-v0.9.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-09-21-desktop-v0.9.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.0/obsidian-0.9.0.asar.gz"
@@ -615,7 +704,9 @@
   },
   "0.9.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-24-desktop-v0.9.1/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-09-24-desktop-v0.9.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.1/obsidian-0.9.1.asar.gz",
@@ -645,7 +736,9 @@
   },
   "0.9.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-09-30-desktop-v0.9.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-09-30-desktop-v0.9.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.2/obsidian-0.9.2.asar.gz",
@@ -675,7 +768,9 @@
   },
   "0.9.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-05-desktop-v0.9.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-10-05-desktop-v0.9.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.3/obsidian-0.9.3.asar.gz",
@@ -705,7 +800,9 @@
   },
   "0.9.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-13-desktop-v0.9.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-10-13-desktop-v0.9.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.4/obsidian-0.9.4.asar.gz",
@@ -735,7 +832,9 @@
   },
   "0.9.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-19-desktop-v0.9.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-10-19-desktop-v0.9.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.5/obsidian-0.9.5.asar.gz"
@@ -743,7 +842,9 @@
   },
   "0.9.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-20-desktop-v0.9.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-10-20-desktop-v0.9.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.6/obsidian-0.9.6.asar.gz",
@@ -773,7 +874,9 @@
   },
   "0.9.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-26-desktop-v0.9.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-10-26-desktop-v0.9.7/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.7/obsidian-0.9.7.asar.gz"
@@ -781,7 +884,9 @@
   },
   "0.9.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-29-desktop-v0.9.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-10-29-desktop-v0.9.8/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.8/obsidian-0.9.8.asar.gz"
@@ -789,7 +894,9 @@
   },
   "0.9.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-29-desktop-v0.9.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-10-29-desktop-v0.9.9/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.9/obsidian-0.9.9.asar.gz"
@@ -797,7 +904,9 @@
   },
   "0.9.10": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-10-30-desktop-v0.9.10/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-10-30-desktop-v0.9.10/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.10/obsidian-0.9.10.asar.gz",
@@ -827,7 +936,9 @@
   },
   "0.9.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-03-desktop-v0.9.11/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-11-03-desktop-v0.9.11/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.11/obsidian-0.9.11.asar.gz",
@@ -857,7 +968,9 @@
   },
   "0.9.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-10-desktop-v0.9.12/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-11-10-desktop-v0.9.12/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.12/obsidian-0.9.12.asar.gz"
@@ -865,7 +978,9 @@
   },
   "0.9.13": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-12-desktop-v0.9.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-11-12-desktop-v0.9.13/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.13/obsidian-0.9.13.asar.gz"
@@ -873,7 +988,9 @@
   },
   "0.9.14": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-13-desktop-v0.9.14/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-11-13-desktop-v0.9.14/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.14/obsidian-0.9.14.asar.gz"
@@ -881,7 +998,9 @@
   },
   "0.9.15": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-17-desktop-v0.9.15/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-11-17-desktop-v0.9.15/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.15/obsidian-0.9.15.asar.gz",
@@ -911,7 +1030,9 @@
   },
   "0.9.16": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-19-desktop-v0.9.16/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-11-19-desktop-v0.9.16/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.16/obsidian-0.9.16.asar.gz"
@@ -919,7 +1040,9 @@
   },
   "0.9.17": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-21-desktop-v0.9.17/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-11-21-desktop-v0.9.17/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.17/obsidian-0.9.17.asar.gz",
@@ -949,7 +1072,9 @@
   },
   "0.9.18": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-25-desktop-v0.9.18/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-11-25-desktop-v0.9.18/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.18/obsidian-0.9.18.asar.gz"
@@ -957,7 +1082,9 @@
   },
   "0.9.19": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-11-26-desktop-v0.9.19/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-11-26-desktop-v0.9.19/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.19/obsidian-0.9.19.asar.gz"
@@ -965,7 +1092,9 @@
   },
   "0.9.20": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-02-desktop-v0.9.20/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-12-02-desktop-v0.9.20/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.20/obsidian-0.9.20.asar.gz",
@@ -995,7 +1124,9 @@
   },
   "0.9.21": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-07-desktop-v0.9.21/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-12-07-desktop-v0.9.21/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.21/obsidian-0.9.21.asar.gz"
@@ -1003,7 +1134,9 @@
   },
   "0.9.22": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-08-desktop-v0.9.22/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-12-08-desktop-v0.9.22/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.22/obsidian-0.9.22.asar.gz",
@@ -1033,7 +1166,9 @@
   },
   "0.10.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-14-desktop-v0.10.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-12-14-desktop-v0.10.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.0/obsidian-0.10.0.asar.gz"
@@ -1041,7 +1176,9 @@
   },
   "0.10.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-16-desktop-v0.10.1/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2020-12-16-desktop-v0.10.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.1/obsidian-0.10.1.asar.gz",
@@ -1071,7 +1208,9 @@
   },
   "0.10.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-21-desktop-v0.10.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-12-21-desktop-v0.10.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.2/obsidian-0.10.2.asar.gz"
@@ -1079,7 +1218,9 @@
   },
   "0.10.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-29-desktop-v0.10.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-12-29-desktop-v0.10.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.3/obsidian-0.10.3.asar.gz"
@@ -1087,7 +1228,9 @@
   },
   "0.10.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-30-desktop-v0.10.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-12-30-desktop-v0.10.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.4/obsidian-0.10.4.asar.gz"
@@ -1095,7 +1238,9 @@
   },
   "0.10.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2020-12-31-desktop-v0.10.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2020-12-31-desktop-v0.10.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.5/obsidian-0.10.5.asar.gz"
@@ -1103,7 +1248,9 @@
   },
   "0.10.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-01-04-desktop-v0.10.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-01-04-desktop-v0.10.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.6/obsidian-0.10.6.asar.gz",
@@ -1133,7 +1280,9 @@
   },
   "0.10.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-01-07-desktop-v0.10.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-01-07-desktop-v0.10.7/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.7/obsidian-0.10.7.asar.gz",
@@ -1163,7 +1312,9 @@
   },
   "0.10.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-01-11-desktop-v0.10.8/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-01-11-desktop-v0.10.8/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.8/obsidian-0.10.8.asar.gz",
@@ -1193,7 +1344,9 @@
   },
   "0.10.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-01-19-desktop-v0.10.9/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-01-19-desktop-v0.10.9/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.9/obsidian-0.10.9.asar.gz",
@@ -1223,7 +1376,9 @@
   },
   "0.10.10": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-01-25-desktop-v0.10.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-01-25-desktop-v0.10.10/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.10/obsidian-0.10.10.asar.gz"
@@ -1231,7 +1386,9 @@
   },
   "0.10.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-01-28-desktop-v0.10.11/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-01-28-desktop-v0.10.11/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.11/obsidian-0.10.11.asar.gz",
@@ -1261,7 +1418,9 @@
   },
   "0.10.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-01-desktop-v0.10.12/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-02-01-desktop-v0.10.12/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.12/obsidian-0.10.12.asar.gz"
@@ -1269,7 +1428,9 @@
   },
   "0.10.13": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-05-desktop-v0.10.13/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-02-05-desktop-v0.10.13/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.13/obsidian-0.10.13.asar.gz",
@@ -1299,7 +1460,9 @@
   },
   "0.11.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-09-desktop-v0.11.0/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-02-09-desktop-v0.11.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.0/obsidian-0.11.0.asar.gz",
@@ -1329,7 +1492,9 @@
   },
   "0.11.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-16-desktop-v0.11.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-02-16-desktop-v0.11.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.1/obsidian-0.11.1.asar.gz"
@@ -1337,7 +1502,9 @@
   },
   "0.11.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-18-desktop-v0.11.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-02-18-desktop-v0.11.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.2/obsidian-0.11.2.asar.gz"
@@ -1345,7 +1512,9 @@
   },
   "0.11.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-20-desktop-v0.11.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-02-20-desktop-v0.11.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.3/obsidian-0.11.3.asar.gz",
@@ -1375,7 +1544,9 @@
   },
   "0.11.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-02-26-desktop-v0.11.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-02-26-desktop-v0.11.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.4/obsidian-0.11.4.asar.gz"
@@ -1383,7 +1554,9 @@
   },
   "0.11.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-03-02-desktop-v0.11.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-03-02-desktop-v0.11.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.5/obsidian-0.11.5.asar.gz",
@@ -1413,7 +1586,9 @@
   },
   "0.11.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-03-09-desktop-v0.11.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-03-09-desktop-v0.11.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.6/obsidian-0.11.6.asar.gz"
@@ -1421,7 +1596,9 @@
   },
   "0.11.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-03-14-desktop-v0.11.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-03-14-desktop-v0.11.7/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.7/obsidian-0.11.7.asar.gz"
@@ -1429,7 +1606,9 @@
   },
   "0.11.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-03-21-desktop-v0.11.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-03-21-desktop-v0.11.8/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.8/obsidian-0.11.8.asar.gz"
@@ -1437,7 +1616,9 @@
   },
   "0.11.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-03-21-desktop-v0.11.9/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-03-21-desktop-v0.11.9/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.9/obsidian-0.11.9.asar.gz",
@@ -1467,7 +1648,9 @@
   },
   "0.11.10": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-03-26-desktop-v0.11.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-03-26-desktop-v0.11.10/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.10/obsidian-0.11.10.asar.gz"
@@ -1475,7 +1658,9 @@
   },
   "0.11.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-04-01-desktop-v0.11.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-04-01-desktop-v0.11.11/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.11/obsidian-0.11.11.asar.gz"
@@ -1483,7 +1668,9 @@
   },
   "0.11.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-04-01-desktop-v0.11.12/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-04-01-desktop-v0.11.12/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.12/obsidian-0.11.12.asar.gz"
@@ -1491,7 +1678,9 @@
   },
   "0.11.13": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-04-04-desktop-v0.11.13/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-04-04-desktop-v0.11.13/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.13/obsidian-0.11.13.asar.gz",
@@ -1521,7 +1710,9 @@
   },
   "0.12.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-04-19-desktop-v0.12.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-04-19-desktop-v0.12.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.0/obsidian-0.12.0.asar.gz"
@@ -1529,7 +1720,9 @@
   },
   "0.12.1": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-04-20-desktop-v0.12.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-04-20-desktop-v0.12.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.1/obsidian-0.12.1.asar.gz"
@@ -1537,7 +1730,9 @@
   },
   "0.12.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-05-03-desktop-v0.12.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-05-03-desktop-v0.12.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.2/obsidian-0.12.2.asar.gz"
@@ -1545,7 +1740,9 @@
   },
   "0.12.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-05-10-desktop-v0.12.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-05-10-desktop-v0.12.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.3/obsidian-0.12.3.asar.gz",
@@ -1574,7 +1771,9 @@
   },
   "0.12.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-05-25-desktop-v0.12.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-05-25-desktop-v0.12.4/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.4/obsidian-0.12.4.asar.gz",
@@ -1603,7 +1802,9 @@
   },
   "0.12.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-06-07-desktop-v0.12.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-06-07-desktop-v0.12.5/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.5/obsidian-0.12.5.asar.gz",
@@ -1632,7 +1833,9 @@
   },
   "0.12.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-06-21-desktop-v0.12.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-06-21-desktop-v0.12.6/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.6/obsidian-0.12.6.asar.gz"
@@ -1640,7 +1843,9 @@
   },
   "0.12.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-06-23-desktop-v0.12.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-06-23-desktop-v0.12.7/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.7/obsidian-0.12.7.asar.gz"
@@ -1648,7 +1853,9 @@
   },
   "0.12.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-06-28-desktop-v0.12.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-06-28-desktop-v0.12.8/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.8/obsidian-0.12.8.asar.gz"
@@ -1656,7 +1863,9 @@
   },
   "0.12.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-06-30-desktop-v0.12.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-06-30-desktop-v0.12.9/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.9/obsidian-0.12.9.asar.gz"
@@ -1664,7 +1873,9 @@
   },
   "0.12.10": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-07-07-desktop-v0.12.10/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-07-07-desktop-v0.12.10/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.10/obsidian-0.12.10.asar.gz",
@@ -1693,7 +1904,9 @@
   },
   "0.12.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-07-19-desktop-v0.12.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-07-19-desktop-v0.12.11/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.11/obsidian-0.12.11.asar.gz"
@@ -1701,7 +1914,9 @@
   },
   "0.12.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-07-26-desktop-v0.12.12/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-07-26-desktop-v0.12.12/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.12/obsidian-0.12.12.asar.gz",
@@ -1730,7 +1945,9 @@
   },
   "0.12.13": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-08-03-desktop-v0.12.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-08-03-desktop-v0.12.13/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.13/obsidian-0.12.13.asar.gz"
@@ -1738,7 +1955,9 @@
   },
   "0.12.14": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-08-23-desktop-v0.12.14/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-08-23-desktop-v0.12.14/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.14/obsidian-0.12.14.asar.gz"
@@ -1746,7 +1965,9 @@
   },
   "0.12.15": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-08-29-desktop-v0.12.15/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-08-29-desktop-v0.12.15/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.15/obsidian-0.12.15.asar.gz",
@@ -1775,11 +1996,15 @@
   },
   "0.12.16": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-09-14-desktop-v0.12.16/"
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-09-14-desktop-v0.12.16/"
+    }
   },
   "0.12.17": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-10-06-desktop-v0.12.17/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-10-06-desktop-v0.12.17/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.17/obsidian-0.12.17.asar.gz"
@@ -1787,7 +2012,9 @@
   },
   "0.12.18": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-10-12-desktop-v0.12.18/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-10-12-desktop-v0.12.18/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.18/obsidian-0.12.18.asar.gz"
@@ -1795,7 +2022,9 @@
   },
   "0.12.19": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-10-15-desktop-v0.12.19/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-10-15-desktop-v0.12.19/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.19/obsidian-0.12.19.asar.gz",
@@ -1824,7 +2053,9 @@
   },
   "0.13.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-10-desktop-v0.13.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-11-10-desktop-v0.13.0/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-0.13.0.asar.gz"
@@ -1832,7 +2063,9 @@
   },
   "0.13.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-11-desktop-v0.13.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-11-11-desktop-v0.13.1/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-0.13.1.asar.gz"
@@ -1840,7 +2073,9 @@
   },
   "0.13.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-12-desktop-v0.13.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-11-12-desktop-v0.13.2/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-0.13.2.asar.gz"
@@ -1848,7 +2083,9 @@
   },
   "0.13.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-19-desktop-v0.13.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-11-19-desktop-v0.13.3/"
+    },
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-0.13.3.asar.gz"
@@ -1856,7 +2093,9 @@
   },
   "0.13.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-19-desktop-v0.13.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-11-19-desktop-v0.13.4/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1865,7 +2104,9 @@
   },
   "0.13.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-22-desktop-v0.13.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-11-22-desktop-v0.13.5/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1874,7 +2115,9 @@
   },
   "0.13.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-11-25-desktop-v0.13.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-11-25-desktop-v0.13.6/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1883,7 +2126,9 @@
   },
   "0.13.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-03-desktop-v0.13.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-03-desktop-v0.13.7/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1892,7 +2137,9 @@
   },
   "0.13.8": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-09-desktop-v0.13.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-09-desktop-v0.13.8/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1901,7 +2148,9 @@
   },
   "0.13.9": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-13-desktop-v0.13.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-13-desktop-v0.13.9/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1910,7 +2159,9 @@
   },
   "0.13.10": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-14-desktop-v0.13.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-14-desktop-v0.13.10/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1919,7 +2170,9 @@
   },
   "0.13.11": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-17-desktop-v0.13.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-17-desktop-v0.13.11/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1928,7 +2181,9 @@
   },
   "0.13.12": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-17-desktop-v0.13.12/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-17-desktop-v0.13.12/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1937,14 +2192,18 @@
   },
   "0.13.13": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-20-desktop-v0.13.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-20-desktop-v0.13.13/"
+    },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-0.13.13.asar.gz"
     }
   },
   "0.13.14": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-20-desktop-v0.13.13/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2021-12-21-desktop-v0.13.14/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1974,7 +2233,9 @@
   },
   "0.13.15": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-23-desktop-v0.13.15/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-23-desktop-v0.13.15/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1983,7 +2244,9 @@
   },
   "0.13.16": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-24-desktop-v0.13.16/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-24-desktop-v0.13.16/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -1992,7 +2255,9 @@
   },
   "0.13.17": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2021-12-29-desktop-v0.13.17/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2021-12-29-desktop-v0.13.17/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2001,7 +2266,9 @@
   },
   "0.13.18": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-01-02-desktop-v0.13.18/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-01-02-desktop-v0.13.18/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2010,7 +2277,9 @@
   },
   "0.13.19": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-01-05-desktop-v0.13.19/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-01-05-desktop-v0.13.19/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2040,7 +2309,9 @@
   },
   "0.13.20": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-01-17-desktop-v0.13.20/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-01-17-desktop-v0.13.20/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2049,7 +2320,9 @@
   },
   "0.13.21": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-01-17-desktop-v0.13.21/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-01-17-desktop-v0.13.21/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2058,7 +2331,9 @@
   },
   "0.13.22": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-01-24-desktop-v0.13.22/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-01-24-desktop-v0.13.22/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2067,7 +2342,9 @@
   },
   "0.13.23": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-01-27-desktop-v0.13.23/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-01-27-desktop-v0.13.23/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2097,7 +2374,9 @@
   },
   "0.13.24": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-02-04-desktop-v0.13.24/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-02-04-desktop-v0.13.24/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2127,7 +2406,9 @@
   },
   "0.13.25": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-02-18-desktop-v0.13.25/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-02-18-desktop-v0.13.25/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2136,7 +2417,9 @@
   },
   "0.13.26": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-02-18-desktop-v0.13.26/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-02-18-desktop-v0.13.26/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2145,7 +2428,9 @@
   },
   "0.13.27": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-02-28-desktop-v0.13.27/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-02-28-desktop-v0.13.27/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2154,7 +2439,9 @@
   },
   "0.13.28": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-01-desktop-v0.13.28/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-01-desktop-v0.13.28/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2163,7 +2450,9 @@
   },
   "0.13.29": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-05-desktop-v0.13.29/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-05-desktop-v0.13.29/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2172,7 +2461,9 @@
   },
   "0.13.30": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-07-desktop-v0.13.30/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-03-07-desktop-v0.13.30/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2202,7 +2493,9 @@
   },
   "0.13.31": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-08-desktop-v0.13.31/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-03-08-desktop-v0.13.31/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2232,7 +2525,9 @@
   },
   "0.13.32": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-09-desktop-v0.13.32/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-09-desktop-v0.13.32/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2241,7 +2536,9 @@
   },
   "0.13.33": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-10-desktop-v0.13.33/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-03-10-desktop-v0.13.33/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2250,7 +2547,9 @@
   },
   "0.14.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-14-desktop-v0.14.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-14-desktop-v0.14.0/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2259,7 +2558,9 @@
   },
   "0.14.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-16-desktop-v0.14.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-16-desktop-v0.14.1/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2268,7 +2569,9 @@
   },
   "0.14.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-17-desktop-v0.14.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-03-17-desktop-v0.14.2/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2298,7 +2601,9 @@
   },
   "0.14.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-28-desktop-v0.14.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-28-desktop-v0.14.3/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2307,7 +2612,9 @@
   },
   "0.14.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-03-31-desktop-v0.14.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-03-31-desktop-v0.14.4/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2316,7 +2623,9 @@
   },
   "0.14.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-04-01-desktop-v0.14.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-04-01-desktop-v0.14.5/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2346,7 +2655,9 @@
   },
   "0.14.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-04-11-desktop-v0.14.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-04-11-desktop-v0.14.6/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2376,7 +2687,9 @@
   },
   "0.14.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-04-25-desktop-v0.14.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-04-25-desktop-v0.14.7/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2385,7 +2698,9 @@
   },
   "0.14.8": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-03-desktop-v0.14.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-03-desktop-v0.14.8/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2394,7 +2709,9 @@
   },
   "0.14.9": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-03-desktop-v0.14.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-03-desktop-v0.14.9/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2403,7 +2720,9 @@
   },
   "0.14.10": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-10-desktop-v0.14.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-10-desktop-v0.14.10/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2412,7 +2731,9 @@
   },
   "0.14.11": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-16-desktop-v0.14.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-16-desktop-v0.14.11/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2421,7 +2742,9 @@
   },
   "0.14.12": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-16-desktop-v0.14.12/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-16-desktop-v0.14.12/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2430,7 +2753,9 @@
   },
   "0.14.13": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-24-desktop-v0.14.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-24-desktop-v0.14.13/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2439,7 +2764,9 @@
   },
   "0.14.14": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-26-desktop-v0.14.14/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-05-26-desktop-v0.14.14/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2448,7 +2775,9 @@
   },
   "0.14.15": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-05-27-desktop-v0.14.15/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-05-27-desktop-v0.14.15/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2478,7 +2807,9 @@
   },
   "0.15.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-06-14-desktop-v0.15.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-06-14-desktop-v0.15.0/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2487,7 +2818,9 @@
   },
   "0.15.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-06-15-desktop-v0.15.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-06-15-desktop-v0.15.1/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2496,7 +2829,9 @@
   },
   "0.15.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-06-17-desktop-v0.15.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-06-17-desktop-v0.15.2/"
+    },
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2505,7 +2840,9 @@
   },
   "0.15.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-06-17-desktop-v0.15.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-06-17-desktop-v0.15.3/"
+    },
     "minRecommendedElectronVersion": "13.0.0",
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
@@ -2515,7 +2852,9 @@
   },
   "0.15.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-07-05-desktop-v0.15.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-07-05-desktop-v0.15.4/"
+    },
     "minRecommendedElectronVersion": "13.0.0",
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
@@ -2525,7 +2864,9 @@
   },
   "0.15.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-07-08-desktop-v0.15.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-07-08-desktop-v0.15.5/"
+    },
     "minRecommendedElectronVersion": "13.0.0",
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
@@ -2535,7 +2876,9 @@
   },
   "0.15.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-07-12-desktop-v0.15.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-07-12-desktop-v0.15.6/"
+    },
     "minRecommendedElectronVersion": "13.0.0",
     "minRecommendedInstallerVersion": "0.11.0",
     "minRunnableInstallerVersion": "0.6.4",
@@ -2566,7 +2909,9 @@
   },
   "0.15.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-07-18-desktop-v0.15.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-07-18-desktop-v0.15.7/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2575,7 +2920,9 @@
   },
   "0.15.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-07-22-desktop-v0.15.8/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-07-22-desktop-v0.15.8/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2605,7 +2952,9 @@
   },
   "0.15.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-07-26-desktop-v0.15.9/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-07-26-desktop-v0.15.9/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2635,7 +2984,9 @@
   },
   "0.16.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-09-29-desktop-v0.16.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-08-30-desktop-v0.16.0/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2644,7 +2995,9 @@
   },
   "0.16.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-08-31-desktop-v0.16.1/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-08-31-desktop-v0.16.1/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2653,7 +3006,9 @@
   },
   "0.16.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-09-02-desktop-v0.16.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-09-02-desktop-v0.16.2/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2662,7 +3017,9 @@
   },
   "0.16.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-09-19-desktop-v0.16.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-09-19-desktop-v0.16.3/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2671,7 +3028,9 @@
   },
   "0.16.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-10-03-desktop-v0.16.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-10-03-desktop-v0.16.4/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2680,7 +3039,9 @@
   },
   "0.16.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-10-06-desktop-v0.16.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-10-06-desktop-v0.16.5/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2689,7 +3050,10 @@
   },
   "1.0.0": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-10-13-desktop-v1.0.0/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-10-13-desktop-v1.0.0/",
+      "mobile": "https://obsidian.md/changelog/2021-07-07-mobile-v1.0.0/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2719,13 +3083,18 @@
   },
   "1.0.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-10-20-desktop-v1.0.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-10-20-desktop-v1.0.1/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4"
   },
   "1.0.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-10-20-desktop-v1.0.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-10-20-desktop-v1.0.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2021-07-11-mobile-v1.0.2/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2734,7 +3103,10 @@
   },
   "1.0.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-10-26-desktop-v1.0.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-10-26-desktop-v1.0.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2021-07-12-mobile-v1.0.3/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2764,7 +3136,10 @@
   },
   "1.1.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-05-desktop-v1.1.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-05-desktop-v1.1.0/",
+      "mobile": "https://obsidian.md/changelog/2022-02-22-mobile-v1.1.0/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2773,7 +3148,10 @@
   },
   "1.1.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-08-desktop-v1.1.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-08-desktop-v1.1.1/",
+      "mobile": "https://obsidian.md/changelog/2022-03-21-mobile-v1.1.1/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2782,7 +3160,9 @@
   },
   "1.1.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-08-desktop-v1.1.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-08-desktop-v1.1.2/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2791,7 +3171,9 @@
   },
   "1.1.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-09-desktop-v1.1.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-09-desktop-v1.1.3/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2800,7 +3182,9 @@
   },
   "1.1.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-12-desktop-v1.1.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-12-desktop-v1.1.4/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2809,7 +3193,9 @@
   },
   "1.1.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-14-desktop-v1.1.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-14-desktop-v1.1.5/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2818,7 +3204,9 @@
   },
   "1.1.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-16-desktop-v1.1.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-16-desktop-v1.1.6/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2827,7 +3215,9 @@
   },
   "1.1.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-19-desktop-v1.1.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-19-desktop-v1.1.7/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2836,7 +3226,9 @@
   },
   "1.1.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-20-desktop-v1.1.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2022-12-20-desktop-v1.1.8/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2870,7 +3262,9 @@
   },
   "1.1.9": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2022-12-23-desktop-v1.1.9/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2022-12-23-desktop-v1.1.9/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2902,7 +3296,9 @@
   },
   "1.1.10": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-01-10-desktop-v1.1.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-01-10-desktop-v1.1.10/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2911,7 +3307,9 @@
   },
   "1.1.11": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-01-10-desktop-v1.1.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-01-10-desktop-v1.1.11/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2920,7 +3318,9 @@
   },
   "1.1.12": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-01-12-desktop-v1.1.12/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-01-12-desktop-v1.1.12/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2929,7 +3329,9 @@
   },
   "1.1.13": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-02-13-desktop-v1.1.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-02-13-desktop-v1.1.13/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2938,7 +3340,9 @@
   },
   "1.1.14": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-02-16-desktop-v1.1.14/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-02-16-desktop-v1.1.14/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2947,7 +3351,9 @@
   },
   "1.1.15": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-02-22-desktop-v1.1.15/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-02-22-desktop-v1.1.15/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -2979,7 +3385,9 @@
   },
   "1.1.16": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-03-01-desktop-v1.1.16/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-03-01-desktop-v1.1.16/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3011,12 +3419,17 @@
   },
   "1.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-03-29-desktop-v1.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-05-02-desktop-v1.2/"
+    },
     "minRecommendedElectronVersion": "18.0.0"
   },
   "1.2.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-03-29-desktop-v1.2.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-03-29-desktop-v1.2.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2022-03-19-mobile-v1.2.0/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3025,7 +3438,10 @@
   },
   "1.2.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-03-31-desktop-v1.2.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-03-31-desktop-v1.2.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2022-04-11-mobile-v1.2.1/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3034,7 +3450,10 @@
   },
   "1.2.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-04-04-desktop-v1.2.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-04-04-desktop-v1.2.2/",
+      "mobile": "https://obsidian.md/changelog/2022-06-07-mobile-v1.2.2/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3043,7 +3462,9 @@
   },
   "1.2.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-04-14-desktop-v1.2.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-04-14-desktop-v1.2.3/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3058,7 +3479,9 @@
   },
   "1.2.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-04-20-desktop-v1.2.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-04-20-desktop-v1.2.5/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3067,7 +3490,9 @@
   },
   "1.2.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-04-26-desktop-v1.2.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-04-26-desktop-v1.2.6/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3076,7 +3501,9 @@
   },
   "1.2.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-02-desktop-v1.2.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-05-02-desktop-v1.2.7/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3112,7 +3539,9 @@
   },
   "1.2.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-03-desktop-v1.2.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-05-03-desktop-v1.2.8/"
+    },
     "minRecommendedElectronVersion": "18.0.0",
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
@@ -3148,7 +3577,9 @@
   },
   "1.3.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-09-desktop-v1.3/",
+    "changelogUrl": {
+      "mobile": "https://obsidian.md/changelog/2022-07-12-mobile-v1.3.0/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3157,7 +3588,9 @@
   },
   "1.3.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-15-desktop-v1.3.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-05-15-desktop-v1.3.1/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3166,7 +3599,9 @@
   },
   "1.3.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-19-desktop-v1.3.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-05-19-desktop-v1.3.2/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3175,7 +3610,9 @@
   },
   "1.3.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-23-desktop-v1.3.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-05-23-desktop-v1.3.3/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3211,7 +3648,9 @@
   },
   "1.3.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-05-24-desktop-v1.3.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-05-24-desktop-v1.3.4/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3247,7 +3686,9 @@
   },
   "1.3.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-06-01-desktop-v1.3.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-06-01-desktop-v1.3.5/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3283,7 +3724,9 @@
   },
   "1.3.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-06-26-desktop-v1.3.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-06-26-desktop-v1.3.6/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3292,7 +3735,10 @@
   },
   "1.3.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-06-26-desktop-v1.3.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-07-31-desktop-v1.3.7/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-06-26-desktop-v1.3.7/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3328,12 +3774,17 @@
   },
   "1.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-08-31-desktop-v1.4.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-08-31-desktop-v1.4.5/"
+    },
     "minRecommendedElectronVersion": "21.0.0"
   },
   "1.4.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-07-26-desktop-v1.4.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-07-26-desktop-v1.4.0/",
+      "mobile": "https://obsidian.md/changelog/2022-10-19-mobile-v1.4.0/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3342,7 +3793,10 @@
   },
   "1.4.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-07-27-desktop-v1.4.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-07-27-desktop-v1.4.1/",
+      "mobile": "https://obsidian.md/changelog/2022-10-26-mobile-v1.4.1/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3351,7 +3805,10 @@
   },
   "1.4.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-07-31-desktop-v1.4.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-07-31-desktop-v1.4.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2023-01-10-mobile-v1.4.2/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3360,7 +3817,9 @@
   },
   "1.4.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-07-31-desktop-v1.4.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-07-31-desktop-v1.4.3/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3369,7 +3828,10 @@
   },
   "1.4.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-08-23-desktop-v1.4.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-08-23-desktop-v1.4.4/",
+      "mobile": "https://obsidian.md/changelog/2023-05-02-mobile-v1.4.4/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3378,7 +3840,11 @@
   },
   "1.4.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-08-30-desktop-v1.4.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-08-31-desktop-v1.4.5/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-08-30-desktop-v1.4.5/",
+      "mobile": "https://obsidian.md/changelog/2023-05-23-mobile-v1.4.5/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3414,7 +3880,10 @@
   },
   "1.4.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-02-desktop-v1.4.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-09-02-desktop-v1.4.6/",
+      "mobile": "https://obsidian.md/changelog/2023-06-01-mobile-v1.4.6/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3423,13 +3892,19 @@
   },
   "1.4.8": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-05-desktop-v1.4.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-09-05-desktop-v1.4.8/",
+      "mobile": "https://obsidian.md/changelog/2023-08-31-mobile-v1.4.8/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2023-08-30-mobile-v1.4.8/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5"
   },
   "1.4.9": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-07-desktop-v1.4.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-09-07-desktop-v1.4.9/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3438,7 +3913,9 @@
   },
   "1.4.10": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-11-desktop-v1.4.10/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-09-11-desktop-v1.4.10/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3474,7 +3951,9 @@
   },
   "1.4.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-11-desktop-v1.4.11/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-09-11-desktop-v1.4.11/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3510,7 +3989,10 @@
   },
   "1.4.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-11-desktop-v1.4.12/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-09-11-desktop-v1.4.12/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2023-09-22-mobile-v1.4.12/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3546,7 +4028,9 @@
   },
   "1.4.13": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-15-desktop-v1.4.13/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-09-15-desktop-v1.4.13/"
+    },
     "minRecommendedElectronVersion": "25.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3582,7 +4066,11 @@
   },
   "1.4.14": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-09-22-desktop-v1.4.14/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-09-26-desktop-v1.4.14/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-09-22-desktop-v1.4.14/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2023-10-10-mobile-v1.4.14/"
+    },
     "minRecommendedElectronVersion": "21.0.0",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3618,7 +4106,9 @@
   },
   "1.4.15": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-10-10-desktop-v1.4.15/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-10-10-desktop-v1.4.15/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3627,7 +4117,10 @@
   },
   "1.4.16": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-10-13-desktop-v1.4.16/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-10-13-desktop-v1.4.16/",
+      "mobile": "https://obsidian.md/changelog/2023-10-13-mobile-v1.4.16/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3663,12 +4156,16 @@
   },
   "1.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3/"
+    },
     "minRecommendedElectronVersion": "25.8.1"
   },
   "1.5.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-11-20-desktop-v1.5.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-11-20-desktop-v1.5.0/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3677,7 +4174,9 @@
   },
   "1.5.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-11-29-desktop-v1.5.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-11-29-desktop-v1.5.1/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3686,7 +4185,9 @@
   },
   "1.5.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2023-12-12-desktop-v1.5.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-12-12-desktop-v1.5.2/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "0.14.5",
     "downloads": {
@@ -3695,7 +4196,9 @@
   },
   "1.5.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3-diff/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3731,7 +4234,10 @@
   },
   "1.5.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-02-06-desktop-v1.5.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-02-06-desktop-v1.5.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-02-06-mobile-v1.5.4/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3740,7 +4246,10 @@
   },
   "1.5.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-02-13-desktop-v1.5.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-02-13-desktop-v1.5.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-02-13-mobile-v1.5.5/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3749,7 +4258,10 @@
   },
   "1.5.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-02-16-desktop-v1.5.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-02-16-desktop-v1.5.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-02-16-mobile-v1.5.6/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3758,7 +4270,10 @@
   },
   "1.5.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-02-20-desktop-v1.5.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-02-20-desktop-v1.5.7/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-02-20-mobile-v1.5.7/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3767,10 +4282,15 @@
   },
   "1.5.8": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-02-21-desktop-v1.5.8/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-02-22-desktop-v1.5.8/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-02-21-desktop-v1.5.8/",
+      "mobile": "https://obsidian.md/changelog/2024-02-22-mobile-v1.5.8/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian-1.5.8.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/obsidian-1.5.8.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian-1.5.8-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian.1.5.8.exe",
@@ -3804,7 +4324,10 @@
   },
   "1.5.9": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-03-04-desktop-v1.5.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-03-04-desktop-v1.5.9/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-03-04-mobile-v1.5.9/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3813,7 +4336,9 @@
   },
   "1.5.10": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-03-04-desktop-v1.5.10/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-03-04-desktop-v1.5.10/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3822,10 +4347,16 @@
   },
   "1.5.11": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-03-13-desktop-v1.5.11/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-03-19-desktop-v1.5.11/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-03-13-desktop-v1.5.11/",
+      "mobile": "https://obsidian.md/changelog/2024-03-19-mobile-v1.5.11/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-03-13-mobile-v1.5.11/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/Obsidian-1.5.11.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/obsidian-1.5.11.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/Obsidian-1.5.11-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.11/Obsidian.1.5.11.exe",
@@ -3859,10 +4390,14 @@
   },
   "1.5.12": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-03-31-desktop-v1.5.12/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-03-31-desktop-v1.5.12/",
+      "mobile": "https://obsidian.md/changelog/2024-03-31-mobile-v1.5.12/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/Obsidian-1.5.12.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/obsidian-1.5.12.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/Obsidian-1.5.12-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/Obsidian.1.5.12.exe",
@@ -3896,7 +4431,9 @@
   },
   "1.6.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-05-09-desktop-v1.6.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-05-09-desktop-v1.6.0/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3905,7 +4442,10 @@
   },
   "1.6.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-05-22-desktop-v1.6.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-05-22-desktop-v1.6.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-05-22-mobile-v1.6.1/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -3914,10 +4454,16 @@
   },
   "1.6.2": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-06-04-desktop-v1.6.2/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-06-07-desktop-v1.6.2/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-06-04-desktop-v1.6.2/",
+      "mobile": "https://obsidian.md/changelog/2024-06-07-mobile-v1.6.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-06-04-mobile-v1.6.2/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/Obsidian-1.6.2.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/obsidian-1.6.2.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/Obsidian-1.6.2-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.2/Obsidian.1.6.2.exe",
@@ -3951,10 +4497,14 @@
   },
   "1.6.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-06-08-desktop-v1.6.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-06-08-desktop-v1.6.3/",
+      "mobile": "https://obsidian.md/changelog/2024-06-08-mobile-v1.6.3/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/Obsidian-1.6.3.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/obsidian-1.6.3.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/Obsidian-1.6.3-universal.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.3/Obsidian.1.6.3.exe",
@@ -3992,7 +4542,10 @@
   },
   "1.6.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-06-20-desktop-v1.6.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-06-20-desktop-v1.6.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-06-20-mobile-v1.6.4/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4001,10 +4554,14 @@
   },
   "1.6.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-06-25-desktop-v1.6.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-06-25-desktop-v1.6.5/",
+      "mobile": "https://obsidian.md/changelog/2024-06-25-mobile-v1.6.5/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/Obsidian-1.6.5.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/obsidian-1.6.5.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/Obsidian-1.6.5.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.5/Obsidian-1.6.5.exe",
@@ -4040,7 +4597,10 @@
   },
   "1.6.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-07-09-desktop-v1.6.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-07-09-desktop-v1.6.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-07-09-mobile-v1.6.6/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4049,10 +4609,16 @@
   },
   "1.6.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-07-11-desktop-v1.6.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-07-18-desktop-v1.6.7/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-07-11-desktop-v1.6.7/",
+      "mobile": "https://obsidian.md/changelog/2024-07-18-mobile-v1.6.7/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-07-11-mobile-v1.6.7/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/Obsidian-1.6.7.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/obsidian-1.6.7.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/Obsidian-1.6.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.6.7/Obsidian-1.6.7.exe",
@@ -4088,7 +4654,10 @@
   },
   "1.7.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-08-08-desktop-v1.7.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-08-08-desktop-v1.7.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-08-08-mobile-v1.7.0/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.7.0.asar.gz"
@@ -4096,7 +4665,10 @@
   },
   "1.7.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-08-27-desktop-v1.7.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-08-27-desktop-v1.7.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-08-27-mobile-v1.7.1/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.7.1.asar.gz"
@@ -4104,7 +4676,10 @@
   },
   "1.7.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-09-19-desktop-v1.7.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-09-19-desktop-v1.7.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-09-19-mobile-v1.7.2/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.7.2.asar.gz"
@@ -4112,7 +4687,10 @@
   },
   "1.7.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-09-24-desktop-v1.7.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-09-24-desktop-v1.7.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-09-24-mobile-v1.7.3/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.7.3.asar.gz"
@@ -4120,10 +4698,16 @@
   },
   "1.7.4": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-10-08-desktop-v1.7.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-10-16-desktop-v1.7.4/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-10-08-desktop-v1.7.4/",
+      "mobile": "https://obsidian.md/changelog/2024-10-16-mobile-v1.7.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-10-08-mobile-v1.7.4/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/Obsidian-1.7.4.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/obsidian-1.7.4.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/Obsidian-1.7.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.4/Obsidian-1.7.4.exe",
@@ -4159,10 +4743,14 @@
   },
   "1.7.5": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-11-04-desktop-v1.7.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-11-04-desktop-v1.7.5/",
+      "mobile": "https://obsidian.md/changelog/2024-11-04-mobile-v1.7.5/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/Obsidian-1.7.5.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/obsidian-1.7.5.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/Obsidian-1.7.5.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.5/Obsidian-1.7.5.exe",
@@ -4198,10 +4786,14 @@
   },
   "1.7.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-11-12-desktop-v1.7.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-11-12-desktop-v1.7.6/",
+      "mobile": "https://obsidian.md/changelog/2024-11-12-mobile-v1.7.6/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/Obsidian-1.7.6.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/obsidian-1.7.6.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/Obsidian-1.7.6.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.6/Obsidian-1.7.6.exe",
@@ -4237,10 +4829,14 @@
   },
   "1.7.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2024-11-18-desktop-v1.7.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2024-11-18-desktop-v1.7.7/",
+      "mobile": "https://obsidian.md/changelog/2024-11-18-mobile-v1.7.7/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/Obsidian-1.7.7.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/obsidian-1.7.7.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/Obsidian-1.7.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.7.7/Obsidian-1.7.7.exe",
@@ -4276,7 +4872,10 @@
   },
   "1.8.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2024-12-18-desktop-v1.8.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2024-12-18-desktop-v1.8.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2024-12-18-mobile-v1.8.0/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4285,7 +4884,10 @@
   },
   "1.8.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-01-07-desktop-v1.8.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-01-07-desktop-v1.8.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-01-07-mobile-v1.8.1/"
+    },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4294,7 +4896,10 @@
   },
   "1.8.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-01-22-desktop-v1.8.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-01-22-desktop-v1.8.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-01-22-mobile-v1.8.2/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4303,10 +4908,16 @@
   },
   "1.8.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2025-01-30-desktop-v1.8.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-01-30-desktop-v1.8.3/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-01-28-desktop-v1.8.3/",
+      "mobile": "https://obsidian.md/changelog/2025-01-30-mobile-v1.8.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-01-28-mobile-v1.8.3/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/Obsidian-1.8.3.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/obsidian-1.8.3.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/Obsidian-1.8.3.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.3/Obsidian-1.8.3.exe",
@@ -4342,10 +4953,14 @@
   },
   "1.8.4": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2025-01-31-desktop-v1.8.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-01-31-desktop-v1.8.4/",
+      "mobile": "https://obsidian.md/changelog/2025-01-31-mobile-v1.8.4/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/Obsidian-1.8.4.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/obsidian-1.8.4.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/Obsidian-1.8.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.4/Obsidian-1.8.4.exe",
@@ -4381,7 +4996,10 @@
   },
   "1.8.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-02-03-desktop-v1.8.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-02-03-desktop-v1.8.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-02-03-mobile-v1.8.5/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4390,7 +5008,10 @@
   },
   "1.8.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-02-12-desktop-v1.8.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-02-12-desktop-v1.8.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-02-12-mobile-v1.8.6/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4399,10 +5020,15 @@
   },
   "1.8.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2025-02-18-desktop-v1.8.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-02-18-desktop-v1.8.7/",
+      "mobile": "https://obsidian.md/changelog/2025-02-18-mobile-v1.8.7/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-02-14-mobile-v1.8.7/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/Obsidian-1.8.7.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/obsidian-1.8.7.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/Obsidian-1.8.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.7/Obsidian-1.8.7.exe",
@@ -4438,7 +5064,10 @@
   },
   "1.8.8": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-02-25-desktop-v1.8.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-02-25-desktop-v1.8.8/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-02-25-mobile-v1.8.8/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4447,11 +5076,16 @@
   },
   "1.8.9": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-03-05-desktop-v1.8.9/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2025-02-28-desktop-v1.8.9/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-03-05-desktop-v1.8.9/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-02-28-desktop-v1.8.9/",
+      "mobile": "https://obsidian.md/changelog/2025-03-05-mobile-v1.8.9/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-02-28-mobile-v1.8.9/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/Obsidian-1.8.9.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/obsidian-1.8.9.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/Obsidian-1.8.9.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.9/Obsidian-1.8.9.exe",
@@ -4487,11 +5121,16 @@
   },
   "1.8.10": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-04-22-desktop-v1.8.10/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2025-04-10-desktop-v1.8.10/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-04-22-desktop-v1.8.10/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-04-10-desktop-v1.8.10/",
+      "mobile": "https://obsidian.md/changelog/2025-04-22-mobile-v1.8.10/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-04-10-mobile-v1.8.10/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.10/Obsidian-1.8.10.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.10/obsidian-1.8.10.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.10/Obsidian-1.8.10.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.8.10/Obsidian-1.8.10.exe",
@@ -4527,7 +5166,10 @@
   },
   "1.9.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-05-21-desktop-v1.9.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-05-21-desktop-v1.9.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-05-21-mobile-v1.9.0/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4536,7 +5178,10 @@
   },
   "1.9.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-05-22-desktop-v1.9.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-05-22-desktop-v1.9.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-05-22-mobile-v1.9.1/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4545,7 +5190,10 @@
   },
   "1.9.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-06-05-desktop-v1.9.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-06-05-desktop-v1.9.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-06-05-mobile-v1.9.2/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4554,7 +5202,10 @@
   },
   "1.9.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-06-26-desktop-v1.9.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-06-26-desktop-v1.9.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-06-26-mobile-v1.9.3/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4563,7 +5214,10 @@
   },
   "1.9.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-06-27-desktop-v1.9.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-06-27-desktop-v1.9.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-06-27-mobile-v1.9.4/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4572,7 +5226,10 @@
   },
   "1.9.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-07-17-desktop-v1.9.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-07-17-desktop-v1.9.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-07-17-mobile-v1.9.5/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4581,7 +5238,10 @@
   },
   "1.9.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-07-18-desktop-v1.9.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-07-18-desktop-v1.9.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-07-18-mobile-v1.9.6/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4590,7 +5250,10 @@
   },
   "1.9.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-08-05-desktop-v1.9.7/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-08-05-desktop-v1.9.7/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-08-05-mobile-v1.9.7/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4599,7 +5262,10 @@
   },
   "1.9.8": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-08-14-desktop-v1.9.8/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-08-14-desktop-v1.9.8/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-08-14-mobile-v1.9.8/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4608,7 +5274,10 @@
   },
   "1.9.9": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-08-15-desktop-v1.9.9/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-08-15-desktop-v1.9.9/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-08-15-mobile-v1.9.9/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4617,11 +5286,16 @@
   },
   "1.9.10": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-08-18-desktop-v1.9.10/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2025-08-17-desktop-v1.9.10/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-08-18-desktop-v1.9.10/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-08-17-desktop-v1.9.10/",
+      "mobile": "https://obsidian.md/changelog/2025-08-18-mobile-v1.9.10/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-08-17-mobile-v1.9.10/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/Obsidian-1.9.10.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/obsidian-1.9.10.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/Obsidian-1.9.10.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.10/Obsidian-1.9.10.exe",
@@ -4662,7 +5336,10 @@
   },
   "1.9.11": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-08-22-desktop-v1.9.11/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-08-22-desktop-v1.9.11/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-08-22-mobile-v1.9.11/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4671,11 +5348,16 @@
   },
   "1.9.12": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-08-26-desktop-v1.9.12/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2025-08-25-desktop-v1.9.12/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-08-26-desktop-v1.9.12/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-08-25-desktop-v1.9.12/",
+      "mobile": "https://obsidian.md/changelog/2025-08-26-mobile-v1.9.12/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-08-25-mobile-v1.9.12/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/Obsidian-1.9.12.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/obsidian-1.9.12.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/Obsidian-1.9.12.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.12/Obsidian-1.9.12.exe",
@@ -4716,7 +5398,10 @@
   },
   "1.9.13": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-09-19-desktop-v1.9.13/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-09-19-desktop-v1.9.13/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-09-19-mobile-v1.9.13/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4725,11 +5410,16 @@
   },
   "1.9.14": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-10-01-desktop-v1.9.14/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2025-09-25-desktop-v1.9.14/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-10-01-desktop-v1.9.14/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-09-25-desktop-v1.9.14/",
+      "mobile": "https://obsidian.md/changelog/2025-10-01-mobile-v1.9.14/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-09-25-mobile-v1.9.14/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/Obsidian-1.9.14.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/obsidian-1.9.14.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/Obsidian-1.9.14.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.9.14/Obsidian-1.9.14.exe",
@@ -4770,7 +5460,10 @@
   },
   "1.10.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-10-01-desktop-v1.10.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-10-01-desktop-v1.10.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-10-01-mobile-v1.10.0/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4779,7 +5472,10 @@
   },
   "1.10.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-10-21-desktop-v1.10.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-10-21-desktop-v1.10.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-10-21-mobile-v1.10.1/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4788,7 +5484,10 @@
   },
   "1.10.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-10-29-desktop-v1.10.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-10-29-desktop-v1.10.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-10-29-mobile-v1.10.2/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4797,10 +5496,14 @@
   },
   "1.10.3": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2025-11-11-desktop-v1.10.3/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-11-11-desktop-v1.10.3/",
+      "mobile": "https://obsidian.md/changelog/2025-11-11-mobile-v1.10.3/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.3/Obsidian-1.10.3.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.3/obsidian-1.10.3.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.3/Obsidian-1.10.3.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.3/Obsidian-1.10.3.exe",
@@ -4841,7 +5544,10 @@
   },
   "1.10.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-11-18-desktop-v1.10.4/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-11-18-desktop-v1.10.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-11-18-mobile-v1.10.4/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4850,7 +5556,10 @@
   },
   "1.10.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-11-19-desktop-v1.10.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-11-19-desktop-v1.10.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-11-19-mobile-v1.10.5/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4859,10 +5568,14 @@
   },
   "1.10.6": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2025-11-25-desktop-v1.10.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2025-11-25-desktop-v1.10.6/",
+      "mobile": "https://obsidian.md/changelog/2025-11-25-mobile-v1.10.6/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.6/Obsidian-1.10.6.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.6/obsidian-1.10.6.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.6/Obsidian-1.10.6.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.10.6/Obsidian-1.10.6.exe",
@@ -4903,7 +5616,10 @@
   },
   "1.11.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-12-10-desktop-v1.11.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-12-10-desktop-v1.11.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-12-10-mobile-v1.11.0/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4912,7 +5628,10 @@
   },
   "1.11.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-12-12-desktop-v1.11.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-12-12-desktop-v1.11.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-12-12-mobile-v1.11.1/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4921,7 +5640,10 @@
   },
   "1.11.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-12-23-desktop-v1.11.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-12-23-desktop-v1.11.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-12-23-mobile-v1.11.2/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4930,7 +5652,10 @@
   },
   "1.11.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2025-12-31-desktop-v1.11.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2025-12-31-desktop-v1.11.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2025-12-31-mobile-v1.11.3/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -4939,11 +5664,16 @@
   },
   "1.11.4": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-01-12-desktop-v1.11.4/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2026-01-07-desktop-v1.11.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-01-12-desktop-v1.11.4/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-01-07-desktop-v1.11.4/",
+      "mobile": "https://obsidian.md/changelog/2026-01-12-mobile-v1.11.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-01-07-mobile-v1.11.4/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/Obsidian-1.11.4.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/obsidian-1.11.4.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/Obsidian-1.11.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.4/Obsidian-1.11.4.exe",
@@ -4984,11 +5714,16 @@
   },
   "1.11.5": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-01-20-desktop-v1.11.5/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2026-01-15-desktop-v1.11.5/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-01-20-desktop-v1.11.5/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-01-15-desktop-v1.11.5/",
+      "mobile": "https://obsidian.md/changelog/2026-01-20-mobile-v1.11.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-01-15-mobile-v1.11.5/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.5/Obsidian-1.11.5.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.5/obsidian-1.11.5.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.5/Obsidian-1.11.5.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.5/Obsidian-1.11.5.exe",
@@ -5029,7 +5764,10 @@
   },
   "1.11.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-01-26-desktop-v1.11.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-01-26-desktop-v1.11.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-01-26-mobile-v1.11.6/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5038,11 +5776,16 @@
   },
   "1.11.7": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-02-05-desktop-v1.11.7/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2026-01-28-desktop-v1.11.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-02-05-desktop-v1.11.7/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-01-28-desktop-v1.11.7/",
+      "mobile": "https://obsidian.md/changelog/2026-02-05-mobile-v1.11.7/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-01-28-mobile-v1.11.7/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.7/Obsidian-1.11.7.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.7/obsidian-1.11.7.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.7/Obsidian-1.11.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.11.7/Obsidian-1.11.7.exe",
@@ -5083,7 +5826,10 @@
   },
   "1.12.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-02-10-desktop-v1.12.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-02-10-desktop-v1.12.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-02-10-mobile-v1.12.0/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5092,7 +5838,10 @@
   },
   "1.12.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-02-10-desktop-v1.12.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-02-10-desktop-v1.12.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-02-10-mobile-v1.12.1/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5101,7 +5850,10 @@
   },
   "1.12.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-02-18-desktop-v1.12.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-02-18-desktop-v1.12.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-02-18-mobile-v1.12.2/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5110,7 +5862,10 @@
   },
   "1.12.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-02-23-desktop-v1.12.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-02-23-desktop-v1.12.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-02-23-mobile-v1.12.3/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5119,11 +5874,16 @@
   },
   "1.12.4": {
     "channel": "public+catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-02-27-desktop-v1.12.4/",
-    "changelogUrl_catalyst": "https://obsidian.md/changelog/2026-02-24-desktop-v1.12.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-02-27-desktop-v1.12.4/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-02-24-desktop-v1.12.4/",
+      "mobile": "https://obsidian.md/changelog/2026-02-27-mobile-v1.12.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-02-24-mobile-v1.12.4/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.4/Obsidian-1.12.4.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.4/obsidian-1.12.4.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.4/Obsidian-1.12.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.4/Obsidian-1.12.4.exe",
@@ -5164,7 +5924,10 @@
   },
   "1.12.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-03-05-desktop-v1.12.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-03-05-desktop-v1.12.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-03-05-mobile-v1.12.5/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5173,7 +5936,10 @@
   },
   "1.12.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-03-18-desktop-v1.12.6/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-03-18-desktop-v1.12.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-03-18-mobile-v1.12.6/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5182,10 +5948,14 @@
   },
   "1.12.7": {
     "channel": "public",
-    "changelogUrl": "https://obsidian.md/changelog/2026-03-23-desktop-v1.12.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-03-23-desktop-v1.12.7/",
+      "mobile": "https://obsidian.md/changelog/2026-03-23-mobile-v1.12.7/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian-1.12.7.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.exe",
@@ -5226,7 +5996,10 @@
   },
   "1.13.0": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-05-28-desktop-v1.13.0/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-05-28-desktop-v1.13.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-05-28-mobile-v1.13.0/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.6.5",
     "downloads": {
@@ -5235,7 +6008,10 @@
   },
   "1.13.1": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-06-09-desktop-v1.13.1/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-06-09-desktop-v1.13.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-06-09-mobile-v1.13.1/"
+    },
     "minRecommendedElectronVersion": "28.2.3",
     "minRunnableInstallerVersion": "1.1.9",
     "downloads": {
@@ -5244,22 +6020,34 @@
   },
   "1.13.2": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-07-14-desktop-v1.13.2/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-07-14-desktop-v1.13.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-07-14-mobile-v1.13.2/"
+    },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.2.asar.gz"
     }
   },
   "1.13.3": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-07-21-desktop-v1.13.3/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-07-21-desktop-v1.13.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-07-21-mobile-v1.13.3/"
+    },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.3.asar.gz"
     }
   },
   "1.13.4": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-07-27-desktop-v1.13.4/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-07-30-desktop-v1.13.4/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-07-27-desktop-v1.13.4/",
+      "mobile": "https://obsidian.md/changelog/2026-07-30-mobile-v1.13.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-07-27-mobile-v1.13.4/"
+    },
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/obsidian-1.13.4.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.4/Obsidian-1.13.4.exe",
@@ -5268,15 +6056,24 @@
   },
   "1.13.5": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-08-05-desktop-v1.13.5/",
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-08-05-desktop-v1.13.5/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-08-05-mobile-v1.13.5/"
+    },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.5.asar.gz"
     }
   },
   "1.13.6": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-08-07-desktop-v1.13.6/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-08-10-desktop-v1.13.6/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-08-07-desktop-v1.13.6/",
+      "mobile": "https://obsidian.md/changelog/2026-08-10-mobile-v1.13.6/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-08-07-mobile-v1.13.6/"
+    },
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/obsidian-1.13.6.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.6/Obsidian-1.13.6.exe",
@@ -5285,8 +6082,14 @@
   },
   "1.13.7": {
     "channel": "catalyst",
-    "changelogUrl": "https://obsidian.md/changelog/2026-08-11-desktop-v1.13.7/",
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-08-12-desktop-v1.13.7/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-08-11-desktop-v1.13.7/",
+      "mobile": "https://obsidian.md/changelog/2026-08-12-mobile-v1.13.7/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-08-11-mobile-v1.13.7/"
+    },
     "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.apk",
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian-1.13.7.asar.gz",
       "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.dmg",
       "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/Obsidian-1.13.7.exe",

@@ -60,6 +60,45 @@ export interface ObsidianRuntimeVersions {
 }
 
 /**
+ * The changelog page URLs for a version, one per publication target, baked into
+ * `metadata.json` from Obsidian's own changelog feed (`obsidian.md/changelog.xml`
+ * — see the `metadata.json` section in `CLAUDE.md`).
+ *
+ * Obsidian publishes a *separate* changelog page per platform (desktop / mobile)
+ * and per channel (public / catalyst "early access"), each at its own dated slug
+ * — the catalyst page typically predates the public one by about a day. Every
+ * key is optional: a version carries only the pages the feed actually published
+ * for it (a catalyst-only build has no `desktop`, a desktop-only release has no
+ * `mobile`, and the oldest versions predate the mobile app entirely).
+ *
+ * Caveat for the mobile keys: before **1.4.8** (2023-09-05) the mobile app ran
+ * its own version line, so a same-keyed mobile page documents a *different*
+ * release than the desktop page beside it (mobile `1.4.5` shipped 2023-05-23,
+ * desktop `1.4.5` 2023-08-31). From 1.4.8 on the two lines track within days.
+ */
+export interface ObsidianVersionChangelogUrls {
+  /**
+  The public desktop changelog page URL.
+   */
+  readonly desktop?: string;
+
+  /**
+  The catalyst ("early access") desktop changelog page URL.
+   */
+  readonly desktopCatalyst?: string;
+
+  /**
+  The public mobile changelog page URL.
+   */
+  readonly mobile?: string;
+
+  /**
+  The catalyst ("early access") mobile changelog page URL.
+   */
+  readonly mobileCatalyst?: string;
+}
+
+/**
  * The pre-resolved asset download URLs for a version, baked into `metadata.json`
  * from the upstream `obsidian-versions.json` catalog (see the `metadata.json`
  * section in `CLAUDE.md`).
@@ -67,12 +106,27 @@ export interface ObsidianRuntimeVersions {
  * These are the exact URLs the version's assets are published at, so the
  * integration-time download paths can skip the GitHub release-API lookup and the
  * historical dot-vs-hyphen asset-name guessing. Only the assets this library
- * actually downloads are carried: the app `asar` and the x64 desktop installers.
- * A field is absent when the version publishes no such asset (e.g. a catalyst
- * build ships only the `asar`), in which case the caller falls back to its
- * hand-rolled resolution.
+ * actually downloads are carried: the app `asar`, the x64 desktop installers,
+ * and the Android `apk`. A field is absent when the version publishes no such
+ * asset (e.g. a catalyst build ships only the `asar`), in which case the caller
+ * falls back to its hand-rolled resolution.
  */
 export interface ObsidianVersionDownloads {
+  /**
+   * The public Android `.apk` URL. Published as a GitHub release asset named
+   * uniformly `Obsidian-<version>.apk` — the asset first appears at 1.5.8 and is
+   * hyphenated from the start, so it has no dot-separator era to guess around
+   * (unlike the desktop installers `installer-asset.ts` handles).
+   *
+   * There is deliberately no catalyst counterpart. Unlike the desktop catalyst
+   * asar, the mobile catalyst build is not published at a URL at all: Obsidian
+   * distributes it through a Discord-gated channel, per
+   * https://obsidian.md/help/early-access. What this table can carry for a
+   * catalyst mobile build is its changelog —
+   * {@link ObsidianVersionChangelogUrls.mobileCatalyst}.
+   */
+  readonly apk?: string;
+
   /**
   The `obsidian-<version>.asar.gz` package URL.
    */
@@ -107,9 +161,11 @@ export interface ObsidianVersionMetadata {
   readonly available?: boolean;
 
   /**
-  URL of the version's changelog.
+   * The version's changelog page URLs, one per publication target (desktop /
+   * mobile × public / catalyst), baked from Obsidian's changelog feed. Absent
+   * for the few versions the feed never published a page for.
    */
-  readonly changelogUrl?: string;
+  readonly changelogUrl?: ObsidianVersionChangelogUrls;
 
   /**
   The release channel: `'public'`, `'catalyst'`, or `'public+catalyst'`.

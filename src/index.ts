@@ -104,6 +104,7 @@ export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';
 export type {
   ObsidianRuntimeVersions,
+  ObsidianVersionChangelogUrls,
   ObsidianVersionDownloads,
   ObsidianVersionMetadata
 } from './obsidian-metadata.ts';

@@ -29,20 +29,50 @@ describe('getVersionMetadata', () => {
     expect(metadata?.channel).toBe('public');
   });
 
-  it('exposes the baked asar + desktop-installer download URLs for a public version', () => {
+  it('exposes the baked asar + desktop-installer + apk download URLs for a public version', () => {
     const downloads = getVersionMetadata('1.12.7')?.downloads;
     expect(downloads?.asar).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian-1.12.7.asar.gz');
     expect(downloads?.exe).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.exe');
     expect(downloads?.dmg).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.dmg');
     expect(downloads?.tar).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/obsidian-1.12.7.tar.gz');
+    expect(downloads?.apk).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.7/Obsidian-1.12.7.apk');
   });
 
-  it('carries only the asar URL for a catalyst version (no public desktop installer)', () => {
+  it('carries no apk before 1.5.8, the release the Android asset first appears on', () => {
+    expect(getVersionMetadata('1.5.7')?.downloads?.apk).toBeUndefined();
+    expect(getVersionMetadata('1.5.8')?.downloads?.apk).toBe('https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.8/Obsidian-1.5.8.apk');
+  });
+
+  it('carries only the asar URL for a catalyst version (no public desktop installer, no apk)', () => {
     const downloads = getVersionMetadata('1.13.1')?.downloads;
     expect(downloads?.asar).toBe('https://releases.obsidian.md/release/obsidian-1.13.1.asar.gz');
     expect(downloads?.exe).toBeUndefined();
     expect(downloads?.dmg).toBeUndefined();
     expect(downloads?.tar).toBeUndefined();
+    expect(downloads?.apk).toBeUndefined();
+  });
+
+  it('exposes a changelog page per publication target, the catalyst pages predating the public ones', () => {
+    const changelogUrl = getVersionMetadata('1.13.7')?.changelogUrl;
+    expect(changelogUrl?.desktop).toBe('https://obsidian.md/changelog/2026-08-12-desktop-v1.13.7/');
+    expect(changelogUrl?.mobile).toBe('https://obsidian.md/changelog/2026-08-12-mobile-v1.13.7/');
+    expect(changelogUrl?.desktopCatalyst).toBe('https://obsidian.md/changelog/2026-08-11-desktop-v1.13.7/');
+    expect(changelogUrl?.mobileCatalyst).toBe('https://obsidian.md/changelog/2026-08-11-mobile-v1.13.7/');
+  });
+
+  it('carries only the catalyst changelog pages for a version that never shipped publicly', () => {
+    const changelogUrl = getVersionMetadata('1.13.1')?.changelogUrl;
+    expect(changelogUrl?.desktopCatalyst).toBe('https://obsidian.md/changelog/2026-06-09-desktop-v1.13.1/');
+    expect(changelogUrl?.mobileCatalyst).toBe('https://obsidian.md/changelog/2026-06-09-mobile-v1.13.1/');
+    expect(changelogUrl?.desktop).toBeUndefined();
+    expect(changelogUrl?.mobile).toBeUndefined();
+  });
+
+  it('carries no mobile changelog page for a version predating the mobile app', () => {
+    const changelogUrl = getVersionMetadata('0.9.22')?.changelogUrl;
+    expect(changelogUrl?.desktop).toBeDefined();
+    expect(changelogUrl?.mobile).toBeUndefined();
+    expect(changelogUrl?.mobileCatalyst).toBeUndefined();
   });
 
   it('exposes the empirically-collected runtime versions and derived ECMAScript edition', () => {
