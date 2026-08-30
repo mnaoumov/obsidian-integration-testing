@@ -172,6 +172,9 @@ export const config = defineConfig({
           // One emulator, one Appium server, and trusted input targets the app's GLOBAL focus and pointer,
           // So these files cannot run against each other (the same reason L8/L11 give consumers).
           fileParallelism: false,
+          // Takes the shared-emulator lock (L7). This project has no transport global setup, so it never
+          // Goes through `coreSetup` — which is what normally acquires it.
+          globalSetup: ['./scripts/android-trusted-input-global-setup.ts'],
           hookTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS,
           include: [ANDROID_TRUSTED_INPUT_TEST_FILE],
           maxWorkers: 1,

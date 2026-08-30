@@ -526,8 +526,15 @@ class AppiumTransportFactory {
         }
       };
 
+      // Chain rather than replace: the transport's own sync teardown drops the trusted-input channel's
+      // Adb port forward, which would otherwise be stranded on the device by an abrupt exit.
+      const originalDisposeSync = appiumTransport.disposeSync.bind(appiumTransport);
       transport.disposeSync = (): void => {
-        killAutoStartedProcesses();
+        try {
+          originalDisposeSync();
+        } finally {
+          killAutoStartedProcesses();
+        }
       };
 
       return transport;

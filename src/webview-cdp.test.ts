@@ -5,9 +5,44 @@ import {
 } from 'vitest';
 
 import {
+  parseForwardedPort,
   parseWebViewDevtoolsSocketName,
   selectWebViewPageTarget
 } from './webview-cdp.ts';
+
+describe('parseForwardedPort', () => {
+  const FORWARD_LIST = [
+    'emulator-5554 tcp:49630 localabstract:webview_devtools_remote_18056',
+    'emulator-5554 tcp:8200 tcp:6790',
+    'emulator-5556 tcp:49999 localabstract:webview_devtools_remote_18056'
+  ].join('\n');
+
+  it('should reuse the port already forwarded to this socket on this device', () => {
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'webview_devtools_remote_18056')).toBe(49_630);
+  });
+
+  it('should not match the same socket on a different device', () => {
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5555', 'webview_devtools_remote_18056')).toBeUndefined();
+  });
+
+  it('should not match a different socket on the same device', () => {
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'webview_devtools_remote_999')).toBeUndefined();
+  });
+
+  it('should ignore non-localabstract forwards, such as Appium own tcp pairs', () => {
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'tcp:6790')).toBeUndefined();
+  });
+
+  it('should return undefined when nothing is forwarded yet', () => {
+    expect(parseForwardedPort('', 'emulator-5554', 'webview_devtools_remote_18056')).toBeUndefined();
+  });
+
+  it('should tolerate the padded and CRLF-terminated output adb actually prints', () => {
+    const padded = '  emulator-5554   tcp:49630   localabstract:webview_devtools_remote_18056  \r\n';
+
+    expect(parseForwardedPort(padded, 'emulator-5554', 'webview_devtools_remote_18056')).toBe(49_630);
+  });
+});
 
 /**
  * A realistic `/proc/net/unix` excerpt: the columns are irrelevant, only the `@`-prefixed abstract socket

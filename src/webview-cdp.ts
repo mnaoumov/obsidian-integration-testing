@@ -16,6 +16,8 @@
  * endpoint then lists the page targets.
  */
 
+import { execFileSync } from 'node:child_process';
+
 import type { CdpInputCommand } from './mobile-input.ts';
 
 import { exec } from './exec.ts';
@@ -23,6 +25,9 @@ import { log } from './log.ts';
 import { pickFreePort } from './obsidian-instance.ts';
 
 const ADB_TIMEOUT_IN_MILLISECONDS = 15_000;
+// `adb forward --list` prints three columns: `<deviceId> tcp:<port> localabstract:<socketName>`.
+const FORWARD_LIST_COLUMN_COUNT = 3;
+const DECIMAL_RADIX = 10;
 const CDP_COMMAND_TIMEOUT_IN_MILLISECONDS = 30_000;
 const CDP_HOST = '127.0.0.1';
 
@@ -119,12 +124,26 @@ export class WebViewCdpConnection {
    * Closes the socket and drops the adb port forward.
    */
   public async dispose(): Promise<void> {
-    this.eventHandlers.clear();
-    if (this.webSocket.readyState === WebSocket.OPEN) {
-      this.webSocket.close();
-    }
-
+    this.closeSocket();
     await removeForward(this.deviceId, this.port);
+  }
+
+  /**
+   * Synchronous disposal, for `process.on('exit')` handlers where async work cannot run.
+   *
+   * Without this an abrupt worker exit leaves the port forward behind — the async {@link dispose} above
+   * never gets a turn.
+   */
+  public disposeSync(): void {
+    this.closeSocket();
+    try {
+      execFileSync('adb', ['-s', this.deviceId, 'forward', '--remove', `tcp:${String(this.port)}`], {
+        stdio: 'ignore',
+        timeout: ADB_TIMEOUT_IN_MILLISECONDS
+      });
+    } catch {
+      // Best effort: adb drops every forward when the device disconnects anyway.
+    }
   }
 
   /**
@@ -190,6 +209,16 @@ export class WebViewCdpConnection {
       await this.send(command.method, command.params);
     }
   }
+
+  /**
+   * Closes the debugger socket and stops routing its events.
+   */
+  private closeSocket(): void {
+    this.eventHandlers.clear();
+    if (this.webSocket.readyState === WebSocket.OPEN) {
+      this.webSocket.close();
+    }
+  }
 }
 
 /**
@@ -210,9 +239,16 @@ export async function connectToWebViewCdp(params: ConnectToWebViewCdpParams): Pr
 
   const procNetUnix = await adb(deviceId, ['shell', 'cat', '/proc/net/unix']);
   const socketName = parseWebViewDevtoolsSocketName(procNetUnix, pid);
-  const port = await pickFreePort();
-  await adb(deviceId, ['forward', `tcp:${String(port)}`, `localabstract:${socketName}`]);
-  log(`[webview-cdp] Forwarded tcp:${String(port)} -> localabstract:${socketName} (${appId} pid ${pid})`);
+
+  const forwardList = await adb(deviceId, ['forward', '--list']);
+  const existingPort = parseForwardedPort(forwardList, deviceId, socketName);
+  const port = existingPort ?? await pickFreePort();
+  if (existingPort === undefined) {
+    await adb(deviceId, ['forward', `tcp:${String(port)}`, `localabstract:${socketName}`]);
+    log(`[webview-cdp] Forwarded tcp:${String(port)} -> localabstract:${socketName} (${appId} pid ${pid})`);
+  } else {
+    log(`[webview-cdp] Reusing forward tcp:${String(port)} -> localabstract:${socketName} (${appId} pid ${pid})`);
+  }
 
   try {
     const response = await fetch(`http://${CDP_HOST}:${String(port)}/json`);
@@ -236,6 +272,36 @@ export async function connectToWebViewCdp(params: ConnectToWebViewCdpParams): Pr
 }
 
 /* v8 ignore start -- Integration-time code (adb, sockets, a live WebView). The pure helpers above are unit-tested; this half is covered by the Android integration tests. */
+
+/**
+ * Finds a port already forwarded to this device socket, so repeated runs reuse one forward.
+ *
+ * Without this every run allocates a fresh port, and any run that exits without the async
+ * {@link WebViewCdpConnection.dispose} — an abrupt worker exit, where only the synchronous teardown
+ * path runs — leaves its forward behind forever. Reuse bounds that to a single forward per socket
+ * rather than one per run.
+ *
+ * @param forwardList - The output of `adb forward --list`.
+ * @param deviceId - The adb device id to match.
+ * @param socketName - The abstract socket name to match.
+ * @returns The already-forwarded local port, or `undefined` when there is none.
+ */
+export function parseForwardedPort(forwardList: string, deviceId: string, socketName: string): number | undefined {
+  for (const line of forwardList.split('\n')) {
+    // `adb forward --list` prints `<deviceId> tcp:<port> localabstract:<socketName>`.
+    const [lineDeviceId, local, remote] = line.trim().split(/\s+/, FORWARD_LIST_COLUMN_COUNT);
+    if (lineDeviceId !== deviceId || remote !== `localabstract:${socketName}` || !local?.startsWith('tcp:')) {
+      continue;
+    }
+
+    const port = Number.parseInt(local.slice('tcp:'.length), DECIMAL_RADIX);
+    if (Number.isSafeInteger(port)) {
+      return port;
+    }
+  }
+
+  return undefined;
+}
 
 /**
  * Picks the WebView's devtools socket name out of `/proc/net/unix`.

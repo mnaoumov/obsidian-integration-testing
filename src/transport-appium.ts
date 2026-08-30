@@ -226,6 +226,10 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly browser: Browser;
   private readonly deviceId: string;
   /**
+   * The `process.on('exit')` handler that tears the channel down when nothing else will.
+   */
+  private disposeInputChannelOnExit: (() => void) | null = null;
+  /**
    * The host half of the trusted-input channel: a CDP connection to the WebView, independent of the
    * Appium session, opened lazily on first evaluate and reused (see **L39**).
    */
@@ -327,6 +331,20 @@ export class AppiumTransport implements ObsidianTransport {
     if (this.isSessionOwner) {
       await this.browser.deleteSession();
     }
+  }
+
+  /**
+   * Synchronous teardown for `process.on('exit')` handlers.
+   *
+   * Only the trusted-input channel needs it: the Appium session is the owning process's to end, and an
+   * abrupt exit is exactly when the async {@link AppiumTransport.dispose} never runs — which would strand
+   * the adb port forward on the device.
+   */
+  public disposeSync(): void {
+    const channel = this.inputChannel;
+    this.inputChannel = null;
+    this.unregisterInputChannelExitHandler();
+    channel?.disposeSync();
   }
 
   /**
@@ -582,6 +600,7 @@ export class AppiumTransport implements ObsidianTransport {
   private async disposeInputChannel(): Promise<void> {
     const channel = this.inputChannel;
     this.inputChannel = null;
+    this.unregisterInputChannelExitHandler();
     await channel?.dispose();
   }
 
@@ -628,6 +647,16 @@ export class AppiumTransport implements ObsidianTransport {
       });
 
       this.inputChannel = connection;
+
+      // Self-cleaning, deliberately: this transport can be created straight from a test worker, with no
+      // `coreSetup` owning its lifecycle and therefore nothing that ever calls `dispose`/`disposeSync` —
+      // Which is how a run leaves its adb port forward stranded on the device (observed 2026-08-30). The
+      // Handler is removed again on disposal so reconnects do not stack listeners.
+      this.disposeInputChannelOnExit = (): void => {
+        connection.disposeSync();
+      };
+      process.once('exit', this.disposeInputChannelOnExit);
+
       log('[appium-transport] Trusted-input channel open.');
     } catch (error: unknown) {
       // Give up for the life of the transport rather than paying an `adb` round-trip on every eval.
@@ -787,6 +816,19 @@ export class AppiumTransport implements ObsidianTransport {
     } catch (error: unknown) {
       log(`[appium-transport] Vault directory removal failed (non-fatal): ${String(error)}`);
     }
+  }
+
+  /**
+   * Drops the `process.on('exit')` handler that would otherwise close an already-closed channel, and would
+   * stack a listener per reconnect.
+   */
+  private unregisterInputChannelExitHandler(): void {
+    if (!this.disposeInputChannelOnExit) {
+      return;
+    }
+
+    process.off('exit', this.disposeInputChannelOnExit);
+    this.disposeInputChannelOnExit = null;
   }
 
   /**
