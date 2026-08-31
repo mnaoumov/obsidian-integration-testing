@@ -1782,7 +1782,7 @@ server and starting a fresh one fixed the suite with no other change.
   factory. `killProcessTreeByPid` was split out of `kill-process-tree.ts` because a marker yields a PID, not
   a `ChildProcess`.
 
-## L40. Headless demo-vault bootstrap — the injected plugins install themselves
+## L41. Headless demo-vault bootstrap — the injected plugins install themselves
 
 - **The problem was a GUI step in the only documented remedy.** `buildDemoVaultPopulate` requires each
   injected community plugin's `main.js` / `manifest.json` to be on disk and throws when they are not — the
@@ -1818,3 +1818,35 @@ server and starting a fresh one fixed the suite with no other change.
 - **Pure/testable split** as L27/L39: the registry lookup, URL building and missing-detection are unit-tested;
   only the `fetch`/write glue sits in the `v8 ignore` band, and the unit tests deliberately cover the
   no-download paths so the suite never touches the network.
+
+## L42. `webdriverio` is Appium-only — it must stay behind a lazy import
+
+`src/transport-factory.ts` calls exactly two `webdriverio` entry points, both inside
+`AppiumTransportFactory`: `attach` (reattaching to an existing session) and `remote` (creating one).
+Nothing on the desktop CDP path touches the module. It is therefore loaded through the module-local
+`importWebdriverio()` — the same shape as `src/sharp-loader.ts`, `no-restricted-syntax` disable and
+justification included — and imported statically **only** as `import type { attach, remote }`, which
+erases.
+
+**Two reasons it must not go back to a static import.**
+
+- **Weight.** `src/index.ts` re-exports `evalInObsidian`, which imports this module, so an eager
+  `webdriverio` puts the whole WebDriver stack — `@wdio/*`, `archiver`, `cheerio`, `jszip` — in the graph
+  of every consumer of the package index, including the desktop-only ones who never start a session.
+- **It breaks Jest outright (T755).** `@wdio/logger` imports `chalk@5`, which reads its own
+  `#supports-color` internal subpath import at module scope. Jest's `--experimental-vm-modules` linker
+  does not link `#`-prefixed internal imports before the body runs, so the binding is still in its TDZ:
+  every Jest ESM suite whose graph reaches this module dies at import with
+  `ReferenceError: Cannot access 'supportsColor' before initialization`, before a single test runs — the
+  same silent shape as T241. That is what kept `npm run test:jest` at "1 suite, 0 tests". **There is no
+  config-level escape**: `moduleNameMapper` is bypassed for `#` specifiers (mapping
+  `^#supports-color$` to a path that does not even exist changes nothing), and Jest cannot drop ESM mode
+  here because `scripts/jest-config.ts` and `scripts/helpers/metadata-global.ts` use
+  `import.meta.dirname`. Removing the edge is the fix; masking `chalk` would only have covered this
+  repo's own suite and left every Jest consumer of the barrel broken.
+
+Per **L6** this reaches Vitest / Jest / Manual alike — the lazy load lives in the shared factory, so no
+adapter changes. One deliberate consequence in the built output: the CJS bundle now emits
+`await import("webdriverio")` rather than `require("webdriverio")`, so Node resolves the package's
+`import` condition (`build/node.js`) instead of its `require` one (`build/index.cjs`). Both are supported
+entry points and only the Appium path reaches them.
