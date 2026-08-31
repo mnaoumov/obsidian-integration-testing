@@ -12,6 +12,16 @@ const DOCS_GENERATOR_TEST_FILES = 'scripts/docs-gen/**/*.test.ts';
 const DOCS_SITE_TEST_FILES = 'docs/src/**/*.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
+// Vitest 4 projects do NOT inherit the root-level `test` options, so a project that omits `testTimeout`
+// Silently runs on the built-in 5000 ms default. That is how the release gate went flaky (T765): every
+// Project here carried a budget EXCEPT `unit-tests` — the only one `npm run test:coverage` runs — so the
+// One project gating a release had the tightest budget in the repo. Spreading the default into each project
+// Makes the omission impossible rather than merely unlikely. The budget covers two costs a per-suite number
+// Cannot: v8 coverage instrumentation, measured at ~2.2x on this project, and the CPU contention of a busy
+// Machine. Suites that are genuinely slow in their own right — rendering an OG image with satori + resvg,
+// Building a ts-morph Project over the whole `tsconfig.json` — sit comfortably inside it.
+const SHARED_TEST_DEFAULTS = { testTimeout: BIG_TIMEOUT_IN_MILLISECONDS };
+
 // The owned-instance worker-attach regression suite runs in its own project: it
 // Owns the instance in the global setup and evals from a worker (every other
 // Integration suite registers in-worker), so it needs the harness-owned global
@@ -90,6 +100,7 @@ export const config = defineConfig({
       {
         define: DEFINE,
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: [...SHARED_EXCLUDE, INTEGRATION_TEST_FILES, JEST_TEST_FILES],
           include: ['src/**/*.test.ts'],
@@ -104,18 +115,16 @@ export const config = defineConfig({
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: [...SHARED_EXCLUDE],
           include: [DOCS_GENERATOR_TEST_FILES, DOCS_SITE_TEST_FILES],
-          name: 'unit-tests:docs-generator',
-          // Rendering an OG image to a bitmap (satori + resvg) and building a ts-morph Project are
-          // Genuinely slow. Under the full aggregate they lose the CPU race and the default 5000 ms
-          // Times them out.
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          name: 'unit-tests:docs-generator'
         }
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: [
             ...SHARED_EXCLUDE,
@@ -128,12 +137,12 @@ export const config = defineConfig({
           ],
           include: [INTEGRATION_TEST_FILES],
           name: 'integration-tests',
-          setupFiles: [METADATA_SETUP_FILE],
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          setupFiles: [METADATA_SETUP_FILE]
         }
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
@@ -141,12 +150,12 @@ export const config = defineConfig({
           include: [OWNED_ATTACH_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:owned-attach',
-          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
@@ -157,12 +166,12 @@ export const config = defineConfig({
           include: [BARE_ATTACH_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:bare-attach',
-          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           // The whole point of this project: a global setup that FAILS. It points the standard
           // Plugin-less setup at a CDP port nothing serves, so `registerVault` throws and the adapter
@@ -179,12 +188,12 @@ export const config = defineConfig({
           include: [FAILED_SETUP_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:failed-setup',
-          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
@@ -192,12 +201,12 @@ export const config = defineConfig({
           include: [ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:enable-community-plugins',
-          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts'],
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           // One emulator, one Appium server, and trusted input targets the app's GLOBAL focus and pointer,
@@ -216,14 +225,14 @@ export const config = defineConfig({
       },
       {
         test: {
+          ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
           include: [DESKTOP_TRUSTED_INPUT_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:desktop-trusted-input',
-          setupFiles: [METADATA_SETUP_FILE],
-          testTimeout: BIG_TIMEOUT_IN_MILLISECONDS
+          setupFiles: [METADATA_SETUP_FILE]
         }
       }
     ]
