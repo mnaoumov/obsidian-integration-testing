@@ -7,6 +7,10 @@
 /* v8 ignore start -- Integration-time factory covered by integration tests, not unit tests. */
 
 import type { ChildProcess } from 'node:child_process';
+import type {
+  attach,
+  remote
+} from 'webdriverio';
 
 import {
   execFile,
@@ -20,10 +24,6 @@ import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import {
-  attach,
-  remote
-} from 'webdriverio';
 
 import type { AppiumServerMarker } from './appium-server-marker.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
@@ -445,6 +445,22 @@ interface ResolveAndReportCompatibilityParams {
 }
 
 /**
+ * The slice of `webdriverio`'s surface the Appium factory calls, named so the
+ * lazy load has a return type without a static import of the module itself.
+ */
+interface WebdriverioModule {
+  /**
+  Reattaches to an existing WebDriver session.
+   */
+  readonly attach: typeof attach;
+
+  /**
+  Creates a new WebDriver session.
+   */
+  readonly remote: typeof remote;
+}
+
+/**
  * Encapsulates all Appium transport creation logic, including Appium server
  * startup, emulator management, and WebDriverIO session establishment.
  *
@@ -487,6 +503,7 @@ class AppiumTransportFactory {
 
     this.log(`Reattaching to existing Appium session ${sessionId} (device=${deviceId})`);
 
+    const { attach } = await importWebdriverio();
     const browser = await attach({
       capabilities: {
         platformName: 'Android'
@@ -590,7 +607,8 @@ class AppiumTransportFactory {
     });
   }
 
-  private connectSession(params: EstablishSessionParams): ReturnType<typeof remote> {
+  private async connectSession(params: EstablishSessionParams): Promise<Awaited<ReturnType<typeof remote>>> {
+    const { remote } = await importWebdriverio();
     return remote({
       capabilities: {
         'appium:appActivity': APP_ACTIVITY,
@@ -1688,6 +1706,30 @@ function createOwnedUserDataDirectory(): string {
   const root = join(tmpdir(), HARNESS_TEMP_DIR_NAME);
   mkdirSync(root, { recursive: true });
   return mkdtempSync(join(root, OWNED_USER_DATA_DIR_PREFIX));
+}
+
+/**
+ * Loads `webdriverio` on demand.
+ *
+ * The load is deferred because a static import would drag the whole WebDriver
+ * stack (`webdriverio` + `@wdio/*` + `archiver`/`cheerio`/`jszip`) into every
+ * consumer of this package's index — `evalInObsidian` reaches this module — when
+ * only the Appium transport needs it. Nothing on the desktop CDP path touches
+ * `webdriverio` at all.
+ *
+ * It also keeps `chalk` out of that graph. `@wdio/logger` imports `chalk@5`,
+ * whose internal `#supports-color` subpath import Jest's VM-modules linker fails
+ * to link, so an eagerly-imported `webdriverio` kills a Jest ESM suite at import
+ * with `ReferenceError: Cannot access 'supportsColor' before initialization`
+ * before a single test runs — which is what made `test:jest` red (T755). A
+ * `moduleNameMapper` cannot patch it: the mapper is bypassed for `#` specifiers.
+ *
+ * @returns A {@link Promise} that resolves to the `webdriverio` entry points the
+ * Appium factory calls.
+ */
+async function importWebdriverio(): Promise<WebdriverioModule> {
+  // eslint-disable-next-line no-restricted-syntax -- `webdriverio` is Appium-only, so it must be loaded lazily: a static import would drag the whole WebDriver stack into every consumer of this package's index, and `chalk` with it (see the doc comment).
+  return await import('webdriverio');
 }
 
 /**
