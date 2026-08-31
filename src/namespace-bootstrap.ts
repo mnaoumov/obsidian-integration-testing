@@ -193,6 +193,20 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * one-line `localStorage.setItem` wrapper used only by the harness.
      */
     setLocalStorageItem(nsParams: SetLocalStorageItemParams): Promise<void>;
+
+    /**
+     * The deliberate seam `obsidian-dev-utils` reads on mobile — the one namespace member that exists for
+     * another package rather than for the harness. Its **L17** mirror (`desktop-trusted-input.ts`) can
+     * reach a trusted event on desktop by itself, but on mobile the injection has to come from the Node
+     * side over the harness's CDP channel (**L39**), and ODU must never import this package at runtime
+     * (ODU **L4**). So ODU reads these off `window.__obsidianIntegrationTesting` instead, declaring the
+     * shape locally.
+     *
+     * These are the **same function objects** `evalWrapper` puts in a closure's `lib` bag, not wrappers:
+     * each already branches on `Platform.isMobile` internally, so the mobile semantics live in exactly one
+     * place and one seam serves both platforms.
+     */
+    readonly trustedInput: TrustedInputHelpers;
   }
 
   interface EvalWrapperParams {
@@ -225,6 +239,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   interface SetLocalStorageItemParams {
     readonly key: string;
     readonly value: string;
+  }
+
+  // The shape of the `trustedInput` seam. Every member is one of the L17-synced helpers, exposed as the
+  // Same function object `evalWrapper` puts in a closure's `lib` bag.
+  interface TrustedInputHelpers {
+    clickElement(clickParams: ClickElementParams): Promise<void>;
+    clickMouse(clickParams: ClickMouseParams): Promise<void>;
+    hoverElement(hoverParams: HoverElementParams): Promise<void>;
+    moveMouse(moveParams: MoveMouseParams): Promise<void>;
+    pressKey(pressParams: PressKeyParams): Promise<void>;
+    typeIntoEditor(typeParams: TypeIntoEditorParams): Promise<void>;
+    unhoverElement(unhoverParams: UnhoverElementParams): Promise<void>;
   }
 
   // `Vault.configDir` is declared always-present by `obsidian-typings`, but old
@@ -566,6 +592,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     async setLocalStorageItem(this: IntegrationTestingNamespace, params): Promise<void> {
       await this.ensureLayoutReady();
       localStorage.setItem(params.key, params.value);
+    },
+
+    // The same function objects `evalWrapper` puts in a closure's `lib` bag — deliberately not re-derived
+    // And not wrapped, so `obsidian-dev-utils` gets exactly the harness's behavior on both platforms.
+    trustedInput: {
+      clickElement,
+      clickMouse,
+      hoverElement,
+      moveMouse,
+      pressKey,
+      typeIntoEditor,
+      unhoverElement
     },
 
     version: bootstrapParams.version
