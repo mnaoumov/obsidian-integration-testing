@@ -1781,3 +1781,40 @@ server and starting a fresh one fixed the suite with no other change.
   (`wedged-appium-server.ts`, `appium-server-marker.ts`); the spawn/kill/HTTP glue stays in the `v8 ignore`
   factory. `killProcessTreeByPid` was split out of `kill-process-tree.ts` because a marker yields a PID, not
   a `ChildProcess`.
+
+## L40. Headless demo-vault bootstrap — the injected plugins install themselves
+
+- **The problem was a GUI step in the only documented remedy.** `buildDemoVaultPopulate` requires each
+  injected community plugin's `main.js` / `manifest.json` to be on disk and throws when they are not — the
+  throw itself is deliberate and unchanged. Its message used to name exactly one fix: *open
+  `demo-vault/` in Obsidian once so `demo-vault-helper` installs it*. But `.obsidian/plugins/*` is gitignored
+  in every fleet plugin repo, so that state lives on the one machine that did it and is invisible to a fresh
+  clone, a new machine, or CI — and since a plugin repo's `npm run version` preflight runs
+  `test:integration`, **a clean clone could not cut a release** until a human opened a GUI. It surfaced ~7
+  minutes into the App Update Notifier 1.0.0 preflight.
+- **Downloading the release assets is the exact equivalent.** A plugin's published `main.js` /
+  `manifest.json` / `styles.css` are what Obsidian's own community browser installs, so writing them into
+  `demo-vault/.obsidian/plugins/<id>/` produces the same folder — and therefore the same fleet-standard
+  `*-demo-vault-<version>.zip`, which is supposed to carry `fix-require-modules` anyway.
+- **The id → repo mapping is not hardcoded; it comes from Obsidian.**
+  `community-plugin-registry.ts` (pure, unit-tested) holds the registry URL —
+  `obsidianmd/obsidian-releases`' `community-plugins.json`, the same table the in-app browser installs from —
+  the `selectPluginRepo` lookup, and the `buildPluginAssetUrl` shapes for a pinned tag vs the moving latest
+  release. `InjectPluginParams.repo` overrides the lookup (and is the only way to bootstrap an unlisted
+  plugin); `InjectPluginParams.version` pins a tag.
+- **Sync stays sync — that is why there are two entry points, not one.** `fetch` has no synchronous form and
+  `buildDemoVaultPopulate` is synchronous, so auto-healing cannot go inside `seedPlugin`. It lives on
+  `buildDemoVaultPopulateAsync` (`demo-vault-bootstrap.ts`), reachable because the Vitest **and** Jest
+  `populate` thunks now return `PopulateFilesParams | Promise<PopulateFilesParams>` — a widening, so every
+  existing synchronous thunk still typechecks and `CoreSetupParams.populate` is untouched (the adapters
+  `await` it). The `bootstrap-demo-vault` CLI subcommand is the same installer for a one-off repair.
+- **One definition of "missing".** `resolveMissingInjectedPlugins` is exported from `demo-vault-populate.ts`
+  and used by both the throw path and the bootstrap, so the two cannot drift. It also owns the opt-out: a
+  plugin with an explicit `sourceDirectory` names a **local build output**, never somewhere to download a
+  published release into, so it is excluded even under `--force` and gets its own error message.
+- **Module direction avoids a cycle.** `demo-vault-bootstrap.ts` imports from `demo-vault-populate.ts`, never
+  the reverse — which is why `buildDemoVaultPopulateAsync` lives in the bootstrap module rather than next to
+  its synchronous sibling.
+- **Pure/testable split** as L27/L39: the registry lookup, URL building and missing-detection are unit-tested;
+  only the `fetch`/write glue sits in the `v8 ignore` band, and the unit tests deliberately cover the
+  no-download paths so the suite never touches the network.

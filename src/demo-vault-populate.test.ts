@@ -14,7 +14,10 @@ import {
   it
 } from 'vitest';
 
-import { buildDemoVaultPopulate } from './demo-vault-populate.ts';
+import {
+  buildDemoVaultPopulate,
+  resolveMissingInjectedPlugins
+} from './demo-vault-populate.ts';
 
 describe('buildDemoVaultPopulate', () => {
   let root: string;
@@ -161,5 +164,80 @@ describe('buildDemoVaultPopulate', () => {
   it('should throw when the plugin source dir does not exist at all', () => {
     expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'ghost' }] }))
       .toThrow(/main\.js missing/);
+  });
+
+  it('should name the headless remedies, not a GUI step, in the throw', () => {
+    // `.obsidian/plugins/*` is gitignored, so "open it in Obsidian once" is unreachable from a clone or CI.
+    // Both headless routes must therefore be named in the message.
+    expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'ghost' }] }))
+      .toThrow(/obsidian-integration-testing bootstrap-demo-vault/);
+    expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'ghost' }] }))
+      .toThrow(/buildDemoVaultPopulateAsync/);
+  });
+
+  it('should tell an explicit-sourceDirectory plugin that it is opted out of the bootstrap', () => {
+    const sourceDirectory = join(root, 'external', 'cst');
+    mkdirSync(sourceDirectory, { recursive: true });
+
+    expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'cst', sourceDirectory }] }))
+      .toThrow(/opts it out of the headless bootstrap/);
+  });
+});
+
+describe('resolveMissingInjectedPlugins', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'demo-vault-missing-'));
+  });
+
+  afterEach(() => {
+    rmSync(root, { force: true, recursive: true });
+  });
+
+  function writePluginBinaries(pluginId: string): void {
+    const directory = join(root, '.obsidian', 'plugins', pluginId);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'main.js'), `// ${pluginId} main`);
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ id: pluginId }));
+  }
+
+  it('should select only the plugins whose binaries are absent', () => {
+    writePluginBinaries('installed');
+
+    const missing = resolveMissingInjectedPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ pluginId: 'installed' }, { pluginId: 'absent' }]
+    });
+
+    expect(missing.map((plugin) => plugin.pluginId)).toEqual(['absent']);
+  });
+
+  it('should select a plugin whose folder exists but is incomplete', () => {
+    const directory = join(root, '.obsidian', 'plugins', 'half');
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'manifest.json'), '{}');
+
+    const missing = resolveMissingInjectedPlugins({ demoVaultPath: root, injectPlugins: [{ pluginId: 'half' }] });
+
+    expect(missing.map((plugin) => plugin.pluginId)).toEqual(['half']);
+  });
+
+  it('should never select a plugin that names an explicit sourceDirectory', () => {
+    const missing = resolveMissingInjectedPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ pluginId: 'local-build', sourceDirectory: join(root, 'dist') }]
+    });
+
+    expect(missing).toEqual([]);
+  });
+
+  it('should preserve the given order and carry the repo/version overrides through', () => {
+    const missing = resolveMissingInjectedPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ pluginId: 'first', repo: 'owner/first' }, { pluginId: 'second', version: '1.2.3' }]
+    });
+
+    expect(missing).toEqual([{ pluginId: 'first', repo: 'owner/first' }, { pluginId: 'second', version: '1.2.3' }]);
   });
 });

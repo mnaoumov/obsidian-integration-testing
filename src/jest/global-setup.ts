@@ -80,8 +80,12 @@ export interface CreateSetupOptions {
    * Returns files/folders to write into the vault before Obsidian opens it (see
    * {@link CoreSetupParams.populate}). A thunk so large fixtures are built lazily,
    * once, in the setup process.
+   *
+   * May return a promise, so the map can be built by something that needs the network — notably
+   * `buildDemoVaultPopulateAsync`, which installs a demo vault's missing community plugins before
+   * reading them. A synchronous thunk (e.g. `buildDemoVaultPopulate`) is unchanged.
    */
-  populate?(this: void): PopulateFilesParams;
+  populate?(this: void): PopulateFilesParams | Promise<PopulateFilesParams>;
 }
 
 /**
@@ -113,7 +117,7 @@ export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
     setupResult = await coreSetup({
       enableCommunityPlugins: options?.enableCommunityPlugins,
       installPlugin: options?.installPlugin,
-      populate: options?.populate?.(),
+      populate: await options?.populate?.(),
       transportOptions
     });
 
