@@ -1631,9 +1631,11 @@ Sibling repos (`obsidian-test-mocks`, and ODU's shared `src/script-utils/npm-pub
 `app.setting.open()` on its own does **nothing observable** from a test. `app.setting.containerEl` is built
 at startup and is never in the document, and `open()` does not attach it — so the modal builds into a
 detached tree, `open()` returns without throwing, and the document a test then reads (or screenshots) is
-untouched. Two plugins concluded from exactly this that the settings tab **cannot** be captured and wrote
-the impossibility down (`obsidian-backlink-full-path`, `obsidian-frontmatter-markdown-links`); the
-diagnosis was right and the conclusion was not.
+untouched. `obsidian-backlink-full-path` concluded from exactly this that the settings tab **cannot** be
+captured and wrote the impossibility down; the diagnosis was right and the conclusion was not.
+`obsidian-frontmatter-markdown-links` skipped the settings shot too but recorded no reason for it — which
+is why that shot went just as long without a retry, and is not the same thing as writing an impossibility
+down.
 
 The fix is one step, and **its order is load-bearing**: append `containerEl` to `document.body` **before**
 `open()`. Attaching afterwards is too late — whatever the modal rendered on open has already gone into the
@@ -1664,6 +1666,12 @@ Three behaviors worth knowing, all measured against a live instance rather than 
   searched — a plugin's tab is **not** in `settingTabs`.
 - **Readiness is polled, never slept.** The recipe was found with a blind `sleep(500)`; the modal's own
   `activeTab.id` + `activeTab.containerEl.childElementCount` are real signals, so the helper waits on those.
+
+**Verified on both transports.** All of the above was first proven against a live desktop instance over
+CDP. `obsidian-frontmatter-markdown-links` then ran `openObsidianSettingsTab` unchanged over the **Appium**
+transport (2026-08-30): its android capture leg went 3/3 green on a cold AVD, with the plugin's settings tab
+rendered and its rows returned. Nothing in the helper is desktop-specific, but that is now measured rather
+than assumed.
 
 `app.setting.close()` is the counterpart. Obsidian leaves the container attached on close, and the attach is
 a `contains` check, so re-opening simply works.
