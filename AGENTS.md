@@ -515,6 +515,14 @@ Notes on the set:
 - **`destroyCurrentWindow` / `ipcSendSync` are NOT synced** — they are transport/Electron-only harness
   primitives (see their `// intentionally not migrated` TSDoc in `namespace-bootstrap.ts`), not
   general-purpose utilities.
+- **The seven synced input helpers are ALSO published as `ns.trustedInput`** (added 2026-08-31, T792-P2) —
+  the one namespace member that exists *for* dev-utils rather than for the harness. Duplication is enough
+  on desktop, where dev-utils' own copy reaches a trusted event unaided; it is **not** enough on mobile,
+  where the injection must come from the Node side over the harness's CDP channel (**L39**) and dev-utils
+  may not import this package at runtime (ODU **L4**). So dev-utils' mobile mirror reads the helpers off
+  `window.__obsidianIntegrationTesting.trustedInput`, declaring the shape locally. The member exposes the
+  **same function objects** `evalWrapper` puts in a closure's `lib` bag — not wrappers — so the mobile
+  branch stays in exactly one place and the seam cannot drift from the `lib` bag it mirrors.
 
 This deliberately reimplements logic that lives here rather than sharing one source — normally the
 workspace never duplicates cross-library code — and is accepted for one reason: **dependency hygiene**.
@@ -1742,6 +1750,15 @@ it.
   `touchstart` timer, so the 600ms dwell has to clear *its* threshold. A synthetic element with no such
   handler will not produce a `contextmenu` from a dwell, which is why long-press has to be verified against
   a real Obsidian element rather than a probe `div`.
+- **`obsidian-dev-utils` reaches this mechanism through `ns.trustedInput`, and only through it** (added
+  2026-08-31, T792-P2). Everything above happens inside the renderer closure, so a caller outside the
+  harness has no way in — and ODU must never import this package at runtime (ODU **L4**), which rules out
+  the direct route. `ns.trustedInput` (`namespace-bootstrap.ts`, **L17**) publishes the seven helpers on
+  the namespace object; ODU's mobile mirror reads them off `window.__obsidianIntegrationTesting`. Two
+  alternatives were rejected: ODU re-implementing the wire format on top of `resolveInput` (the library
+  monkey-patching the harness inverts L4's dependency direction), and shipping a throwing stub in ODU (no
+  working mobile path at all). Note the seam publishes the helpers, **not** the channel: `resolveInput`
+  and the `Runtime.addBinding` half stay harness-internal.
 
 ## L40. Adopting an Appium server is not the same as trusting it (marker + wedged-server recovery)
 
