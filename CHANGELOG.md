@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 12.0.0
+
+- feat(trusted-input): publish the helpers as ns.trustedInput, the seam dev-utils reads on mobile
+- fix(vitest-config): budget every project's testTimeout, not eight of nine
+- docs(settings-tab): credit the impossibility note to one plugin, not two
+- fix(transport-factory): lazy-load webdriverio so the Jest gate can run
+- fix(coverage): restore the 100% gate so a release can be cut again
+- feat(demo-vault): install a demo vault's injected plugins headlessly
+- fix(appium): recognize a wedged Appium server and stop blaming the device
+- fix(setup): fail a project's tests with its setup error, not a fallback transport
+- feat(metadata): source the catalog from Obsidian's own endpoints
+- feat(trusted-input)!: give the lib bag a mobile path via a CDP channel to the WebView
+
 ## 11.0.0
 
 - feat(metadata)!: per-target changelogUrl object and baked Android apk URLs
