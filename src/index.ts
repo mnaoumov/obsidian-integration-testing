@@ -43,10 +43,23 @@ export {
   setVaultPathResolver
 } from './context-provider.ts';
 export type {
+  BootstrapDemoVaultPluginsParams,
+  BootstrapDemoVaultPluginsResult,
+  InstalledPluginInfo
+} from './demo-vault-bootstrap.ts';
+export {
+  bootstrapDemoVaultPlugins,
+  buildDemoVaultPopulateAsync
+} from './demo-vault-bootstrap.ts';
+export type {
   BuildDemoVaultPopulateParams,
-  InjectPluginParams
+  InjectPluginParams,
+  ResolveMissingInjectedPluginsParams
 } from './demo-vault-populate.ts';
-export { buildDemoVaultPopulate } from './demo-vault-populate.ts';
+export {
+  buildDemoVaultPopulate,
+  resolveMissingInjectedPlugins
+} from './demo-vault-populate.ts';
 export type { ReadDemoVaultTreeParams } from './demo-vault-tree.ts';
 export { readDemoVaultTree } from './demo-vault-tree.ts';
 export { DesktopOnlyPluginSkipError } from './desktop-only-plugin-skip-error.ts';

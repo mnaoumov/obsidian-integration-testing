@@ -175,10 +175,54 @@ export const { setup, teardown } = createSetup({
 });
 ```
 
-`buildDemoVaultPopulate` throws an actionable error if an injected plugin's `main.js` / `manifest.json` is
-missing from the demo vault — open `demo-vault/` in Obsidian once so `demo-vault-helper` installs it, then
-re-run. `enableCommunityPlugins` also composes with `installPlugin: false`, enabling extras into an
-otherwise plugin-less vault.
+`enableCommunityPlugins` also composes with `installPlugin: false`, enabling extras into an otherwise
+plugin-less vault.
+
+### Install the injected plugins headlessly
+
+An injected plugin's built files are **not in git** — `.obsidian/plugins/*` is gitignored — so a fresh
+clone, a new machine, or CI has nothing to seed and `buildDemoVaultPopulate` throws. Since a release
+preflight runs the integration tests, that is enough to block cutting a release. Two headless remedies,
+both of which download the plugin's published GitHub release assets into
+`demo-vault/.obsidian/plugins/<id>/` — the same folder Obsidian itself would have produced, so the shipped
+`*-demo-vault-<version>.zip` is unaffected:
+
+- **`buildDemoVaultPopulateAsync`** — the self-healing drop-in. It installs whatever is missing and then
+  builds the very same map, so the setup above needs one identifier changed and an `await`-able thunk (both
+  the Vitest and Jest adapters accept a `populate` thunk that returns a promise):
+
+  ```ts
+  import { buildDemoVaultPopulateAsync } from 'obsidian-integration-testing';
+
+  export const { setup, teardown } = createSetup({
+    enableCommunityPlugins: [CST_ID],
+    populate: () =>
+      buildDemoVaultPopulateAsync({
+        demoVaultPath: join(process.cwd(), 'demo-vault'),
+        injectPlugins: [{ pluginId: CST_ID, data: { modulesRoot: '_assets' } }]
+      })
+  });
+  ```
+
+- **`bootstrap-demo-vault`** — the one-off CLI, for repairing a checkout without touching the setup:
+
+  ```sh
+  npx obsidian-integration-testing bootstrap-demo-vault
+  npx obsidian-integration-testing bootstrap-demo-vault --plugin fix-require-modules --version 13.6.11
+  ```
+
+  With no `--plugin` it installs every id already present under `.obsidian/plugins/`. `--force`
+  re-downloads plugins that are already installed; `--repo owner/name` and `--version <tag>` apply to a
+  single `--plugin`.
+
+Each id resolves to its GitHub repository through **Obsidian's own community plugin registry** — the same
+`id` → `repo` table the in-app community browser installs from — so nothing is hardcoded. Pass `repo` on
+the injected plugin to skip that lookup (or to bootstrap a plugin that is not listed there), and `version`
+to pin a release tag instead of taking the latest.
+
+An injected plugin that names an explicit `sourceDirectory` is deliberately **excluded**: that points at a
+local build output, not somewhere to download a release into. `buildDemoVaultPopulate` stays synchronous
+and keeps throwing — `fetch` has no synchronous form — but its message now names both remedies above.
 
 ## Non-plugin consumers
 
