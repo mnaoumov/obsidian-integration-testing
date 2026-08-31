@@ -25,6 +25,7 @@ import {
   remote
 } from 'webdriverio';
 
+import type { AppiumServerMarker } from './appium-server-marker.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
@@ -37,12 +38,19 @@ import type {
   ObsidianTransportOptions
 } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
+import type { WedgedAppiumServerReportReason } from './wedged-appium-server.ts';
 
 import {
   checkIsAppiumDriverInstalled,
   UIAUTOMATOR2_DRIVER_NAME,
   willAutoInstallAppiumDependencies
 } from './appium-dependencies.ts';
+import {
+  checkIsHarnessOwnedAppiumServer,
+  clearAppiumServerMarker,
+  readAppiumServerMarker,
+  writeAppiumServerMarker
+} from './appium-server-marker.ts';
 import {
   resolveAppiumStartTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
@@ -67,7 +75,10 @@ import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { resolveInstallerCompatibility } from './installer-compatibility.ts';
 import { IntegrationSetupFailedError } from './integration-setup-failed-error.ts';
-import { killProcessTree } from './kill-process-tree.ts';
+import {
+  killProcessTree,
+  killProcessTreeByPid
+} from './kill-process-tree.ts';
 import {
   HARNESS_TEMP_DIR_NAME,
   OWNED_USER_DATA_DIR_PREFIX,
@@ -105,6 +116,11 @@ import {
   shouldHideAppiumConsole,
   shouldHideEmulatorWindow
 } from './visibility.ts';
+import {
+  buildWedgedAppiumServerMessage,
+  checkIsAppiumStatusReady,
+  resolveWedgedAppiumServerRemedy
+} from './wedged-appium-server.ts';
 
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
@@ -113,6 +129,7 @@ const APPIUM_CONNECTION_RETRY_COUNT = 3;
 const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
+const APPIUM_STOP_TIMEOUT_IN_MILLISECONDS = 15_000;
 const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
 // Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
@@ -126,8 +143,11 @@ const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120_000;
 const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10_000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
+const HTTP_MULTIPLE_CHOICES = 300;
+const HTTP_OK = 200;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
+const MILLISECONDS_PER_SECOND = 1000;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120_000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 
@@ -185,6 +205,76 @@ interface EnsureDeviceConnectedResult {
   The emulator process, if one was auto-started.
    */
   readonly emulatorProcess?: ChildProcess | undefined;
+}
+
+/**
+ * Parameters for {@link AppiumTransportFactory.establishSession}.
+ */
+interface EstablishSessionParams {
+  /**
+  The Android package the session drives.
+   */
+  readonly appId: string;
+
+  /**
+  The marker of the adopted server, when an earlier run of this harness left one.
+   */
+  readonly appiumServerMarker: AppiumServerMarker | undefined;
+
+  /**
+  Resolved timeout in milliseconds for a replacement Appium server to become ready.
+   */
+  readonly appiumStartTimeoutInMilliseconds: number;
+
+  /**
+  The device the session is established against.
+   */
+  readonly deviceId: string;
+
+  /**
+  Whether the server was adopted rather than started by this run.
+   */
+  readonly isAdoptedServer: boolean;
+
+  /**
+  Whether a replacement server's console window is shown (omitted → hidden).
+   */
+  readonly isAppiumConsoleVisible?: boolean | undefined;
+
+  /**
+  The Appium server port.
+   */
+  readonly port: number;
+
+  /**
+  Resolved WebDriverIO connection retry timeout in milliseconds.
+   */
+  readonly sessionConnectionRetryTimeoutInMilliseconds: number;
+
+  /**
+  Whether Appium auto-start is allowed — a `false` here also forbids replacing a wedged server.
+   */
+  readonly shouldAutoStartAppium?: boolean | undefined;
+
+  /**
+  The Appium server URL.
+   */
+  readonly url: URL;
+}
+
+/**
+ * Result of {@link AppiumTransportFactory.establishSession}.
+ */
+interface EstablishSessionResult {
+  /**
+  The replacement Appium server process, when a wedged one had to be restarted.
+   */
+  readonly appiumProcess?: ChildProcess | undefined;
+
+  /**
+  The established session.
+   */
+  readonly browser: Awaited<ReturnType<typeof remote>>;
 }
 
 /**
@@ -293,9 +383,21 @@ interface StartAppiumAndEmulatorResult {
   readonly appiumProcess?: ChildProcess | undefined;
 
   /**
+  The adopted server's marker, when an earlier run of this harness left one.
+   */
+  readonly appiumServerMarker?: AppiumServerMarker | undefined;
+
+  /**
   The emulator process, if one was auto-started.
    */
   readonly emulatorProcess?: ChildProcess | undefined;
+
+  /**
+   * Whether an already-listening server was adopted rather than started by this
+   * run. Only an adopted server can be the stale one `wedged-appium-server.ts`
+   * describes.
+   */
+  readonly isAdoptedAppiumServer: boolean;
 }
 
 /**
@@ -412,12 +514,63 @@ class AppiumTransportFactory {
     });
   }
 
+  private buildWedgedMessage(params: EstablishSessionParams, reason: WedgedAppiumServerReportReason): string {
+    const marker = params.appiumServerMarker;
+    return buildWedgedAppiumServerMessage({
+      appiumOrigin: params.url.origin,
+      deviceId: params.deviceId,
+      reason,
+      ...(marker !== undefined && {
+        serverAgeInMilliseconds: Date.now() - marker.startedAtInMilliseconds,
+        serverPid: marker.pid
+      })
+    });
+  }
+
+  /**
+   * Preflight probe for an already-running server.
+   *
+   * Liveness is not readiness: resolving on *any* response adopts a server that
+   * is refusing sessions (a non-2xx `/status`, or one that reports itself
+   * shutting down) exactly like a healthy one. Rejecting instead hands those
+   * cases to the auto-start path. It cannot catch the wedged server of
+   * `wedged-appium-server.ts` — that one answers `ready: true` — which is why
+   * the wedge is recognized from the failed session instead.
+   *
+   * @param url - The Appium server URL.
+   */
   private checkAppiumReachable(url: URL): Promise<void> {
     return new Promise((resolve, reject) => {
       const statusUrl = new URL('/status', url);
-      const request = http.get(statusUrl, { timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (response) => {
-        response.resume();
-        resolve();
+      /*
+       * `agent: false` — never a pooled socket. The global agent keeps sockets
+       * alive per host:port, so a probe after a server on that port was replaced
+       * can reuse the dead socket and fail with `ECONNRESET` regardless of what
+       * is listening now. That would make `waitForAppiumStopped` call a live
+       * server dead, and it is exactly the sequence the wedged-server restart
+       * performs. A fresh socket per probe costs nothing at this frequency.
+       */
+      const request = http.get(statusUrl, { agent: false, timeout: APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS }, (response) => {
+        const statusCode = response.statusCode ?? 0;
+        if (statusCode < HTTP_OK || statusCode >= HTTP_MULTIPLE_CHOICES) {
+          response.resume();
+          reject(new Error(`Appium server at ${url.origin} answered /status with HTTP ${String(statusCode)}; it is not accepting sessions.`));
+          return;
+        }
+
+        response.setEncoding('utf-8');
+        let body = '';
+        response.on('data', (chunk: string) => {
+          body += chunk;
+        });
+        response.on('end', () => {
+          if (checkIsAppiumStatusReady(body)) {
+            resolve();
+            return;
+          }
+
+          reject(new Error(`Appium server at ${url.origin} reports it is not ready to accept new connections.`));
+        });
       });
       request.on('timeout', () => {
         request.destroy();
@@ -434,6 +587,30 @@ class AppiumTransportFactory {
           )
         );
       });
+    });
+  }
+
+  private connectSession(params: EstablishSessionParams): ReturnType<typeof remote> {
+    return remote({
+      capabilities: {
+        'appium:appActivity': APP_ACTIVITY,
+        'appium:appPackage': params.appId,
+        'appium:autoGrantPermissions': true,
+        'appium:automationName': 'UiAutomator2',
+        'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
+        'appium:noReset': true,
+        'appium:udid': params.deviceId,
+        'appium:uiautomator2ServerInstallTimeout': SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS,
+        'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
+        'platformName': 'Android'
+      },
+      connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
+      connectionRetryTimeout: params.sessionConnectionRetryTimeoutInMilliseconds,
+      hostname: params.url.hostname,
+      logLevel: 'warn',
+      path: params.url.pathname,
+      port: params.port,
+      transformRequest: stripForbiddenFetchHeaders
     });
   }
 
@@ -480,31 +657,22 @@ class AppiumTransportFactory {
         });
       }
 
-      const sessionConnectionRetryTimeout = resolveSessionConnectionRetryTimeoutInMilliseconds(options);
-      this.log(
-        `Connecting to Appium (device=${actualDeviceId}, app=${appId}, retryTimeout: ${String(sessionConnectionRetryTimeout)}ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
-      );
-      const browser = await remote({
-        capabilities: {
-          'appium:appActivity': APP_ACTIVITY,
-          'appium:appPackage': appId,
-          'appium:autoGrantPermissions': true,
-          'appium:automationName': 'UiAutomator2',
-          'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
-          'appium:noReset': true,
-          'appium:udid': actualDeviceId,
-          'appium:uiautomator2ServerInstallTimeout': SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS,
-          'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
-          'platformName': 'Android'
-        },
-        connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
-        connectionRetryTimeout: sessionConnectionRetryTimeout,
-        hostname: url.hostname,
-        logLevel: 'warn',
-        path: url.pathname,
+      const sessionResult = await this.establishSession({
+        appId,
+        appiumServerMarker: result.appiumServerMarker,
+        appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
+        deviceId: actualDeviceId,
+        isAdoptedServer: result.isAdoptedAppiumServer,
+        isAppiumConsoleVisible: options.isAppiumConsoleVisible,
         port,
-        transformRequest: stripForbiddenFetchHeaders
+        sessionConnectionRetryTimeoutInMilliseconds: resolveSessionConnectionRetryTimeoutInMilliseconds(options),
+        shouldAutoStartAppium: options.shouldAutoStartAppium,
+        url
       });
+
+      const browser = sessionResult.browser;
+      // A wedged adopted server is replaced by one this run owns, so it must be torn down like any other auto-started server.
+      appiumProcess = sessionResult.appiumProcess ?? appiumProcess;
 
       this.log('Appium session established.');
       const appiumTransport = new AppiumTransport({
@@ -544,6 +712,8 @@ class AppiumTransportFactory {
       function killAutoStartedProcesses(): void {
         if (appiumProcess) {
           killProcessTree(appiumProcess);
+          // Drop the marker with the server it describes, so the next run cannot mistake a recycled PID for ours.
+          clearAppiumServerMarker(port);
           // Cannot use this.log inside nested function — `this` is not captured.
           log(`[transport-factory:${options.type}] Auto-started Appium server stopped.`);
         }
@@ -555,6 +725,7 @@ class AppiumTransportFactory {
     } catch (error: unknown) {
       if (appiumProcess) {
         killProcessTree(appiumProcess);
+        clearAppiumServerMarker(port);
         this.log('Killed auto-started Appium server after connection failure.');
       }
       if (emulatorProcess) {
@@ -563,6 +734,23 @@ class AppiumTransportFactory {
       }
       throw error;
     }
+  }
+
+  /**
+   * Describes an adopted server's provenance for the preflight log, so a stale
+   * leftover is visible in the transcript of a run that goes on to succeed — not
+   * only in the error of one that fails.
+   *
+   * @param marker - The marker read for the port, if any.
+   * @returns A short provenance description.
+   */
+  private describeAdoptedServer(marker: AppiumServerMarker | undefined): string {
+    if (!marker || !checkIsHarnessOwnedAppiumServer(marker)) {
+      return 'not started by this harness';
+    }
+
+    const ageInSeconds = Math.round((Date.now() - marker.startedAtInMilliseconds) / MILLISECONDS_PER_SECOND);
+    return `started by an earlier run of this harness, pid ${String(marker.pid)}, up for ${String(ageInSeconds)}s`;
   }
 
   /**
@@ -708,6 +896,47 @@ class AppiumTransportFactory {
     this.log(`The ${UIAUTOMATOR2_DRIVER_NAME} driver installed.`);
   }
 
+  /**
+   * Establishes the WebDriverIO session, recognizing the one failure that blames
+   * the wrong subject: `Could not find a connected Android device` from a server
+   * whose adb is wedged while the host's own adb sees the device fine.
+   *
+   * A server an earlier run of this harness started is restarted and the session
+   * retried once — the confirmed remedy. A foreign or user-managed server is
+   * never killed; it is reported with a message that names the server.
+   *
+   * @param params - The session capabilities plus what is known about the server.
+   * @returns The session, and the replacement server process when one was started.
+   */
+  private async establishSession(params: EstablishSessionParams): Promise<EstablishSessionResult> {
+    this.log(
+      `Connecting to Appium (device=${params.deviceId}, app=${params.appId}, retryTimeout: ${String(params.sessionConnectionRetryTimeoutInMilliseconds)}ms, retries: ${String(APPIUM_CONNECTION_RETRY_COUNT)})...`
+    );
+
+    try {
+      return { browser: await this.connectSession(params) };
+    } catch (error: unknown) {
+      const verdict = resolveWedgedAppiumServerRemedy({
+        connectedDeviceIds: await this.getConnectedDeviceIdsQuietly(),
+        deviceId: params.deviceId,
+        error,
+        isAdoptedServer: params.isAdoptedServer,
+        isAutoStartAllowed: params.shouldAutoStartAppium !== false,
+        isHarnessOwnedServer: checkIsHarnessOwnedAppiumServer(params.appiumServerMarker)
+      });
+
+      if (verdict.remedy === 'not-wedged') {
+        throw error;
+      }
+
+      if (verdict.remedy === 'report') {
+        throw new Error(this.buildWedgedMessage(params, verdict.reason), { cause: error });
+      }
+
+      return await this.restartWedgedServerAndRetry(params, error);
+    }
+  }
+
   private async findDeviceByAvdName(avdName: string, deviceIds: string[]): Promise<string | undefined> {
     for (const deviceId of deviceIds) {
       const runningAvd = await new Promise<string>((resolve) => {
@@ -747,6 +976,21 @@ class AppiumTransportFactory {
     return lines
       .filter((line) => line.includes('\tdevice'))
       .map((line) => line.split('\t', 1)[0] ?? '');
+  }
+
+  /**
+   * Lists the host's connected devices for the wedged-server cross-check, where
+   * an adb that itself fails must not be read as evidence against the server.
+   *
+   * @returns The connected device IDs, or an empty list when adb could not be run.
+   */
+  private async getConnectedDeviceIdsQuietly(): Promise<string[]> {
+    try {
+      return await this.getConnectedDeviceIds();
+    } catch (error: unknown) {
+      this.log(`Could not re-check connected devices: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
   }
 
   private getDeviceProperty(deviceId: string, property: string): Promise<string> {
@@ -791,6 +1035,47 @@ class AppiumTransportFactory {
     return join(sdkRoot, 'emulator', 'emulator');
   }
 
+  /**
+   * Replaces a wedged server this harness started earlier and retries the
+   * session once.
+   *
+   * The old server is killed and the port is waited out before a replacement is
+   * started: a socket that keeps answering `/status` would let the readiness
+   * poll pass on the dying server, and a port that never goes quiet means the
+   * kill did not take — in which case starting anything on it is pointless.
+   *
+   * @param params - The session capabilities plus what is known about the server.
+   * @param originalError - The failure that convicted the server, logged so the diagnosis is on the record.
+   * @returns The session and the replacement server process.
+   */
+  private async restartWedgedServerAndRetry(params: EstablishSessionParams, originalError: unknown): Promise<EstablishSessionResult> {
+    const marker = ensureNonNullable(params.appiumServerMarker, 'A restart verdict requires the marker that proved ownership.');
+    this.log(
+      `Appium at ${params.url.origin} cannot see ${params.deviceId} although this host's adb can — the server this harness started earlier (pid ${String(marker.pid)}) is stale. Restarting it... (session failed with: ${originalError instanceof Error ? originalError.message : String(originalError)})`
+    );
+
+    killProcessTreeByPid(marker.pid);
+    clearAppiumServerMarker(params.port);
+
+    try {
+      await this.waitForAppiumStopped(params.url);
+    } catch (error: unknown) {
+      throw new Error(this.buildWedgedMessage(params, 'restart-did-not-help'), { cause: error });
+    }
+
+    const launch = this.startAppiumServer(params.port, params.isAppiumConsoleVisible);
+
+    try {
+      await this.waitForAppiumReady(params.url, params.appiumStartTimeoutInMilliseconds, launch);
+      this.log('Replacement Appium server is ready, retrying the session...');
+      return { appiumProcess: launch.process, browser: await this.connectSession(params) };
+    } catch (error: unknown) {
+      killProcessTree(launch.process);
+      clearAppiumServerMarker(params.port);
+      throw new Error(this.buildWedgedMessage(params, 'restart-did-not-help'), { cause: error });
+    }
+  }
+
   private async sendKeyEvent(deviceId: string, keyCode: number, description: string): Promise<void> {
     await new Promise<void>((resolve) => {
       execFile(
@@ -814,11 +1099,13 @@ class AppiumTransportFactory {
     const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
+    let appiumServerMarker: AppiumServerMarker | undefined;
 
     this.log(`Checking Appium server at ${appiumUrl.href}...`);
     try {
       await this.checkAppiumReachable(appiumUrl);
-      this.log('Appium server is reachable.');
+      appiumServerMarker = readAppiumServerMarker(port);
+      this.log(`Appium server is reachable (${this.describeAdoptedServer(appiumServerMarker)}).`);
     } catch (error: unknown) {
       if (shouldAutoStartAppium === false) {
         throw error;
@@ -851,7 +1138,9 @@ class AppiumTransportFactory {
       return {
         actualDeviceId: deviceResult.actualDeviceId,
         appiumProcess,
-        emulatorProcess: deviceResult.emulatorProcess
+        appiumServerMarker,
+        emulatorProcess: deviceResult.emulatorProcess,
+        isAdoptedAppiumServer: !needsAppiumStart
       };
     } catch (error: unknown) {
       if (appiumProcess) {
@@ -898,6 +1187,16 @@ class AppiumTransportFactory {
     });
 
     child.unref();
+
+    /*
+     * Record the server as ours before anything can adopt it. The marker is what
+     * lets a later run tell its own leftover server from a foreign one, and so
+     * whether restarting a wedged server is this harness's call to make — see
+     * `appium-server-marker.ts`.
+     */
+    if (child.pid !== undefined) {
+      writeAppiumServerMarker({ pid: child.pid, port });
+    }
 
     return {
       process: child,
@@ -1122,6 +1421,32 @@ class AppiumTransportFactory {
         subject: 'Auto-started Appium server'
       }));
     }
+  }
+
+  /**
+   * Waits until nothing answers `/status` on the port any more.
+   *
+   * @param url - The Appium server URL.
+   * @throws If the port is still served when the timeout elapses.
+   */
+  private async waitForAppiumStopped(url: URL): Promise<void> {
+    const deadline = Date.now() + APPIUM_STOP_TIMEOUT_IN_MILLISECONDS;
+
+    while (Date.now() < deadline) {
+      try {
+        await this.checkAppiumReachable(url);
+      } catch {
+        return;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+
+    throw new Error(
+      `Something is still serving ${url.origin} ${String(APPIUM_STOP_TIMEOUT_IN_MILLISECONDS)}ms after the stale Appium server was killed.`
+    );
   }
 
   private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch): Promise<void> {
