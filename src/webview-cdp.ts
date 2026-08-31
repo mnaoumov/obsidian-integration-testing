@@ -79,6 +79,8 @@ interface CdpMessage {
   readonly result?: Record<string, unknown>;
 }
 
+/* v8 ignore start -- Integration-time code (a live WebSocket to a WebView, adb port forwarding). Covered by the Android integration tests, not by unit tests. It ends before `parseForwardedPort`: `perfectionist/sort-modules` places the pure, unit-tested helpers AFTER this class and `connectToWebViewCdp`, so they must stay measured. */
+
 /**
  * An open CDP connection to a WebView.
  *
@@ -271,7 +273,7 @@ export async function connectToWebViewCdp(params: ConnectToWebViewCdpParams): Pr
   }
 }
 
-/* v8 ignore start -- Integration-time code (adb, sockets, a live WebView). The pure helpers above are unit-tested; this half is covered by the Android integration tests. */
+/* v8 ignore stop */
 
 /**
  * Finds a port already forwarded to this device socket, so repeated runs reuse one forward.
@@ -316,12 +318,19 @@ export function parseForwardedPort(forwardList: string, deviceId: string, socket
  * @returns The socket name, e.g. `webview_devtools_remote_18056`.
  */
 export function parseWebViewDevtoolsSocketName(procNetUnix: string, pid: string): string {
+  // The whole match minus its leading `@`, rather than a named capture group: a mandatory group is always
+  // Present once the pattern has matched, so `match.groups?.['name'] ?? ''` would leave behind two branches
+  // No input can ever reach — and this file is measured against a 100% branch gate.
   const names = [
-    ...new Set([...procNetUnix.matchAll(/@(?<name>webview_devtools_remote_\w+)/g)]
-      .map((match) => match.groups?.['name'] ?? ''))
-  ].filter(Boolean);
+    ...new Set([...procNetUnix.matchAll(/@webview_devtools_remote_\w+/g)]
+      .map((match) => match[0].slice('@'.length)))
+  ];
 
-  if (names.length === 0) {
+  // Destructured rather than indexed for the same reason: `soleName` carries the "there is at least one"
+  // Fact in the type, so neither the empty check below nor the single-candidate one leaves a dead branch.
+  const [soleName, ...otherNames] = names;
+
+  if (soleName === undefined) {
     throw new Error(
       'No `webview_devtools_remote_*` socket on the device. Obsidian Mobile is not running, or its WebView '
         + 'debugger is disabled.'
@@ -333,8 +342,8 @@ export function parseWebViewDevtoolsSocketName(procNetUnix: string, pid: string)
     return exactName;
   }
 
-  if (names.length === 1) {
-    return names[0] ?? '';
+  if (otherNames.length === 0) {
+    return soleName;
   }
 
   throw new Error(
@@ -359,6 +368,8 @@ export function selectWebViewPageTarget(targets: readonly CdpTarget[]): CdpTarge
 
   return target;
 }
+
+/* v8 ignore start -- Integration-time code (adb shell-outs). Covered by the Android integration tests, not by unit tests. */
 
 /**
  * Runs an adb command against one device.

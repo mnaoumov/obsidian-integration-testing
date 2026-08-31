@@ -6,6 +6,7 @@ import {
 
 import {
   buildResolveInputExpression,
+  codePointOf,
   toCdpInputCommands,
   toCdpModifiers
 } from './mobile-input.ts';
@@ -31,6 +32,27 @@ describe('buildResolveInputExpression', () => {
 
   it('should optional-chain the whole call, so answering a page that has navigated is a no-op', () => {
     expect(buildResolveInputExpression('7')).toContain('?.resolveInput?.(');
+  });
+});
+
+describe('codePointOf', () => {
+  it('should return the code point of a single character', () => {
+    expect(codePointOf('0')).toBe(48);
+    expect(codePointOf('9')).toBe(57);
+    expect(codePointOf('A')).toBe(65);
+    expect(codePointOf('Z')).toBe(90);
+  });
+
+  it('should read the FIRST code point of a longer string', () => {
+    expect(codePointOf('AB')).toBe(65);
+  });
+
+  it('should treat an astral-plane character as one code point, not a surrogate half', () => {
+    expect(codePointOf('😀')).toBe(0x1_F6_00);
+  });
+
+  it('should throw on an empty string, the case every call site would otherwise guard against', () => {
+    expect(() => codePointOf('')).toThrow('codePointOf received an empty string.');
   });
 });
 
