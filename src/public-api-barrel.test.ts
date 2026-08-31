@@ -46,7 +46,9 @@ const TS_CONFIG_PATH = resolve(ROOT_DIR, 'tsconfig.json');
 // Building a ts-morph Project over the whole `tsconfig.json` takes a couple of seconds, and it loses the
 // CPU race when the full unit suite runs in parallel — the same reason `unit-tests:docs-generator` raises
 // Its timeout.
-const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
+// `test:coverage` makes that far worse: v8 instrumentation slows the very same load by roughly 10x (3.1 s
+// Plain, past 30 s instrumented), so this budget has to clear the instrumented cost, not the plain one.
+const BIG_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**
  * The barrel's two halves: which modules it re-exports from, and which names it forwards.

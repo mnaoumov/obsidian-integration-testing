@@ -1,6 +1,8 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync
 } from 'node:fs';
@@ -11,7 +13,8 @@ import {
   beforeEach,
   describe,
   expect,
-  it
+  it,
+  vi
 } from 'vitest';
 
 import {
@@ -19,9 +22,17 @@ import {
   buildDemoVaultPopulateAsync
 } from './demo-vault-bootstrap.ts';
 
-// Every case here is deliberately a NO-DOWNLOAD case.
-// The bootstrap must not touch the network when the binaries are on disk already, or the plugin opted out.
-// A unit test that did reach GitHub would be slow and flaky; the download path is covered by integration.
+// No case here reaches the network. Most are NO-DOWNLOAD cases outright: the bootstrap must not fetch when
+// The binaries are on disk already, or the plugin opted out. The one case that DOES walk the install loop
+// Stubs `fetch` and passes an explicit `repo`, so neither the asset download nor the memoised community
+// Registry lookup leaves the process — a real GitHub round-trip would be slow and flaky here, and the
+// Genuine end-to-end download stays an integration test.
+const HTTP_NOT_FOUND = 404;
+const PLUGIN_ASSET_BODIES = new Map<string, string>([
+  ['main.js', '// installed main'],
+  ['manifest.json', '{"id":"installed-plugin"}']
+]);
+
 describe('bootstrapDemoVaultPlugins', () => {
   let root: string;
 
@@ -31,6 +42,7 @@ describe('bootstrapDemoVaultPlugins', () => {
 
   afterEach(() => {
     rmSync(root, { force: true, recursive: true });
+    vi.unstubAllGlobals();
   });
 
   function writePluginBinaries(pluginId: string, sourceDirectory?: string): string {
@@ -92,6 +104,28 @@ describe('bootstrapDemoVaultPlugins', () => {
     expect(result.skippedPluginIds).toEqual(['fix-require-modules', 'backlink-cache']);
   });
 
+  it('should download and write the binaries of a plugin that is missing', async () => {
+    vi.stubGlobal('fetch', servePluginAssets);
+
+    const result = await bootstrapDemoVaultPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ pluginId: 'installed-plugin', repo: 'demo-owner/obsidian-installed-plugin' }]
+    });
+
+    expect(result.installed).toEqual([{
+      assetNames: ['main.js', 'manifest.json'],
+      pluginId: 'installed-plugin',
+      repo: 'demo-owner/obsidian-installed-plugin',
+      version: undefined
+    }]);
+    expect(result.skippedPluginIds).toEqual([]);
+
+    const installedDirectory = join(root, '.obsidian', 'plugins', 'installed-plugin');
+    expect(readFileSync(join(installedDirectory, 'main.js'), 'utf-8')).toBe('// installed main');
+    expect(readFileSync(join(installedDirectory, 'manifest.json'), 'utf-8')).toBe('{"id":"installed-plugin"}');
+    expect(existsSync(join(installedDirectory, 'styles.css'))).toBe(false);
+  });
+
   it('should do nothing for an empty plugin list', async () => {
     const result = await bootstrapDemoVaultPlugins({ demoVaultPath: root, injectPlugins: [] });
 
@@ -136,3 +170,23 @@ describe('buildDemoVaultPopulateAsync', () => {
     expect(map['note.md']?.toString()).toBe('top');
   });
 });
+
+/**
+ * A `fetch` that serves a plugin's release assets from memory, so the install loop can be exercised without
+ * a GitHub round-trip. The optional stylesheet answers 404 — what GitHub returns for a plugin that
+ * publishes none — so the "skip an absent optional asset" path is walked too.
+ *
+ * @param input - The asset URL the bootstrap asked for.
+ * @returns The asset's response.
+ */
+function servePluginAssets(input: RequestInfo | URL): Promise<Response> {
+  const url = new Request(input).url;
+
+  for (const [assetName, body] of PLUGIN_ASSET_BODIES) {
+    if (url.endsWith(`/${assetName}`)) {
+      return Promise.resolve(new Response(body));
+    }
+  }
+
+  return Promise.resolve(new Response('', { status: HTTP_NOT_FOUND, statusText: 'Not Found' }));
+}

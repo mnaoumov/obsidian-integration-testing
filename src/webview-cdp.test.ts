@@ -42,6 +42,15 @@ describe('parseForwardedPort', () => {
 
     expect(parseForwardedPort(padded, 'emulator-5554', 'webview_devtools_remote_18056')).toBe(49_630);
   });
+
+  it('should skip a matching row whose port is not a number, rather than forward to NaN', () => {
+    const malformed = [
+      'emulator-5554 tcp:not-a-port localabstract:webview_devtools_remote_18056',
+      'emulator-5554 tcp:49630 localabstract:webview_devtools_remote_18056'
+    ].join('\n');
+
+    expect(parseForwardedPort(malformed, 'emulator-5554', 'webview_devtools_remote_18056')).toBe(49_630);
+  });
 });
 
 /**

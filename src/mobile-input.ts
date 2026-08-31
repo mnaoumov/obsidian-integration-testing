@@ -188,11 +188,10 @@ const NAMED_KEYS = new Map<string, NamedKey>([
 ]);
 
 const FIRST_CODE_POINT_INDEX = 0;
-const NO_CODE_POINT = 0;
-const DIGIT_ZERO_CODE_POINT = '0'.codePointAt(FIRST_CODE_POINT_INDEX) ?? NO_CODE_POINT;
-const DIGIT_NINE_CODE_POINT = '9'.codePointAt(FIRST_CODE_POINT_INDEX) ?? NO_CODE_POINT;
-const UPPERCASE_A_CODE_POINT = 'A'.codePointAt(FIRST_CODE_POINT_INDEX) ?? NO_CODE_POINT;
-const UPPERCASE_Z_CODE_POINT = 'Z'.codePointAt(FIRST_CODE_POINT_INDEX) ?? NO_CODE_POINT;
+const DIGIT_ZERO_CODE_POINT = codePointOf('0');
+const DIGIT_NINE_CODE_POINT = codePointOf('9');
+const UPPERCASE_A_CODE_POINT = codePointOf('A');
+const UPPERCASE_Z_CODE_POINT = codePointOf('Z');
 
 /**
  * The CDP spelling of one named key.
@@ -216,6 +215,27 @@ interface NamedKey {
  */
 export function buildResolveInputExpression(id: string, errorMessage?: string): string {
   return `window.__obsidianIntegrationTesting?.resolveInput?.(${JSON.stringify(id)}, ${JSON.stringify(errorMessage ?? null)})`;
+}
+
+/**
+ * The first code point of a non-empty string.
+ *
+ * `String.prototype.codePointAt` is typed `number | undefined`, so every call site would otherwise carry a
+ * `?? fallback` that no input can ever reach — a dead branch under the 100% coverage gate. Throwing here
+ * keeps that impossible case in ONE place, where a unit test can reach it directly, instead of spreading
+ * unreachable fallbacks (or coverage suppressions) across the module.
+ *
+ * @param text - A non-empty string.
+ * @returns Its first code point.
+ * @throws When `text` is empty.
+ */
+export function codePointOf(text: string): number {
+  const codePoint = text.codePointAt(FIRST_CODE_POINT_INDEX);
+  if (codePoint === undefined) {
+    throw new Error('codePointOf received an empty string.');
+  }
+
+  return codePoint;
 }
 
 /**
@@ -283,7 +303,7 @@ function resolveKey(key: string): NamedKey {
     );
   }
 
-  const upperCasedCodePoint = key.toUpperCase().codePointAt(FIRST_CODE_POINT_INDEX) ?? codePoint;
+  const upperCasedCodePoint = codePointOf(key.toUpperCase());
   return {
     code: resolveKeyCode(upperCasedCodePoint),
     text: key,
