@@ -170,6 +170,27 @@ The Android setup fails fast, rather than spinning out a timeout, when the toolc
   nvm-managed Node). Add it to `PATH` (see `npm config get prefix`), or set
   `shouldAutoInstallAppiumDependencies: false` and install Appium yourself.
 
+### "The Appium server ... cannot see Android device ..., although this host's adb can"
+
+An Appium server that has been listening for a while can go **stale**: it still answers `/status` with
+`ready: true`, but its internal `adb` can no longer enumerate devices. Every session then fails with
+Appium's own `Could not find a connected Android device in 20000ms` — which blames the device, so the
+obvious next step (`adb devices`) lists the device instantly and tells you nothing. The device is fine; the
+server is wedged.
+
+The harness cross-checks the two before believing that error. When this host's `adb` *can* see the device
+and Appium cannot, it says so and names the server instead:
+
+- **The harness started that server itself, in an earlier run** — it restarts it for you (kills it, waits
+  for the port to go quiet, starts a fresh one, retries the session once) and the run continues. Nothing to
+  do.
+- **The server is yours** (`shouldAutoStartAppium: false`, or simply one you started by hand) — it is
+  reported, never killed. Restart it yourself and re-run.
+
+The preflight also logs the provenance of any server it adopts — *"started by an earlier run of this
+harness, pid N, up for Ns"* or *"not started by this harness"* — so a long-lived leftover is visible before
+anything goes wrong.
+
 ### "Integration setup for transport ... failed, so its tests cannot run"
 
 Every test in the project reports this when the project's global setup failed — the device was not

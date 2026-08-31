@@ -1733,3 +1733,51 @@ it.
   `touchstart` timer, so the 600ms dwell has to clear *its* threshold. A synthetic element with no such
   handler will not produce a `contextmenu` from a dwell, which is why long-press has to be verified against
   a real Obsidian element rather than a probe `div`.
+
+## L40. Adopting an Appium server is not the same as trusting it (marker + wedged-server recovery)
+
+**L27** made *provisioning* fail fast. This section covers the opposite case: a server that is already
+there. The preflight adopts whatever answers `/status` on the port — the right default, since a second
+server cannot bind an occupied port — but adoption was unconditional, and **liveness is not readiness**.
+
+The failure that motivated this (T727): a server auto-started by a run ~1h earlier was still listening and
+still answering `/status` with `ready: true`, but its `appium-adb` could no longer enumerate devices. Every
+session creation then died with `Could not find a connected Android device in 20000ms` while `adb devices`
+from the shell listed `emulator-5554` instantly. The error names the wrong subject — it blames a device
+that is demonstrably present — so the obvious next diagnostic is the one that misleads. Killing that
+server and starting a fresh one fixed the suite with no other change.
+
+- **Provenance is recorded, so it can be reported.** `src/appium-server-marker.ts` writes a per-port JSON
+  sentinel (`<tmpdir>/obsidian-integration-testing/<port>.appium-server.json`: `pid`, `port`,
+  `startedAtInMilliseconds`) whenever the harness auto-starts a server, and clears it when that server is
+  stopped. The preflight log now says which kind of server it adopted — *"started by an earlier run of this
+  harness, pid N, up for Ns"* vs *"not started by this harness"* — on **every** run, including ones that go
+  on to succeed. A long-lived leftover is therefore visible in the transcript, not only in an error.
+- **No preflight can catch the wedge; it is recognized from the failed session.** A wedged server answers
+  `/status` normally, so no probe short of creating a session distinguishes it. `src/wedged-appium-server.ts`
+  (pure, unit-tested) classifies the failure instead: `checkIsAppiumDeviceNotFoundError` matches
+  `appium-adb`'s message through the whole `cause` chain, and `resolveWedgedAppiumServerRemedy` convicts the
+  server only when the **host's own adb still lists the device**. If the host cannot see it either, the
+  original error was honest and is rethrown untouched.
+- **Only a server this harness started is restarted.** `restart` requires: the device-not-found error, the
+  host's adb sees the device, the server was *adopted* (not started by this run), auto-start is not disabled,
+  and the marker's PID is alive. Then the marked process tree is killed, the port is waited out
+  (`waitForAppiumStopped` — a lingering socket would let the readiness poll pass on the dying server), a
+  replacement is started, and the session is retried **once**; the replacement is owned by this run and torn
+  down with it. Everything else — a foreign/user-managed server, `shouldAutoStartAppium: false`, a server
+  this run started itself — is **reported, never killed**. Terminating a process the run does not own is not
+  its call to make.
+- **The error names the server.** `buildWedgedAppiumServerMessage` replaces the device-not-found text with
+  the server's origin, the device the host can see, an explicit warning that `adb devices` will list the
+  device and mislead you, and reason-specific advice (foreign server / auto-start disabled / freshly started
+  / restart did not help), plus the marker's pid and age when known. The original error is kept as the
+  `cause`.
+- **`/status` is also read, not just counted.** `checkAppiumReachable` now requires a 2xx and an Appium
+  status body that does not report `ready: false` (Appium sets that while shutting down), so a server on its
+  way down is no longer adopted as healthy. The parse is deliberately tolerant — a malformed or
+  flag-less body reads as ready, since an unrecognized shape must not make a healthy server look
+  unreachable. This does **not** catch the wedge, which is why the session-side recognition above exists.
+- **Pure/testable split** mirrors L27: classification, remedy and message live in unit-tested modules
+  (`wedged-appium-server.ts`, `appium-server-marker.ts`); the spawn/kill/HTTP glue stays in the `v8 ignore`
+  factory. `killProcessTreeByPid` was split out of `kill-process-tree.ts` because a marker yields a PID, not
+  a `ChildProcess`.
