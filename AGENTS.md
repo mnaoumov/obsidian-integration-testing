@@ -36,7 +36,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 
 ## L3. Testing
 
-- Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:docs-generator` — the second covers the vendored docs generator, see **L35**).
+- Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:scripts` — the first covers `src/**`, the second everything under `scripts/**` plus the docs site: the vendored docs generator (**L35**), the custom ESLint rules (**L34**), and the release-script helpers (**L37**)). The second project's include was `scripts/docs-gen/**/*.test.ts` until T813-P2 widened it to `scripts/**/*.test.ts`; the narrow glob had left `scripts/helpers/eslint-rules/*.test.ts` — four real suites, 87 tests, all green the moment they were picked up — run by no project at all, and left the release script with nowhere to put a regression test at all. A test file under `scripts/` is now picked up by construction rather than by remembering to widen a glob.
 - Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs five projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded); and `integration-tests:failed-setup` (the T726 regression suite — its global setup is wired to FAIL by attaching to a CDP port nothing serves, and the worker asserts it fails with that cause rather than falling back to a transport nobody asked for; hermetic, launches nothing, ~3 s).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics. It runs **`unit-tests` alone** (`scripts/test-coverage.ts` passes `--project unit-tests`), so anything wrong with that one project's configuration is a release-gate failure: the gate is a step of `updateVersion`'s preflight (**L37**) and P2 publishes only through Trusted Publisher, with no manual route around a red run.
 - **Every Vitest project takes its `testTimeout` from the shared `SHARED_TEST_DEFAULTS` spread** in `scripts/vitest-config.ts`, not from its own line. Vitest 4 projects do **not** inherit the root-level `test` options, so a project that omits `testTimeout` silently runs on the built-in 5000 ms default — and that is exactly what `unit-tests` did until T765, making it the tightest budget in the repo on the one project gating a release. Spreading the default makes the omission impossible rather than merely unlikely; add a project and it is budgeted by construction. The 30 s budget absorbs two costs no per-suite number can predict: v8 coverage instrumentation, **measured at ~2.2x** on this project (whole run 4.8–5.9 s plain vs 9.6–11.0 s instrumented — *not* the ~10x the T765 report first assumed), and the CPU contention of a box running many concurrent sessions. Only two deliberate overrides sit on top of it: `src/public-api-barrel.test.ts`'s own 120 s (its ts-morph `Project` over the whole `tsconfig.json` measures ~9.5 s instrumented, too close to 30 s under load), and the Android project's 300 s (an emulator run is 140–200 s cold, **L19**).
@@ -1553,7 +1553,7 @@ it (G59 "split when too big"; this repo is tooling, not a plugin, so `docs/` is 
   `docs/src/generated-sidebar.json`, `docs/public/og/`, `docs/dist/`, `.astro/`.
 - `scripts/docs-gen/**` is excluded from the root `tsconfig.json` (it has its own, bundler-resolved) and
   from dprint + cspell, so the vendored copy stays byte-comparable with ODU's. It IS linted, and its unit
-  tests run in the `unit-tests:docs-generator` Vitest project (`npm test` runs it alongside `unit-tests`).
+  tests run in the `unit-tests:scripts` Vitest project (`npm test` runs it alongside `unit-tests`).
 
 ### The copy is a sync, not a fork — four deliberate divergences
 
@@ -1647,6 +1647,38 @@ dispatched with the tag as input.
 
 Sibling repos (`obsidian-test-mocks`, and ODU's shared `src/script-utils/npm-publish.ts`) still publish with
 `NPM_TOKEN`; this repo is the first one moved.
+
+### `npm pack --json` changed shape in npm 12 — parse it, never cast it (T813-P2)
+
+npm ≤ 11 emitted an **array** of pack results; **npm 12 emits an object keyed by package name**. Both are
+valid JSON, so `JSON.parse(output) as [NpmPackResult]` kept parsing happily and then read `filename` off
+`undefined`. That is a `TypeError` at `publishGitHubRelease` — the **second-to-last** step of
+`updateVersion`, so it fires *after* the gate, the bump, the changelog, the commit, the tag and
+`git push --follow-tags` have all already landed on the remote. Cutting 12.0.0 left exactly that: `298fffa`
+and a public `12.0.0` tag with **no GitHub release**, so `publish-npm.yml` never fired and nothing reached
+npm. There is no re-run from that state — `assertGitRepoClean` passes but `getNewVersion` would bump to
+13.0.0.
+
+`scripts/helpers/npm-pack.ts` now owns the read: `parseNpmPackFilename` accepts both shapes, **validates**
+rather than asserts, and every failure names the raw output, so the next npm shape change is diagnosable
+from the release log instead of from a stack trace. `scripts/helpers/npm-pack.test.ts` pins both
+generations against a payload captured from real npm 12 output.
+
+Two notes for anyone syncing this against ODU's copy, which carries the same defect (T806-P1):
+
+- **This repo needs no stdout noise-stripping.** ODU guards with `indexOf('[\n  {')` because its exec helper
+  merges the streams. `execString` (`scripts/helpers/exec.ts`) accumulates `stdout` and `stderr`
+  **separately** and `execFromRoot(…, { isQuiet: true })` returns `stdout` alone, and npm writes its
+  `npm notice run … prepare` lines to `stderr` — so the string reaching the parser is pure JSON. The shape
+  was the whole defect here.
+- **The two copies are independent by design.** `scripts/version.ts` is not in the **L17** hand-synced set,
+  and this repo must never depend on ODU, so fixing one does nothing for the other. Both needed it.
+
+**If a release ever half-fails here again**, `npm pack` has already written the tarball, so recovery needs
+no rebuild: `gh release create <version> dist/<tarball> --title v<version> --notes-file <notes>`, the notes
+being the `CHANGELOG.md` section for that version plus the
+`**Full Changelog**: <repo>/compare/<prev>...<new>` line `getReleaseNotes` would have produced.
+`publish-npm.yml` fires on a manually-created release exactly as it would on a scripted one.
 
 ## L38. Settings modal — attach the container BEFORE opening (`openSettingsTab`)
 
