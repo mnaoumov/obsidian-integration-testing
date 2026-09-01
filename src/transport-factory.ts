@@ -525,6 +525,7 @@ class AppiumTransportFactory {
       isSessionOwner: false,
       platform: 'android',
       shouldSweepLeftovers: willSweepLeftovers(options),
+      ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
       ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
       ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
       ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
@@ -699,6 +700,7 @@ class AppiumTransportFactory {
         deviceId: actualDeviceId,
         platform: 'android',
         shouldSweepLeftovers: willSweepLeftovers(options),
+        ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
         ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
         ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
         ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
@@ -878,6 +880,19 @@ class AppiumTransportFactory {
     if (existingDeviceId) {
       this.log(`AVD "${avdName}" is already running on device ${existingDeviceId}, reusing.`);
       await this.suppressErrorDialogs(existingDeviceId);
+      /*
+       * A reused device gets the SAME settle gate a harness-started one gets.
+       * Appearing in `adb devices` says only that adbd is up: the guest can
+       * still be running the boot animation or optimizing packages, and a
+       * session established against that contends with the churn and inflates
+       * every subsequent round-trip 25-50x (L19). Skipping the gate here is
+       * what let a release preflight spend its whole layout-ready budget on a
+       * handful of contended probes while `adb devices` reported `device`
+       * throughout.
+       */
+      await this.waitForBoot(existingDeviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
+      await this.waitForDeviceIdle(existingDeviceId, deviceIdleTimeoutInMilliseconds);
+      await this.wakeScreen(existingDeviceId);
       return { actualDeviceId: existingDeviceId };
     }
 
@@ -1467,7 +1482,14 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch): Promise<void> {
+  /**
+   * Polls `sys.boot_completed` until the device reports a finished boot.
+   *
+   * @param deviceId - The device UDID to poll.
+   * @param deadline - The absolute time at which to give up.
+   * @param emulator - The emulator this run started, so its early death fails fast instead of polling out the deadline. Omitted for a reused device, which this run did not launch and cannot inspect.
+   */
+  private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch | undefined): Promise<void> {
     const remainingMs = Math.max(0, deadline - Date.now());
     this.log(
       `Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
@@ -1490,11 +1512,11 @@ class AppiumTransportFactory {
         return;
       }
 
-      const exitInfo = emulator.readExitInfo();
+      const exitInfo = emulator?.readExitInfo();
       if (exitInfo) {
         throw new Error(buildProcessExitMessage({
           exitInfo,
-          output: emulator.readOutput(),
+          output: emulator?.readOutput() ?? '',
           outputLabel: 'Emulator output',
           subject: 'Android emulator'
         }));
@@ -1511,8 +1533,8 @@ class AppiumTransportFactory {
   }
 
   /**
-   * Waits for a freshly-booted emulator to become idle before the session is
-   * established.
+   * Waits for a booted emulator to become idle before the session is
+   * established — whether this run started it or found it already running.
    *
    * `sys.boot_completed` fires before the guest is actually idle — package
    * optimization and services keep churning — so establishing the Appium
@@ -1520,6 +1542,10 @@ class AppiumTransportFactory {
    * contend with that work and inflates session establishment ~3x. This polls
    * a later, quieter signal (boot animation stopped + package manager serving,
    * via {@link checkDeviceIdle}) and returns as soon as it is satisfied.
+   *
+   * A **reused** device needs this every bit as much as a started one: being
+   * listed in `adb devices` says only that adbd answers, and the churn it does
+   * not gate is paid later by whatever polls the WebView.
    *
    * Best-effort: if the guest does not report idle within the budget it logs a
    * warning and proceeds (a slow session is better than a failed run), and a

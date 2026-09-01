@@ -618,11 +618,15 @@ Measured breakdown (see also the auto-memory `reference_android_appium_cold_cost
   `@default 60000`). After `sys.boot_completed`, `waitForNewDevice` waits for idle before `remote()` runs,
   so the session executes against an idle guest. Best-effort (warns + proceeds on timeout; `0` skips).
   Option `deviceIdleTimeoutInMilliseconds`. Probes return `''` on adb timeout so a slow/partial
-  `package list` can't falsely read as idle.
+  `package list` can't falsely read as idle. **Since T794 this covers a REUSED device too** — the branch
+  that found an AVD already running used to skip the gate entirely, which is the hole T794 fell into; see
+  **L43**.
 - **Configurable timeouts** (all raised/threaded with per-poll elapsed logging, resolved via the testable
   `appium-session-config.ts`): `appiumStartTimeoutInMilliseconds` (`@default 180000`),
-  `sessionConnectionRetryTimeoutInMilliseconds` (`@default 180000`), `layoutReadyTimeoutInMilliseconds`
-  (`@default 90000`). Headroom for the starved/CI regime — not root causes.
+  `sessionConnectionRetryTimeoutInMilliseconds` (`@default 180000`), `appStartTimeoutInMilliseconds`
+  (`@default 180000`), `layoutReadyTimeoutInMilliseconds` (`@default 90000`). Headroom for the starved/CI
+  regime — not root causes. The last two are the two halves T794 split the old single post-reload clock
+  into (**L43**).
 - **`registerVault` marker push via `adb`** instead of `browser.pushFile` — measured cold marker 9–21s →
   ~2.5s, total `registerVault` ~10–24s → ~5.6–7.8s (3–4×). The one measured, unconditional win.
 - **Crash/ANR dialog suppression** — see **L13**. **Process visibility (off-screen, never minimize)** —
@@ -645,10 +649,15 @@ In descending value:
 The residual cold cost is dominated by emulator provisioning / host contention (**L13**), which code can
 only be made **resilient** to (the idle-gate), not eliminate. On this fast WHPX host the without-gate
 session isn't as slow as a starved release env sees, so the gate's headline speedup is confidence-based
-for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured. The exact
-`30000ms`→`90000ms` layout trip was never reproduced here — to close it definitively, capture a real
-failing trace during an actual release (the per-poll elapsed logging pinpoints layout-slowdown vs
-command-latency burst vs session establishment).
+for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured.
+
+**The open question here — capture a real failing layout trip during an actual release, and tell
+layout-slowdown from command-latency burst — was answered by T794 (2026-08-31).** A release preflight
+blew the 90 s budget with `adb devices` reporting `device` throughout, and the answer was
+command-latency burst: the run had **reused** an emulator, so the boot-idle gate above never ran, and
+~2–4 probes against the churning guest consumed the whole budget while `waitForLayoutReady`'s own
+measured cost is ~1 s. Both halves of the fix, and the timeout message that now discriminates the two
+readings without a second trace, are in **L43**.
 
 ## L20. `metadata.json` — per-version installer-floor table (`minRunnableInstallerVersion`)
 
@@ -1876,3 +1885,63 @@ adapter changes. One deliberate consequence in the built output: the CJS bundle 
 `await import("webdriverio")` rather than `require("webdriverio")`, so Node resolves the package's
 `import` condition (`build/node.js`) instead of its `require` one (`build/index.cjs`). Both are supported
 entry points and only the Appium path reaches them.
+
+## L43. Android startup is two budgets, and a reused device gets the same settle gate as a started one
+
+A release preflight (T789, 2026-08-31) failed Android setup with
+`Obsidian layout did not become ready within 90000ms` while `adb devices` reported
+`emulator-5554 device` throughout. This is the real failing trace **L19**'s "Honest limit" asked for,
+and it says the 90 s was never spent on Obsidian: L19 measured `waitForLayoutReady` at ~1 s, and ≤8.4 s
+under 12-core + disk + memory stress. It was spent on ~2–4 `browser.execute` round-trips against a guest
+that was still churning — the 25–50× round-trip inflation L19 measured directly.
+
+### The hole: `ensureDeviceConnected`'s reuse branch skipped the gate
+
+`ensureDeviceConnected` has two branches. The start-a-new-emulator branch runs `waitForBoot` →
+`waitForDeviceIdle` → `wakeScreen`. The **reuse-an-already-running-device branch returned immediately**,
+doing only `suppressErrorDialogs` — and `transport-options.ts` documented that as intended ("Only applies
+to a harness-started emulator, not a reused one"). Appearing in `adb devices` says only that `adbd`
+answers; the guest can still be running the boot animation or `dex2oat`. So the one shape that most needs
+the gate — an emulator booted moments earlier, by hand or by a previous run — was the one shape that
+never got it, and the cost landed on whatever polled the WebView next.
+
+The reuse branch now runs the same three steps, so `deviceIdleTimeoutInMilliseconds` governs both paths
+(`0` still skips; the wait is still best-effort — it warns and proceeds). `waitForBoot`'s `emulator`
+parameter became `ProcessLaunch | undefined`: a reused device was not launched by this run, so there is
+no exit info to fail fast on. `ensureAvdExists` deliberately stays where it is — **L27**'s reasoning for
+skipping the AVD preflight on a running AVD is untouched.
+
+### The budget: one wall clock became two phases
+
+`registerVault` waited out `location.reload()` on a single 90 s clock started at the reload, so it paid
+for the app's cold start *and* Obsidian's own work out of one budget sized for the latter. That is why a
+first run after a machine restart failed once by design. It is now two phases, each with its own budget:
+
+- **`appStartTimeoutInMilliseconds` (`@default 180000`)** — until `globalThis.app` exists. Everything
+  here is outside Obsidian's control (the WebView reloading, a guest still optimizing packages), so it
+  sits in the same generous tier as `appiumStartTimeoutInMilliseconds` /
+  `sessionConnectionRetryTimeoutInMilliseconds`.
+- **`layoutReadyTimeoutInMilliseconds` (`@default 90000`)** — until `app.workspace.layoutReady`, its
+  clock starting **only when phase 1 completes**. It now covers Obsidian's work alone, which is why it
+  can stay tight.
+
+Progress is read as a **milestone ladder** rather than a boolean —
+`no-webview` → `no-app` → `no-workspace` → `workspace-not-ready` → `layout-ready` — from one probe per
+poll. Deliberately **one `browser.execute` round-trip and no `ensureWebViewContext`**: that call's
+`getContexts()` runs `adb shell cat /proc/net/unix`, measured at ~17 s (L19), which is the very cost
+being budgeted. A probe that throws is `no-webview`, not an error — the page is mid-reload for most of
+phase 1, so a WebView that cannot answer is the expected reading there.
+
+### The timeout message now discriminates, which is the L19 ask
+
+The failure reports the furthest milestone reached, the probe count, and the slowest round-trip. **Many
+fast probes stalled at one milestone** = Obsidian genuinely slow, and the phase's budget is the right
+knob. **A handful of probes each taking tens of seconds** = a contended guest, and the knob is
+`deviceIdleTimeoutInMilliseconds`, not a bigger budget. Before this, both read as the same sentence.
+
+### Where the code lives
+
+Per **L27**'s pure/testable split: `src/app-startup-progress.ts` (`classifyAppStartupProbe`,
+`checkAppStarted`, `checkLayoutReady`, `compareAppStartupMilestones`, `buildStartupTimeoutMessage`) is
+pure and unit-tested; `transport-appium.ts` keeps only the polling orchestration, and `transport-factory.ts`
+only the `adb` glue — both stay `/* v8 ignore */` under the 100 % gate.

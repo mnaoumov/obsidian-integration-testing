@@ -34,6 +34,24 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly appiumUrl: string;
 
   /**
+   * Timeout in milliseconds for Obsidian Mobile to get as far as `globalThis.app`
+   * existing after the vault is (re)opened.
+   *
+   * The first of the two budgets the transport spends after `location.reload()`.
+   * It covers the app's own cold start — the WebView reloading and Obsidian's
+   * bundle coming up — which on a cold or contended guest can take minutes, and
+   * is not work {@link layoutReadyTimeoutInMilliseconds} should be sized for.
+   * Only once `globalThis.app` appears does that far tighter clock start.
+   *
+   * Splitting the two is what stops a first run after a machine restart from
+   * failing by design: the old single 90s wall clock started at the reload, so a
+   * cold app start spent it before Obsidian had begun laying anything out.
+   *
+   * @default `180000`
+   */
+  readonly appStartTimeoutInMilliseconds?: number;
+
+  /**
    * The Android AVD (Android Virtual Device) name.
    *
    * The transport factory launches `emulator -avd <avdName>` as a background
@@ -54,9 +72,8 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly deviceId?: string;
 
   /**
-   * Timeout in milliseconds for waiting, after `sys.boot_completed`, for a
-   * harness-started emulator to become idle before the Appium session is
-   * established.
+   * Timeout in milliseconds for waiting, after `sys.boot_completed`, for the
+   * emulator to become idle before the Appium session is established.
    *
    * `sys.boot_completed` fires *before* the guest is actually idle: package
    * optimization and system services keep churning, so establishing the session
@@ -64,8 +81,12 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * contend with that work and inflates session establishment ~3x. The factory
    * instead waits until the boot animation has stopped and the package manager
    * is serving, proceeding early once idle or after this budget (best-effort — a
-   * timeout logs a warning and proceeds). Set `0` to skip the wait. Only applies
-   * to a harness-started emulator, not a reused one.
+   * timeout logs a warning and proceeds). Set `0` to skip the wait.
+   *
+   * Applies to a **reused** device as well as a harness-started one. A device
+   * that is merely present in `adb devices` can still be mid-`dex2oat`, and
+   * skipping the gate there is what left a run polling a churning guest until
+   * {@link layoutReadyTimeoutInMilliseconds} ran out.
    *
    * @default `60000`
    */
@@ -97,14 +118,21 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly isEmulatorVisible?: boolean;
 
   /**
-   * Timeout in milliseconds for waiting for `app.workspace.layoutReady` after
-   * the vault is (re)opened.
+   * Timeout in milliseconds for waiting for `app.workspace.layoutReady`, counted
+   * from the moment {@link appStartTimeoutInMilliseconds} is satisfied — not
+   * from the reload.
    *
-   * Registering a vault triggers a full Obsidian re-init (`location.reload()`
-   * reopens the vault and reloads every plugin — the heaviest startup step). On
-   * a cold-booted or under-provisioned emulator that init can take a while, so
-   * this budget is the largest of the transport timeouts. Raise it further if
-   * releases still flake on slow CI emulators.
+   * The second of the two budgets the transport spends after `location.reload()`.
+   * It covers only Obsidian's own work — opening the vault and loading every
+   * plugin — once the app itself is up, which is why it can stay tight: measured
+   * at ~1s, and ≤8.4s under 12-core + disk + memory stress.
+   *
+   * Blowing it therefore means Obsidian genuinely stalled, **or** that each probe
+   * round-trip is being inflated by a busy guest. The timeout error names which,
+   * by reporting the probe count and slowest round-trip alongside the furthest
+   * startup milestone reached: a handful of probes each taking tens of seconds is
+   * a contended guest, and the knob for that is
+   * {@link deviceIdleTimeoutInMilliseconds}, not this one.
    *
    * @default `90000`
    */

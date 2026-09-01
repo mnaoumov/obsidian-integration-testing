@@ -50,6 +50,11 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type {
+  AppStartupMilestone,
+  AppStartupPhase,
+  StartupProbeResult
+} from './app-startup-progress.ts';
 import type { CaptureScreenshotParams } from './capture-screenshot.ts';
 import type { MobileInputEnvelope } from './mobile-input.ts';
 import type {
@@ -59,6 +64,13 @@ import type {
 } from './transport.ts';
 import type { WebViewCdpConnection } from './webview-cdp.ts';
 
+import {
+  buildStartupTimeoutMessage,
+  checkAppStarted,
+  checkLayoutReady,
+  classifyAppStartupProbe,
+  compareAppStartupMilestones
+} from './app-startup-progress.ts';
 import {
   decodeBase64Png,
   isPng
@@ -101,6 +113,15 @@ export interface AppiumTransportConfig {
   appId?: string;
 
   /**
+   * Timeout in milliseconds for Obsidian Mobile to get as far as `globalThis.app`
+   * existing after the vault is (re)opened, before the tighter
+   * {@link layoutReadyTimeoutInMilliseconds} clock starts.
+   *
+   * @default `180000`
+   */
+  appStartTimeoutInMilliseconds?: number;
+
+  /**
    * The Appium browser/driver instance.
    * Created by the consumer via e.g. WebDriverIO's `remote()`.
    */
@@ -124,8 +145,9 @@ export interface AppiumTransportConfig {
   isSessionOwner?: boolean;
 
   /**
-   * Timeout in milliseconds for waiting for `app.workspace.layoutReady` after
-   * the vault is (re)opened.
+   * Timeout in milliseconds for waiting for `app.workspace.layoutReady`, counted
+   * from the moment {@link appStartTimeoutInMilliseconds} is satisfied — not from
+   * the reload, so a cold app start is not charged against it.
    *
    * @default `90000`
    */
@@ -173,6 +195,7 @@ const WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS = 60_000;
 const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90_000;
+const DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS = 180_000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
@@ -211,6 +234,26 @@ interface LoadingWorkspace {
 }
 
 /**
+ * Parameters for {@link AppiumTransport.waitForStartupMilestone}.
+ */
+interface WaitForStartupMilestoneParams {
+  /**
+  Whether the milestone just observed ends this phase.
+   */
+  readonly isSatisfied: (milestone: AppStartupMilestone) => boolean;
+
+  /**
+  The phase being waited out, named in the log and in the timeout message.
+   */
+  readonly phase: AppStartupPhase;
+
+  /**
+  This phase's budget.
+   */
+  readonly timeoutInMilliseconds: number;
+}
+
+/**
  * Transport that communicates with Obsidian Mobile via Appium WebView JS injection.
  *
  * Evaluates expressions by switching to the `WEBVIEW_md.obsidian` context and
@@ -223,6 +266,7 @@ export class AppiumTransport implements ObsidianTransport {
    */
   public readonly isMobile = true;
   private readonly appId: string;
+  private readonly appStartTimeoutInMilliseconds: number;
   private readonly browser: Browser;
   private readonly deviceId: string;
   /**
@@ -271,6 +315,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.layoutReadyTimeoutInMilliseconds = config.layoutReadyTimeoutInMilliseconds ?? DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS;
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
+    this.appStartTimeoutInMilliseconds = config.appStartTimeoutInMilliseconds ?? DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS;
     this.shouldSweepLeftovers = config.shouldSweepLeftovers ?? true;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? DEFAULT_ANDROID_VAULT_BASE_PATH;
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
@@ -494,7 +539,8 @@ export class AppiumTransport implements ObsidianTransport {
    * 3. Add the vault to localStorage (`mobile-external-vaults`, `mobile-selected-vault`,
    *    `enable-plugin-<path>`)
    * 4. Trigger `location.reload()` so Obsidian re-reads localStorage and opens the vault
-   * 5. Wait for `app.workspace.layoutReady`
+   * 5. Wait for `globalThis.app` to exist (the app's cold start), then — on a
+   *    separate, tighter budget — for `app.workspace.layoutReady`
    *
    * Existing vault registrations in localStorage are preserved (append, not
    * overwrite) — except the **harness's own** `temp-vault-*` registrations from
@@ -546,7 +592,9 @@ export class AppiumTransport implements ObsidianTransport {
       stalePrefix
     );
 
-    // Wait for reload + vault initialization.
+    // Wait for reload + vault initialization, as two separately budgeted phases:
+    // The app's cold start first, then Obsidian's own work. See `waitForAppStarted`.
+    await this.waitForAppStarted();
     await this.waitForLayoutReady();
   }
 
@@ -756,6 +804,31 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Probes the WebView once for how far Obsidian's startup has got.
+   *
+   * A probe that throws is reported as `undefined` rather than propagated: the
+   * page is mid-`location.reload()` for most of the app-start phase, and a
+   * WebView that cannot answer yet is the *expected* reading there, not an error.
+   *
+   * @returns What the probe saw, or `undefined` when it could not run.
+   */
+  private async probeStartup(): Promise<StartupProbeResult | undefined> {
+    try {
+      return await this.browser.execute((): StartupProbeResult => {
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
+        const app = globalThis.app as LoadingApp | undefined;
+        return {
+          hasApp: !!app,
+          hasWorkspace: !!app?.workspace,
+          isLayoutReady: !!app?.workspace?.layoutReady
+        };
+      });
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Pushes the minimal `.obsidian/app.json` vault marker via `adb push`.
    *
    * `browser.pushFile` (WebDriver base64) is an order of magnitude slower on a
@@ -832,34 +905,94 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Polls until `globalThis.app` exists in the WebView — the app has finished
+   * its cold start and Obsidian's own boot has begun.
+   *
+   * This is the **first** of the two budgets spent after `location.reload()`,
+   * and the generous one. Everything it pays for is outside Obsidian's control:
+   * the WebView reloading, and a guest that may still be optimizing packages.
+   * Keeping it separate is the point of the split — the old single wall clock
+   * started here and left the tight layout budget paying for a cold start.
+   */
+  private async waitForAppStarted(): Promise<void> {
+    log(`[appium-transport] Waiting for the app to start (timeout=${String(this.appStartTimeoutInMilliseconds)}ms)...`);
+    await this.waitForStartupMilestone({
+      isSatisfied: checkAppStarted,
+      phase: 'app-start',
+      timeoutInMilliseconds: this.appStartTimeoutInMilliseconds
+    });
+  }
+
+  /**
    * Polls until `app.workspace.layoutReady` is `true` in the WebView.
+   *
+   * The **second** budget, and the tight one: by the time it starts, the app is
+   * already up, so all it covers is Obsidian opening the vault and loading
+   * plugins — ~1s in practice, ≤8.4s under heavy host stress (**L19**).
    */
   private async waitForLayoutReady(): Promise<void> {
-    const start = Date.now();
-    const deadline = start + this.layoutReadyTimeoutInMilliseconds;
     log(`[appium-transport] Waiting for layout ready (timeout=${String(this.layoutReadyTimeoutInMilliseconds)}ms)...`);
+    await this.waitForStartupMilestone({
+      isSatisfied: checkLayoutReady,
+      phase: 'layout-ready',
+      timeoutInMilliseconds: this.layoutReadyTimeoutInMilliseconds
+    });
+  }
+
+  /**
+   * Polls the WebView until a startup phase's milestone is satisfied, tracking
+   * the evidence that tells a slow Obsidian from a contended guest.
+   *
+   * Each poll costs exactly one `browser.execute` round-trip — deliberately not
+   * an {@link ensureWebViewContext} call, whose `getContexts()` runs
+   * `adb shell cat /proc/net/unix` and was measured at ~17s per **L19**. The
+   * round-trip is timed, and the slowest one is reported on timeout: a phase
+   * that ran out after a handful of probes each taking tens of seconds was
+   * starved by the guest, not by Obsidian.
+   *
+   * @param params - The phase, its budget, and the predicate that ends it.
+   */
+  private async waitForStartupMilestone(params: WaitForStartupMilestoneParams): Promise<void> {
+    const { isSatisfied, phase, timeoutInMilliseconds } = params;
+    const start = Date.now();
+    const deadline = start + timeoutInMilliseconds;
+
+    let furthestMilestone: AppStartupMilestone = 'no-webview';
+    let pollCount = 0;
+    let slowestRoundTripInMilliseconds = 0;
 
     while (Date.now() < deadline) {
-      try {
-        const isReady = await this.browser.execute((): boolean => {
-          // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-          const app = globalThis.app as LoadingApp | undefined;
-          return !!app?.workspace?.layoutReady;
-        });
-        if (isReady) {
-          log(`[appium-transport] Layout is ready after ${String(Date.now() - start)}ms.`);
-          this.isInWebViewContext = true;
-          return;
-        }
-      } catch {
-        // App not ready yet (page may be reloading).
+      const roundTripStart = Date.now();
+      const milestone = classifyAppStartupProbe(await this.probeStartup());
+      const roundTripInMilliseconds = Date.now() - roundTripStart;
+
+      pollCount++;
+      slowestRoundTripInMilliseconds = Math.max(slowestRoundTripInMilliseconds, roundTripInMilliseconds);
+      if (compareAppStartupMilestones(milestone, furthestMilestone) > 0) {
+        furthestMilestone = milestone;
       }
 
-      log(`[appium-transport] Layout not ready yet (elapsed=${String(Date.now() - start)}ms). Retrying...`);
+      if (isSatisfied(milestone)) {
+        log(`[appium-transport] Phase "${phase}" satisfied after ${String(Date.now() - start)}ms (${String(pollCount)} probe(s)).`);
+        this.isInWebViewContext = true;
+        return;
+      }
+
+      log(
+        `[appium-transport] Phase "${phase}" not satisfied yet: ${milestone} `
+          + `(elapsed=${String(Date.now() - start)}ms, round-trip=${String(roundTripInMilliseconds)}ms). Retrying...`
+      );
       await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(`Obsidian layout did not become ready within ${String(this.layoutReadyTimeoutInMilliseconds)}ms`);
+    throw new Error(buildStartupTimeoutMessage({
+      elapsedInMilliseconds: Date.now() - start,
+      milestone: furthestMilestone,
+      phase,
+      pollCount,
+      slowestRoundTripInMilliseconds,
+      timeoutInMilliseconds
+    }));
   }
 }
 
