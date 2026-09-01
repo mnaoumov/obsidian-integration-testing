@@ -8,7 +8,11 @@ import {
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
 const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
-const DOCS_GENERATOR_TEST_FILES = 'scripts/docs-gen/**/*.test.ts';
+// Every test under `scripts/` — the vendored docs generator (L35), the custom ESLint rules, and the
+// Release-script helpers. Deliberately the whole tree rather than `scripts/docs-gen/**`, which is what it
+// Used to be: that narrower glob silently left `scripts/helpers/eslint-rules/*.test.ts` run by no project
+// At all, and left `scripts/version.ts` with nowhere to put a regression test at all (T813-P2).
+const SCRIPTS_TEST_FILES = 'scripts/**/*.test.ts';
 const DOCS_SITE_TEST_FILES = 'docs/src/**/*.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
@@ -118,8 +122,8 @@ export const config = defineConfig({
           ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           exclude: [...SHARED_EXCLUDE],
-          include: [DOCS_GENERATOR_TEST_FILES, DOCS_SITE_TEST_FILES],
-          name: 'unit-tests:docs-generator'
+          include: [SCRIPTS_TEST_FILES, DOCS_SITE_TEST_FILES],
+          name: 'unit-tests:scripts'
         }
       },
       {
