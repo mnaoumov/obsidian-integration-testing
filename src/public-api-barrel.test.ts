@@ -1,9 +1,17 @@
 /**
  * @file
  *
- * Guards the hand-maintained public API barrel (`src/index.ts`, see **L2**): every type a re-exported
- * signature mentions must itself be re-exported, or consumers can call the function but cannot name what
- * it takes or returns — and the API reference (**L35**) silently omits it.
+ * Guards the hand-maintained public API barrel (`src/index.ts`, see **L2**) in both directions.
+ *
+ * Outward: every type a re-exported signature mentions must itself be re-exported, or consumers can call
+ * the function but cannot name what it takes or returns — and the API reference (**L35**) silently omits
+ * it.
+ *
+ * Inward: every `src/` module must be reachable from something this package actually ships. A module
+ * nothing imports and no entry point names is invisible to every other gate here — it type-checks, it
+ * lints, it builds, and it is dead. Two modules had already fallen through that gap when this second
+ * assertion was written (T812): `obsidian-namespace.ts`, a public-looking type mirror that was never once
+ * re-exported, and `native-dialog-monitor.ts`, orphaned when `d65aa6a` retired its only caller.
  */
 
 import type {
@@ -15,6 +23,7 @@ import type {
 
 import { readFileSync } from 'node:fs';
 import {
+  dirname,
   relative,
   resolve
 } from 'node:path';
@@ -38,9 +47,27 @@ import {
  */
 const RE_EXPORT_REG_EXP = /export\s+(?:type\s+)?\{(?<specifiers>[^}]*)\}\s*from\s*'(?<moduleSpecifier>[^']+)'/g;
 
+/**
+ * A repo-relative `dist/` path, split into the `src/` module it was built from.
+ *
+ * `package.json` names shipped entry points by their build output, so every subpath has to be mapped back
+ * across the build to be checked against the sources. The extension alternation covers both module
+ * formats and both declaration formats the build emits.
+ */
+const DIST_PATH_REG_EXP = /^dist\/lib\/(?:cjs|esm)\/(?<relativePath>.+?)\.(?:cjs|mjs|d\.cts|d\.mts)$/;
+
+/**
+ * The module specifier a `bin/` shim imports its implementation from — the one hop between
+ * `package.json`'s `bin` map and the built module it ultimately runs.
+ */
+const BIN_IMPORT_REG_EXP = /from\s*'(?<moduleSpecifier>[^']+)'/g;
+
+const LEADING_DOT_SLASH_REG_EXP = /^\.\//;
+
 const ROOT_DIR = resolve(import.meta.dirname, '..');
 const SRC_DIR = toPosixPath(resolve(ROOT_DIR, 'src'));
 const BARREL_PATH = resolve(SRC_DIR, 'index.ts');
+const PACKAGE_JSON_PATH = resolve(ROOT_DIR, 'package.json');
 const TS_CONFIG_PATH = resolve(ROOT_DIR, 'tsconfig.json');
 
 // Building a ts-morph Project over the whole `tsconfig.json` takes a couple of seconds, and it loses the
@@ -49,6 +76,30 @@ const TS_CONFIG_PATH = resolve(ROOT_DIR, 'tsconfig.json');
 // `test:coverage` makes that far worse: v8 instrumentation slows the very same load by roughly 10x (3.1 s
 // Plain, past 30 s instrumented), so this budget has to clear the instrumented cost, not the plain one.
 const BIG_TIMEOUT_IN_MILLISECONDS = 120_000;
+
+/**
+ * One node of `package.json`'s `exports` tree: a built file, or a nested condition map leading to one.
+ */
+type ExportsCondition = ExportsConditionMap | string;
+
+/**
+ * A nested `exports` condition map (`import` / `require` / `types` / …).
+ *
+ * An interface rather than a `Record<string, ExportsCondition>`, because TypeScript resolves a mapped type
+ * eagerly and rejects the recursion (`TS2456`) — an interface's members are deferred.
+ */
+interface ExportsConditionMap {
+  [condition: string]: ExportsCondition;
+}
+
+/**
+ * The `package.json` maps that name a shipped entry point — the modules a consumer reaches without any
+ * `src/` module importing them, which is what makes them roots rather than orphans.
+ */
+interface PackageEntryPoints {
+  bin?: Record<string, string>;
+  exports?: ExportsConditionMap;
+}
 
 /**
  * The barrel's two halves: which modules it re-exports from, and which names it forwards.
@@ -67,10 +118,14 @@ interface UnexportedTypeReference {
   sourceFilePath: string;
 }
 
+// Both assertions load the same project; building it twice would double the most expensive thing in this
+// File. See `getProject`.
+let cachedProject: Project | undefined;
+
 describe('public API barrel', () => {
   it('should re-export every type mentioned by a public signature', { timeout: BIG_TIMEOUT_IN_MILLISECONDS }, () => {
     const barrel = readPublicApiBarrel();
-    const project = new Project({ tsConfigFilePath: TS_CONFIG_PATH });
+    const project = getProject();
     const unexportedTypeReferences: UnexportedTypeReference[] = [];
 
     for (const entryFilePath of barrel.entryFilePaths) {
@@ -97,6 +152,19 @@ describe('public API barrel', () => {
     }
 
     expect(unexportedTypeReferences.map((unexportedTypeReference) => formatUnexportedTypeReference(unexportedTypeReference)).sort()).toEqual([]);
+  });
+
+  it('should leave no module unreachable from a shipped entry point', { timeout: BIG_TIMEOUT_IN_MILLISECONDS }, () => {
+    const project = getProject();
+    const reachableFilePaths = collectReachableFilePaths(project, readRootFilePaths(project));
+
+    const orphanFilePaths = project.getSourceFiles()
+      .map((sourceFile) => sourceFile.getFilePath())
+      .filter((filePath) => filePath.startsWith(`${SRC_DIR}/`) && !reachableFilePaths.has(filePath))
+      .map((filePath) => toRelativePath(filePath))
+      .sort();
+
+    expect(orphanFilePaths).toEqual([]);
   });
 });
 
@@ -137,6 +205,53 @@ function collectClassSignatureNodes(classDeclaration: ClassDeclaration): TsMorph
   }
 
   return signatureNodes;
+}
+
+/**
+ * Every built file `package.json`'s `exports` tree points at, flattened out of its condition maps.
+ *
+ * @param exportsCondition - The `exports` node to flatten.
+ * @param distPaths - The set to collect the repo-relative `dist/` paths into.
+ */
+function collectDistPaths(exportsCondition: ExportsCondition, distPaths: Set<string>): void {
+  if (typeof exportsCondition === 'string') {
+    distPaths.add(exportsCondition.replace(LEADING_DOT_SLASH_REG_EXP, ''));
+    return;
+  }
+
+  for (const nestedCondition of Object.values(exportsCondition)) {
+    collectDistPaths(nestedCondition, distPaths);
+  }
+}
+
+/**
+ * Every file reachable from the roots by following module specifiers, transitively.
+ *
+ * `getReferencedSourceFiles()` covers static imports, re-exports, dynamic `import()` and `import()` type
+ * nodes alike — all of them resolved, so a specifier that names a package rather than a local module
+ * simply contributes nothing.
+ *
+ * @param project - The ts-morph project to resolve modules against.
+ * @param rootFilePaths - The entry points to walk out from.
+ * @returns The reachable file paths, the roots included.
+ */
+function collectReachableFilePaths(project: Project, rootFilePaths: string[]): Set<string> {
+  const reachableFilePaths = new Set<string>();
+  const pendingFilePaths = [...rootFilePaths];
+
+  while (pendingFilePaths.length > 0) {
+    const filePath = pendingFilePaths.pop();
+    if (filePath === undefined || reachableFilePaths.has(filePath)) {
+      continue;
+    }
+    reachableFilePaths.add(filePath);
+
+    for (const referencedSourceFile of project.getSourceFile(filePath)?.getReferencedSourceFiles() ?? []) {
+      pendingFilePaths.push(referencedSourceFile.getFilePath());
+    }
+  }
+
+  return reachableFilePaths;
 }
 
 /**
@@ -228,6 +343,19 @@ function formatUnexportedTypeReference(unexportedTypeReference: UnexportedTypeRe
 }
 
 /**
+ * The ts-morph project over the whole `tsconfig.json`, built at most once per run.
+ *
+ * Loading it is the single most expensive thing in this file — the reason for the timeout above — and both
+ * assertions need the same one, so it is memoized rather than built per test.
+ *
+ * @returns The shared project.
+ */
+function getProject(): Project {
+  cachedProject ??= new Project({ tsConfigFilePath: TS_CONFIG_PATH });
+  return cachedProject;
+}
+
+/**
  * Whether a type reference resolves to a declaration of this package's own `src/` (its tests aside), which
  * is what makes it a name the barrel is responsible for.
  *
@@ -294,6 +422,74 @@ function readPublicApiBarrel(): PublicApiBarrel {
     entryFilePaths: [...entryFilePaths],
     names
   };
+}
+
+/**
+ * Every module a consumer can reach without another `src/` module importing it: the barrel, every
+ * `exports` subpath, whatever the `bin` shims run, and the test files the runner loads directly.
+ *
+ * Derived from `package.json` rather than listed here on purpose — a hand-written root list is the same
+ * kind of unchecked mirror this assertion exists to catch.
+ *
+ * @param project - The ts-morph project the roots must resolve within.
+ * @returns The root file paths, deduplicated.
+ */
+function readRootFilePaths(project: Project): string[] {
+  const packageEntryPoints = JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8')) as PackageEntryPoints;
+  const distPaths = new Set<string>();
+
+  collectDistPaths(packageEntryPoints.exports ?? {}, distPaths);
+
+  for (const binFilePath of Object.values(packageEntryPoints.bin ?? {})) {
+    const binAbsolutePath = resolve(ROOT_DIR, binFilePath);
+    for (const match of readFileSync(binAbsolutePath, 'utf-8').matchAll(BIN_IMPORT_REG_EXP)) {
+      const moduleSpecifier = match.groups?.['moduleSpecifier'] ?? '';
+      const importedAbsolutePath = resolve(dirname(binAbsolutePath), moduleSpecifier);
+      distPaths.add(toPosixPath(relative(ROOT_DIR, importedAbsolutePath)));
+    }
+  }
+
+  const rootFilePaths = new Set<string>([toPosixPath(BARREL_PATH)]);
+
+  for (const distPath of distPaths) {
+    rootFilePaths.add(resolveSourceFilePath(distPath, project));
+  }
+
+  for (const sourceFile of project.getSourceFiles()) {
+    const filePath = sourceFile.getFilePath();
+    if (filePath.startsWith(`${SRC_DIR}/`) && filePath.endsWith('.test.ts')) {
+      rootFilePaths.add(filePath);
+    }
+  }
+
+  return [...rootFilePaths];
+}
+
+/**
+ * Maps a shipped `dist/` path back across the build to the `src/` module it was compiled from.
+ *
+ * Throws rather than skipping: a shipped entry point that no longer maps to a source file is a broken
+ * `package.json`, and silently dropping it would let everything it reaches read as orphaned.
+ *
+ * @param distPath - The repo-relative `dist/` path to map back.
+ * @param project - The ts-morph project the module must exist in.
+ * @returns The absolute, forward-slashed path of the source module.
+ */
+function resolveSourceFilePath(distPath: string, project: Project): string {
+  const relativePath = DIST_PATH_REG_EXP.exec(distPath)?.groups?.['relativePath'];
+  if (!relativePath) {
+    throw new Error(`'package.json' ships '${distPath}', which is not a path this build's output can produce.`);
+  }
+
+  // A declaration-only subpath (`./vitest/typings`) has no `.ts` sibling — its source IS the `.d.ts`.
+  for (const extension of ['.ts', '.d.ts']) {
+    const candidateFilePath = toPosixPath(resolve(SRC_DIR, `${relativePath}${extension}`));
+    if (project.getSourceFile(candidateFilePath)) {
+      return candidateFilePath;
+    }
+  }
+
+  throw new Error(`'package.json' ships '${distPath}', which no module under 'src/' builds.`);
 }
 
 /**
