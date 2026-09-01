@@ -5,7 +5,7 @@ exitIfScriptDisabled();
 
 const BUILD_STEPS = [
   'build:clean',
-  'build:compile:typescript',
+  'build:compile',
   'build:lib',
   'build:types'
 ];
