@@ -31,7 +31,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 
 - `npm run build` — clean, type-check, build ESM+CJS via esbuild, emit `.d.mts`/`.d.cts` declarations.
 - Output lands in `dist/lib/esm/` and `dist/lib/cjs/`.
-- `src/index.ts` is the manually maintained barrel file — **nothing generates it**, so adding a public name means editing it **in the same change**. It is also the definition of "public" for the API reference (**L35**): a name is documented iff it is re-exported there. A name left out therefore ships both undocumented and unnameable by consumers, even when the signature that uses it is public — which is exactly what happened to `ClickElementParams` / `ClickMouseParams` (added in `0877618`, exported only later). `src/public-api-barrel.test.ts` enforces the type half of this: every type a re-exported signature mentions must itself be re-exported.
+- `src/index.ts` is the manually maintained barrel file — **nothing generates it**, so adding a public name means editing it **in the same change**. It is also the definition of "public" for the API reference (**L35**): a name is documented iff it is re-exported there. A name left out therefore ships both undocumented and unnameable by consumers, even when the signature that uses it is public — which is exactly what happened to `ClickElementParams` / `ClickMouseParams` (added in `0877618`, exported only later). `src/public-api-barrel.test.ts` guards this in **both** directions: outward, every type a re-exported signature mentions must itself be re-exported; inward, every `src/` module must be reachable from something the package actually ships — the barrel, an `exports` subpath, a `bin` shim, or a test file. Its roots are derived from `package.json`, never listed in the test, so a new subpath is covered by construction rather than by remembering. The inward half was added by T812 and was red on two modules the moment it existed: `obsidian-namespace.ts`, a hand-written mirror of the `__obsidianIntegrationTesting` shape that was **never once** re-exported (`git log -S` on the barrel returns nothing) and had already drifted from the object it mirrored, and `native-dialog-monitor.ts`, orphaned when `d65aa6a` retired its only caller. Both were deleted. **There is deliberately no exported mirror of the namespace shape:** every site that touches it declares its own local holder interface (`src/context-id.ts`, `src/enable-plugin.ts`, `src/namespace-bootstrap.ts`) — which is what their *"intentionally kept local (not declared globally) to avoid leaking into consumer types"* disables say — and `obsidian-dev-utils` declares the `trustedInput` shape locally for the same reason (**L39**). Re-adding a public mirror would recreate a type nothing type-checks against, which is precisely how the deleted one drifted unnoticed.
 - `npm run docs:build` — the Astro + Starlight documentation site under `docs/` (**L35**), built and deployed separately from the library.
 
 ## L3. Testing
@@ -1514,7 +1514,6 @@ away":
 | `checkAsarFallback` / `checkElectronCompatibility` / `checkInstallerCompatibility` | `resolveAsarFallback` / `resolveElectronCompatibility` / `resolveInstallerCompatibility` |
 | `InjectPluginParams.sourceDir` | `InjectPluginParams.sourceDirectory` |
 | `OwnedInstanceConfig.userDataDir` | `OwnedInstanceConfig.userDataDirectory` |
-| `IpcSendSyncNamespaceParams.args` | `IpcSendSyncNamespaceParams.channelArguments` |
 
 `fn`/`args` could NOT take the rule's own suggestions: `function` and `arguments` are reserved words and
 cannot be binding names in a module, so the rule falls back to `function_` / `arguments_`. Since consumers
@@ -1522,10 +1521,15 @@ destructure both inside closures (G76), the names had to be real identifiers —
 
 Two contracts deliberately did NOT change, and must not be "fixed" to match: the on-disk leftover-sweep
 prefixes (`TEMP_VAULT_DIR_PREFIX = 'temp-vault-'`, **L31**) — renaming them would orphan existing leftover
-directories — and Electron's `--user-data-dir` switch string. The `evalWrapper` **wire format** between Node
-and the renderer did change (`{ fn, args }` → `{ callback, input }`); that is safe only because
-`getBootstrapVersion()` keys off `LIBRARY_VERSION`, so a stale namespace in a running Obsidian is
-re-bootstrapped on the version bump that ships this.
+directories — and Electron's `--user-data-dir` switch string. Two **wire formats** between Node and the
+renderer did change: `evalWrapper`'s (`{ fn, args }` → `{ callback, input }`) and `ipcSendSync`'s
+(`{ channel, args }` → `{ channel, channelArguments }`). Both are safe only because `getBootstrapVersion()`
+keys off `LIBRARY_VERSION`, so a stale namespace in a running Obsidian is re-bootstrapped on the version bump
+that ships this. Neither belongs in the table above: the namespace payload types are closure-local to
+`namespace-bootstrap.ts` (`EvalWrapperParams`, `IpcSendSyncParams`) and the payloads themselves are JSON
+literals `transport-desktop-cdp.ts` writes, so no consumer can name either — nothing to follow. The table
+did carry an `IpcSendSyncNamespaceParams` row until T812, naming a type in `src/obsidian-namespace.ts` that
+was never once re-exported; that file is gone (**L2**).
 
 **Never run `--fix` over `unicorn/name-replacements`** without `tsc` + the full suite behind it: its fixer is
 not reference-aware for enum members, interface members, and parameter properties, and object-literal keys in
