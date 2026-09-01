@@ -126,10 +126,11 @@ sensible defaults:
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | `appId`                                       | App package (Android) or bundle ID (iOS).                                                                              | `'md.obsidian'`        |
 | `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to become ready; only when the harness auto-starts it.                     | `180000`               |
-| `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for a started emulator to go idle before the session; avoids inflated cold setup. `0` skips.       | `60000`                |
+| `appStartTimeoutInMilliseconds`               | Max wait for the app's cold start (`globalThis.app` to exist) after the vault (re)opens, before the layout clock runs. | `180000`               |
+| `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for the emulator — started or reused — to go idle before the session. `0` skips.                   | `60000`                |
 | `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window and live output. Hidden and quiet by default.                       | `false`                |
 | `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.            | `false`                |
-| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady` after the vault (re)opens; raise on slow emulators.                           | `90000`                |
+| `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady`, counted from the app start above — so it covers Obsidian's work only.        | `90000`                |
 | `leftoverMaxAgeInMilliseconds`                | Age gate for the **host** leftover sweep; the device sweep is unconditional.                                           | `7200000`              |
 | `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.               | `180000`               |
 | `shouldAutoInstallAppiumDependencies`         | Auto-install missing Appium and the UiAutomator2 driver before auto-starting the server (global `npm install -g`).     | `true`                 |
@@ -207,15 +208,24 @@ yet`, means a worker reached the desktop transport with nothing prepared for it 
 failed setup, or an integration project missing `obsidian-integration-testing/vitest-setup` from its
 `setupFiles`.
 
-### "Obsidian layout did not become ready"
+### "Obsidian layout did not become ready" / "Obsidian Mobile did not finish starting"
 
 Registering a vault reloads the page, triggering a full Obsidian re-init — reopen the vault and reload
-every plugin, the heaviest startup step. On a cold-booted or under-provisioned emulator that can exceed
-the default `90000` ms budget and fail setup with
-`Obsidian layout did not become ready within 90000ms`. Run the health check in
-[AVD provisioning](#avd-provisioning) first (a full `/data` presents exactly like this), then bring the
-AVD up to the minimums there and, if still needed, raise the budget with
-`layoutReadyTimeoutInMilliseconds`. It is headroom, not a substitute for adequate provisioning.
+every plugin, the heaviest startup step. That reload is waited out as **two** budgets, so the message
+tells you which half ran out: `appStartTimeoutInMilliseconds` covers the app's own cold start (up to
+`globalThis.app` existing), and only then does `layoutReadyTimeoutInMilliseconds` start ticking on
+Obsidian's own work.
+
+**Read the numbers in the message before raising anything.** It reports the furthest startup milestone
+reached, how many times the WebView was probed, and the slowest probe round-trip. A budget that ran out
+after a *handful* of probes each taking tens of seconds was not spent on Obsidian at all — it was spent
+on a busy guest inflating every round-trip, and the fix is to let the emulator settle
+(`deviceIdleTimeoutInMilliseconds`), not to enlarge the budget. Many *fast* probes stalled at one
+milestone is the opposite reading, and there the budget is the right knob.
+
+Either way, run the health check in [AVD provisioning](#avd-provisioning) first — a full `/data`
+presents exactly like this — and bring the AVD up to the minimums there. A raised budget is headroom,
+not a substitute for adequate provisioning.
 
 ## Related
 

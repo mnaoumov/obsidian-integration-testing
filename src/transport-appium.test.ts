@@ -9,6 +9,8 @@ import {
   vi
 } from 'vitest';
 
+import type { StartupProbeResult } from './app-startup-progress.ts';
+
 import { log } from './log.ts';
 import { strictProxy } from './strict-proxy.ts';
 import { AppiumTransport } from './transport-appium.ts';
@@ -32,6 +34,15 @@ vi.mock('./log.ts', () => ({
 interface ExecOptions extends Record<string, unknown> {
   readonly cwd: string;
 }
+
+/**
+ * What the WebView startup probe reports once Obsidian is fully up.
+ */
+const STARTED_PROBE: StartupProbeResult = {
+  hasApp: true,
+  hasWorkspace: true,
+  isLayoutReady: true
+};
 
 interface MockBrowser {
   activateApp: ReturnType<typeof vi.fn>;
@@ -152,7 +163,8 @@ describe('AppiumTransport.registerVault', () => {
 
   beforeEach(() => {
     mockBrowser = createMockBrowser();
-    mockBrowser.execute.mockResolvedValue(true);
+    // Report a fully started, laid-out app so both startup phases resolve on the first probe.
+    mockBrowser.execute.mockResolvedValue(STARTED_PROBE);
     mockExec.mockReset().mockResolvedValue('');
     transport = new AppiumTransport({
       browser: strictProxy<Browser>(mockBrowser),
@@ -270,14 +282,40 @@ describe('AppiumTransport.unregisterVault', () => {
   });
 });
 
-describe('AppiumTransport layout-ready timeout', () => {
+describe('AppiumTransport startup budgets', () => {
   let mockBrowser: MockBrowser;
 
   beforeEach(() => {
     mockBrowser = createMockBrowser();
-    // Report layout ready immediately so registerVault resolves without waiting.
-    mockBrowser.execute.mockResolvedValue(true);
+    // Report a fully started, laid-out app so registerVault resolves without waiting.
+    mockBrowser.execute.mockResolvedValue(STARTED_PROBE);
     vi.mocked(log).mockClear();
+  });
+
+  it('should default the app-start timeout to 180000ms', async () => {
+    const transport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android'
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Waiting for the app to start (timeout=180000ms)'));
+  });
+
+  it('should use the configured appStartTimeoutInMilliseconds', async () => {
+    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 23_456;
+    const transport = new AppiumTransport({
+      appStartTimeoutInMilliseconds: CUSTOM_TIMEOUT_IN_MILLISECONDS,
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android'
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Waiting for the app to start (timeout=23456ms)'));
   });
 
   it('should default the layout-ready timeout to 90000ms', async () => {
@@ -304,6 +342,51 @@ describe('AppiumTransport layout-ready timeout', () => {
     await transport.registerVault('/tmp/my-vault');
 
     expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Waiting for layout ready (timeout=12345ms)'));
+  });
+
+  it('should not start the layout-ready clock until the app has started', async () => {
+    mockBrowser.execute
+      // The localStorage write that triggers the reload.
+      .mockResolvedValueOnce(undefined)
+      // The app is still cold-starting: the WebView answers, but there is no `app` yet.
+      .mockResolvedValueOnce({ hasApp: false, hasWorkspace: false, isLayoutReady: false })
+      .mockResolvedValue(STARTED_PROBE);
+
+    const transport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android'
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    const messages = vi.mocked(log).mock.calls.map(([message]) => message);
+    const appStartNotSatisfiedIndex = messages.findIndex((message) => message.includes('Phase "app-start" not satisfied yet: no-app'));
+    const layoutClockStartedIndex = messages.findIndex((message) => message.includes('Waiting for layout ready'));
+
+    expect(appStartNotSatisfiedIndex).toBeGreaterThanOrEqual(0);
+    // The tight budget's clock is announced only after the generous one is satisfied.
+    expect(layoutClockStartedIndex).toBeGreaterThan(appStartNotSatisfiedIndex);
+  });
+
+  it('should report the furthest milestone and the probe timings when a budget runs out', async () => {
+    const SHORT_TIMEOUT_IN_MILLISECONDS = 600;
+    mockBrowser.execute
+      // The localStorage write that triggers the reload.
+      .mockResolvedValueOnce(undefined)
+      // The WebView never comes back.
+      .mockRejectedValue(new Error('no such window: target window already closed'));
+
+    const transport = new AppiumTransport({
+      appStartTimeoutInMilliseconds: SHORT_TIMEOUT_IN_MILLISECONDS,
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android'
+    });
+
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow(
+      /Obsidian Mobile did not finish starting within 600ms[\s\S]*never answered a single probe[\s\S]*slowest round-trip/
+    );
   });
 });
 
