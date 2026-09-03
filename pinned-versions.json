@@ -40,6 +40,13 @@
       "expect": "^7.0.3",
       "manualCheck": "The check reads the range @wdio/utils declares, not a version, because that range is what forces the override. When it moves to ^8 or later the override and this entry can both go. Before lifting it, re-run the deepmergeCustom probe rather than trusting the range alone: @wdio/config passes a handler that reads `meta.key`, and that is precisely the API 8.0.0 renamed, so a regression there would be silent rather than a crash."
     },
+    "fflate": {
+      "section": "overrides",
+      "why": "Clears GHSA-px8p-9vwx-vf98 (fflate unzipSync infinite loop on a malformed ZIP64 archive), which covers 0.7.0 - 0.7.4; 0.7.5 is the fix. Two packages reach fflate here and only one is vulnerable: @shuding/opentype.js declares ^0.7.3 and already resolves 0.7.5 on its own, while satori declares the EXACT 0.7.3 and so keeps a second, vulnerable copy nested under itself. No direct bump reaches it - satori 0.33.4 is the newest release and still pins 0.7.3 - so the override is the only lever (G100 step 2), and it dedupes the two copies into one. NEVER take the `npm audit fix --force` remedy: it downgrades satori to 0.32.0. The forced patch bump is safe - 0.7.5 is a patch on the line satori already asks for. Kept caret-ranged so the sweep carries it forward.",
+      "check": "node -e \"process.stdout.write(require('satori/package.json').dependencies['fflate'])\"",
+      "expect": "0.7.3",
+      "manualCheck": "The check reads the range satori itself declares, because that exact pin is what makes the override necessary. When satori moves to a range that admits 0.7.5 or later, the override and this entry can both be deleted."
+    },
     "js-yaml": {
       "section": "overrides",
       "why": "Astro and Starlight `import yaml from 'js-yaml'`, and js-yaml 5 is ESM-only with NO default export - hoisting 5.x into their subtree makes `npm run docs:build` die on 'The requested module js-yaml does not provide an export named default' before it reads a single page. The override exists to keep the whole tree off the vulnerable 3.x line, and 4.3.1 does that just as well while staying loadable; it is also what the other js-yaml consumers here (cosmiconfig under @commitlint/load, @istanbuljs/load-nyc-config under jest, markdownlint-cli2) resolve to. The check records the range astro itself asks for: when astro moves to 5.x, this pin can be dropped. Same pin and same reason as obsidian-dev-utils and obsidian-test-mocks.",
