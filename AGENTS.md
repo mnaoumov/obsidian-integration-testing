@@ -1981,3 +1981,27 @@ Per **L27**'s pure/testable split: `src/app-startup-progress.ts` (`classifyAppSt
 `checkAppStarted`, `checkLayoutReady`, `compareAppStartupMilestones`, `buildStartupTimeoutMessage`) is
 pure and unit-tested; `transport-appium.ts` keeps only the polling orchestration, and `transport-factory.ts`
 only the `adb` glue — both stay `/* v8 ignore */` under the 100 % gate.
+
+## L44. Security overrides (`fflate` GHSA-px8p-9vwx-vf98)
+
+`fflate` `0.7.0 – 0.7.4` can enter an infinite loop in `unzipSync` on a malformed ZIP64 archive; `0.7.5` is
+the fix. Two packages in this tree reach it, and only one of them is vulnerable:
+
+```text
+@shuding/opentype.js → fflate@^0.7.3   ← already resolves 0.7.5 on its own, fine
+satori               → fflate@0.7.3    ← an EXACT pin, so it keeps a second, vulnerable copy nested
+```
+
+Both arrive through the docs-site OG-image path (`satori` + `@resvg/resvg-js`). No direct bump reaches the
+vulnerable copy: `satori@0.33.4` is the newest release and still declares the exact `0.7.3`. So the fix is
+`overrides.fflate` → `^0.7.5` (G100 step 2), which also **dedupes** the two copies into one — the install
+that applied it reported `removed 1 package`.
+
+**Never take `npm audit fix --force` here** — its remedy is `satori@0.32.0`, a downgrade. **Remove the
+override** when `satori` declares a range that admits `0.7.5` or later; the `check` in
+[`pinned-versions.json`](pinned-versions.json) reads that declared range and watches exactly that.
+
+The override is kept **caret-ranged** so `update-npm-deps.ps1` carries it forward, and it is listed in
+`pinned-versions.json` anyway — the sweep keeps a caret override *current*, but it never reports that the
+advisory the override answers has gone away, and the override with it. Same arrangement as
+`brace-expansion` in **L30**.
