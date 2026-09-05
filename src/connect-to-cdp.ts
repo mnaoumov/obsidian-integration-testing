@@ -156,6 +156,26 @@ export interface ConnectToCdpOptions {
   readonly commandTimeoutInMilliseconds?: number;
 
   /**
+   * The vault's **config folder** — Obsidian's per-vault *Override config
+   * folder* setting, e.g. `'.obsidian-desktop'`. Set it to open a vault that
+   * keeps its settings somewhere other than `.obsidian`; without it such a vault
+   * opens against `.obsidian`, which for a vault that has a stale one beside the
+   * real folder means opening successfully against the wrong settings.
+   *
+   * Must start with a dot, must not be the bare dot, and must not contain a path
+   * separator — anything else throws before Obsidian launches, since Obsidian
+   * would silently substitute `.obsidian`. After the vault opens, its actual
+   * `app.vault.configDir` is read back and a mismatch throws
+   * `ConfigDirectoryFallbackError`.
+   *
+   * Ignored in attach mode ({@link ConnectToCdpOptions.port} set), where the
+   * vault is opened by the user's own Obsidian under its own config.
+   *
+   * @default `undefined` (Obsidian's own default, `.obsidian`)
+   */
+  readonly configDirectory?: string;
+
+  /**
    * Grace window in milliseconds for fast-failing a dead boot of the owned
    * instance — the renderer loaded but the app never bootstrapped (empty
    * `<body>`, no `window.app`), the terminal state when the asar cannot run on
@@ -381,6 +401,7 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTransportOptions {
   return normalizeOptionalProperties<ObsidianCdpTransportOptions>({
     commandTimeoutInMilliseconds: options?.commandTimeoutInMilliseconds,
+    configDirectory: options?.configDirectory,
     deadBootGraceInMilliseconds: options?.deadBootGraceInMilliseconds,
     host: options?.host,
     isObsidianAppVisible: options?.isObsidianAppVisible ?? true,

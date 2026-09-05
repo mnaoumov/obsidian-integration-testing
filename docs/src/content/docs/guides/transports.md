@@ -89,6 +89,45 @@ try {
   `0` to disable the fast-fail and restore the plain wait-out-the-readiness-timeout behavior. Owned mode
   only; ignored when attaching.
 
+## Vaults whose config folder is not `.obsidian`
+
+Obsidian lets a vault keep its settings in a folder other than `.obsidian` — *Settings → About → Override
+config folder*. Point the harness at such a vault and, by default, it opens against `.obsidian` instead. If
+the vault has a stale `.obsidian` sitting beside the real folder, that is not an error you will see: the
+vault opens, the layout is ready, and the run reports success against the wrong settings and none of the
+plugins you meant to test. Set `configDirectory` to name the real folder:
+
+```ts
+environmentOptions: {
+  obsidianTransport: {
+    type: 'obsidian-cdp',
+    configDirectory: '.obsidian-desktop'
+  }
+}
+```
+
+- **`configDirectory`** (default `undefined`, i.e. Obsidian's own `.obsidian`) — the vault's config folder.
+  It must start with a dot, must not be the bare dot, and must not contain a path separator; anything else
+  throws before Obsidian is launched. Owned mode only; ignored when attaching, where your own Obsidian
+  opens the vault under its own config.
+
+Obsidian stores this override in `localStorage`, not in any file, and reads it once — in the vault's own
+renderer, while the vault is being set up. So the harness cannot write it into the vault's window: by then
+the read has already happened. Setting `configDirectory` therefore changes how the owned instance boots. It
+comes up on Obsidian's starter screen, the override is written in *that* renderer, and only then is the
+vault opened. That costs roughly one extra second and is why the option is opt-in rather than always on.
+
+Because `localStorage` is scoped to a user-data directory and an owned instance gets a fresh temporary one,
+nothing is inherited from your own Obsidian — a vault you have configured this way in your day-to-day
+Obsidian still needs the option here.
+
+:::caution
+When Obsidian rejects an override it substitutes `.obsidian` **silently**. The harness guards against that
+by reading the live `app.vault.configDir` back after the vault opens and throwing
+`ConfigDirectoryFallbackError` on any mismatch. There is deliberately no option to downgrade that to a
+warning: a vault opened against the wrong config folder is silently the wrong vault.
+:::
+
 ## Window visibility
 
 By default the owned Obsidian window is shown. Integration setup explicitly hides its owned window so test
