@@ -19,14 +19,19 @@ import {
 } from 'node:child_process';
 import {
   mkdirSync,
-  mkdtempSync
+  mkdtempSync,
+  statSync
 } from 'node:fs';
 import http from 'node:http';
-import { tmpdir } from 'node:os';
+import {
+  homedir,
+  tmpdir
+} from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
 import type { AppiumServerMarker } from './appium-server-marker.ts';
+import type { AvdProbeResult } from './avd-probe-verdict.ts';
 import type { ProcessListEntry } from './emulator-backend.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
@@ -67,6 +72,13 @@ import {
   listAvailableAvds
 } from './avd-list.ts';
 import {
+  buildAvdProbeSummary,
+  buildUnreadableDevicesMessage,
+  checkIsEmulatorDeviceId,
+  classifyAvdProbe,
+  resolveAvdProbeVerdict
+} from './avd-probe-verdict.ts';
+import {
   resolveInstallerCompatibilityAction,
   willThrowOnIncompatibleInstaller,
   willThrowOnSilentAsarFallback,
@@ -86,6 +98,10 @@ import {
   parseWindowsTaskList,
   selectEmulatorBackendPids
 } from './emulator-backend.ts';
+import {
+  buildAvdSnapshotDirectoryCandidates,
+  buildSnapshotAgeMessage
+} from './emulator-snapshot.ts';
 import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { resolveInstallerCompatibility } from './installer-compatibility.ts';
@@ -119,7 +135,10 @@ import {
   parsePosixLsofPids,
   parseWindowsNetstatPids
 } from './port-owner.ts';
-import { buildProcessExitMessage } from './process-exit-message.ts';
+import {
+  appendProcessOutputTail,
+  buildProcessExitMessage
+} from './process-exit-message.ts';
 import { checkIsProcessAlive } from './process-liveness.ts';
 import { resolveDeadBootGraceInMilliseconds } from './renderer-boot-detection.ts';
 import {
@@ -135,7 +154,10 @@ import {
   DEFAULT_ANDROID_VAULT_BASE_PATH
 } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
-import { ensureNonNullable } from './type-guards.ts';
+import {
+  assertNever,
+  ensureNonNullable
+} from './type-guards.ts';
 import {
   shouldHideAppiumConsole,
   shouldHideEmulatorWindow
@@ -149,6 +171,13 @@ import {
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
 const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
+/*
+ * How many times the AVD adoption probe asks a device which AVD it is serving.
+ * One retry, because the alternative to an answer is refusing to launch: a
+ * second 5s look is far cheaper than either a false refusal or the colliding
+ * launch a discarded timeout used to authorize (see `avd-probe-verdict.ts`).
+ */
+const AVD_PROBE_ATTEMPT_COUNT = 2;
 /*
  * `dumpsys connectivity` is far larger than the other probes' output, and Node's
  * default 1 MiB `maxBuffer` would fail the call rather than truncate it — which
@@ -304,6 +333,11 @@ interface EnsureDeviceConnectedParams {
   Resolved timeout in milliseconds for the network-ready wait (`0` skips it).
    */
   readonly networkReadyTimeoutInMilliseconds: number;
+
+  /**
+  Whether the auto-started emulator may resume and refresh the AVD's boot snapshot (omitted → cold boot).
+   */
+  readonly shouldReuseEmulatorSnapshot?: boolean | undefined;
 }
 
 /**
@@ -540,6 +574,11 @@ interface StartAppiumAndEmulatorParams {
   Whether Appium auto-start is allowed.
    */
   readonly shouldAutoStartAppium?: boolean | undefined;
+
+  /**
+  Whether the auto-started emulator may resume and refresh the AVD's boot snapshot (omitted → cold boot).
+   */
+  readonly shouldReuseEmulatorSnapshot?: boolean | undefined;
 }
 
 /**
@@ -978,7 +1017,8 @@ class AppiumTransportFactory {
         networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
         port,
         shouldAutoInstallAppiumDependencies: willAutoInstallAppiumDependencies(options),
-        shouldAutoStartAppium: options.shouldAutoStartAppium
+        shouldAutoStartAppium: options.shouldAutoStartAppium,
+        shouldReuseEmulatorSnapshot: options.shouldReuseEmulatorSnapshot
       });
 
       appiumProcess = result.appiumProcess;
@@ -1218,28 +1258,32 @@ class AppiumTransportFactory {
     const deviceIdsBefore = await this.getConnectedDeviceIds();
     this.log(`Checking existing devices for AVD "${avdName}"... (connected: [${deviceIdsBefore.join(', ')}])`);
 
-    const existingDeviceId = await this.findDeviceByAvdName(avdName, deviceIdsBefore);
+    const probeResults = await this.probeDevicesForAvd(avdName, deviceIdsBefore);
+    this.log(`AVD probe: ${buildAvdProbeSummary(probeResults)}.`);
+    const probeVerdict = resolveAvdProbeVerdict(probeResults);
 
-    if (existingDeviceId) {
-      this.log(`AVD "${avdName}" is already running on device ${existingDeviceId}, reusing.`);
-      await this.suppressErrorDialogs(existingDeviceId);
-      /*
-       * A reused device gets the SAME settle gate a harness-started one gets.
-       * Appearing in `adb devices` says only that adbd is up: the guest can
-       * still be running the boot animation or optimizing packages, and a
-       * session established against that contends with the churn and inflates
-       * every subsequent round-trip 25-50x (L19). Skipping the gate here is
-       * what let a release preflight spend its whole layout-ready budget on a
-       * handful of contended probes while `adb devices` reported `device`
-       * throughout. The same argument applies to the network gate: a device
-       * that has been up for seconds is exactly one with no validated network
-       * yet.
-       */
-      await this.waitForBoot(existingDeviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
-      await this.waitForDeviceReady(existingDeviceId, timeouts);
-      await this.wakeScreen(existingDeviceId);
-      // A device this run did not start is not this run's to stop.
-      return { actualDeviceId: existingDeviceId, ownedEmulatorPids: [] };
+    switch (probeVerdict.verdict) {
+      case 'refuse': {
+        /*
+         * Silence is not a skip. Falling through to a launch here is what
+         * produced `FATAL | Running multiple emulators with the same AVD` —
+         * see `avd-probe-verdict.ts` for the run this reproduces.
+         */
+        throw new Error(buildUnreadableDevicesMessage({
+          avdName,
+          probeTimeoutInMilliseconds: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS,
+          unreadableDeviceIds: probeVerdict.unreadableDeviceIds
+        }));
+      }
+      case 'reuse': {
+        return await this.reuseConnectedDevice(avdName, probeVerdict.deviceId, timeouts);
+      }
+      case 'start-new': {
+        break;
+      }
+      default: {
+        return assertNever(probeVerdict);
+      }
     }
 
     this.log(`AVD "${avdName}" not found on any existing device, starting a new emulator...`);
@@ -1254,7 +1298,11 @@ class AppiumTransportFactory {
      * somebody else's emulator.
      */
     const emulatorPidsBefore = await this.listEmulatorBackendPids([]);
-    const emulator = this.startEmulator(avdName, isEmulatorVisible);
+    const shouldReuseSnapshot = params.shouldReuseEmulatorSnapshot === true;
+    if (shouldReuseSnapshot) {
+      this.logSnapshotAge(avdName);
+    }
+    const emulator = this.startEmulator(avdName, shouldReuseSnapshot, isEmulatorVisible);
 
     let actualDeviceId: string;
     try {
@@ -1327,27 +1375,6 @@ class AppiumTransportFactory {
 
       return await this.restartWedgedServerAndRetry(params, error);
     }
-  }
-
-  private async findDeviceByAvdName(avdName: string, deviceIds: string[]): Promise<string | undefined> {
-    for (const deviceId of deviceIds) {
-      const runningAvd = await new Promise<string>((resolve) => {
-        execFile(
-          'adb',
-          ['-s', deviceId, 'emu', 'avd', 'name'],
-          { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
-          (_error, stdout) => {
-            resolve(stdout.split('\n', 1)[0]?.trim() ?? '');
-          }
-        );
-      });
-
-      if (runningAvd === avdName) {
-        return deviceId;
-      }
-    }
-
-    return undefined;
   }
 
   private async getConnectedDeviceIds(): Promise<string[]> {
@@ -1554,6 +1581,91 @@ class AppiumTransportFactory {
   }
 
   /**
+   * Logs how old the snapshot a run has opted into resuming is.
+   *
+   * Best-effort: a missing snapshot is the normal state of a fresh AVD, not a
+   * failure, and this is a diagnostic rather than a gate.
+   *
+   * @param avdName - The AVD whose snapshot is about to be resumed.
+   */
+  private logSnapshotAge(avdName: string): void {
+    let savedAt: Date | undefined;
+
+    for (const candidate of buildAvdSnapshotDirectoryCandidates({ avdName, environment: process.env, homeDirectory: homedir() })) {
+      try {
+        savedAt = statSync(candidate).mtime;
+        break;
+      } catch {
+        // Not this AVD home — try the next candidate.
+      }
+    }
+
+    this.log(buildSnapshotAgeMessage({ avdName, savedAt }));
+  }
+
+  /**
+   * Reads one emulator's AVD name from its console, retrying once.
+   *
+   * The retry is what makes the refusal proportionate: the probe's whole budget
+   * is 5s, and a second look costs less than a colliding launch does. What it
+   * must never do is report a non-answer as an answer — the discarded `_error`
+   * this replaces resolved `''`, which compared unequal to the wanted AVD and so
+   * read as a definite "some other AVD".
+   *
+   * @param deviceId - The emulator to ask.
+   * @returns The AVD name it answered, or `undefined` when it did not answer.
+   */
+  private async probeAvdName(deviceId: string): Promise<string | undefined> {
+    for (let attempt = 1; attempt <= AVD_PROBE_ATTEMPT_COUNT; attempt++) {
+      const answer = await new Promise<string | undefined>((resolve) => {
+        execFile(
+          'adb',
+          ['-s', deviceId, 'emu', 'avd', 'name'],
+          { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+          (error, stdout) => {
+            resolve(error ? undefined : stdout.split('\n', 1)[0]?.trim());
+          }
+        );
+      });
+
+      if (answer !== undefined && answer.length > 0) {
+        return answer;
+      }
+
+      if (attempt < AVD_PROBE_ATTEMPT_COUNT) {
+        this.log(
+          `Device ${deviceId} did not answer \`adb -s ${deviceId} emu avd name\` within ${String(ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS)}ms; retrying once.`
+        );
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Asks every connected device which AVD it is serving.
+   *
+   * A device that is not a locally started emulator is never asked: its console
+   * cannot answer however healthy it is, and reading that as silence would
+   * refuse every run on a host with a handset plugged in — see
+   * `avd-probe-verdict.ts`.
+   *
+   * @param avdName - The AVD the run wants.
+   * @param deviceIds - The connected devices.
+   * @returns One outcome per device, in listed order.
+   */
+  private async probeDevicesForAvd(avdName: string, deviceIds: readonly string[]): Promise<AvdProbeResult[]> {
+    const results: AvdProbeResult[] = [];
+
+    for (const deviceId of deviceIds) {
+      const probedAvdName = checkIsEmulatorDeviceId(deviceId) ? await this.probeAvdName(deviceId) : undefined;
+      results.push({ deviceId, outcome: classifyAvdProbe({ avdName, deviceId, probedAvdName }) });
+    }
+
+    return results;
+  }
+
+  /**
    * Replaces a leftover server an earlier run failed to stop, instead of
    * adopting it.
    *
@@ -1642,6 +1754,36 @@ class AppiumTransportFactory {
     }
   }
 
+  /**
+   * Adopts a device already serving the requested AVD.
+   *
+   * @param avdName - The AVD it is serving.
+   * @param deviceId - The device to adopt.
+   * @param timeouts - The two post-boot readiness budgets.
+   * @returns The adopted device, owning no emulator PIDs.
+   */
+  private async reuseConnectedDevice(avdName: string, deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<EnsureDeviceConnectedResult> {
+    this.log(`AVD "${avdName}" is already running on device ${deviceId}, reusing.`);
+    await this.suppressErrorDialogs(deviceId);
+    /*
+     * A reused device gets the SAME settle gate a harness-started one gets.
+     * Appearing in `adb devices` says only that adbd is up: the guest can
+     * still be running the boot animation or optimizing packages, and a
+     * session established against that contends with the churn and inflates
+     * every subsequent round-trip 25-50x (L19). Skipping the gate here is
+     * what let a release preflight spend its whole layout-ready budget on a
+     * handful of contended probes while `adb devices` reported `device`
+     * throughout. The same argument applies to the network gate: a device
+     * that has been up for seconds is exactly one with no validated network
+     * yet.
+     */
+    await this.waitForBoot(deviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
+    await this.waitForDeviceReady(deviceId, timeouts);
+    await this.wakeScreen(deviceId);
+    // A device this run did not start is not this run's to stop.
+    return { actualDeviceId: deviceId, ownedEmulatorPids: [] };
+  }
+
   private async sendKeyEvent(deviceId: string, keyCode: number, description: string): Promise<void> {
     await new Promise<void>((resolve) => {
       execFile(
@@ -1662,7 +1804,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -1716,7 +1858,7 @@ class AppiumTransportFactory {
           this.log('Auto-started Appium server is ready.');
         })
         : Promise.resolve(),
-      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds })
+      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
     ]);
 
     const deviceResult = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : undefined;
@@ -1809,10 +1951,10 @@ class AppiumTransportFactory {
     }
   }
 
-  private startEmulator(avdName: string, isEmulatorVisible?: boolean): ProcessLaunch {
+  private startEmulator(avdName: string, shouldReuseSnapshot: boolean, isEmulatorVisible?: boolean): ProcessLaunch {
     const emulatorBinary = this.resolveEmulatorBinary();
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
-    const input = buildEmulatorArguments({ avdName, isHidden: isWindowHidden });
+    const input = buildEmulatorArguments({ avdName, isHidden: isWindowHidden, shouldReuseSnapshot });
     const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);
     this.log(`Running: ${emulatorBinary} ${input.join(' ')}`);
     /*
@@ -2256,9 +2398,16 @@ class AppiumTransportFactory {
       });
     }
 
-    throw new Error(
-      `Device "${deviceId}" connected but did not finish booting within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`
-    );
+    /*
+     * The tail goes on the TIMEOUT too, not only on the exit. An emulator that
+     * prints `FATAL | Running multiple emulators with the same AVD` and then
+     * lingers never sets `exitInfo`, so this used to be the whole of what the
+     * reader got — a budget, with the explanation captured and discarded.
+     */
+    throw new Error(appendProcessOutputTail(
+      `Device "${deviceId}" connected but did not finish booting within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`,
+      { output: emulator?.readOutput() ?? '', outputLabel: 'Emulator output' }
+    ));
   }
 
   /**
@@ -2467,9 +2616,11 @@ class AppiumTransportFactory {
       });
     }
 
-    throw new Error(
-      `No new emulator device appeared within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`
-    );
+    // As in `waitForBoot`: an emulator that hangs has as much to say as one that dies.
+    throw new Error(appendProcessOutputTail(
+      `No new emulator device appeared within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`,
+      { output: emulator.readOutput(), outputLabel: 'Emulator output' }
+    ));
   }
 
   private async wakeScreen(deviceId: string): Promise<void> {

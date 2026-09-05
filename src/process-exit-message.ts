@@ -1,14 +1,34 @@
 /**
  * @file
  *
- * Pure builder for the diagnostic message describing an auto-started child
- * process (the Android emulator or the Appium server) that died during startup,
- * appending the captured output tail when available.
+ * Pure builders for the diagnostic message describing an auto-started child
+ * process (the Android emulator or the Appium server) that failed during
+ * startup, appending the captured output tail when available.
+ *
+ * A startup fails two ways — the process **dies**, or it **hangs** past a
+ * budget — and the captured tail is equally the explanation in both. So the
+ * tail-appending half is its own export, used by the timeout throws that once
+ * reported only the budget they blew.
  *
  * Kept separate from the integration-only `transport-factory` (excluded from
  * unit tests) so the message formatting stays unit-testable — the launchers
  * themselves spawn real processes.
  */
+
+/**
+ * Parameters for {@link appendProcessOutputTail}.
+ */
+export interface AppendProcessOutputTailParams {
+  /**
+  The captured stdout+stderr tail (empty when none was captured).
+   */
+  readonly output: string;
+
+  /**
+  Label for the captured output section (e.g. `"Emulator output"`).
+   */
+  readonly outputLabel: string;
+}
 
 /**
  * Parameters for {@link buildProcessExitMessage}.
@@ -60,6 +80,30 @@ export interface ProcessExitInfo {
 }
 
 /**
+ * Appends a process's captured output tail to a message, when there is one.
+ *
+ * Split out of {@link buildProcessExitMessage} so the **timeout** failures can
+ * carry the tail too. A process that dies gets its output attached; one that
+ * hangs used to get `No new emulator device appeared within 300000ms.` and
+ * nothing else — even though the line that explains it (`FATAL | Running
+ * multiple emulators with the same AVD is an experimental feature`) had already
+ * been captured. The emulator writing its own diagnosis is worth nothing if the
+ * harness reads it on only one of the two ways a startup can fail.
+ *
+ * @param message - The failure message to extend.
+ * @param params - The captured tail and its label.
+ * @returns The message, with the tail appended when non-empty.
+ */
+export function appendProcessOutputTail(message: string, params: AppendProcessOutputTailParams): string {
+  const trimmedOutput = params.output.trim();
+  if (trimmedOutput.length === 0) {
+    return message;
+  }
+
+  return `${message}\n\n${params.outputLabel} (tail):\n${trimmedOutput}`;
+}
+
+/**
  * Builds a descriptive error message for an auto-started child process that
  * exited (or failed to spawn) during startup, appending the captured output
  * tail when available.
@@ -70,12 +114,7 @@ export interface ProcessExitInfo {
 export function buildProcessExitMessage(params: BuildProcessExitMessageParams): string {
   const { exitInfo, output, outputLabel, subject } = params;
 
-  const reason = resolveReason(exitInfo);
-  const trimmedOutput = output.trim();
-  const details = trimmedOutput.length > 0
-    ? `\n\n${outputLabel} (tail):\n${trimmedOutput}`
-    : '';
-  return `${subject} ${reason} during startup.${details}`;
+  return appendProcessOutputTail(`${subject} ${resolveReason(exitInfo)} during startup.`, { output, outputLabel });
 }
 
 /**

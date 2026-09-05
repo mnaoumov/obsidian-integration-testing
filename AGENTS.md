@@ -407,7 +407,8 @@ glue, so the `@default false` resolution is extracted there to stay testable, mi
   `DesktopCdpTransport.moveOwnedWindowOffscreen` moves the window beyond all displays via
   `window.electron.remote.getCurrentWindow().setPosition(...)`. Best-effort (warn, don't throw).
   Attach mode never moves the user's window.
-- **`isEmulatorVisible`** → `buildEmulatorArgs({ isHidden })` appends `-no-window` (headless emulator).
+- **`isEmulatorVisible`** → `buildEmulatorArguments({ isHidden })` appends `-no-window` (headless emulator).
+- **`shouldReuseEmulatorSnapshot`** → `buildEmulatorArguments({ shouldReuseSnapshot })` decides the snapshot pair: `false` (default) passes `-no-snapshot-load -no-snapshot-save` for a hermetic cold boot, `true` passes neither so the emulator loads **and** saves `default_boot`. Never one without the other — see **L47**.
 - **`isAppiumConsoleVisible`** → `startAppiumServer` spawns with `windowsHide` and discards output; set it to `true` to surface both the console and live logs for debugging.
 
 **Off-screen, NOT minimize — this is the crux (empirically established, see the auto-memory
@@ -642,10 +643,12 @@ Measured breakdown (see also the auto-memory `reference_android_appium_cold_cost
 
 In descending value:
 
-1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). `emulator-arguments.ts`
-   passes `-no-snapshot-save`, so a fresh CI AVD full-cold-boots every run. Making snapshot load+save an
-   opt-in option would let a persistent runner warm-boot — but it changes test-isolation/hermeticity, so
-   the default must stay cold; this is a deliberate user tradeoff, not a default change.
+1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). **Shipped as
+   `shouldReuseEmulatorSnapshot` (T956), and the default stayed cold as this lever always said it must.**
+   Note what the code actually did until then: it passed `-no-snapshot-save` **without**
+   `-no-snapshot-load`, so it never wrote `default_boot` yet resumed it every run — neither hermetic nor
+   warm, and the reason this lever read as un-shipped while the harness was quietly taking the risk. The
+   option now toggles **both** flags together; **L47** has the measurements and the rule.
 2. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
    the release environment.
 3. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
@@ -2260,3 +2263,96 @@ would have waved this exact server through. That is why `reclaimUnstoppedAppiumS
 the reclaim ingredients against that live leftover: owners of 4723 `[34772]` → killed → `[]`; emulator
 backends `[24340]` → `adb emu kill` timed out against the offline device (best-effort, as designed) → killed
 → none alive → `adb devices` empty and `checkIsDeviceListed('emulator-5554')` `false`.
+
+**The preflight half of the same story is L47.** A verified teardown is only one of the two lines of
+defence, and the abrupt-kill case above is exactly when the other one matters: the *next* run's adoption
+check has to recognize the leftover rather than launch beside it.
+
+## L47. A probe that did not answer is not an answer — and the snapshot is owned or not loaded
+
+**L46** made the teardown prove its claims. This is the same discipline applied to the *preflight*: three
+places where the harness treated an absence of evidence as evidence, or threw away evidence it already
+held. All three were found in one night of Android failures (2026-09-03) that looked like four unrelated
+faults and were not.
+
+### The adoption probe read a timeout as "some other AVD"
+
+Before launching, `ensureDeviceConnected` asks each connected emulator which AVD it serves. The probe was:
+
+```ts
+execFile('adb', ['-s', deviceId, 'emu', 'avd', 'name'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+  (_error, stdout) => { resolve(stdout.split('\n', 1)[0]?.trim() ?? ''); });
+```
+
+`_error` discarded, so a timeout yielded `''`, `'' !== avdName`, and the loop fell through to *"start a new
+emulator"* — **beside the emulator already serving that AVD**. Caught live:
+
+```text
+14:27:52.114  Checking existing devices for AVD "obsidian_test"... (connected: [emulator-5554])
+14:27:57.170  AVD "obsidian_test" not found on any existing device, starting a new emulator...
+```
+
+5.056s apart — exactly `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS`. The launch that followed hit
+`FATAL | Running multiple emulators with the same AVD is an experimental feature`.
+
+Note **why** the probe timed out: the guest was already wedged (Appium's own
+`adb shell getprop ro.build.version.sdk` was timing out at 20s against the same device in the same window).
+The check is asked its question precisely when it is least able to answer — which is the condition under
+which it then does the most damage. Same shape as the connectivity-probe lesson in **L45** and the `adb
+devices` `offline` distinction in **L46**: *the failure of a probe is a fact about the probe, not about
+the thing probed.*
+
+- **`avd-probe-verdict.ts` (pure, unit-tested)** owns four outcomes — `match`, `other-avd`,
+  `not-an-emulator`, `no-answer` — and the verdict over them: `reuse` / `start-new` / `refuse`. Only
+  `no-answer` is silence, and only silence refuses.
+- **A match beats an unreadable sibling.** Once the wanted AVD is found, an unrelated wedged device is
+  somebody else's problem; blocking there would be the same overreach **L46** refuses when it declines to
+  sweep `qemu*`. Silence is decisive *only* when the run would otherwise go on to launch.
+- **A non-emulator is never probed at all.** `adb … emu avd name` errors against a physical handset or a
+  TCP-attached device however healthy it is, so treating that as silence would refuse every run on a host
+  with a phone plugged in — a worse defect than the one being fixed. Only an `emulator-<port>` device can
+  collide with `emulator -avd`, so only that device's silence counts (`checkIsEmulatorDeviceId`).
+- **One retry, then refuse.** The probe's budget is 5s; a second look is far cheaper than either a false
+  refusal or a colliding launch. The refusal names the device, the command, the budget, the collision and
+  the recovery — a message that stops a run must leave the reader able to unblock it.
+- **The evidence is logged next to the conclusion.** `AVD probe: emulator-5554=no-answer, …` — the old log
+  printed only the conclusion, which is exactly the line that was wrong.
+
+### The snapshot was loaded but never saved
+
+`emulator-arguments.ts` passed `-no-snapshot-save` **without** `-no-snapshot-load`. So the harness never
+wrote `default_boot` and resumed it every run: the guest each run started from was state nothing had
+validated since a human last saved it — **neither hermetic nor warm, the one combination that is never
+correct**. Measured 2026-09-03, same AVD back to back:
+
+| Launch | Result |
+| --- | --- |
+| snapshot resumed (the old flags) | guest dies ~90s in, every time |
+| `-no-snapshot-load` (cold) | booted in 50s, `alive=True shell=[1]` at 60/120/180/240s |
+
+`obsidian_screenshots` was unaffected all night — a different snapshot, not a different SDK. The failure a
+rotten snapshot produces (serves adb, accepts a uiautomator2 session, drops `offline` ~33s later) is
+indistinguishable from a code regression, and *which call happened to be in flight when it went* is what
+made the error message differ every time.
+
+**The rule: the harness owns the snapshot it loads, or it loads none.** `shouldReuseEmulatorSnapshot`
+(`@default false`) toggles **both** flags together — cold-boots hermetically by default, or loads *and*
+saves for a persistent runner that wants the ~112s back (**L19** lever 1, now shipped). The opt-in path
+also logs which snapshot it is resuming and when it was saved (`emulator-snapshot.ts`), so a trade the
+caller made deliberately stays visible in the transcript.
+
+### A timeout threw away the output the emulator had already written
+
+`57b92f8` pipes and captures the emulator's stdout/stderr, and `buildProcessExitMessage` attaches the tail
+when the process **exits**. But a startup fails two ways, and the *timeout* throws attached nothing — so an
+emulator that printed the `FATAL` above and then lingered produced `No new emulator device appeared within
+300000ms.` and nothing else, with the explanation captured in memory and discarded. `appendProcessOutputTail`
+is split out of the exit builder and used by both timeout paths (`waitForNewDevice`, `waitForBoot`).
+
+### What this does not cover
+
+The pre-booted-AVD adoption path is now *safe* (it refuses instead of colliding) but not yet *useful*: a
+hand-booted healthy AVD is still only adopted when its probe answers. And as **L46**'s caveat already
+records, Vitest kills workers at the hook timeout, so no teardown gets a turn and the next run's preflight
+remains the second line of defence — which is precisely why that preflight must not be the thing that
+launches a colliding emulator.

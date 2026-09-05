@@ -260,6 +260,31 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly shouldAutoStartAppium?: boolean;
 
   /**
+   * Whether the auto-started emulator may resume — and refresh — the AVD's
+   * saved boot snapshot.
+   *
+   * When `false` (the default) the emulator is started with
+   * `-no-snapshot-load -no-snapshot-save`, so every run cold-boots a guest whose
+   * state nothing carried over. That is the hermetic default a test harness
+   * owes its callers, and it is also the safe one: a snapshot the harness loads
+   * but never writes rots unnoticed, and the failure it eventually produces — a
+   * device that serves adb, accepts a session, then drops `offline` about half a
+   * minute later — is indistinguishable from a code regression. Measured on one
+   * AVD back to back, a resumed snapshot killed the guest ~90s in *every* time,
+   * while the same AVD cold-booted in 50s and stayed up.
+   *
+   * Set it to `true` on a **persistent runner** whose AVD is not shared with
+   * anything else: the emulator then both loads and saves `default_boot`, so the
+   * snapshot each run resumes is one a previous run wrote, and the ~112s cold
+   * boot is largely bought back. The trade is test isolation — a guest that
+   * carries state between runs — so it is opt-in per project, never a default.
+   * Ignored when reusing an already-running device (nothing is launched).
+   *
+   * @default `false`
+   */
+  readonly shouldReuseEmulatorSnapshot?: boolean;
+
+  /**
    * Whether the harness removes the temporary directories earlier runs leaked.
    *
    * When `true` (the default), each run sweeps at start **and** at end: on the
