@@ -65,6 +65,7 @@ import {
   willThrowOnSilentAsarFallback,
   willWarnOnCompatibilityIssues
 } from './compatibility-options.ts';
+import { assertValidConfigDirectory } from './config-directory.ts';
 import { getSetupError } from './context-provider.ts';
 import {
   checkDeviceIdle,
@@ -1710,10 +1711,17 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
   }
 
   log('[transport-factory:obsidian-cdp] Creating owned isolated Obsidian instance');
+  // Before `resolveOwnedInstanceConfig`, which may download and cache an installer shell:
+  // A structurally invalid config folder name cannot become valid later, so paying for a
+  // Provisioning round-trip first would only delay the same failure.
+  if (options?.configDirectory !== undefined) {
+    assertValidConfigDirectory(options.configDirectory);
+  }
   const ownedInstance = await resolveOwnedInstanceConfig(options);
   return new DesktopCdpTransport(normalizeOptionalProperties<DesktopCdpTransportConfig>({
     cdpHost: options?.host,
     commandTimeoutInMilliseconds: options?.commandTimeoutInMilliseconds,
+    configDirectory: options?.configDirectory,
     deadBootGraceInMilliseconds: resolveDeadBootGraceInMilliseconds(options),
     isObsidianAppVisible: options?.isObsidianAppVisible,
     ownedInstance,

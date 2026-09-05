@@ -19,12 +19,32 @@
  * Seeding both was verified to open the vault directly (no selector) on 0.6.4,
  * 0.9.20, 0.12.19, 0.13.19, 0.14.5 and 1.12.7. `updateDisabled` suppresses the
  * throwaway instance's self-update.
+ *
+ * Both markers can also be **withheld** — see
+ * {@link BuildOwnedObsidianJsonParams.shouldAutoOpenVault}. The one caller that
+ * does so wants the starter screen on purpose: a `configDirectory` override is a
+ * `localStorage` entry, and `localStorage` only exists once a renderer does, so
+ * the override has to be written in the starter screen's renderer before the
+ * vault's own window is created. The vault stays registered under the harness's
+ * id either way, and the later `vault-open` IPC reuses that id (verified on
+ * 1.13.7) rather than minting a second entry — which is what makes the
+ * `<vaultId>-config` key name knowable before launch.
  */
 
 /**
  * Parameters for {@link buildOwnedObsidianJson}.
  */
 export interface BuildOwnedObsidianJsonParams {
+  /**
+   * Whether to include the auto-open markers, so Obsidian opens the vault
+   * directly instead of showing the starter screen. Pass `false` to keep the
+   * vault registered but closed — the caller then opens it itself, over the
+   * `vault-open` IPC, once it has prepared the starter screen's renderer.
+   *
+   * @default `true`
+   */
+  readonly shouldAutoOpenVault?: boolean;
+
   /**
   Last-access timestamp to stamp on the vault entry.
    */
@@ -48,8 +68,9 @@ export interface OwnedObsidianJson {
   /**
    * Top-level auto-open marker (vault id) honored by old Obsidian versions;
    * ignored as an unknown key by newer versions that use the per-entry `open`.
+   * Omitted when the caller withheld the auto-open markers.
    */
-  readonly last_open: string;
+  readonly last_open?: string;
 
   /**
   Disables the throwaway instance's self-update.
@@ -67,9 +88,10 @@ export interface OwnedObsidianJson {
  */
 export interface OwnedObsidianVaultEntry {
   /**
-  Per-entry auto-open flag honored by newer Obsidian versions.
+   * Per-entry auto-open flag honored by newer Obsidian versions. Omitted when
+   * the caller withheld the auto-open markers.
    */
-  readonly open: true;
+  readonly open?: true;
 
   /**
   Absolute path to the harness vault folder.
@@ -91,12 +113,19 @@ export interface OwnedObsidianVaultEntry {
  * @returns The `obsidian.json` object to write into the owned user-data dir.
  */
 export function buildOwnedObsidianJson(params: BuildOwnedObsidianJsonParams): OwnedObsidianJson {
+  const shouldAutoOpenVault = params.shouldAutoOpenVault ?? true;
+  const entry: OwnedObsidianVaultEntry = shouldAutoOpenVault
+    ? { open: true, path: params.vaultPath, ts: params.ts }
+    : { path: params.vaultPath, ts: params.ts };
+
   return {
+    // Spread rather than `last_open: undefined`, so the key is genuinely absent from
+    // The written JSON: this seed is read by Obsidian versions spanning a decade, and
+    // A present-but-undefined auto-open marker is not a shape any of them was tested
+    // Against.
     // eslint-disable-next-line camelcase -- Obsidian's own obsidian.json field name (old versions' auto-open marker).
-    last_open: params.vaultId,
+    ...shouldAutoOpenVault && { last_open: params.vaultId },
     updateDisabled: true,
-    vaults: {
-      [params.vaultId]: { open: true, path: params.vaultPath, ts: params.ts }
-    }
+    vaults: { [params.vaultId]: entry }
   };
 }

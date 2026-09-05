@@ -22,6 +22,12 @@ export {
   isPng,
   readPngDimensions
 } from './capture-screenshot.ts';
+export type { ConfigDirectoryFallbackErrorConstructorParams } from './config-directory-fallback-error.ts';
+export { ConfigDirectoryFallbackError } from './config-directory-fallback-error.ts';
+export {
+  assertValidConfigDirectory,
+  DEFAULT_CONFIG_DIRECTORY
+} from './config-directory.ts';
 export type {
   CdpConnection,
   ConnectToCdpOptions

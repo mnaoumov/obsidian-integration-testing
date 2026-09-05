@@ -46,6 +46,7 @@ import {
   isPng
 } from './capture-screenshot.ts';
 import { resolveAsarFallbackAction } from './compatibility-options.ts';
+import { ConfigDirectoryFallbackError } from './config-directory-fallback-error.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { resolveElectronCompatibility } from './electron-compatibility.ts';
 import { exec } from './exec.ts';
@@ -97,6 +98,20 @@ export interface DesktopCdpTransportConfig {
    * Defaults to `30000`.
    */
   commandTimeoutInMilliseconds?: number;
+
+  /**
+   * The vault's config folder override (Obsidian's *Override config folder*),
+   * e.g. `'.obsidian-desktop'`. When set, the owned instance boots to the
+   * starter screen, writes `<vaultId>-config` into that renderer's
+   * `localStorage`, and only then opens the vault over the `vault-open` IPC —
+   * the override is read once, during the vault renderer's own setup, so it has
+   * to exist before that window is created. The opened vault's actual
+   * `app.vault.configDir` is then read back, and a mismatch throws
+   * {@link ConfigDirectoryFallbackError}. Only meaningful in owned mode.
+   *
+   * @default `undefined` (Obsidian's own default, `.obsidian`)
+   */
+  configDirectory?: string;
 
   /**
    * Grace window in milliseconds for fast-failing a dead boot of the owned
@@ -281,6 +296,12 @@ const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30_000;
 const INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS = 500;
+// How long to wait for the starter screen's renderer to expose `localStorage`
+// And `window.electron.ipcRenderer` — the two things the config-folder override
+// Needs. CDP already serves a page target by the time the launch resolves, so
+// This only covers the renderer finishing its own script evaluation.
+const STARTER_SCREEN_TIMEOUT_IN_MILLISECONDS = 30_000;
+const STARTER_SCREEN_POLL_INTERVAL_IN_MILLISECONDS = 250;
 const OWNED_WINDOW_OFFSCREEN_MARGIN_IN_PIXELS = 200;
 const OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS = 20_000;
 const OWNED_WINDOW_HIDE_POLL_INTERVAL_IN_MILLISECONDS = 250;
@@ -302,6 +323,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private cdpPort: number;
   private cdpUrl: string;
   private readonly commandTimeoutInMilliseconds: number;
+  private readonly configDirectory: string | undefined;
   private readonly deadBootGraceInMilliseconds: number;
   private electronCompatibility: ElectronCompatibility | undefined;
   private readonly isHarnessOwnedInstance: boolean;
@@ -327,6 +349,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       cdpHost = 'localhost',
       cdpPort,
       commandTimeoutInMilliseconds = COMMAND_TIMEOUT_IN_MILLISECONDS,
+      configDirectory,
       deadBootGraceInMilliseconds = DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS,
       isHarnessOwnedInstance = false,
       isObsidianAppVisible = true,
@@ -337,6 +360,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     } = config ?? {};
     this.cdpHost = cdpHost;
     this.commandTimeoutInMilliseconds = commandTimeoutInMilliseconds;
+    this.configDirectory = configDirectory;
     this.deadBootGraceInMilliseconds = deadBootGraceInMilliseconds;
     this.isHarnessOwnedInstance = isHarnessOwnedInstance;
     this.isObsidianAppVisible = isObsidianAppVisible;
@@ -686,6 +710,42 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Verifies the ready vault is actually using the requested config folder,
+   * throwing {@link ConfigDirectoryFallbackError} when it is not.
+   *
+   * Obsidian applies the override with `setConfigDir`, which substitutes
+   * `.obsidian` for any value its own `validateConfigDir` rejects — without a
+   * word, and without failing the boot. The resulting vault opens, reaches
+   * layout-ready, and reports success; what it lacks is the settings and enabled
+   * plugins of the folder that was asked for. Reading the live
+   * `app.vault.configDir` back is the only way to tell the two apart, and it
+   * covers every cause at once: a name Obsidian rejected (including its
+   * unrecoverable character blacklist, which `assertValidConfigDirectory` deliberately
+   * does not guess at), and a write that never reached the vault's renderer.
+   *
+   * A no-op when no override was requested.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async assertRequestedConfigDirectory(vaultPath: string): Promise<void> {
+    if (this.configDirectory === undefined) {
+      return;
+    }
+
+    const actualConfigDirectory = await this.evaluate('app.vault.configDir', { cwd: vaultPath });
+    if (actualConfigDirectory === this.configDirectory) {
+      log(`[cdp-transport] Vault opened with the requested config folder ${this.configDirectory}.`);
+      return;
+    }
+
+    throw new ConfigDirectoryFallbackError({
+      actualConfigDirectory,
+      requestedConfigDirectory: this.configDirectory,
+      vaultPath
+    });
+  }
+
+  /**
    * Verifies the running app (asar) version matches the swapped-in pin, storing the
    * verdict on {@link getAsarFallback}. On a **silent fallback** (the installer ran
    * its own bundled asar instead of the pin) it throws {@link SilentAsarFallbackError}
@@ -1027,6 +1087,56 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Writes the config-folder override into the starter screen's `localStorage`
+   * and then opens the vault from there over the `vault-open` IPC.
+   *
+   * Obsidian reads the override exactly once, in the vault's own renderer, during
+   * `Vault.setup` — `getOverrideConfigDir(appId)` is `localStorage.getItem(appId +
+   * '-config')`. So there is no writing it into the vault's window: by the time
+   * that window exists the read has happened. The starter screen is the earlier
+   * renderer the write needs, and it qualifies because it has `localStorage` and
+   * `window.electron.ipcRenderer` but no `app` (verified on 1.13.7).
+   *
+   * That missing `app` is also why this talks raw CDP rather than going through
+   * {@link ensureNamespaceBootstrapped} / the `ipcSendSync` helper as
+   * {@link DesktopCdpTransport.openVaultInRunningInstance} does: every one of
+   * those paths probes `app.vault.adapter` to identify its target, and would fail
+   * on the very renderer this needs.
+   *
+   * The key name is known ahead of the write because the harness registered the
+   * vault under an id it generated itself, and `vault-open` reuses that entry
+   * rather than minting a new one.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   * @param vaultId - The harness-generated vault id the vault is registered under.
+   * @param configDirectory - The config folder to override to.
+   */
+  private async openVaultFromStarterScreen(vaultPath: string, vaultId: string, configDirectory: string): Promise<void> {
+    log(`[cdp-transport] Seeding config folder override ${configDirectory} on the starter screen...`);
+    const target = await this.waitForStarterScreenTarget();
+    const ws = await this.connectToTarget(target);
+    try {
+      await this.sendCommand(ws, 'Runtime.evaluate', {
+        expression: `localStorage.setItem(${JSON.stringify(`${vaultId}-config`)}, ${JSON.stringify(configDirectory)});`,
+        returnByValue: true
+      });
+      await this.sendCommand(ws, 'Runtime.evaluate', {
+        expression: `localStorage.setItem(${JSON.stringify(`enable-plugin-${vaultId}`)}, 'true');`,
+        returnByValue: true
+      });
+      log(`[cdp-transport] Set ${vaultId}-config and enable-plugin-${vaultId} in localStorage.`);
+
+      await this.sendCommand(ws, 'Runtime.evaluate', {
+        expression: `window.electron.ipcRenderer.sendSync('vault-open', ${JSON.stringify(vaultPath)}, false)`,
+        returnByValue: true
+      });
+      log(`[cdp-transport] Sent vault-open for ${vaultPath} from the starter screen.`);
+    } finally {
+      ws.close();
+    }
+  }
+
+  /**
    * Opens a vault in an already-running Obsidian instance via the `vault-open`
    * Electron IPC (evaluated through CDP on an existing target), then polls until
    * the new vault's window target appears, is layout-ready, and its trust dialog
@@ -1168,8 +1278,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     const vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
-    const obsidianJson = buildOwnedObsidianJson({ ts: Date.now(), vaultId, vaultPath });
-    writeFileSync(join(config.userDataDirectory, 'obsidian.json'), JSON.stringify(obsidianJson));
+
+    // A config-folder override is a `localStorage` entry, and `localStorage` needs a
+    // Renderer, so the vault must NOT auto-open: the instance boots to the starter
+    // Screen, the override is written there, and the vault is opened from it over
+    // IPC. Obsidian reuses the pre-registered id for that open (verified on 1.13.7),
+    // Which is what makes the `<vaultId>-config` key name knowable before launch.
+    const shouldAutoOpenVault = this.configDirectory === undefined;
 
     // Relaunch-retry: some old (Electron 10-era) Obsidian builds intermittently
     // Boot with `window.app` present but the workspace never initializing, so the
@@ -1182,6 +1297,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
       if (attempt > 1) {
         await delay(OWNED_RELAUNCH_SETTLE_IN_MILLISECONDS);
       }
+
+      // Re-seeded every attempt rather than once before the loop: Obsidian rewrites
+      // `obsidian.json` as it opens a vault (it stamps the entry `open: true`), so a
+      // Relaunch that inherited the previous attempt's file would sail past the
+      // Starter screen the override needs.
+      const obsidianJson = buildOwnedObsidianJson({ shouldAutoOpenVault, ts: Date.now(), vaultId, vaultPath });
+      writeFileSync(join(config.userDataDirectory, 'obsidian.json'), JSON.stringify(obsidianJson));
 
       const instance = await launchOwnedObsidianInstance({
         cdpHost: this.cdpHost,
@@ -1202,11 +1324,23 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
 
       try {
+        if (!shouldAutoOpenVault) {
+          // `shouldAutoOpenVault` is a `const` derived from `this.configDirectory === undefined`,
+          // So TypeScript narrows the field to `string` in this branch on its own.
+          await this.openVaultFromStarterScreen(vaultPath, vaultId, this.configDirectory);
+        }
         await this.waitForOwnedVaultReady(vaultPath);
+        await this.assertRequestedConfigDirectory(vaultPath);
         await this.armParentLivenessWatchdog(vaultPath, instance.parentLivenessPort);
         return;
       } catch (error: unknown) {
-        if (error instanceof RendererFailedToInitializeError || error instanceof SilentAsarFallbackError) {
+        // A config-folder fallback is deterministic — the name is either one Obsidian
+        // Accepts or it is not — so relaunching only burns another boot.
+        if (
+          error instanceof RendererFailedToInitializeError
+          || error instanceof SilentAsarFallbackError
+          || error instanceof ConfigDirectoryFallbackError
+        ) {
           throw error;
         }
         lastError = error;
@@ -1350,6 +1484,48 @@ export class DesktopCdpTransport implements ObsidianTransport {
     // Swallowed as "not ready yet" and looping until the readiness timeout.
     await this.checkRuntimeCompatibility(vaultPath);
     log('[cdp-transport] Owned vault is ready.');
+  }
+
+  /**
+   * Polls until the starter screen's renderer can accept the config-folder
+   * override — that is, until it exposes both `localStorage` and
+   * `window.electron.ipcRenderer.sendSync`.
+   *
+   * A page target exists as soon as the launch resolves, so this is not waiting
+   * for a window; it is waiting for that window's own scripts to finish. Writing
+   * before then would either throw or, worse, land in a renderer that is about to
+   * be replaced.
+   *
+   * @returns The starter screen's CDP target.
+   * @throws {Error} When no renderer becomes writable within the timeout.
+   */
+  private async waitForStarterScreenTarget(): Promise<CdpTarget> {
+    const deadline = Date.now() + STARTER_SCREEN_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      const [target] = await this.getPageTargets();
+      if (target) {
+        const ws = await this.connectToTarget(target);
+        try {
+          const response = await this.sendCommand(ws, 'Runtime.evaluate', {
+            expression: 'typeof localStorage !== "undefined" && !!(window.electron && window.electron.ipcRenderer && window.electron.ipcRenderer.sendSync)',
+            returnByValue: true
+          });
+          if (response.result?.result?.value === true) {
+            return target;
+          }
+        } catch {
+          // The renderer is not evaluating yet — keep polling.
+        } finally {
+          ws.close();
+        }
+      }
+      await delay(STARTER_SCREEN_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+
+    throw new Error(
+      `The starter screen did not expose localStorage and the Electron IPC bridge within ${String(STARTER_SCREEN_TIMEOUT_IN_MILLISECONDS)}ms, `
+        + 'so the config folder override could not be written.'
+    );
   }
 }
 

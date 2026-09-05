@@ -39,4 +39,37 @@ describe('buildOwnedObsidianJson', () => {
 
     expect(json.updateDisabled).toBe(true);
   });
+
+  it('should withhold BOTH auto-open markers when the caller wants the starter screen', () => {
+    const json = buildOwnedObsidianJson({ shouldAutoOpenVault: false, ts: TS, vaultId: VAULT_ID, vaultPath: VAULT_PATH });
+
+    // Either marker left behind would auto-open the vault on the version that reads it,
+    // Destroying the starter-screen renderer the caller needs to write into.
+    expect(json.last_open).toBeUndefined();
+    expect(json.vaults[VAULT_ID]?.open).toBeUndefined();
+  });
+
+  it('should omit last_open entirely rather than carry it as undefined, so the written JSON has no such key', () => {
+    const json = buildOwnedObsidianJson({ shouldAutoOpenVault: false, ts: TS, vaultId: VAULT_ID, vaultPath: VAULT_PATH });
+
+    expect(Object.hasOwn(json, 'last_open')).toBe(false);
+    // Asserted on the serialized form, because that string is what Obsidian reads.
+    expect(JSON.stringify(json)).toBe(JSON.stringify({
+      updateDisabled: true,
+      vaults: { [VAULT_ID]: { path: VAULT_PATH, ts: TS } }
+    }));
+  });
+
+  it('should still register the vault under the harness id when auto-open is withheld, so vault-open reuses it', () => {
+    const json = buildOwnedObsidianJson({ shouldAutoOpenVault: false, ts: TS, vaultId: VAULT_ID, vaultPath: VAULT_PATH });
+
+    expect(json.vaults[VAULT_ID]).toEqual({ path: VAULT_PATH, ts: TS });
+  });
+
+  it('should auto-open by default, so only an explicit false changes the seed', () => {
+    const json = buildOwnedObsidianJson({ shouldAutoOpenVault: true, ts: TS, vaultId: VAULT_ID, vaultPath: VAULT_PATH });
+
+    expect(json.last_open).toBe(VAULT_ID);
+    expect(json.vaults[VAULT_ID]?.open).toBe(true);
+  });
 });

@@ -295,6 +295,36 @@ export interface ObsidianCdpTransportOptions {
   readonly commandTimeoutInMilliseconds?: number;
 
   /**
+   * The vault's **config folder** — Obsidian's per-vault *Override config
+   * folder* setting, e.g. `'.obsidian-desktop'`. Must start with a dot, must not
+   * be the bare dot, and must not contain a path separator; anything else throws
+   * before Obsidian is launched, because Obsidian itself would silently
+   * substitute `.obsidian`.
+   *
+   * Needed to open a vault that keeps its settings somewhere other than
+   * `.obsidian` — a vault with a stale `.obsidian` beside the real folder would
+   * otherwise open successfully against the wrong settings and report success.
+   * The override lives in `localStorage`, keyed by vault id, and so is scoped to
+   * a user-data directory: an owned instance gets a fresh temp one and therefore
+   * inherits nothing from the user's Obsidian, however that vault is configured
+   * there.
+   *
+   * Setting it costs one extra boot phase: the instance is launched to the
+   * starter screen, the override is written in that renderer, and the vault is
+   * then opened over IPC. After the vault is ready its actual
+   * `app.vault.configDir` is read back and any mismatch throws
+   * `ConfigDirectoryFallbackError` — there is no knob to downgrade that, because a
+   * vault opened against the wrong config folder is silently the wrong vault.
+   *
+   * Only meaningful in owned mode; **ignored in attach mode** ({@link ObsidianCdpTransportOptions.port}
+   * set), where the vault is opened by the user's own Obsidian under its own
+   * config.
+   *
+   * @default `undefined` (Obsidian's own default, `.obsidian`)
+   */
+  readonly configDirectory?: string;
+
+  /**
    * Grace window in milliseconds for fast-failing a **dead boot** of the owned
    * instance.
    *
