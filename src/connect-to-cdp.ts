@@ -27,6 +27,7 @@ import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ObsidianCdpTransportOptions } from './transport-options.ts';
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { ensureHeadlessVaultConfig } from './headless-vault-config.ts';
 import {
   resolveLeftoverMaxAgeInMilliseconds,
   sweepHostLeftovers,
@@ -37,6 +38,7 @@ import { normalizeOptionalProperties } from './normalize-optional-properties.ts'
 import { TemporaryVault } from './temporary-vault.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
+import { resolveOwnedConfigDirectory } from './transport-options.ts';
 
 const DEFAULT_CDP_HOST = 'localhost';
 
@@ -325,6 +327,18 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   const transport = await createTransportFromOptions(transportOptions);
   const vault = new TemporaryVault(options?.vault);
   const shouldRemoveVaultOnDispose = options?.shouldRemoveVaultOnDispose ?? (options?.vault === undefined);
+
+  // The headless defaults go only into a vault the harness made — the same
+  // `options.vault === undefined` discriminator the disposal above turns on. A
+  // Caller-supplied vault is a real one the user keeps, and a debugging session
+  // Has no business rewriting its settings.
+  if (options?.vault === undefined) {
+    await ensureHeadlessVaultConfig({
+      configDirectory: resolveOwnedConfigDirectory(transportOptions),
+      label: transportOptions.type,
+      vaultPath: vault.path
+    });
+  }
 
   // Registering the vault is what launches the owned instance (provisions the
   // Asar, opens the vault, and bootstraps the helper namespace), or opens the

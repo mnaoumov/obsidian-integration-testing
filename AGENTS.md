@@ -1689,22 +1689,37 @@ being the `CHANGELOG.md` section for that version plus the
 `**Full Changelog**: <repo>/compare/<prev>...<new>` line `getReleaseNotes` would have produced.
 `publish-npm.yml` fires on a manually-created release exactly as it would on a scripted one.
 
-## L38. Settings modal — attach the container BEFORE opening (`openSettingsTab`)
+## L38. Settings modal — the popout is the cause; the pre-attach is only a floor (`openSettingsTab`)
 
-`app.setting.open()` on its own does **nothing observable** from a test. `app.setting.containerEl` is built
-at startup and is never in the document, and `open()` does not attach it — so the modal builds into a
-detached tree, `open()` returns without throwing, and the document a test then reads (or screenshots) is
-untouched. `obsidian-backlink-full-path` concluded from exactly this that the settings tab **cannot** be
-captured and wrote the impossibility down; the diagnosis was right and the conclusion was not.
-`obsidian-frontmatter-markdown-links` skipped the settings shot too but recorded no reason for it — which
-is why that shot went just as long without a retry, and is not the same thing as writing an impossibility
-down.
+`app.setting.open()` on its own does **nothing observable** from a test. `obsidian-backlink-full-path`
+concluded from exactly this that the settings tab **cannot** be captured and wrote the impossibility down;
+the diagnosis was right and the conclusion was not. `obsidian-frontmatter-markdown-links` skipped the
+settings shot too but recorded no reason for it — which is why that shot went just as long without a retry,
+and is not the same thing as writing an impossibility down.
 
-The fix is one step, and **its order is load-bearing**: append `containerEl` to `document.body` **before**
-`open()`. Attaching afterwards is too late — whatever the modal rendered on open has already gone into the
-detached container, so it ends up on screen showing the wrong thing while looking entirely successful. That
-is a convincing-looking wrong answer, which is why the harness owns the recipe instead of each plugin
-copying it.
+**This section used to say the cause was a detached `containerEl` that `open()` never attaches. That was
+wrong** — a misdiagnosis of the popout, corrected on 2026-09-05 after a probe against a live Obsidian
+1.14.0 measured what actually happens on 2026-09-03. The real
+mechanism is **L48**: `app.setting` is popout-capable, Obsidian ships `settingsPopoutWindow` as `true`, and
+on desktop `open()` therefore builds the modal in a **second Electron window**. Turn that key off and
+`open()` attaches `containerEl` to the driven document *itself* — measured in
+`owned-instance-worker-attach.integration.test.ts`, which asserts exactly that against a live instance.
+
+So the two layers are:
+
+- **The fix is the vault-level default** (**L48**). Every vault the global setup provisions carries
+  `settingsPopoutWindow: false`, so a consumer suite — which reaches that vault through
+  `getTemporaryVault()` — needs nothing.
+- **The pre-attach is a fallback, not the fix.** `openSettingsTab` still appends `containerEl` to
+  `document.body` before `open()`, and **its order is still load-bearing** (attaching afterwards is too
+  late; whatever the modal rendered has already gone where it went). It matters only for a vault that does
+  *not* carry the default — one built in-worker with `new TemporaryVault()`, or a caller-supplied vault
+  handed to `connectToCdp`. Proof it is not redundant: disabling the append makes
+  `eval-in-obsidian.integration.test.ts`'s two attach assertions fail, on exactly such a vault, while the
+  row reads keep passing — the popout signature. Proof it is not sufficient either: it keeps `containerEl`
+  reachable as an object, but a **screenshot** frames this window, and a popout leaves this window empty.
+
+The harness owns both so no plugin has to copy either.
 
 Two layers, the same split as `captureObsidianScreenshot` (Node-side) over the renderer-side `lib` bag:
 
@@ -2356,3 +2371,56 @@ hand-booted healthy AVD is still only adopted when its probe answers. And as **L
 records, Vitest kills workers at the hook timeout, so no teardown gets a turn and the next run's preflight
 remains the second line of defence — which is precisely why that preflight must not be the thing that
 launches a colliding emulator.
+
+## L48. Headless vault defaults — two `app.json` keys the harness writes, and where the write has to land
+
+A vault the harness owns is opened with no user in front of it, and two of Obsidian's shipped defaults are
+wrong for that. Both are written into `<vault>/<configDir>/app.json` **before the vault is ever opened**, by
+`ensureHeadlessVaultConfig` (`src/headless-vault-config.ts`). Neither is a knob: a consumer that had to
+know they existed would be a consumer copying the harness's job.
+
+- **`alwaysUpdateLinks: true`.** Without it any rename or move that touches links pops an interactive
+  *"Update links?"* modal — Obsidian skips it only when this is on. Headless nobody answers, so the Promise
+  never settles: the rename's `FileManager.updateQueue` task hangs forever, and because that queue is a
+  **singleton**, every later `renameFile` in the same instance hangs behind it. That is the long-observed
+  "rename wall".
+- **`settingsPopoutWindow: false`.** Obsidian ships this **`true`** — verified in the shipped bundles of
+  both 1.13.7 and the 1.14.0 asar the harness provisions, so it is a long-standing default and not a 1.14
+  regression. `app.setting.shouldUsePopout()` returns it directly, and the popout branch is taken whenever
+  `Platform.canPopoutWindow` (`isDesktopApp && isDesktop`) — every desktop run, no mobile one. It creates a
+  real second Electron window, reassigns the `activeWindow` / `activeDocument` globals to it, and
+  `Modal.open()` appends `getRootEl()` (`modalEl`, for a popout) into **that** window's document. A suite
+  that only asserts can still read `settingTab.containerEl` — an object reference, wherever it lives — which
+  is why this went unnoticed for so long. A **screenshot** cannot: `captureObsidianScreenshot` frames the
+  window the harness drives, so a settings shot comes back with no settings in it and **no error to say
+  so**. Found on 2026-09-03 by a plugin whose settings screenshot came back with no settings in it, hit
+  again by a second plugin's capture suite the same week, and fixed here on 2026-09-05.
+
+### The write has to go where the vault will look, and only into a vault we made
+
+Two constraints shape the call sites, and both were bugs until 2026-09-05:
+
+- **After `populate`, before `syncToDevice`.** `coreSetup` calls it in that gap deliberately: after
+  `populate` so an `app.json` a consumer carries in cannot win over the harness default, and before
+  `syncToDevice` so the file reaches an Android device with the rest of the vault. Moving it into
+  `TemporaryVault.register()` would be too late for mobile — the push has already happened.
+- **The `configDirectory` override has to reach it.** The old `ensureAlwaysUpdateLinks` hardcoded
+  `.obsidian` while the harness supports opening a vault whose settings live elsewhere (**L5**). Under an
+  override it wrote to a folder the vault never reads and **both** defaults vanished silently.
+  `resolveOwnedConfigDirectory` (`src/transport-options.ts`) answers the question once: the override only
+  when the transport is CDP **and** owned, `undefined` in attach mode (where the user's Obsidian opens the
+  vault under its own config, as that option's own docs say) and on Android (no override exists).
+- **Never a caller-supplied vault.** `connectToCdp` provisions a vault too and called neither helper before
+  2026-09-05, so it lacked both defaults. It now writes them — but only when it made the directory itself
+  (`options.vault === undefined`, the same discriminator that already decides whether disposal deletes it).
+  A vault the caller named is a real one they keep, and a debugging session has no business rewriting its
+  settings.
+
+### What is still NOT covered, deliberately
+
+A vault a suite builds in-worker with `new TemporaryVault()` gets neither default — the write lives in
+`coreSetup` and `connectToCdp`, not in `TemporaryVault` itself, for the mobile-ordering reason above. This
+does not touch consumers: a plugin's suite reaches the global-setup vault through `getTemporaryVault()`,
+which is provisioned. It does affect this repo's own suites, which build their own vaults for isolation —
+`eval-in-obsidian.integration.test.ts` runs against a popout-enabled vault and is the coverage that keeps
+`openSettingsTab`'s pre-attach fallback honest (**L38**).

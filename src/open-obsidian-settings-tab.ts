@@ -51,8 +51,9 @@ type OpenSettingsTabInput = Record<'openParams', OpenSettingsTabParams>;
  * actually rendered, resolving the transport and vault from the current test
  * context.
  *
- * See {@link Lib.openSettingsTab} for why simply calling `app.setting.open()`
- * renders nothing, and why the container must be attached **before** it.
+ * See {@link Lib.openSettingsTab} for why `app.setting.open()` can put the modal
+ * in a second Electron window, and why the container is attached **before** it on
+ * a vault that lacks the harness's `settingsPopoutWindow: false` default.
  *
  * Close it again from a callback with `app.setting.close()`; re-opening works,
  * because the attach is idempotent.

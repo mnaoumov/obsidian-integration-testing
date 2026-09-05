@@ -592,3 +592,24 @@ export type ObsidianTransportOptions =
 export function checkIsMobileTransport(options: ObsidianTransportOptions): boolean {
   return options.type === 'obsidian-android-appium';
 }
+
+/**
+ * The config folder a vault the harness **owns** will actually read, or `undefined` when it is
+ * Obsidian's own default.
+ *
+ * {@link ObsidianCdpTransportOptions.configDirectory} is the only knob that moves it, and it is
+ * meaningful only in owned mode: in attach mode the vault is opened by the user's own Obsidian under
+ * its own config, and on Android there is no override at all. Anything the harness writes into a vault
+ * before it is opened has to go where that vault will look, so this is the answer every such writer
+ * needs — see `ensureHeadlessVaultConfig`.
+ *
+ * @param options - The resolved transport options.
+ * @returns The overridden config folder name, or `undefined` for Obsidian's default.
+ */
+export function resolveOwnedConfigDirectory(options: ObsidianTransportOptions): string | undefined {
+  if (options.type !== 'obsidian-cdp' || options.port !== undefined) {
+    return undefined;
+  }
+
+  return options.configDirectory;
+}
