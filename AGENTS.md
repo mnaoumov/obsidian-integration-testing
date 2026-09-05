@@ -622,7 +622,11 @@ Measured breakdown (see also the auto-memory `reference_android_appium_cold_cost
   Option `deviceIdleTimeoutInMilliseconds`. Probes return `''` on adb timeout so a slow/partial
   `package list` can't falsely read as idle. **Since T794 this covers a REUSED device too** — the branch
   that found an AVD already running used to skip the gate entirely, which is the hole T794 fell into; see
-  **L43**.
+  **L43**. **Since T934 the gate is boot-idle *plus* network-validated**: both idle signals clear well
+  before the guest has a route, so a second phase (`checkNetworkValidated`,
+  `networkReadyTimeoutInMilliseconds`, `@default 120000`) polls `dumpsys connectivity` after it. Both
+  branches now go through the single `waitForDeviceReady`, so neither can drift on which gates it runs —
+  see **L45**.
 - **Configurable timeouts** (all raised/threaded with per-poll elapsed logging, resolved via the testable
   `appium-session-config.ts`): `appiumStartTimeoutInMilliseconds` (`@default 180000`),
   `sessionConnectionRetryTimeoutInMilliseconds` (`@default 180000`), `appStartTimeoutInMilliseconds`
@@ -2007,3 +2011,128 @@ The override is kept **caret-ranged** so `update-npm-deps.ps1` carries it forwar
 `pinned-versions.json` anyway — the sweep keeps a caret override *current*, but it never reports that the
 advisory the override answers has gone away, and the override with it. Same arrangement as
 `brace-expansion` in **L30**.
+
+## L45. An idle device is not a connected one — gate the session on a validated network too
+
+`sys.boot_completed`, a stopped boot animation and a serving package manager all say the guest is **busy
+enough to be useful**. None of them says it can reach anything. Measured on two AVDs from a cold boot:
+
+```text
+obsidian_test        created 70635 firstValidated 72681 lastValidated 72681
+obsidian_screenshots created 66870 firstValidated 79870
+```
+
+Roughly **70–80 seconds of guest uptime before the network is usable**, against an idle gate (**L43**) that
+clears well ahead of it. On `obsidian_screenshots` at 85s uptime the default network already existed but scored
+`EVER_EVALUATED&IS_UNMETERED` — no `IS_VALIDATED`, no `firstValidated` field at all — so "a default network
+exists" is not the signal either; validation is.
+
+Re-measured end to end while implementing the gate (`obsidian_test`, `-no-snapshot`, headless): the guest
+reported `sys.boot_completed` and a **stopped** boot animation at **+56s**, and at that moment
+`dumpsys connectivity` said `Active default network: none` with **zero** `NetworkAgentInfo` entries. The
+network appeared and validated at **+85s** — `Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED&
+EVER_VALIDATED&IS_VALIDATED)` with `created 73314 firstValidated 76174 lastValidated 76174`. So the new
+phase costs about **30s past the idle gate** on a cold boot here, and the validated entry carries *both*
+signals the predicate accepts. Note `none`, not `null`, is the real empty sentinel.
+
+A **snapshot-restored** guest is the interesting counter-case: its dump showed the default network back
+with `Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED)` and no validation fields at all, i.e. correctly
+not-ready. Anything relying on a warm boot should expect to wait for re-validation, not to skip it.
+
+**Why this is a correctness bug and not a slowness one.** It broke P41's Android capture suite on the
+harness's own auto-started emulator: `expected [] to include 'App'`, because the details panel opened with
+no streams — the check behind it had no network. The same suite against the same AVD after validation
+passes 2/2. The failure mode is not a timeout but a **test that ran to completion against a silently empty
+result**, and no assertion inside a suite can tell that apart from a genuinely empty response. A readiness
+gate is the only place that can. When it *does* surface as a timeout it surfaces as a bare
+`WebDriverError: script timeout` naming only `AppiumTransport.evaluate` — an error pointing at the harness
+rather than at the missing network, which is what sent that investigation a full day down the wrong path.
+
+**The probe is `dumpsys connectivity`, and the three that look better are all wrong** — each of them was
+believed during that day:
+
+- `ip route` shows **no** default route on a healthy device: Android uses per-network policy routing, and
+  the route lives in table 1015, not `main`.
+- `ping` fails on a healthy device: QEMU user-mode NAT does not forward ICMP on Windows hosts.
+- `getprop net.dns1` is empty on every modern Android: DNS went per-network in 8/9.
+
+An AVD was diagnosed as having no default route on the strength of the first of these. It had one.
+
+**The shape.** `checkNetworkValidated` in [`src/device-readiness.ts`](src/device-readiness.ts) is a pure
+predicate over raw probe output, like `checkDeviceIdle` beside it: ready ⇔ the dump names an **active
+default network** *and* that network's own `NetworkAgentInfo` entry reports validation (an `IS_VALIDATED`
+score policy, or a non-zero `firstValidated`). Both halves are load-bearing — a validated entry for some
+*other* network id must not satisfy an unvalidated default.
+
+**Read the agent's own LINE and nothing past it.** A real 75 KB dump lists the active network's agent under
+`Current Networks:` and then, ~190 lines later, one `NetworkOffer` per provider — and **every offer
+advertises `IS_VALIDATED` in its score policies regardless of what the live network is doing**. The dump
+sampled here carried seven of them while its default network scored only `TRANSPORT_PRIMARY&EVER_EVALUATED`.
+A parser that slices from the agent marker to the next one (or to end of dump, when the agent is the only
+one) therefore reports **every** dump as validated. The first cut of this code did exactly that and was
+caught only by running it over the captured bytes — the unit fixtures, invented from the excerpt in the
+task file, all passed. One entry is one line in the observed output, so the slice is bounded to that line;
+an entry that ever wraps reads as not-ready, which is the safe direction to be wrong in. Every fixture in
+[`src/device-readiness.test.ts`](src/device-readiness.test.ts) now carries an offer line for that reason.
+
+The factory polls it in `waitForNetworkValidated` under `networkReadyTimeoutInMilliseconds`
+(`@default 120000`; `0` skips). The budget starts *after* `sys.boot_completed`, where the measured wait on
+this WHPX host is ~30s — 120s is headroom for the starved/CI regime the other Android budgets are already
+sized for, not the expected cost.
+
+**The connectivity probe needs a budget of its own, and getting that wrong disables the gate silently
+while it reports the opposite.** The first cut reused `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS` (5s), the
+budget shared by `getprop` and `cmd package list packages`. In the first end-to-end run the polls came back
+**7.06s apart against a 2s interval** — 5s of timeout plus the interval — so *every* dump overran, resolved
+to the failed value, and the gate spent its whole 120s reporting "no validated network" without ever having
+parsed one. The idle gate on the same device had cleared in **226ms**.
+
+The cause is **contention, not size**: timed on a responsive guest, `dumpsys connectivity` costs
+**0.9–2.4s** returning 33–39 KB, right alongside `getprop`'s 0.7–2.1s. But this phase runs in exactly the
+window where residual post-boot churn still inflates every `adb` round-trip **25–50×** (**L19**) — the same
+inflation the idle gate exists to duck, arriving one step later. `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` is
+30s, ~15× the idle cost, which is that inflation with room. Do not "optimize" it back down to the shared
+5s: idle timings are exactly the measurement that makes 5s look sufficient.
+
+The second change matters more than the number. `dumpConnectivity` returns a `ConnectivityProbeResult`
+carrying **the failure's reason rather than an empty string**, so `waitForNetworkValidated` can log — and
+name in its final warning — the difference between *a guest that answered and has no network*, *one that
+went quiet* (`no answer within 30000ms`) and *one that is simply gone*
+(`adb.exe: device 'emulator-5554' not found`). The other probes may collapse failure into empty output
+because there every reading means not-idle; here they mean different things, and a dead guest misreported
+as an offline one is the same class of misleading signal this whole phase exists to remove. That
+distinction earned itself immediately: it is what identified the emulator deaths below, which a bare
+"no validated network" would have blamed on the network. `dumpConnectivity` also raises `maxBuffer` —
+Node's default 1 MiB would fail the call on a large dump rather than truncate it, which reads as "not
+ready" forever.
+
+**This gate is NOT what kills the emulator, and that was A/B-tested rather than assumed.** Every end-to-end
+attempt on this host lost its guest 30–70s after `boot_completed` — `device offline`, then
+`device 'emulator-5554' not found` — which looks damning for a phase that polls `adb` every 2s in exactly
+that window. It is not: a control run with `networkReadyTimeoutInMilliseconds: 0` (the log confirms
+`Skipping network-ready wait … (timeout is 0)`) lost the guest the same way, that time inside Appium's own
+`adbExec`, failing with `Could not find a connected Android device`. Cold-booting with the AVD's saved
+snapshot moved aside changed nothing either, so it is not snapshot restore. The instability is
+pre-existing — the T983 / T942 / T956 family — and it is why the gate's **success** path has no end-to-end
+run behind it on this machine: `checkNetworkValidated` is verified against captured real dumps, and the
+phase is verified running, polling, warning and proceeding inside the harness, but no harness run has yet
+survived long enough to watch it clear.
+
+**Best-effort, deliberately** (owner, T934): a timeout logs a warning and proceeds, because an offline AVD
+is still a usable one for suites that never touch the network. The warning is the deliverable — it names
+the missing network and says the run may now return **empty results rather than fail**, so the next reader
+of an empty-looking assertion starts where P41 finished.
+
+**The Android suite's clocks rose by exactly this phase's cost, rather than the default falling to fit
+them.** On a guest that never validates, the gate spends its full 120s inside `beforeAll`, and the
+registration hook's 240s and the project's 300s `hookTimeout`/`testTimeout` were both sized before this
+phase existed — 240s was already a practical figure rather than a sum, since Appium start and session
+connection budget 180s *each*. So `REGISTRATION_TIMEOUT_IN_MILLISECONDS` is 360s and
+`ANDROID_TIMEOUT_IN_MILLISECONDS` 420s, each +120s. The project constant matters as much as the hook
+argument: `afterAll`'s `dispose` builds a transport of its own and so pays the gate again. Shrinking the
+120s default to fit a test clock would have traded a correctness gate for a number.
+
+**Both branches go through one door.** `waitForDeviceReady` owns "which gates a device passes", and the
+reused-device and started-device branches both call it. That is not tidiness: the reused branch skipping a
+gate outright is exactly the hole T794 fell into (**L43**), and two call sites listing gates by hand is how
+that happens again.

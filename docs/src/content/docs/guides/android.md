@@ -132,6 +132,7 @@ sensible defaults:
 | `isEmulatorVisible`                           | Show the auto-started emulator window. Hidden (`-no-window`, headless) by default so it never steals focus.            | `false`                |
 | `layoutReadyTimeoutInMilliseconds`            | Max wait for `app.workspace.layoutReady`, counted from the app start above — so it covers Obsidian's work only.        | `90000`                |
 | `leftoverMaxAgeInMilliseconds`                | Age gate for the **host** leftover sweep; the device sweep is unconditional.                                           | `7200000`              |
+| `networkReadyTimeoutInMilliseconds`           | Max wait after the idle gate for a validated network; without it networked tests pass on empty data. `0` skips.        | `120000`               |
 | `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.               | `180000`               |
 | `shouldAutoInstallAppiumDependencies`         | Auto-install missing Appium and the UiAutomator2 driver before auto-starting the server (global `npm install -g`).     | `true`                 |
 | `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                         | `true`                 |
@@ -222,6 +223,13 @@ after a *handful* of probes each taking tens of seconds was not spent on Obsidia
 on a busy guest inflating every round-trip, and the fix is to let the emulator settle
 (`deviceIdleTimeoutInMilliseconds`), not to enlarge the budget. Many *fast* probes stalled at one
 milestone is the opposite reading, and there the budget is the right knob.
+
+There is a third reading, and it does not look like a timeout at all. A test whose network-dependent
+assertion comes back **empty rather than failing** — an empty list, a panel with no rows — was very likely
+run against a device with no route: a cold emulator's default network is not created and validated until
+some 80s into the guest's uptime, well after the idle gate clears. The harness waits that out by default
+(`networkReadyTimeoutInMilliseconds`) and logs a warning naming the missing network when it gives up, so
+check the harness log above the failure before reading the assertion at face value.
 
 Either way, run the health check in [AVD provisioning](#avd-provisioning) first — a full `/data`
 presents exactly like this — and bring the AVD up to the minimums there. A raised budget is headroom,
