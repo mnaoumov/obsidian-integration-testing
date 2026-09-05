@@ -4,7 +4,10 @@ import {
   it
 } from 'vitest';
 
-import { buildProcessExitMessage } from './process-exit-message.ts';
+import {
+  appendProcessOutputTail,
+  buildProcessExitMessage
+} from './process-exit-message.ts';
 
 describe('buildProcessExitMessage', () => {
   it('should describe a premature exit with a code', () => {
@@ -74,5 +77,33 @@ describe('buildProcessExitMessage', () => {
         subject: 'Android emulator'
       })
     ).toBe('Android emulator exited prematurely with code 1 during startup.');
+  });
+});
+
+describe('appendProcessOutputTail', () => {
+  /*
+   * The gap this export closes: a startup that TIMED OUT used to report only
+   * the budget it blew, discarding the line the emulator had already written to
+   * explain itself.
+   */
+  it('should append the captured tail to a timeout message', () => {
+    expect(
+      appendProcessOutputTail('No new emulator device appeared within 300000ms.', {
+        output: 'FATAL | Running multiple emulators with the same AVD is an experimental feature.',
+        outputLabel: 'Emulator output'
+      })
+    ).toBe(
+      'No new emulator device appeared within 300000ms.\n\n'
+        + 'Emulator output (tail):\nFATAL | Running multiple emulators with the same AVD is an experimental feature.'
+    );
+  });
+
+  it('should leave the message alone when nothing was captured', () => {
+    expect(
+      appendProcessOutputTail('Device "emulator-5554" connected but did not finish booting within 300000ms.', {
+        output: '  \n ',
+        outputLabel: 'Emulator output'
+      })
+    ).toBe('Device "emulator-5554" connected but did not finish booting within 300000ms.');
   });
 });

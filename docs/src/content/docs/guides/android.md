@@ -136,6 +136,7 @@ sensible defaults:
 | `sessionConnectionRetryTimeoutInMilliseconds` | Max wait to establish the Appium session (UiAutomator2 install + app launch); the dominant startup cost.               | `180000`               |
 | `shouldAutoInstallAppiumDependencies`         | Auto-install missing Appium and the UiAutomator2 driver before auto-starting the server (global `npm install -g`).     | `true`                 |
 | `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                         | `true`                 |
+| `shouldReuseEmulatorSnapshot`                 | Let the emulator load **and** save the AVD's boot snapshot. Off by default: every run cold-boots a hermetic guest.     | `false`                |
 | `shouldSweepLeftovers`                        | Remove the temp vaults / instance profiles earlier runs leaked.                                                        | `true`                 |
 | `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                         | `'/sdcard/Documents/'` |
 | `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                                      | `60000`                |
@@ -171,6 +172,40 @@ The Android setup fails fast, rather than spinning out a timeout, when the toolc
   `npm install -g appium`, but the npm global bin directory is not on `PATH` (common with scoop- or
   nvm-managed Node). Add it to `PATH` (see `npm config get prefix`), or set
   `shouldAutoInstallAppiumDependencies: false` and install Appium yourself.
+
+### "AVD ... did not answer `adb -s ... emu avd name`"
+
+Before starting an emulator, the harness asks every connected emulator which AVD it is serving, so it can
+adopt one already running that AVD instead of launching a second. A device that **does not answer** — the
+probe times out twice, 5s each — is not evidence that the answer is no: it is most often the very emulator
+you are about to collide with, wedged badly enough that every `adb` call against it times out. So the run
+stops and names the device rather than launching beside it:
+
+```text
+AVD "obsidian_test": device emulator-5554 did not answer `adb -s emulator-5554 emu avd name` within
+5000ms (retried once), so this run cannot tell whether it is already serving that AVD. Starting an
+emulator anyway would collide (`FATAL | Running multiple emulators with the same AVD is an experimental
+feature`), which the emulator reports only to its own stdout. Kill the unresponsive device, or run
+`adb kill-server`, then retry.
+```
+
+The recovery is exactly what the message says. Note that under `-no-window` (the default) the process
+holding the AVD is `qemu-system-x86_64-headless`, **not** `qemu-system-x86_64`, so the obvious
+`Get-Process -Name qemu-system-x86_64` filter does not find it — match `qemu*` instead. Physical handsets
+and TCP-attached devices are never probed, so a phone plugged into the host cannot trigger this.
+
+### The emulator dies about a minute into every run
+
+If the guest boots, serves `adb`, accepts a session, and then drops to `offline` roughly 30–90s later —
+every time, on the same AVD — suspect the AVD's saved boot snapshot rather than your code. The harness
+cold-boots by default (`-no-snapshot-load -no-snapshot-save`) precisely so a rotten snapshot cannot cause
+this. If you have opted into `shouldReuseEmulatorSnapshot: true`, the run logs which snapshot it is
+resuming and when it was saved; a stale one is repaired by cold-booting the AVD by hand and re-saving it:
+
+```sh
+emulator -avd <name> -no-snapshot-load
+adb -s emulator-5554 emu avd snapshot save default_boot
+```
 
 ### "The Appium server ... cannot see Android device ..., although this host's adb can"
 
