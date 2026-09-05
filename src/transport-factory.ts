@@ -14,6 +14,7 @@ import type {
 
 import {
   execFile,
+  execFileSync,
   spawn
 } from 'node:child_process';
 import {
@@ -26,6 +27,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { AppiumServerMarker } from './appium-server-marker.ts';
+import type { ProcessListEntry } from './emulator-backend.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
@@ -41,6 +43,10 @@ import type { ObsidianTransport } from './transport.ts';
 import type { WedgedAppiumServerReportReason } from './wedged-appium-server.ts';
 
 import {
+  checkIsDeviceListed,
+  listOnlineDeviceIds
+} from './adb-device-list.ts';
+import {
   checkIsAppiumDriverInstalled,
   UIAUTOMATOR2_DRIVER_NAME,
   willAutoInstallAppiumDependencies
@@ -49,6 +55,7 @@ import {
   checkIsHarnessOwnedAppiumServer,
   clearAppiumServerMarker,
   readAppiumServerMarker,
+  recordAppiumServerStopAttempt,
   writeAppiumServerMarker
 } from './appium-server-marker.ts';
 import {
@@ -74,6 +81,11 @@ import {
   resolveNetworkReadyTimeoutInMilliseconds
 } from './device-readiness.ts';
 import { buildEmulatorArguments } from './emulator-arguments.ts';
+import {
+  parsePosixProcessList,
+  parseWindowsTaskList,
+  selectEmulatorBackendPids
+} from './emulator-backend.ts';
 import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { resolveInstallerCompatibility } from './installer-compatibility.ts';
@@ -103,12 +115,21 @@ import {
   resolveConcreteVersion
 } from './obsidian-version-switch.ts';
 import { compareVersions } from './obsidian-version.ts';
+import {
+  parsePosixLsofPids,
+  parseWindowsNetstatPids
+} from './port-owner.ts';
 import { buildProcessExitMessage } from './process-exit-message.ts';
+import { checkIsProcessAlive } from './process-liveness.ts';
 import { resolveDeadBootGraceInMilliseconds } from './renderer-boot-detection.ts';
 import {
   resolveAppiumSpawnFlags,
   resolveEmulatorSpawnFlags
 } from './spawn-options.ts';
+import {
+  buildTeardownMessage,
+  resolveTeardownOutcome
+} from './teardown-verdict.ts';
 import {
   AppiumTransport,
   DEFAULT_ANDROID_VAULT_BASE_PATH
@@ -146,6 +167,7 @@ const ADB_DUMPSYS_MAX_BUFFER_IN_BYTES = 8_388_608;
  */
 const ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS = 30_000;
 const APPIUM_CONNECTION_RETRY_COUNT = 3;
+const APPIUM_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
 const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
@@ -161,8 +183,19 @@ const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120_000;
+const EMULATOR_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS = 5000;
 const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10_000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
+const EMULATOR_STOP_POLL_INTERVAL_IN_MILLISECONDS = 500;
+const EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS = 20_000;
+/*
+ * 30s, not the 10s a `tasklist` costs on an idle host: this query runs in the
+ * same post-boot contention window that inflates every `adb` round-trip 25-50x
+ * (L45), and the first end-to-end run overran a 10s budget there — silently
+ * disarming the teardown escalation. Sized like `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS`,
+ * for the same reason.
+ */
+const HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS = 30_000;
 const HTTP_MULTIPLE_CHOICES = 300;
 const HTTP_OK = 200;
 const KEYCODE_MENU = 82;
@@ -171,6 +204,13 @@ const MILLISECONDS_PER_SECOND = 1000;
 const NETWORK_READY_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120_000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
+/*
+ * The sync teardown runs inside `process.on('exit')`, so this query blocks the
+ * exit itself. Short on purpose: losing the escalation is better than holding
+ * the handler for the async path's 30s, and the sync log never claims a
+ * verified stop anyway.
+ */
+const SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS = 5000;
 
 /**
  * How the requested app (asar) version will be applied to an owned instance; at
@@ -201,6 +241,18 @@ interface AsarPlan {
  * of them is worth waiting out — a 30s timeout is a contended guest, while an
  * instant `error: closed` is a dead one.
  */
+interface CheckIsEmulatorGoneParams {
+  /**
+  The device the emulator serves.
+   */
+  readonly deviceId: string;
+
+  /**
+  The emulator PIDs this run owns.
+   */
+  readonly ownedEmulatorPids: readonly number[];
+}
+
 interface ConnectivityProbeResult {
   /**
   Why the probe failed, set iff it did not answer.
@@ -267,6 +319,15 @@ interface EnsureDeviceConnectedResult {
   The emulator process, if one was auto-started.
    */
   readonly emulatorProcess?: ChildProcess | undefined;
+
+  /**
+   * The emulator processes this run is responsible for killing — the launcher
+   * plus the QEMU backend it forked, identified by diffing the host's process
+   * list across the launch. Empty when the device was reused rather than
+   * started. See `emulator-backend.ts` for why the launcher's PID alone is not
+   * enough.
+   */
+  readonly ownedEmulatorPids: readonly number[];
 }
 
 /**
@@ -342,6 +403,18 @@ interface EstablishSessionResult {
 /**
  * The locally-installed Obsidian shell resolved by {@link resolveInstalledShellOrNull}.
  */
+interface HostCommandQuery {
+  /**
+  The executable to run.
+   */
+  readonly command: string;
+
+  /**
+  The command's arguments.
+   */
+  readonly commandArguments: string[];
+}
+
 interface InstalledShell {
   /**
   Absolute path to the installed shell executable.
@@ -358,6 +431,18 @@ interface InstalledShell {
  * A spawned child process (the Android emulator or the Appium server) together
  * with helpers to inspect its captured output and exit status.
  */
+interface ParsePortOwnerPidsParams {
+  /**
+  Raw stdout of the platform's port query.
+   */
+  readonly output: string;
+
+  /**
+  The port that was queried.
+   */
+  readonly port: number;
+}
+
 interface ProcessLaunch {
   /**
   The spawned process.
@@ -383,6 +468,28 @@ interface ProcessLaunch {
 /**
  * Parameters for {@link AppiumTransportFactory.startAppiumAndEmulator}.
  */
+interface ReclaimUnstoppedAppiumServerParams {
+  /**
+  The marker that proves the leftover is this harness's own.
+   */
+  readonly marker: AppiumServerMarker;
+
+  /**
+  The port it is holding.
+   */
+  readonly port: number;
+
+  /**
+  Whether this run is allowed to start a replacement.
+   */
+  readonly shouldAutoStartAppium?: boolean | undefined;
+
+  /**
+  The server's URL.
+   */
+  readonly url: URL;
+}
+
 interface StartAppiumAndEmulatorParams {
   /**
   Resolved timeout in milliseconds for the auto-started Appium server to become ready.
@@ -465,11 +572,92 @@ interface StartAppiumAndEmulatorResult {
    * describes.
    */
   readonly isAdoptedAppiumServer: boolean;
+
+  /**
+  The emulator processes this run is responsible for killing; empty when the device was reused.
+   */
+  readonly ownedEmulatorPids: readonly number[];
 }
 
 /**
  * Parameters for {@link AppiumTransportFactory.sweepDeviceLeftoverVaults}.
  */
+interface StopAutoStartedAppiumServerParams {
+  /**
+  The server process this run spawned.
+   */
+  readonly appiumProcess: ChildProcess;
+
+  /**
+  The port it was started on, whose marker is cleared or stamped by the outcome.
+   */
+  readonly port: number;
+
+  /**
+  The server's URL, polled to decide whether it actually stopped.
+   */
+  readonly url: URL;
+}
+
+interface StopAutoStartedEmulatorParams {
+  /**
+  The AVD name, named in the warning so the leftover is identifiable.
+   */
+  readonly avdName: string;
+
+  /**
+  The device the emulator is serving, polled to decide whether it actually stopped.
+   */
+  readonly deviceId: string;
+
+  /**
+  The emulator launcher process this run spawned.
+   */
+  readonly emulatorProcess: ChildProcess;
+
+  /**
+  The emulator PIDs this run owns, escalated to when the launcher's tree kill leaves one behind.
+   */
+  readonly ownedEmulatorPids: readonly number[];
+}
+
+interface StopAutoStartedProcessesParams {
+  /**
+  The Appium server process, when this run started one.
+   */
+  readonly appiumProcess?: ChildProcess | undefined;
+
+  /**
+  The AVD name, for the emulator's warning.
+   */
+  readonly avdName: string;
+
+  /**
+  The device the emulator is serving, when this run started one.
+   */
+  readonly deviceId?: string | undefined;
+
+  /**
+  The emulator launcher process, when this run started one.
+   */
+  readonly emulatorProcess?: ChildProcess | undefined;
+
+  /**
+  The emulator PIDs this run owns.
+   */
+  readonly ownedEmulatorPids: readonly number[];
+
+  /**
+  The Appium port.
+   */
+  readonly port: number;
+
+  /**
+  The Appium server URL.
+   */
+  readonly url: URL;
+}
+
 interface SweepDeviceLeftoverVaultsParams {
   /**
   The device UDID to sweep.
@@ -515,6 +703,23 @@ interface ResolveAndReportCompatibilityParams {
  * The slice of `webdriverio`'s surface the Appium factory calls, named so the
  * lazy load has a return type without a static import of the module itself.
  */
+interface WaitForEmulatorStoppedParams {
+  /**
+  The device the emulator serves.
+   */
+  readonly deviceId: string;
+
+  /**
+  The emulator PIDs this run owns.
+   */
+  readonly ownedEmulatorPids: readonly number[];
+
+  /**
+  How long to wait for the emulator to disappear, in milliseconds.
+   */
+  readonly timeoutInMilliseconds: number;
+}
+
 interface WebdriverioModule {
   /**
   Reattaches to an existing WebDriver session.
@@ -675,6 +880,51 @@ class AppiumTransportFactory {
     });
   }
 
+  /**
+   * Waits out the Appium port and reports whether it went quiet, rather than
+   * throwing as {@link waitForAppiumStopped} does.
+   *
+   * @param url - The Appium server URL.
+   * @param timeoutInMilliseconds - How long to wait.
+   * @returns `true` when nothing answers on the port any more.
+   */
+  private async checkIsAppiumStopped(url: URL, timeoutInMilliseconds: number): Promise<boolean> {
+    try {
+      await this.waitForAppiumStopped(url, timeoutInMilliseconds);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Decides whether the emulator this run started is really gone.
+   *
+   * Two independent proofs, cheapest first: none of the PIDs this run owns is
+   * alive, and the device no longer appears in `adb devices` **in any state** (a
+   * dying emulator answers `offline` while it still holds the AVD).
+   *
+   * @param params - The device and the PIDs this run owns.
+   * @returns `true` when nothing of this run's emulator is left.
+   */
+  private async checkIsEmulatorGone(params: CheckIsEmulatorGoneParams): Promise<boolean> {
+    if (params.ownedEmulatorPids.some((pid) => checkIsProcessAlive(pid))) {
+      return false;
+    }
+
+    try {
+      return !checkIsDeviceListed({ deviceId: params.deviceId, devicesOutput: await this.getDevicesOutput() });
+    } catch (error: unknown) {
+      /*
+       * An adb that cannot run is not evidence about the emulator — and the PID
+       * probe above has already said this run's processes are gone, which is the
+       * stronger of the two proofs.
+       */
+      this.log(`Could not re-check connected devices while stopping the emulator: ${error instanceof Error ? error.message : String(error)}`);
+      return true;
+    }
+  }
+
   private async connectSession(params: EstablishSessionParams): Promise<Awaited<ReturnType<typeof remote>>> {
     const { remote } = await importWebdriverio();
     return remote({
@@ -712,8 +962,10 @@ class AppiumTransportFactory {
 
     const appId = options.appId ?? APP_PACKAGE;
 
+    let actualDeviceId: string | undefined;
     let appiumProcess: ChildProcess | undefined;
     let emulatorProcess: ChildProcess | undefined;
+    let ownedEmulatorPids: readonly number[] = [];
 
     try {
       const result = await this.startAppiumAndEmulator({
@@ -731,7 +983,8 @@ class AppiumTransportFactory {
 
       appiumProcess = result.appiumProcess;
       emulatorProcess = result.emulatorProcess;
-      const actualDeviceId = result.actualDeviceId;
+      ownedEmulatorPids = result.ownedEmulatorPids;
+      actualDeviceId = result.actualDeviceId;
 
       /*
        * Before `remote()` launches Obsidian — the last point at which nothing
@@ -780,7 +1033,7 @@ class AppiumTransportFactory {
         try {
           await originalDispose();
         } finally {
-          killAutoStartedProcesses();
+          await this.stopAutoStartedProcessesVerified(buildStopParams());
         }
       };
 
@@ -791,36 +1044,26 @@ class AppiumTransportFactory {
         try {
           originalDisposeSync();
         } finally {
-          killAutoStartedProcesses();
+          this.stopAutoStartedProcessesBestEffort(buildStopParams());
         }
       };
 
       return transport;
-
-      function killAutoStartedProcesses(): void {
-        if (appiumProcess) {
-          killProcessTree(appiumProcess);
-          // Drop the marker with the server it describes, so the next run cannot mistake a recycled PID for ours.
-          clearAppiumServerMarker(port);
-          // Cannot use this.log inside nested function — `this` is not captured.
-          log(`[transport-factory:${options.type}] Auto-started Appium server stopped.`);
-        }
-        if (emulatorProcess) {
-          killProcessTree(emulatorProcess);
-          log(`[transport-factory:${options.type}] Auto-started emulator stopped.`);
-        }
-      }
     } catch (error: unknown) {
-      if (appiumProcess) {
-        killProcessTree(appiumProcess);
-        clearAppiumServerMarker(port);
-        this.log('Killed auto-started Appium server after connection failure.');
-      }
-      if (emulatorProcess) {
-        killProcessTree(emulatorProcess);
-        this.log('Killed auto-started emulator after connection failure.');
-      }
+      await this.stopAutoStartedProcessesVerified(buildStopParams());
       throw error;
+    }
+
+    function buildStopParams(): StopAutoStartedProcessesParams {
+      return {
+        appiumProcess,
+        avdName: options.avdName,
+        deviceId: actualDeviceId,
+        emulatorProcess,
+        ownedEmulatorPids,
+        port,
+        url
+      };
     }
   }
 
@@ -838,7 +1081,8 @@ class AppiumTransportFactory {
     }
 
     const ageInSeconds = Math.round((Date.now() - marker.startedAtInMilliseconds) / MILLISECONDS_PER_SECOND);
-    return `started by an earlier run of this harness, pid ${String(marker.pid)}, up for ${String(ageInSeconds)}s`;
+    const unstoppedSuffix = marker.stopAttemptedAtInMilliseconds === undefined ? '' : ', and an earlier run failed to stop it';
+    return `started by an earlier run of this harness, pid ${String(marker.pid)}, up for ${String(ageInSeconds)}s${unstoppedSuffix}`;
   }
 
   private dumpConnectivity(deviceId: string): Promise<ConnectivityProbeResult> {
@@ -994,11 +1238,22 @@ class AppiumTransportFactory {
       await this.waitForBoot(existingDeviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
       await this.waitForDeviceReady(existingDeviceId, timeouts);
       await this.wakeScreen(existingDeviceId);
-      return { actualDeviceId: existingDeviceId };
+      // A device this run did not start is not this run's to stop.
+      return { actualDeviceId: existingDeviceId, ownedEmulatorPids: [] };
     }
 
     this.log(`AVD "${avdName}" not found on any existing device, starting a new emulator...`);
     await this.ensureAvdExists(avdName);
+    /*
+     * Snapshot the emulator processes that predate this launch, so the ones that
+     * appear across it can be identified as OURS. The launcher's PID is not
+     * enough to kill: under `-no-window` the process that holds the AVD is the
+     * `qemu-system-*-headless` backend it forks, which survives a `taskkill /T`
+     * of the launcher (see `emulator-backend.ts`). Diffing here — rather than
+     * sweeping `qemu*` at teardown — is what keeps the harness from killing
+     * somebody else's emulator.
+     */
+    const emulatorPidsBefore = await this.listEmulatorBackendPids([]);
     const emulator = this.startEmulator(avdName, isEmulatorVisible);
 
     let actualDeviceId: string;
@@ -1008,9 +1263,12 @@ class AppiumTransportFactory {
       emulator.stopCapture();
     }
 
-    this.log(`Emulator "${avdName}" started, device ${actualDeviceId} is connected.`);
+    const ownedEmulatorPids = await this.listEmulatorBackendPids(emulatorPidsBefore);
+    this.log(
+      `Emulator "${avdName}" started, device ${actualDeviceId} is connected (owned emulator PIDs: [${ownedEmulatorPids.join(', ')}]).`
+    );
     await this.suppressErrorDialogs(actualDeviceId);
-    return { actualDeviceId, emulatorProcess: emulator.process };
+    return { actualDeviceId, emulatorProcess: emulator.process, ownedEmulatorPids };
   }
 
   private async ensureUiautomator2DriverInstalled(): Promise<void> {
@@ -1093,23 +1351,7 @@ class AppiumTransportFactory {
   }
 
   private async getConnectedDeviceIds(): Promise<string[]> {
-    const output = await new Promise<string>((resolve, reject) => {
-      execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to run 'adb devices': ${error.message}. Is ADB installed and in PATH?`));
-          return;
-        }
-        if (stderr) {
-          this.log(`ADB stderr: ${stderr.trim()}`);
-        }
-        resolve(stdout);
-      });
-    });
-
-    const lines = output.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
-    return lines
-      .filter((line) => line.includes('\tdevice'))
-      .map((line) => line.split('\t', 1)[0] ?? '');
+    return listOnlineDeviceIds(await this.getDevicesOutput());
   }
 
   /**
@@ -1141,6 +1383,106 @@ class AppiumTransportFactory {
     });
   }
 
+  /**
+   * Runs `adb devices` and returns its raw stdout.
+   *
+   * The raw listing is what teardown needs: `getConnectedDeviceIds` keeps only
+   * the `device` state, and an emulator on its way out answers `offline` while
+   * still holding the AVD — see `adb-device-list.ts`.
+   *
+   * @returns The raw `adb devices` output.
+   * @throws If adb could not be run at all.
+   */
+  private getDevicesOutput(): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(`Failed to run 'adb devices': ${error.message}. Is ADB installed and in PATH?`));
+          return;
+        }
+        if (stderr) {
+          this.log(`ADB stderr: ${stderr.trim()}`);
+        }
+        resolve(stdout);
+      });
+    });
+  }
+
+  /**
+   * Asks the emulator to shut itself down over its console.
+   *
+   * Preferred over killing the process outright because it is the path that
+   * releases the AVD's `multiinstance.lock`. Best-effort: a console that does
+   * not answer is reported and the caller falls through to the kill.
+   *
+   * @param deviceId - The emulator's device ID.
+   */
+  private killEmulatorConsole(deviceId: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      execFile('adb', ['-s', deviceId, 'emu', 'kill'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout) => {
+        this.log(
+          error
+            ? `Emulator console shutdown for ${deviceId} did not answer: ${error.message}`
+            : `Emulator console shutdown for ${deviceId}: ${stdout.trim()}`
+        );
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Lists the emulator processes currently running on the host, excluding a set
+   * that is already accounted for.
+   *
+   * Called twice around a launch: with an empty `knownPids` to snapshot what
+   * predates it, then with that snapshot to name what the launch added — which
+   * is precisely the set this run owns.
+   *
+   * Best-effort: a listing that cannot be produced yields no PIDs, so an
+   * unavailable `tasklist`/`ps` degrades to "nothing to escalate to" rather than
+   * failing the run it is cleaning up for. **It says so, loudly** — an empty set
+   * that means "no backend to own" and one that means "the query failed" are
+   * otherwise the same log line, and the second silently disarms the escalation.
+   * That is not hypothetical: the first end-to-end run of this code logged
+   * `owned emulator PIDs: []` for a launch whose backend was demonstrably there,
+   * because `tasklist` overran a 10s budget on a host the wedged emulator had
+   * already slowed to the point where every `adb` call was timing out too — the
+   * same contention **L45** sizes `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` for, and
+   * the same "wrong budget silently disables the check" shape.
+   *
+   * A host always has processes, so a listing that parses to **zero** rows is a
+   * failed query however it exited, and is reported like one.
+   *
+   * @param knownPids - Emulator PIDs to exclude.
+   * @returns The emulator PIDs not in `knownPids`.
+   */
+  private async listEmulatorBackendPids(knownPids: readonly number[]): Promise<number[]> {
+    const query = buildHostProcessQuery();
+    const output = await new Promise<string>((resolve) => {
+      execFile(
+        query.command,
+        query.commandArguments,
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          if (error) {
+            this.log(`Warning: could not list host processes (\`${query.command}\`): ${error.message}`);
+          }
+          resolve(error ? '' : stdout);
+        }
+      );
+    });
+
+    const processes = parseHostProcessList(output);
+    if (processes.length === 0) {
+      this.log(
+        `Warning: \`${query.command}\` listed no processes, so this run cannot identify the emulator backend it owns. Teardown will fall back to \`adb devices\` alone and will have no PID to escalate to.`
+      );
+      return [];
+    }
+
+    return selectEmulatorBackendPids({ knownPids, processes });
+  }
+
   private listInstalledPackages(deviceId: string): Promise<string> {
     return new Promise((resolve) => {
       execFile(
@@ -1155,8 +1497,98 @@ class AppiumTransportFactory {
     });
   }
 
+  /**
+   * Finds the processes still listening on a port.
+   *
+   * This is the only real escalation available for the Appium server: the PID
+   * the harness holds is the shell wrapper it spawned, so re-killing it achieves
+   * nothing, while a socket still answering on the port is direct evidence of
+   * what survived.
+   *
+   * @param port - The port to query.
+   * @returns The listening PIDs, or an empty list when the query could not be run.
+   */
+  private listPortOwnerPids(port: number): Promise<number[]> {
+    const query = buildPortOwnerQuery(port);
+    return new Promise<number[]>((resolve) => {
+      execFile(
+        query.command,
+        query.commandArguments,
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          // `lsof` exits non-zero when nothing holds the port, which is a legitimate empty answer.
+          resolve(parsePortOwnerPids({ output: error ? '' : stdout, port }));
+        }
+      );
+    });
+  }
+
+  /**
+   * Synchronous {@link listPortOwnerPids}, for the `process.on('exit')` teardown
+   * that cannot await.
+   *
+   * Its budget is deliberately **not** the async path's: this call blocks process
+   * exit outright, so it takes a short one and gives up rather than holding the
+   * exit handler for half a minute on a contended host. Giving up loses the
+   * escalation, which the sync path's log already admits it cannot confirm.
+   *
+   * @param port - The port to query.
+   * @returns The listening PIDs, or an empty list when the query could not be run in time.
+   */
+  private listPortOwnerPidsSync(port: number): number[] {
+    const query = buildPortOwnerQuery(port);
+    try {
+      const output = execFileSync(query.command, query.commandArguments, {
+        encoding: 'utf-8',
+        maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES,
+        timeout: SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS
+      });
+      return parsePortOwnerPids({ output, port });
+    } catch {
+      return [];
+    }
+  }
+
   private log(message: string): void {
     log(`[transport-factory:${this.type}] ${message}`);
+  }
+
+  /**
+   * Replaces a leftover server an earlier run failed to stop, instead of
+   * adopting it.
+   *
+   * This is the other half of {@link stopAutoStartedAppiumServer}'s stamped
+   * marker, and it is the case that motivated the whole verified teardown: the
+   * leftover answers `/status` perfectly, is adopted, and then dies seconds into the session as
+   * it finally finishes shutting down — a failure that reads as a device or
+   * network fault. A server we know we already asked to die is not a server to
+   * build a suite on.
+   *
+   * @param params - The marker, the port and whether a replacement may be started.
+   * @returns `true` when the port was freed and a fresh server must be started.
+   */
+  private async reclaimUnstoppedAppiumServer(params: ReclaimUnstoppedAppiumServerParams): Promise<boolean> {
+    const stopAttemptedAtInMilliseconds = params.marker.stopAttemptedAtInMilliseconds ?? Date.now();
+    const ageInSeconds = Math.round((Date.now() - stopAttemptedAtInMilliseconds) / MILLISECONDS_PER_SECOND);
+    const provenance = `the server on port ${String(params.port)} is a leftover an earlier run of this harness tried to stop ${String(ageInSeconds)}s ago and could not`;
+
+    if (params.shouldAutoStartAppium === false) {
+      this.log(`WARNING: ${provenance}. Auto-start is disabled, so this run adopts it anyway; if the session dies mid-flight, that is why.`);
+      return false;
+    }
+
+    this.log(`Refusing to adopt a known-doomed server: ${provenance}. Killing whatever holds the port and starting a fresh server...`);
+    for (const pid of await this.listPortOwnerPids(params.port)) {
+      killProcessTreeByPid(pid);
+    }
+    clearAppiumServerMarker(params.port);
+
+    if (await this.checkIsAppiumStopped(params.url, APPIUM_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS)) {
+      return true;
+    }
+
+    this.log(`WARNING: ${provenance}, and it survived this run's kill too. Adopting it, which may fail mid-session.`);
+    return false;
   }
 
   private resolveEmulatorBinary(): string {
@@ -1192,7 +1624,7 @@ class AppiumTransportFactory {
     clearAppiumServerMarker(params.port);
 
     try {
-      await this.waitForAppiumStopped(params.url);
+      await this.waitForAppiumStopped(params.url, APPIUM_STOP_TIMEOUT_IN_MILLISECONDS);
     } catch (error: unknown) {
       throw new Error(this.buildWedgedMessage(params, 'restart-did-not-help'), { cause: error });
     }
@@ -1240,6 +1672,18 @@ class AppiumTransportFactory {
       await this.checkAppiumReachable(appiumUrl);
       appiumServerMarker = readAppiumServerMarker(port);
       this.log(`Appium server is reachable (${this.describeAdoptedServer(appiumServerMarker)}).`);
+
+      if (appiumServerMarker?.stopAttemptedAtInMilliseconds !== undefined) {
+        needsAppiumStart = await this.reclaimUnstoppedAppiumServer({
+          marker: appiumServerMarker,
+          port,
+          shouldAutoStartAppium,
+          url: appiumUrl
+        });
+        if (needsAppiumStart) {
+          appiumServerMarker = undefined;
+        }
+      }
     } catch (error: unknown) {
       if (shouldAutoStartAppium === false) {
         throw error;
@@ -1259,30 +1703,46 @@ class AppiumTransportFactory {
 
     const appiumProcess = appiumLaunch?.process;
 
-    try {
-      const [, deviceResult] = await Promise.all([
-        appiumLaunch
-          ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds, appiumLaunch).then(() => {
-            this.log('Auto-started Appium server is ready.');
-          })
-          : Promise.resolve(),
-        this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds })
-      ]);
+    /*
+     * `allSettled`, not `all`: the two halves start together, so a rejected
+     * Appium wait used to abandon an emulator that went on to boot perfectly —
+     * the leak survived the very teardown that was supposed to prevent it,
+     * because the emulator's handle only exists inside the result `Promise.all`
+     * discarded. Both outcomes are collected so both can be stopped.
+     */
+    const [appiumOutcome, deviceOutcome] = await Promise.allSettled([
+      appiumLaunch
+        ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds, appiumLaunch).then(() => {
+          this.log('Auto-started Appium server is ready.');
+        })
+        : Promise.resolve(),
+      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds })
+    ]);
 
-      return {
-        actualDeviceId: deviceResult.actualDeviceId,
+    const deviceResult = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : undefined;
+
+    if (appiumOutcome.status === 'rejected' || deviceResult === undefined) {
+      await this.stopAutoStartedProcessesVerified({
         appiumProcess,
-        appiumServerMarker,
-        emulatorProcess: deviceResult.emulatorProcess,
-        isAdoptedAppiumServer: !needsAppiumStart
-      };
-    } catch (error: unknown) {
-      if (appiumProcess) {
-        killProcessTree(appiumProcess);
-        this.log('Killed auto-started Appium server after startup failure.');
-      }
-      throw error;
+        avdName,
+        deviceId: deviceResult?.actualDeviceId,
+        emulatorProcess: deviceResult?.emulatorProcess,
+        ownedEmulatorPids: deviceResult?.ownedEmulatorPids ?? [],
+        port,
+        url: appiumUrl
+      });
+
+      throw getSettledFailure([appiumOutcome, deviceOutcome]);
     }
+
+    return {
+      actualDeviceId: deviceResult.actualDeviceId,
+      appiumProcess,
+      appiumServerMarker,
+      emulatorProcess: deviceResult.emulatorProcess,
+      isAdoptedAppiumServer: !needsAppiumStart,
+      ownedEmulatorPids: deviceResult.ownedEmulatorPids
+    };
   }
 
   private startAppiumServer(port: number, isAppiumConsoleVisible?: boolean): ProcessLaunch {
@@ -1428,6 +1888,173 @@ class AppiumTransportFactory {
    *
    * @param deviceId - The device UDID to configure.
    */
+  /**
+   * Stops the Appium server this run started, and **verifies** it stopped.
+   *
+   * The port is the verdict: a socket still answering `/status` after the kill
+   * is the server, whatever the PID table says. When it is still there the
+   * listener is killed by port ownership — the only escalation that means
+   * anything, since re-killing the shell wrapper's PID would just repeat the
+   * kill that already failed.
+   *
+   * @param params - The server process, its port and its URL.
+   */
+  private async stopAutoStartedAppiumServer(params: StopAutoStartedAppiumServerParams): Promise<void> {
+    killProcessTree(params.appiumProcess);
+
+    let hasEscalated = false;
+    let isStopped = await this.checkIsAppiumStopped(params.url, APPIUM_STOP_TIMEOUT_IN_MILLISECONDS);
+
+    if (!isStopped) {
+      const ownerPids = await this.listPortOwnerPids(params.port);
+      if (ownerPids.length > 0) {
+        hasEscalated = true;
+        this.log(
+          `Auto-started Appium server still answers on ${params.url.origin} after its process tree was killed; escalating to the PID(s) holding the port: [${ownerPids.join(', ')}].`
+        );
+        for (const pid of ownerPids) {
+          killProcessTreeByPid(pid);
+        }
+        isStopped = await this.checkIsAppiumStopped(params.url, APPIUM_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS);
+      }
+    }
+
+    this.log(buildTeardownMessage({
+      evidence: `port ${String(params.port)}`,
+      outcome: resolveTeardownOutcome({ hasEscalated, isStopped }),
+      subject: 'Auto-started Appium server',
+      timeoutInMilliseconds: APPIUM_STOP_TIMEOUT_IN_MILLISECONDS
+    }));
+
+    if (isStopped) {
+      // Drop the marker with the server it describes, so the next run cannot mistake a recycled PID for ours.
+      clearAppiumServerMarker(params.port);
+      return;
+    }
+
+    // Keep the marker, stamped: a leftover we could not kill must stay convictable by the next run.
+    recordAppiumServerStopAttempt(params.port);
+  }
+
+  /**
+   * Stops the emulator this run started, and **verifies** it stopped.
+   *
+   * The console shutdown goes first because it is the only path that releases
+   * the AVD's `multiinstance.lock`; a `taskkill` leaves the lock behind, and a
+   * stale lock is what makes the next run fail with `Running multiple emulators
+   * with the same AVD` — a FATAL the emulator writes to its own stdout, where
+   * nobody sees it.
+   *
+   * @param params - The emulator process, the device it serves and the PIDs this run owns.
+   */
+  private async stopAutoStartedEmulator(params: StopAutoStartedEmulatorParams): Promise<void> {
+    await this.killEmulatorConsole(params.deviceId);
+    killProcessTree(params.emulatorProcess);
+
+    const waitParams: WaitForEmulatorStoppedParams = {
+      deviceId: params.deviceId,
+      ownedEmulatorPids: params.ownedEmulatorPids,
+      timeoutInMilliseconds: EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS
+    };
+
+    let hasEscalated = false;
+    let isStopped = await this.waitForEmulatorStopped(waitParams);
+
+    if (!isStopped) {
+      const survivingPids = params.ownedEmulatorPids.filter((pid) => checkIsProcessAlive(pid));
+      if (survivingPids.length > 0) {
+        hasEscalated = true;
+        this.log(
+          `Auto-started emulator outlived the launcher's process tree; escalating to the backend PID(s) this run started: [${survivingPids.join(', ')}].`
+        );
+        for (const pid of survivingPids) {
+          killProcessTreeByPid(pid);
+        }
+        isStopped = await this.waitForEmulatorStopped({ ...waitParams, timeoutInMilliseconds: EMULATOR_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS });
+      }
+    }
+
+    this.log(buildTeardownMessage({
+      evidence: `AVD "${params.avdName}" on device ${params.deviceId}`,
+      outcome: resolveTeardownOutcome({ hasEscalated, isStopped }),
+      subject: 'Auto-started emulator',
+      timeoutInMilliseconds: EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS
+    }));
+  }
+
+  /**
+   * Best-effort teardown for `process.on('exit')`, which cannot await.
+   *
+   * It kills, looks once for a survivor still holding the Appium port or a
+   * still-live emulator PID, kills those too — and then says exactly that. It
+   * never claims a verified stop, because it cannot wait to earn one.
+   *
+   * @param params - Everything this run started.
+   */
+  private stopAutoStartedProcessesBestEffort(params: StopAutoStartedProcessesParams): void {
+    if (params.appiumProcess) {
+      killProcessTree(params.appiumProcess);
+      const ownerPids = this.listPortOwnerPidsSync(params.port);
+      for (const pid of ownerPids) {
+        killProcessTreeByPid(pid);
+      }
+
+      if (ownerPids.length > 0) {
+        this.log(
+          `Auto-started Appium server: stop requested and PID(s) [${ownerPids.join(', ')}] holding port ${String(params.port)} killed — sync teardown cannot wait to confirm.`
+        );
+        recordAppiumServerStopAttempt(params.port);
+      } else {
+        this.log(`Auto-started Appium server: stop requested, nothing left listening on port ${String(params.port)}.`);
+        clearAppiumServerMarker(params.port);
+      }
+    }
+
+    if (params.emulatorProcess) {
+      killProcessTree(params.emulatorProcess);
+      const survivingPids = params.ownedEmulatorPids.filter((pid) => checkIsProcessAlive(pid));
+      for (const pid of survivingPids) {
+        killProcessTreeByPid(pid);
+      }
+
+      this.log(
+        survivingPids.length > 0
+          ? `Auto-started emulator: stop requested and surviving backend PID(s) [${survivingPids.join(', ')}] killed — sync teardown cannot wait to confirm.`
+          : 'Auto-started emulator: stop requested, no process of this run left running.'
+      );
+    }
+  }
+
+  /**
+   * Stops everything this run auto-started, verifying each stop.
+   *
+   * @param params - Everything this run started.
+   */
+  private async stopAutoStartedProcessesVerified(params: StopAutoStartedProcessesParams): Promise<void> {
+    if (!params.appiumProcess && !params.emulatorProcess) {
+      return;
+    }
+
+    this.log('Stopping everything this run auto-started...');
+
+    if (params.appiumProcess) {
+      await this.stopAutoStartedAppiumServer({
+        appiumProcess: params.appiumProcess,
+        port: params.port,
+        url: params.url
+      });
+    }
+
+    if (params.emulatorProcess && params.deviceId !== undefined) {
+      await this.stopAutoStartedEmulator({
+        avdName: params.avdName,
+        deviceId: params.deviceId,
+        emulatorProcess: params.emulatorProcess,
+        ownedEmulatorPids: params.ownedEmulatorPids
+      });
+    }
+  }
+
   private async suppressErrorDialogs(deviceId: string): Promise<void> {
     this.log(`Disabling crash/ANR dialogs on device ${deviceId} (settings put global hide_error_dialogs 1)...`);
 
@@ -1561,10 +2188,11 @@ class AppiumTransportFactory {
    * Waits until nothing answers `/status` on the port any more.
    *
    * @param url - The Appium server URL.
+   * @param timeoutInMilliseconds - How long to wait before giving up.
    * @throws If the port is still served when the timeout elapses.
    */
-  private async waitForAppiumStopped(url: URL): Promise<void> {
-    const deadline = Date.now() + APPIUM_STOP_TIMEOUT_IN_MILLISECONDS;
+  private async waitForAppiumStopped(url: URL, timeoutInMilliseconds: number): Promise<void> {
+    const deadline = Date.now() + timeoutInMilliseconds;
 
     while (Date.now() < deadline) {
       try {
@@ -1579,7 +2207,7 @@ class AppiumTransportFactory {
     }
 
     throw new Error(
-      `Something is still serving ${url.origin} ${String(APPIUM_STOP_TIMEOUT_IN_MILLISECONDS)}ms after the stale Appium server was killed.`
+      `Something is still serving ${url.origin} ${String(timeoutInMilliseconds)}ms after the Appium server was killed.`
     );
   }
 
@@ -1730,6 +2358,28 @@ class AppiumTransportFactory {
    * @param deviceId - The device UDID to poll.
    * @param timeoutInMilliseconds - Maximum time to wait; `0` skips the wait.
    */
+  /**
+   * Polls until this run's emulator is gone, or the budget elapses.
+   *
+   * @param params - The device, the PIDs this run owns, and the budget.
+   * @returns `true` when the emulator disappeared within the budget.
+   */
+  private async waitForEmulatorStopped(params: WaitForEmulatorStoppedParams): Promise<boolean> {
+    const deadline = Date.now() + params.timeoutInMilliseconds;
+
+    while (Date.now() < deadline) {
+      if (await this.checkIsEmulatorGone(params)) {
+        return true;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, EMULATOR_STOP_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+
+    return false;
+  }
+
   private async waitForNetworkValidated(deviceId: string, timeoutInMilliseconds: number): Promise<void> {
     if (timeoutInMilliseconds <= 0) {
       this.log(`Skipping network-ready wait for device ${deviceId} (timeout is 0).`);
@@ -1885,6 +2535,32 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
 }
 
 /**
+ * Builds the platform's "list every process" query.
+ *
+ * @returns The command and arguments to run.
+ */
+function buildHostProcessQuery(): HostCommandQuery {
+  return process.platform === 'win32'
+    ? { command: 'tasklist', commandArguments: ['/FO', 'CSV', '/NH'] }
+    : { command: 'ps', commandArguments: ['-eo', 'pid=,comm='] };
+}
+
+/**
+ * Builds the platform's "who holds this port" query.
+ *
+ * `netstat` cannot filter by port, so the whole table comes back and the parser
+ * does the matching; `lsof` filters server-side and answers with bare PIDs.
+ *
+ * @param port - The port to query.
+ * @returns The command and arguments to run.
+ */
+function buildPortOwnerQuery(port: number): HostCommandQuery {
+  return process.platform === 'win32'
+    ? { command: 'netstat', commandArguments: ['-ano'] }
+    : { command: 'lsof', commandArguments: ['-ti', `tcp:${String(port)}`] };
+}
+
+/**
  * Creates a desktop CDP transport. When an explicit `port` is given the
  * transport attaches to an already-running Obsidian on that port; otherwise it
  * launches and owns an isolated instance (the default, hermetic mode).
@@ -1937,6 +2613,22 @@ function createOwnedUserDataDirectory(): string {
 }
 
 /**
+ * Returns the first rejection reason among settled outcomes.
+ *
+ * @param outcomes - The settled outcomes, at least one of which is expected to have rejected.
+ * @returns The first rejection reason, or a stand-in error when none rejected.
+ */
+function getSettledFailure(outcomes: readonly PromiseSettledResult<unknown>[]): unknown {
+  for (const outcome of outcomes) {
+    if (outcome.status === 'rejected') {
+      return outcome.reason;
+    }
+  }
+
+  return new Error('Android provisioning failed without naming a reason.');
+}
+
+/**
  * Loads `webdriverio` on demand.
  *
  * The load is deferred because a static import would drag the whole WebDriver
@@ -1958,6 +2650,28 @@ function createOwnedUserDataDirectory(): string {
 async function importWebdriverio(): Promise<WebdriverioModule> {
   // eslint-disable-next-line no-restricted-syntax -- `webdriverio` is Appium-only, so it must be loaded lazily: a static import would drag the whole WebDriver stack into every consumer of this package's index, and `chalk` with it (see the doc comment).
   return await import('webdriverio');
+}
+
+/**
+ * Parses a host process listing with the platform's parser.
+ *
+ * @param output - Raw stdout of {@link buildHostProcessQuery}'s command.
+ * @returns The listed processes.
+ */
+function parseHostProcessList(output: string): ProcessListEntry[] {
+  return process.platform === 'win32' ? parseWindowsTaskList(output) : parsePosixProcessList(output);
+}
+
+/**
+ * Parses a port-owner listing with the platform's parser.
+ *
+ * @param params - The raw output and the port that was queried.
+ * @returns The PIDs holding the port.
+ */
+function parsePortOwnerPids(params: ParsePortOwnerPidsParams): number[] {
+  return process.platform === 'win32'
+    ? parseWindowsNetstatPids({ netstatOutput: params.output, port: params.port })
+    : parsePosixLsofPids(params.output);
 }
 
 /**

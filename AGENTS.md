@@ -2136,3 +2136,127 @@ argument: `afterAll`'s `dispose` builds a transport of its own and so pays the g
 reused-device and started-device branches both call it. That is not tidiness: the reused branch skipping a
 gate outright is exactly the hole T794 fell into (**L43**), and two call sites listing gates by hand is how
 that happens again.
+
+## L46. A teardown is verified, not announced — and the emulator's real process is not the one we spawned
+
+The teardown printed `Auto-started Appium server stopped.` and `Auto-started emulator stopped.` on the
+**attempt**: `killAutoStartedProcesses` issued `killProcessTree` and logged, unconditionally, with nothing
+asserting either process had exited. On 2026-09-02 both were still serving **ten minutes** after those lines
+were written. The next run found them, adopted them — correctly, by every check the preflight had —
+established a session, found the WebView, and died two seconds in with `UND_ERR_SOCKET` then `ECONNREFUSED`
+on every call including its own `DELETE /session`, as the leftovers finally finished dying. What the test
+reported was `IntegrationSetupFailedError … cannot get temp vault`, which reads as a device or a network
+fault; re-running once the zombies had died passed, and taught nobody anything. **A log that says the machine
+is clean when it is not is worse than no log**: it sends the next reader away from the cause.
+
+**Why the kill missed.** Under `-no-window` the process that holds the AVD is
+`qemu-system-x86_64-headless.exe`, forked by the `emulator.exe` launcher whose PID the harness holds.
+`taskkill /F /T` against the launcher reports success and the backend keeps TCP 5554/5555 and the
+AVD's `multiinstance.lock`, so the *next* run hits
+`FATAL | Running multiple emulators with the same AVD is an experimental feature` — which the emulator
+writes to its own stdout, where nobody sees it. It is self-perpetuating: each failed run force-kills the
+launcher again and leaves another backend. Note that the obvious diagnostic filter,
+`Get-Process -Name qemu-system-x86_64`, does **not** match the `-headless` name — which is how one zombie
+stayed invisible through several rounds of "no emulator is running".
+
+- **Only a verified stop may say `stopped`.** `teardown-verdict.ts` (pure, unit-tested) owns the three
+  outcomes — `stopped`, `stopped-after-escalation`, `still-running` — and the lines for them. The failure
+  line names the budget, the evidence and the consequence:
+  *`WARNING: Auto-started emulator did not exit within 20000ms and still holds AVD "obsidian_test" on device
+  emulator-5554; a later run may adopt it. Kill it before the next Android run.`*
+- **The Appium verdict is the port; the emulator's is two independent proofs.** The server reuses
+  `waitForAppiumStopped` — which already existed for the wedged-server restart (**L40**) and was simply
+  never wired into teardown — and escalates by **port ownership** (`port-owner.ts`: `netstat -ano` /
+  `lsof -ti`), the only escalation that means anything, since the PID the harness holds is the `shell: true`
+  wrapper and re-killing it just repeats the kill that failed. The emulator must satisfy *both* that none of
+  the PIDs this run owns is alive **and** that the device is gone from `adb devices` **in any state** —
+  `adb-device-list.ts` exists for that distinction, because a dying emulator answers `offline` while it
+  still holds the AVD, and the pre-existing `getConnectedDeviceIds` filter (`\tdevice`) reads `offline` as
+  absent. Teardown asks "is it listed?", the preflight keeps asking "is it usable?"; both now come from one
+  parser.
+- **Ownership is a pre-launch snapshot, never a `qemu*` sweep.** `ensureDeviceConnected` lists the emulator
+  backends before spawning and again after the device connects (`emulator-backend.ts`), and the difference
+  is `ownedEmulatorPids` — the launcher plus the backend it forked. Sweeping every `qemu*` at teardown is
+  the *manual* recovery for this does; the harness must not, because another AVD (`obsidian_screenshots`)
+  or one the user booted by hand would go with it. Killing a process the run does not own is not its call to
+  make — the same principle **L40** applies to a foreign Appium server.
+- **The console shutdown goes first.** `adb -s <device> emu kill` is the only path that releases
+  `multiinstance.lock`; `taskkill` leaves it behind, and the stale lock is the whole of the next run's
+  failure. It is best-effort and the kill follows regardless — `adb emu kill` alone was measured leaving
+  four processes behind across one night.
+- **The sync path is honest instead of thorough.** `disposeSync` runs inside `process.on('exit')` and cannot
+  await, so it kills, looks **once** for a survivor holding the port or a still-live owned PID, kills those
+  too, and logs *"stop requested … — sync teardown cannot wait to confirm"*. It never prints a bare
+  `stopped.` and never blocks process exit on a poll (the owner's call). Its one blocking call — the
+  port query — takes `SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS` (5s), **not** the async path's 30s:
+  this one blocks the exit handler itself, so losing the escalation beats holding the process for half a
+  minute, and the line it prints never claimed a verified stop anyway. Note the caveat
+  `android-trusted-input-global-setup.ts` already records: Vitest terminates workers abruptly, so **neither**
+  teardown path is guaranteed a turn — which is why the *next* run's preflight is the second line of defence.
+- **A failed stop keeps its marker, stamped.** The old code cleared the marker on every teardown, so a
+  server we could not kill read as a **foreign, user-managed** server to the next run — the one kind
+  **L40** forbids touching, and precisely the server this harness is most entitled to replace.
+  `recordAppiumServerStopAttempt` writes `stopAttemptedAtInMilliseconds` instead of clearing (only when the
+  stop is unverified, so an abrupt exit that did kill the server still clears it). The preflight then
+  **refuses to adopt** a server carrying that stamp: it kills the port's owners, waits, and starts a fresh
+  one. That is the direct fix for the failing run above — the wedged-server recovery in **L40** could not have
+  helped, because it is recognized from a *device-not-found* session error, and a server dying mid-flight
+  gives socket errors instead.
+
+**Pure/testable split**, as **L27**/**L40**: `adb-device-list.ts`, `emulator-backend.ts`, `port-owner.ts`,
+`process-liveness.ts` and `teardown-verdict.ts` are unit-tested and deliberately not `v8 ignore`d; only the
+`execFile`/`kill` glue stays in the integration-only factory. `process-liveness.ts` was split out of
+`appium-server-marker.ts`, whose `checkIsHarnessOwnedAppiumServer` had the signal-0 probe inlined and now
+shares it with the emulator's PID checks.
+
+**The process query needs a budget sized for the contended window, and getting it wrong disarms the
+escalation silently.** The first end-to-end run of this code logged `owned emulator PIDs: []` for a launch
+whose backend was demonstrably running: `tasklist` overran a 10s budget on a host the wedged emulator had
+already slowed to where every `adb` call was timing out too — the same contention **L45** sizes
+`ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` for. `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` is therefore 30s,
+not the ~1s the query costs idle. The budget is only half the fix: an empty PID set that means *"no backend
+to own"* and one that means *"the query failed"* are the same log line, so `listEmulatorBackendPids` now
+**reports both failure shapes** — a non-zero exit, and a listing that parses to **zero rows**, which on a
+real host can only be a failed query however it exited. Teardown then falls back to the `adb devices` proof
+alone, and says so, rather than quietly having nothing to escalate to.
+
+**End-to-end evidence (2026-09-05, this host).** Two full provisioning attempts in one run, both of which
+failed to establish a session on this host's pre-existing emulator instability — so both exercised the
+failure teardown:
+
+```text
+Emulator "obsidian_test" started, device emulator-5554 is connected (owned emulator PIDs: [50560, 42464])
+Auto-started Appium server stopped (verified: port 4723 released).
+Emulator console shutdown for emulator-5554 did not answer: Command failed: adb -s emulator-5554 emu kill
+Auto-started emulator stopped (verified: AVD "obsidian_test" on device emulator-5554 released).
+```
+
+`[50560, 42464]` is the launcher **and** the `qemu-system-x86_64-headless` backend — the snapshot diff
+catching exactly the process the old teardown left behind. The console shutdown failing and the run
+continuing to the kill is the best-effort path working as intended. Afterwards `adb devices`, `Get-Process
+qemu*` and `netstat :4723/:5554` were all clean, and the run's own **next** attempt found
+`connected: []` and `Appium not reachable` — i.e. it started fresh instead of adopting, which is precisely
+the sequence the old teardown could not manage. Independently confirmed on the same host: the process listening on 4723
+is the `node` server (pid 41928), **not** the `cmd.exe` wrapper the harness holds a `ChildProcess` for, and
+the pid holding console port 5554 is the `-headless` backend — which is why both escalations go by
+port/snapshot ownership rather than by re-killing the PID we already killed.
+
+**The abrupt-kill case, observed by accident and worth more than the planned test.** A second end-to-end
+run was killed mid-flight (SIGKILL to the runner, no orderly teardown — the case this section's sync bullet
+says neither path is guaranteed to cover). It left precisely the leftover described above: an Appium server
+still LISTENING on 4723, `adb devices` reporting `emulator-5554 **offline**`, and the launcher **dead** with
+`qemu-system-x86_64-headless` still alive — the zombie shape, reproduced without trying. The sync
+teardown did get a turn, could not confirm the stop, and **stamped the marker** rather than clearing it:
+
+```json
+{"pid":21944,"port":4723,"startedAtInMilliseconds":1788638781534,"stopAttemptedAtInMilliseconds":1788638815537}
+```
+
+The decisive detail is that marker PID **21944 was dead while the server was alive** — 21944 is the
+`cmd.exe` wrapper; the live listener was node 34772. So `checkIsHarnessOwnedAppiumServer(marker)` returned
+**`false`** for a leftover that was unambiguously ours, and an adopt-refusal gated on marker-PID liveness
+would have waved this exact server through. That is why `reclaimUnstoppedAppiumServer` gates on the
+**stamp** alone, and why every escalation goes by port ownership rather than by the PID we hold. Replaying
+the reclaim ingredients against that live leftover: owners of 4723 `[34772]` → killed → `[]`; emulator
+backends `[24340]` → `adb emu kill` timed out against the offline device (best-effort, as designed) → killed
+→ none alive → `adb devices` empty and `checkIsDeviceListed('emulator-5554')` `false`.
