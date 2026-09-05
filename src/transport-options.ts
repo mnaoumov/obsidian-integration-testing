@@ -154,6 +154,32 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly leftoverMaxAgeInMilliseconds?: number;
 
   /**
+   * Timeout in milliseconds for waiting, after the device-idle gate, for the
+   * emulator to report a **validated default network** before the Appium session
+   * is established.
+   *
+   * A device can be idle, fully packaged and answering `adb` while still having
+   * no route: the two {@link deviceIdleTimeoutInMilliseconds} signals are
+   * satisfied well before the default network is created and validated, which
+   * lands ~80s into guest uptime. That gap is dangerous rather than merely slow
+   * — a test that reaches the network there runs to completion against a
+   * silently **empty result**, which no assertion inside the suite can tell
+   * apart from a genuinely empty response.
+   *
+   * The factory polls `dumpsys connectivity` until an active default network
+   * reports validation, proceeding early once it does or after this budget
+   * (best-effort — a timeout logs a warning naming the missing network and
+   * proceeds). Set `0` to skip the wait, e.g. for a deliberately offline AVD or
+   * a suite that never touches the network.
+   *
+   * Applies to a **reused** device as well as a harness-started one, for the
+   * same reason the idle gate does.
+   *
+   * @default `120000`
+   */
+  readonly networkReadyTimeoutInMilliseconds?: number;
+
+  /**
    * Number of extra attempts to enable the plugin and verify it loaded, on top
    * of the first attempt.
    *

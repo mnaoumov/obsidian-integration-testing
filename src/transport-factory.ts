@@ -69,7 +69,9 @@ import { assertValidConfigDirectory } from './config-directory.ts';
 import { getSetupError } from './context-provider.ts';
 import {
   checkDeviceIdle,
-  resolveDeviceIdleTimeoutInMilliseconds
+  checkNetworkValidated,
+  resolveDeviceIdleTimeoutInMilliseconds,
+  resolveNetworkReadyTimeoutInMilliseconds
 } from './device-readiness.ts';
 import { buildEmulatorArguments } from './emulator-arguments.ts';
 import { exec } from './exec.ts';
@@ -126,6 +128,23 @@ import {
 const APP_PACKAGE = 'md.obsidian';
 const APP_ACTIVITY = `${APP_PACKAGE}.MainActivity`;
 const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
+/*
+ * `dumpsys connectivity` is far larger than the other probes' output, and Node's
+ * default 1 MiB `maxBuffer` would fail the call rather than truncate it — which
+ * would read as "not ready" forever and burn the whole network budget.
+ */
+const ADB_DUMPSYS_MAX_BUFFER_IN_BYTES = 8_388_608;
+/*
+ * The connectivity dump gets a budget of its OWN, well above the 5s the other
+ * probes share — not because the dump is slow (measured 0.9-2.4s on a responsive
+ * guest, alongside `getprop`'s 0.7-2.1s), but because it runs in the window
+ * where residual post-boot contention still inflates every `adb` round-trip
+ * 25-50x (L19). At 5s it overran on EVERY poll of the first end-to-end run,
+ * and an overrun is reported as "no network", so too small a budget does not
+ * degrade this gate — it silently disables it while the gate claims the
+ * opposite. 30s is ~15x the idle cost, which is that inflation with room.
+ */
+const ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS = 30_000;
 const APPIUM_CONNECTION_RETRY_COUNT = 3;
 const APPIUM_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const APPIUM_PREFLIGHT_TIMEOUT_IN_MILLISECONDS = 5000;
@@ -149,6 +168,7 @@ const HTTP_OK = 200;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
 const MILLISECONDS_PER_SECOND = 1000;
+const NETWORK_READY_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120_000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 
@@ -174,6 +194,42 @@ interface AsarPlan {
 }
 
 /**
+ * Outcome of one `dumpsys connectivity` probe: exactly one field is set.
+ *
+ * A failed probe carries **why** it failed rather than collapsing into "no
+ * output", because the two failures look nothing alike in practice and only one
+ * of them is worth waiting out — a 30s timeout is a contended guest, while an
+ * instant `error: closed` is a dead one.
+ */
+interface ConnectivityProbeResult {
+  /**
+  Why the probe failed, set iff it did not answer.
+   */
+  readonly failureReason?: string | undefined;
+
+  /**
+  The raw dump, set iff the probe answered.
+   */
+  readonly output?: string | undefined;
+}
+
+/**
+ * The two post-boot readiness budgets, carried together so the started-device
+ * and reused-device branches cannot drift apart on which gates they run.
+ */
+interface DeviceReadinessTimeouts {
+  /**
+  Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it).
+   */
+  readonly deviceIdleTimeoutInMilliseconds: number;
+
+  /**
+  Resolved timeout in milliseconds for the network-ready wait (`0` skips it).
+   */
+  readonly networkReadyTimeoutInMilliseconds: number;
+}
+
+/**
  * Parameters for {@link AppiumTransportFactory.ensureDeviceConnected}.
  */
 interface EnsureDeviceConnectedParams {
@@ -191,6 +247,11 @@ interface EnsureDeviceConnectedParams {
   Whether the auto-started emulator window is shown (omitted → hidden).
    */
   readonly isEmulatorVisible?: boolean | undefined;
+
+  /**
+  Resolved timeout in milliseconds for the network-ready wait (`0` skips it).
+   */
+  readonly networkReadyTimeoutInMilliseconds: number;
 }
 
 /**
@@ -352,6 +413,11 @@ interface StartAppiumAndEmulatorParams {
   Whether the auto-started emulator window is shown (omitted → hidden).
    */
   readonly isEmulatorVisible?: boolean | undefined;
+
+  /**
+  Resolved timeout in milliseconds for the network-ready wait (`0` skips it).
+   */
+  readonly networkReadyTimeoutInMilliseconds: number;
 
   /**
   The Appium server port.
@@ -657,6 +723,7 @@ class AppiumTransportFactory {
         deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
         isAppiumConsoleVisible: options.isAppiumConsoleVisible,
         isEmulatorVisible: options.isEmulatorVisible,
+        networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
         port,
         shouldAutoInstallAppiumDependencies: willAutoInstallAppiumDependencies(options),
         shouldAutoStartAppium: options.shouldAutoStartAppium
@@ -774,6 +841,36 @@ class AppiumTransportFactory {
     return `started by an earlier run of this harness, pid ${String(marker.pid)}, up for ${String(ageInSeconds)}s`;
   }
 
+  private dumpConnectivity(deviceId: string): Promise<ConnectivityProbeResult> {
+    return new Promise((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'shell', 'dumpsys', 'connectivity'],
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout, stderr) => {
+          /*
+           * A failure carries its reason, NOT an empty string. The other probes
+           * collapse a failure into empty output because there "empty" and
+           * "failed" both mean not-idle, but here they mean different things and
+           * only one of them is about the network: a probe that never answers
+           * must not be reported as a guest without a route.
+           */
+          if (!error) {
+            resolve({ output: stdout });
+            return;
+          }
+
+          const detail = (stderr.trim() || error.message.trim()).split('\n', 1)[0] ?? '';
+          resolve({
+            failureReason: error.killed
+              ? `no answer within ${String(ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS)}ms`
+              : detail || 'adb failed with no message'
+          });
+        }
+      );
+    });
+  }
+
   /**
    * Ensures the Appium toolchain is present before the server is auto-started:
    * Appium itself, then the `uiautomator2` driver. Each is checked first and
@@ -872,7 +969,8 @@ class AppiumTransportFactory {
   }
 
   private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
-    const { avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible } = params;
+    const { avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds } = params;
+    const timeouts: DeviceReadinessTimeouts = { deviceIdleTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds };
     const deviceIdsBefore = await this.getConnectedDeviceIds();
     this.log(`Checking existing devices for AVD "${avdName}"... (connected: [${deviceIdsBefore.join(', ')}])`);
 
@@ -889,10 +987,12 @@ class AppiumTransportFactory {
        * every subsequent round-trip 25-50x (L19). Skipping the gate here is
        * what let a release preflight spend its whole layout-ready budget on a
        * handful of contended probes while `adb devices` reported `device`
-       * throughout.
+       * throughout. The same argument applies to the network gate: a device
+       * that has been up for seconds is exactly one with no validated network
+       * yet.
        */
       await this.waitForBoot(existingDeviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
-      await this.waitForDeviceIdle(existingDeviceId, deviceIdleTimeoutInMilliseconds);
+      await this.waitForDeviceReady(existingDeviceId, timeouts);
       await this.wakeScreen(existingDeviceId);
       return { actualDeviceId: existingDeviceId };
     }
@@ -903,7 +1003,7 @@ class AppiumTransportFactory {
 
     let actualDeviceId: string;
     try {
-      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, deviceIdleTimeoutInMilliseconds);
+      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts);
     } finally {
       emulator.stopCapture();
     }
@@ -1130,7 +1230,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -1166,7 +1266,7 @@ class AppiumTransportFactory {
             this.log('Auto-started Appium server is ready.');
           })
           : Promise.resolve(),
-        this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible })
+        this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds })
       ]);
 
       return {
@@ -1589,7 +1689,101 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForNewDevice(deviceIdsBefore: string[], emulator: ProcessLaunch, deviceIdleTimeoutInMilliseconds: number): Promise<string> {
+  /**
+   * Runs both post-boot readiness gates, in order, on a device that has just
+   * reported `sys.boot_completed`.
+   *
+   * The single owner of "which gates a device passes before a session", so the
+   * started-device and reused-device branches cannot diverge on it — the branch
+   * that skipped a gate entirely is the hole T794 fell into (**L43**).
+   *
+   * @param deviceId - The device UDID to gate on.
+   * @param timeouts - The two resolved budgets.
+   */
+  private async waitForDeviceReady(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<void> {
+    await this.waitForDeviceIdle(deviceId, timeouts.deviceIdleTimeoutInMilliseconds);
+    await this.waitForNetworkValidated(deviceId, timeouts.networkReadyTimeoutInMilliseconds);
+  }
+
+  /**
+   * Waits for a booted emulator to have a **validated default network** before
+   * the session is established.
+   *
+   * The idle gate above says nothing about connectivity, and its two signals are
+   * satisfied well before the default network is created and validated — that
+   * lands ~80s into guest uptime, tens of seconds after the boot flag on a fast
+   * host. A suite started in that gap does not merely run slowly: a test
+   * that reaches the network runs to completion against a silently **empty
+   * result**, which no assertion inside the suite can distinguish from a
+   * genuinely empty response. Only a readiness gate can catch that, which is why
+   * this exists (see {@link checkNetworkValidated}, which also records why the
+   * three obvious connectivity probes are all wrong).
+   *
+   * Best-effort, on the same contract as the idle gate: if no validated network
+   * appears within the budget it logs a warning **naming the missing network**
+   * and proceeds (an offline AVD is still a usable one for suites that never
+   * touch the network), and a budget of `0` skips the wait entirely. The warning
+   * is the point — the failure it precedes otherwise surfaces as a bare
+   * `WebDriverError: script timeout` naming the transport, which reads as a
+   * harness defect rather than a missing route.
+   *
+   * @param deviceId - The device UDID to poll.
+   * @param timeoutInMilliseconds - Maximum time to wait; `0` skips the wait.
+   */
+  private async waitForNetworkValidated(deviceId: string, timeoutInMilliseconds: number): Promise<void> {
+    if (timeoutInMilliseconds <= 0) {
+      this.log(`Skipping network-ready wait for device ${deviceId} (timeout is 0).`);
+      return;
+    }
+
+    const start = Date.now();
+    const deadline = start + timeoutInMilliseconds;
+    this.log(
+      `Waiting for device ${deviceId} to report a validated network (timeout: ${String(timeoutInMilliseconds)}ms, poll: ${String(NETWORK_READY_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
+    );
+
+    let probeFailureCount = 0;
+    let lastFailureReason = '';
+
+    while (Date.now() < deadline) {
+      const probe = await this.dumpConnectivity(deviceId);
+      const elapsed = String(Date.now() - start);
+      const connectivityOutput = probe.output;
+
+      if (connectivityOutput === undefined) {
+        probeFailureCount++;
+        lastFailureReason = probe.failureReason ?? 'unknown adb failure';
+        this.log(
+          `Device ${deviceId} connectivity probe failed (elapsed: ${elapsed}ms): ${lastFailureReason}. Retrying...`
+        );
+      } else if (checkNetworkValidated({ connectivityOutput })) {
+        this.log(`Device ${deviceId} has a validated network after ${elapsed}ms.`);
+        return;
+      } else {
+        this.log(`Device ${deviceId} has no validated network yet (elapsed: ${elapsed}ms). Retrying...`);
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, NETWORK_READY_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+
+    /*
+     * Two different diagnoses, never merged into one sentence: a guest that
+     * answered and reported no network is offline, while a guest that never
+     * answered says nothing about its network and everything about itself.
+     */
+    const diagnosis = probeFailureCount > 0
+      ? `${String(probeFailureCount)} of its connectivity probes failed, last "${lastFailureReason}", so the guest may be wedged rather than offline`
+      : 'it answered every probe and reported no validated default network';
+    this.log(
+      `Warning: device ${deviceId} reported no validated network within ${String(timeoutInMilliseconds)}ms (${diagnosis}); `
+        + 'proceeding with session establishment anyway. Tests that reach the network will run against a device with no route, '
+        + 'and may return EMPTY RESULTS rather than fail — read any empty-looking assertion failure below as a missing network first.'
+    );
+  }
+
+  private async waitForNewDevice(deviceIdsBefore: string[], emulator: ProcessLaunch, timeouts: DeviceReadinessTimeouts): Promise<string> {
     this.log(
       `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
@@ -1603,7 +1797,7 @@ class AppiumTransportFactory {
         const actualDeviceId = newIds[0] ?? '';
         this.log(`Device ${actualDeviceId} appeared in ADB, waiting for boot to complete...`);
         await this.waitForBoot(actualDeviceId, deadline, emulator);
-        await this.waitForDeviceIdle(actualDeviceId, deviceIdleTimeoutInMilliseconds);
+        await this.waitForDeviceReady(actualDeviceId, timeouts);
         await this.wakeScreen(actualDeviceId);
         return actualDeviceId;
       }
