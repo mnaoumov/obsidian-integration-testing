@@ -26,13 +26,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import process from 'node:process';
 
 import { log } from './log.ts';
+import { checkIsProcessAlive } from './process-liveness.ts';
 
 const MARKER_DIR_NAME = 'obsidian-integration-testing';
 const MARKER_FILE_SUFFIX = '.appium-server.json';
-const PROCESS_EXISTENCE_PROBE_SIGNAL = 0;
 
 /**
  * Identifies the Appium server this harness started on a port.
@@ -52,6 +51,15 @@ export interface AppiumServerMarker {
   When the server was started (`Date.now()` epoch milliseconds).
    */
   readonly startedAtInMilliseconds: number;
+
+  /**
+   * When a run tried to stop this server and could not verify it exited
+   * (`Date.now()` epoch milliseconds), or `undefined` when no stop has failed.
+   *
+   * Its presence means the server is a **known-doomed leftover**: it was ours,
+   * we asked it to die, and it did not. See {@link recordAppiumServerStopAttempt}.
+   */
+  readonly stopAttemptedAtInMilliseconds?: number | undefined;
 }
 
 /**
@@ -84,13 +92,7 @@ export function checkIsHarnessOwnedAppiumServer(marker: AppiumServerMarker | und
     return false;
   }
 
-  try {
-    process.kill(marker.pid, PROCESS_EXISTENCE_PROBE_SIGNAL);
-    return true;
-  } catch (error: unknown) {
-    // `EPERM` means the process exists but is owned by another user — still alive.
-    return getErrorCode(error) === 'EPERM';
-  }
+  return checkIsProcessAlive(marker.pid);
 }
 
 /**
@@ -125,28 +127,39 @@ export function readAppiumServerMarker(port: number): AppiumServerMarker | undef
 }
 
 /**
+ * Records that a run tried to stop the marked server and could not verify it
+ * exited — **instead of** clearing the marker.
+ *
+ * Clearing it would be the worst of both worlds: the leftover keeps serving, and
+ * the next run reads it as a foreign, user-managed server it must never touch
+ * (`checkIsHarnessOwnedAppiumServer` needs the marker to convict it). Keeping
+ * the marker, stamped, says exactly what is true — this is ours, and it outlived
+ * our teardown — which is what lets the next run refuse to adopt it and replace
+ * it instead.
+ *
+ * @param port - The Appium server port.
+ */
+export function recordAppiumServerStopAttempt(port: number): void {
+  const marker = readAppiumServerMarker(port);
+  if (!marker) {
+    return;
+  }
+
+  writeMarker({ ...marker, stopAttemptedAtInMilliseconds: Date.now() });
+}
+
+/**
  * Records the server this run just started, stamping it with the current time so
  * a later run can report how long it has been up.
  *
  * @param params - The started server's PID and port.
  */
 export function writeAppiumServerMarker(params: WriteAppiumServerMarkerParams): void {
-  const marker: AppiumServerMarker = {
+  writeMarker({
     pid: params.pid,
     port: params.port,
     startedAtInMilliseconds: Date.now()
-  };
-
-  try {
-    mkdirSync(getMarkerDirectory(), { recursive: true });
-    writeFileSync(getMarkerFilePath(params.port), JSON.stringify(marker));
-  } catch (error: unknown) {
-    log(`[appium-server-marker] Could not record the server on port ${String(params.port)}: ${getErrorMessage(error)}`);
-  }
-}
-
-function getErrorCode(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : undefined;
+  });
 }
 
 function getErrorMessage(error: unknown): string {
@@ -167,11 +180,25 @@ function parseMarker(parsed: unknown, port: number): AppiumServerMarker | undefi
   }
 
   const record = parsed as Record<string, unknown>;
-  const { pid, port: markedPort, startedAtInMilliseconds } = record;
+  const { pid, port: markedPort, startedAtInMilliseconds, stopAttemptedAtInMilliseconds } = record;
 
   if (typeof pid !== 'number' || typeof startedAtInMilliseconds !== 'number' || markedPort !== port) {
     return undefined;
   }
 
-  return { pid, port, startedAtInMilliseconds };
+  return {
+    pid,
+    port,
+    startedAtInMilliseconds,
+    ...(typeof stopAttemptedAtInMilliseconds === 'number' && { stopAttemptedAtInMilliseconds })
+  };
+}
+
+function writeMarker(marker: AppiumServerMarker): void {
+  try {
+    mkdirSync(getMarkerDirectory(), { recursive: true });
+    writeFileSync(getMarkerFilePath(marker.port), JSON.stringify(marker));
+  } catch (error: unknown) {
+    log(`[appium-server-marker] Could not record the server on port ${String(marker.port)}: ${getErrorMessage(error)}`);
+  }
 }

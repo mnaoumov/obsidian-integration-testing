@@ -12,6 +12,7 @@ import {
   checkIsHarnessOwnedAppiumServer,
   clearAppiumServerMarker,
   readAppiumServerMarker,
+  recordAppiumServerStopAttempt,
   writeAppiumServerMarker
 } from './appium-server-marker.ts';
 
@@ -23,6 +24,7 @@ const PORT = 4723;
 const MARKER_DIR = join('/tmp', 'obsidian-integration-testing');
 const MARKER_PATH = join(MARKER_DIR, '4723.appium-server.json');
 const NOW_IN_MILLISECONDS = 1_700_000_000_000;
+const EARLIER_IN_MILLISECONDS = 1_699_999_000_000;
 
 const mockMkdirSync = vi.hoisted(() => vi.fn<(path: string, options?: unknown) => void>());
 const mockReadFileSync = vi.hoisted(() => vi.fn<(path: string, encoding: string) => string>());
@@ -149,6 +151,56 @@ describe('readAppiumServerMarker', () => {
 
     mockReadFileSync.mockReturnValue(JSON.stringify({ pid: 12_345, port: PORT, startedAtInMilliseconds: 'nope' }));
     expect(readAppiumServerMarker(PORT)).toBeUndefined();
+  });
+
+  it('should carry a recorded stop attempt through', () => {
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({ pid: 12_345, port: PORT, startedAtInMilliseconds: EARLIER_IN_MILLISECONDS, stopAttemptedAtInMilliseconds: NOW_IN_MILLISECONDS })
+    );
+
+    expect(readAppiumServerMarker(PORT)).toEqual({
+      pid: 12_345,
+      port: PORT,
+      startedAtInMilliseconds: EARLIER_IN_MILLISECONDS,
+      stopAttemptedAtInMilliseconds: NOW_IN_MILLISECONDS
+    });
+  });
+
+  it('should ignore a stop-attempt stamp of the wrong type', () => {
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({ pid: 12_345, port: PORT, startedAtInMilliseconds: NOW_IN_MILLISECONDS, stopAttemptedAtInMilliseconds: 'nope' })
+    );
+
+    expect(readAppiumServerMarker(PORT)).toEqual({ pid: 12_345, port: PORT, startedAtInMilliseconds: NOW_IN_MILLISECONDS });
+  });
+});
+
+/*
+ * A server the harness tried and failed to stop must stay convictable. Clearing
+ * the marker instead makes the leftover read as a foreign, user-managed server
+ * to the next run — one it is not allowed to touch — which is precisely the
+ * server it is most entitled to kill.
+ */
+describe('recordAppiumServerStopAttempt', () => {
+  it('should stamp the existing marker with the failed stop, keeping its identity', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify({ pid: 12_345, port: PORT, startedAtInMilliseconds: EARLIER_IN_MILLISECONDS }));
+
+    recordAppiumServerStopAttempt(PORT);
+
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      MARKER_PATH,
+      JSON.stringify({ pid: 12_345, port: PORT, startedAtInMilliseconds: EARLIER_IN_MILLISECONDS, stopAttemptedAtInMilliseconds: NOW_IN_MILLISECONDS })
+    );
+  });
+
+  it('should do nothing when there is no marker to stamp', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw makeErrnoError('ENOENT');
+    });
+
+    recordAppiumServerStopAttempt(PORT);
+
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 });
 
