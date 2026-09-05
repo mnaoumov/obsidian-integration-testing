@@ -129,3 +129,75 @@ describe('second registered vault routes to its own window', () => {
     expect(view.basePath).not.toBe(inject('temporaryVaultPath'));
   });
 });
+
+/**
+What a raw `app.setting.open()` -- deliberately NOT the `openSettingsTab` helper -- does to the window
+The harness is actually driving.
+*/
+interface HeadlessDefaultsProbe {
+  configuredAlwaysUpdateLinks: unknown;
+  configuredSettingsPopoutWindow: unknown;
+  isActiveDocumentMain: boolean;
+  isContainerAttachedByOpenAlone: boolean;
+  isContainerInMainDocument: boolean;
+}
+
+/*
+ * Every callback below re-derives its own `getConfig` rather than sharing a helper: the callback is
+ * Serialized and run in the renderer, so anything it closes over here is simply not there.
+ */
+
+describe('headless vault defaults in the global-setup-owned vault', () => {
+  it('writes both headless defaults into the vault the global setup provisioned', async () => {
+    const config = await evalInObsidian({
+      callback({ app }): Record<string, unknown> {
+        // `obsidian-typings`' `ConfigItem` union does not list `settingsPopoutWindow`, so the key cannot
+        // Be passed as typed. Widening the bound function keeps it to one assertion.
+        const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
+        return {
+          alwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
+          settingsPopoutWindow: getConfig('settingsPopoutWindow')
+        };
+      }
+    });
+
+    // Obsidian ships `settingsPopoutWindow` as `true`, so `false` here can only have come from the
+    // Harness -- reading back the default proves the `app.json` write reached the opened vault, which
+    // Is the thing a `configDirectory` override used to break silently.
+    expect(config['alwaysUpdateLinks']).toBe(true);
+    expect(config['settingsPopoutWindow']).toBe(false);
+  });
+
+  it('keeps the settings modal in the driven window, so a screenshot of it is possible at all', async () => {
+    const probe = await evalInObsidian({
+      callback({ app }): HeadlessDefaultsProbe {
+        const setting = app.setting;
+        const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
+
+        // No helper, no pre-append: this measures `open()` alone, which is what the popout branch
+        // Hijacks. With the popout on, `open()` appends `modalEl` into a SECOND Electron window and
+        // Reassigns the `activeDocument` global to it, leaving this document with none of the modal.
+        setting.open();
+        const result = {
+          configuredAlwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
+          configuredSettingsPopoutWindow: getConfig('settingsPopoutWindow'),
+          isActiveDocumentMain: activeDocument === document,
+          isContainerAttachedByOpenAlone: document.body.contains(setting.containerEl),
+          isContainerInMainDocument: setting.containerEl.ownerDocument === document
+        };
+        setting.close();
+        return result;
+      }
+    });
+
+    expect(probe.configuredAlwaysUpdateLinks).toBe(true);
+    expect(probe.configuredSettingsPopoutWindow).toBe(false);
+    // The globals stay this window's, so `captureObsidianScreenshot` photographs the window the modal
+    // Is in rather than one it left behind.
+    expect(probe.isActiveDocumentMain).toBe(true);
+    expect(probe.isContainerInMainDocument).toBe(true);
+    // `open()` attaches the container itself once the popout is off -- the fact AGENTS.md L38 got
+    // Wrong, and the reason the helper's own append is a fallback rather than the load-bearing step.
+    expect(probe.isContainerAttachedByOpenAlone).toBe(true);
+  });
+});

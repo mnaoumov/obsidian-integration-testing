@@ -904,12 +904,19 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const setting = ns.app.setting;
 
     /*
-     * The one step that makes any of this work, and it MUST happen before `open()`.
-     * `containerEl` is built at startup and is never in the document, and `open()` does not attach it —
-     * So the modal builds into a detached tree, `open()` returns without throwing, and the document the
-     * Caller then reads (or screenshots) is untouched. Attaching afterwards is too late: whatever the
-     * Modal rendered on open has already gone into the detached container, so the modal ends up on
-     * Screen showing the wrong thing while looking entirely successful.
+     * A FALLBACK for a vault that does not carry the harness's `settingsPopoutWindow: false` default —
+     * And it MUST happen before `open()`.
+     *
+     * With the default in place `open()` attaches `containerEl` to this document itself, and this branch
+     * Never fires (measured, `owned-instance-worker-attach.integration.test.ts`). Without it Obsidian
+     * Ships the key `true`, `shouldUsePopout()` returns it, and `open()` puts the modal in a SECOND
+     * Electron window instead — leaving this document with nothing while returning without throwing.
+     * Pre-attaching keeps `containerEl` reachable here, which is enough for a caller that reads rows off
+     * The tab; it is NOT enough for a screenshot, whose frame is of this window. Only the vault-level
+     * Default fixes that, so this is a floor rather than the fix.
+     *
+     * Attaching AFTERWARDS is useless either way: whatever the modal rendered on open has already gone
+     * Where it went.
      */
     if (!document.body.contains(setting.containerEl)) {
       document.body.append(setting.containerEl);

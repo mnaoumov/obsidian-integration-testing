@@ -473,8 +473,11 @@ ${name}`;
     });
   });
 
-  // `app.setting.open()` on its own renders into a DETACHED container, so every test here asserts
-  // Against the live document rather than against `open()` not throwing.
+  // This suite's vault is built in-worker and so carries none of the global setup's headless defaults --
+  // `settingsPopoutWindow` is still Obsidian's shipped `true` here, and `app.setting.open()` therefore
+  // Puts the modal in a SECOND Electron window. That is deliberate coverage: it is the helper's
+  // Pre-attach fallback under test, not the vault-level fix. Every case asserts against the live
+  // Document rather than against `open()` not throwing.
   describe('openSettingsTab', () => {
     it('should attach the container and render the requested tab', async () => {
       const result = await evalInObsidian({

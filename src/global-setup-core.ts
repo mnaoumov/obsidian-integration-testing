@@ -41,6 +41,7 @@ import {
 } from './enable-plugin.ts';
 import { errorToString } from './error-to-string.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { ensureHeadlessVaultConfig } from './headless-vault-config.ts';
 import {
   resolveLeftoverMaxAgeInMilliseconds,
   sweepHostLeftovers,
@@ -58,7 +59,10 @@ import { TemporaryVault } from './temporary-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
 import { createTransportFromOptions } from './transport-factory.ts';
-import { checkIsMobileTransport } from './transport-options.ts';
+import {
+  checkIsMobileTransport,
+  resolveOwnedConfigDirectory
+} from './transport-options.ts';
 
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DIST_DEV = 'dist/dev';
@@ -67,8 +71,6 @@ const MAIN_JS = 'main.js';
 const OBSIDIAN_CONFIG_DIR = '.obsidian';
 const PLUGINS_DIR = 'plugins';
 const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
-const APP_JSON = 'app.json';
-const APP_JSON_INDENT = 2;
 
 /**
  * Tracks setups that completed successfully but haven't been torn down yet.
@@ -355,7 +357,11 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
       temporaryVault.populate(params.populate);
     }
 
-    await ensureAlwaysUpdateLinks(temporaryVault, label);
+    await ensureHeadlessVaultConfig({
+      configDirectory: resolveOwnedConfigDirectory(transportOptions),
+      label,
+      vaultPath: temporaryVault.path
+    });
 
     log(`[integration-setup:${label}] Syncing vault to device...`);
     await temporaryVault.syncToDevice(transport);
@@ -653,40 +659,6 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
   const logcatTail = await transport.readConsoleCaptureSince?.(captureHandle);
   const detail = logcatTail ?? getGenericPluginLoadFailureMessage(pluginId);
   throw new Error(`Plugin "${pluginId}" failed to load: ${detail}`);
-}
-
-/**
- * Enables `alwaysUpdateLinks` in the owned vault's `.obsidian/app.json`.
- *
- * Without it, any rename or move that affects links makes Obsidian's
- * `FileManager.updateAllLinks` pop an interactive "Update links?" confirmation modal
- * (it only skips the modal when `alwaysUpdateLinks` is on). Headless there is no user
- * to answer it, so the Promise never resolves — the rename's internal
- * `FileManager.updateQueue` task hangs forever, and because that queue is a singleton
- * every subsequent `renameFile` in the shared instance hangs too (the long-observed
- * "rename wall"). Enabling the setting makes renames update links non-interactively,
- * so rename-driven integration tests run in headless mode.
- *
- * Merges into any existing `app.json` (e.g. one carried in via `populate`) so other
- * config keys are preserved, and runs before `syncToDevice` so the value reaches
- * mobile devices too.
- *
- * @param temporaryVault - The owned temp vault to configure.
- * @param label - The transport label, for logging.
- */
-async function ensureAlwaysUpdateLinks(temporaryVault: TemporaryVault, label: string): Promise<void> {
-  const configDirectory = join(temporaryVault.path, OBSIDIAN_CONFIG_DIR);
-  const appJsonPath = join(configDirectory, APP_JSON);
-  let appConfig: Record<string, unknown> = {};
-  try {
-    appConfig = JSON.parse(await readFile(appJsonPath, 'utf-8')) as Record<string, unknown>;
-  } catch {
-    // No existing app.json (or unreadable) — start from an empty config.
-  }
-  appConfig['alwaysUpdateLinks'] = true;
-  await mkdir(configDirectory, { recursive: true });
-  await writeFile(appJsonPath, JSON.stringify(appConfig, null, APP_JSON_INDENT));
-  log(`[integration-setup:${label}] Enabled alwaysUpdateLinks in ${APP_JSON} (headless rename support).`);
 }
 
 /**
