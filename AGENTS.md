@@ -2490,9 +2490,25 @@ Recorded so they are not re-chased — each looked right from the static configu
 - **Memory.** The run with 12.1 GB free wedged exactly like the one with 4.6 GB, and halving the guest to
   4096 MB made it die *sooner*.
 
-**So this is below the harness.** Two AVDs and five argument sets share only the emulator build
-(36.6.11.0), the system image (`android-37.0/google_apis_playstore_ps16k`, the only one installed on this
-host) and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending to.
+**So this is below the harness.** Two AVDs and five argument sets share only the emulator build, the
+system image and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending
+to. The first two of those three were then eliminated as well, on the same day:
+
+| Also tested | Result |
+| --- | --- |
+| A different **system image** — `android-36/google_apis` (not 37.0, not Play Store, no 16 KB page size) on a fresh throwaway AVD | 85s of usable life vs 43-71s, then the identical wedge |
+| A different **emulator build** — 36.6.11.0 → 37.1.11.0, same AVD, same arguments | died at 64s, *sooner* than the 92s baseline |
+
+Which leaves the **host**: Windows 11 26200 + WHPX. HVCI is off (`SecurityServicesRunning` is `0`), so
+there is no memory-integrity setting to turn off — VBS is up only because Hyper-V/WHPX is enabled at all.
+Anyone hitting this on their own machine should start from the reproducer below rather than from these
+tests, but should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix
+it, because none of them did here.
+
+Two tooling notes for whoever repeats this: `sdkmanager` / `android sdk install` has no download resume
+and failed three times mid-transfer on a 1.8 GB image (`curl -L --retry 20 --retry-all-errors -C -` is the
+workaround), and `android sdk install emulator` exits **9 even on success** — check `emulator -version`
+rather than the exit code.
 
 ### What the harness does about it
 

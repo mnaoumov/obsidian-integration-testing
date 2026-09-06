@@ -237,7 +237,9 @@ measured on one host on 2026-09-05: six hand-boots, two AVDs and five different 
 every one wedging 64–92s after boot with the QEMU backend at **0% CPU** — blocked, not spinning. Changing
 the GPU mode (`-gpu swiftshader_indirect`), disabling the network simulator (`-feature
 -WiFiPacketStream`), halving the guest RAM and dropping `-dns-server` each changed nothing. When you see
-that shape, check the emulator build, the system image and the host hypervisor rather than your tests:
+that shape, the fault is in the platform rather than your tests. On that host a newer system image
+(`android-36/google_apis`) and a newer emulator build (37.1.11.0) were both tried and both wedged
+identically, which left the host hypervisor. Reproduce it directly before spending time anywhere else:
 
 ```sh
 # Reproduce without Appium or a suite: boot by hand and poll. A healthy guest answers indefinitely.
