@@ -2500,10 +2500,13 @@ It cannot make the emulator work. It can stop misreporting it, which is the diff
 sends the reader to `adb devices` and one that sends them to the emulator build.
 
 - **`emulator-liveness.ts` (pure, unit-tested)** owns the two-probe verdict: `alive` /
-  `guest-unresponsive` / `emulator-wedged` / `device-gone`. The probes are read **asymmetrically** — only
-  `answered` clears the guest (an errored shell is `adb.exe: device offline`, adb refusing, not the guest
-  speaking), and only `no-answer` convicts the emulator (an errored console *is* the emulator speaking).
-  Each probe is trusted only in the direction it can testify.
+  `guest-unresponsive` / `emulator-wedged` / `device-gone`. **Only a successful probe is an answer.** An
+  earlier draft split failures into "errored" and "timed out" and read an errored console as *the emulator
+  speaking, with a refusal* — which is wrong: `adb … emu` is routed by the **adb server**, so against an
+  `offline` device adb refuses on the spot and the console is never reached. That draft logged
+  `shell=errored, console=errored -> guest-unresponsive` for a device whose emulator then had to be killed
+  by PID because `adb emu kill` could not reach it either. Each probe is asked twice before its silence is
+  believed, the same one-retry restraint **L47** applies to the AVD probe and for the same reason.
 - **A non-emulator is never convicted on its console**, for exactly the reason **L47** gives: `adb … emu`
   errors against a physical handset however healthy it is. There was one plugged into this host during
   the investigation, which is how the case came up.
@@ -2519,9 +2522,30 @@ sends the reader to `adb devices` and one that sends them to the emulator build.
   the hanging-thread and packet-streamer lines are printed later, while the run is inside
   `establishSession`. The window now closes when the session is established.
 
-### What was deliberately NOT added
+### The wedge is not deterministic, so the run boots a second emulator
 
-**An automatic cold-boot retry.** The obvious reading of `connectionRetryCount: 3` re-attempting against a
-wedged device is "retry the boot instead" — but on the host where this was measured the wedge recurs at
-the same point in every run, so a re-boot buys another 90s and the identical failure. The liveness gate
-already stops the three useless session retries, which is the part that was actually costing anything.
+**This corrects an earlier reading in this same entry.** The first draft argued *against* an automatic
+cold-boot retry: the wedge recurs at the same point in every run, so a re-boot buys another 90s and the
+identical failure. That inference was drawn from the six hand-boots above — and **every one of them was a
+first boot**, so the data said nothing whatever about second ones.
+
+The run that settled it, 2026-09-05:
+
+```text
+19:06:52  emulator started -> 19:08:20 device connected -> 19:09:01 liveness FAILED
+19:09:12  emulator started -> 19:12:50 device connected -> 19:13:11 session ESTABLISHED
+```
+
+The second emulator — same AVD, same arguments, booted 11 seconds after the first was killed — ran the
+suite to completion. (It happened by accident: the failing run's `afterAll` builds a transport of its own,
+which provisioned again.) A retry would have rescued that run.
+
+So `EMULATOR_BOOT_ATTEMPT_COUNT` is 2. **One** retry: a cold boot costs 90-220s, so a second failure is
+where the run should stop and say so rather than keep paying. Only an emulator this run started is
+replaced — an adopted device is somebody else's to restart, the same ownership line **L46** draws in
+never sweeping `qemu*`. And the emulator is disowned *before* it is stopped, so a throw inside the stop
+cannot leave the outer teardown chasing the same processes twice.
+
+What is still not added is a *session* retry: `connectionRetryCount: 3` re-attempting `POST /session`
+against a device that is already gone remains useless, and the liveness gate now stops those three
+attempts before they are made.

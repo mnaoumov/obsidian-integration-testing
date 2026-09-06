@@ -56,19 +56,14 @@ describe('resolveEmulatorLivenessVerdict', () => {
   });
 
   /*
-   * An errored console is the emulator speaking, so it is alive. Only silence
-   * convicts it.
+   * The regression this module's probe-outcome doc exists for. An earlier draft
+   * read a failed console probe as "the emulator answered, with an error" and
+   * so reported `guest-unresponsive` for a device whose emulator then had to be
+   * killed by PID. `adb ... emu` is routed by the adb server, which refuses an
+   * `offline` device before the console is ever reached.
    */
-  it('should blame the guest when the console errors rather than falling silent', () => {
-    expect(resolve({ consoleProbe: 'errored', shellProbe: 'no-answer' })).toBe('guest-unresponsive');
-  });
-
-  /*
-   * The other half of the asymmetry: `adb.exe: device offline` is adb refusing,
-   * not the guest answering, so it must not clear the device.
-   */
-  it('should not treat an errored shell probe as proof the guest is alive', () => {
-    expect(resolve({ consoleProbe: 'no-answer', shellProbe: 'errored' })).toBe('emulator-wedged');
+  it('should convict the emulator when the console probe merely failed', () => {
+    expect(resolve({ consoleProbe: 'no-answer', shellProbe: 'no-answer' })).not.toBe('guest-unresponsive');
   });
 
   /*

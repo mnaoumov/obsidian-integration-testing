@@ -211,15 +211,21 @@ If it still dies after cold-booting, the snapshot was not the cause — read the
 
 ### "Device ... stopped answering before the Appium session could be established"
 
-The harness probes the device once more immediately before creating the session, and refuses the run when
-it has gone quiet. The message names **which layer** stopped answering, because the recovery differs:
+The harness probes the device once more immediately before creating the session. When the device has gone
+quiet and the emulator is one the harness started, it **boots a fresh emulator and tries once more** — the
+wedge is not deterministic, and a second boot from the same AVD often runs the whole suite. A device the
+harness merely adopted is never replaced, and a second failure stops the run rather than paying for
+another 90–220s boot.
 
-- **`the EMULATOR is wedged`** — neither the guest nor the emulator's own console answered. The console
-  (`adb -s <device> emu ...`) is served by the emulator process rather than by the guest, so its silence
-  convicts the emulator itself. Nothing recovers a wedged emulator; the harness tears it down and a re-run
-  boots a fresh one. **`adb devices` will still list the device and will mislead you** — nothing is left
-  running to update that state, which is why this used to surface as Appium's `Device <id> was not in the
-  list of connected devices` and send everybody to the one diagnostic that cannot help.
+When the run does stop, the message names **which layer** stopped answering, because the recovery differs:
+
+- **`the EMULATOR is wedged`** — neither the guest nor the emulator's own console answered, each asked
+  twice. The console (`adb -s <device> emu ...`) is served by the emulator process rather than by the
+  guest, so its silence convicts the emulator itself. Nothing recovers a wedged emulator, which is why the
+  harness replaces it rather than retrying against it; seeing this message means the replacement failed
+  too. **`adb devices` will still list the device and will mislead you** — nothing is left running to
+  update that state, which is why this used to surface as Appium's `Device <id> was not in the list of
+  connected devices` and send everybody to the one diagnostic that cannot help.
 - **The guest did not answer but the console did** — the emulator is healthy and the guest is frozen or
   starved. A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget for
   waiting one out.

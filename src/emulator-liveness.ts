@@ -29,9 +29,13 @@
  *
  * | `adb shell` | `adb emu` | What it means |
  * | --- | --- | --- |
- * | answers | — | Alive. Proceed. |
- * | silent | answers | The **guest** is frozen or too busy to schedule `adbd`. |
- * | silent | silent | The **emulator process** is wedged. Nothing will recover it. |
+ * | succeeds | — | Alive. Proceed. |
+ * | fails | succeeds | The **guest** is frozen or too busy to schedule `adbd`. |
+ * | fails | fails | The **emulator process** is unreachable. Nothing will recover it. |
+ *
+ * Only a *successful* console probe clears the emulator — see
+ * {@link EmulatorLivenessProbeOutcome} for why a failed one cannot be read as
+ * the emulator answering.
  *
  * Measured 2026-09-05 across six hand-boots on this host — two AVDs and five
  * argument sets — every one of which reached the bottom row 64–92s after boot:
@@ -89,13 +93,19 @@ export interface BuildEmulatorLivenessMessageParams {
 }
 
 /**
- * What one probe of the device answered.
+ * Whether a probe got an answer from the thing it was asking.
  *
- * `'errored'` is an **answer** — something responded, with a refusal. Only
- * `'no-answer'` is silence, the distinction `avd-probe-verdict.ts` was written
- * to preserve and the one this module turns into a verdict.
+ * Two-valued on purpose. An earlier draft split failures into "errored" and
+ * "timed out" and read an errored console as *the emulator speaking, with a
+ * refusal* — which is wrong, and wrong in the exact way this module exists to
+ * avoid. `adb -s <device> emu <command>` is routed by the **adb server**: when
+ * the device is `offline` adb refuses on the spot and never reaches the console,
+ * so the error is adb's, not the emulator's. Measured 2026-09-05, where that
+ * draft logged `shell=errored, console=errored -> guest-unresponsive` for a
+ * device whose emulator then had to be killed by PID because `adb emu kill`
+ * could not reach it either. Only a **successful** probe is an answer.
  */
-export type EmulatorLivenessProbeOutcome = 'answered' | 'errored' | 'no-answer';
+export type EmulatorLivenessProbeOutcome = 'answered' | 'no-answer';
 
 /**
  * Whether the device is still usable, and if not, which layer failed.
@@ -115,12 +125,13 @@ export type EmulatorLivenessVerdict = 'alive' | 'device-gone' | 'emulator-wedged
  */
 export interface ResolveEmulatorLivenessVerdictParams {
   /**
-   * What `adb -s <device> emu avd status` answered — the **emulator console**,
-   * served by the emulator process rather than by the guest.
+   * Whether `adb -s <device> emu avd status` succeeded — reaching the
+   * **emulator console**, served by the emulator process rather than by the
+   * guest.
    *
-   * Meaningful only for an `emulator-<port>` device: the console errors against
-   * a physical handset however healthy it is, which is why a non-emulator is
-   * never convicted on it (the trap `avd-probe-verdict.ts` documents).
+   * Meaningful only for an `emulator-<port>` device: the console fails against a
+   * physical handset however healthy it is, which is why a non-emulator is never
+   * convicted on it (the trap `avd-probe-verdict.ts` documents).
    */
   readonly consoleProbe: EmulatorLivenessProbeOutcome;
 
@@ -159,19 +170,20 @@ export function buildEmulatorLivenessMessage(params: BuildEmulatorLivenessMessag
     'device-gone': [
       'The host\'s `adb devices` no longer lists it, so it is no longer serving adb at all.',
       'Either the emulator exited, or it wedged badly enough to drop off adb — the emulator output below is the best evidence for which.',
-      'Re-run to boot a fresh one, and check that nothing else on this host stops emulators.'
+      'An emulator this run started is replaced automatically once, so seeing this means the replacement did not survive either. Check that nothing else on this host stops emulators, and that the emulator build and system image are sound.'
     ],
     'emulator-wedged': [
       `Neither the guest (\`adb -s ${params.deviceId} shell\`) nor the emulator's own console (\`adb -s ${params.deviceId} emu avd status\`) answered within ${budget}.`,
       'The console is served by the emulator process, not by the guest, so its silence means the EMULATOR is wedged — not the guest, not the Appium server, and not the device being absent.',
       '`adb devices` will still list this device and will mislead you: nothing is left running to update that state.',
-      'This run cannot recover it. A wedged emulator does not come back, so retrying the session against it cannot succeed; the emulator is torn down instead, and a re-run boots a fresh one.',
+      'A wedged emulator does not come back, so retrying the session against it cannot succeed. One this run started is replaced with a fresh boot automatically, which means seeing this message is the replacement failing too.',
       'If it recurs at the same point in every run, the fault is below the harness: check the emulator build, the system image and the host hypervisor rather than these tests.'
     ],
     'guest-unresponsive': [
       `The guest (\`adb -s ${params.deviceId} shell\`) did not answer within ${budget}, but the emulator's own console did.`,
       'So the emulator process is healthy and the guest is frozen or too starved to schedule `adbd`.',
-      'A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget that governs waiting one out.'
+      'A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget that governs waiting one out.',
+      'But if it recurs at the same point in every run, no timeout will fix it — the fault is below the harness, in the emulator build, the system image or the host hypervisor.'
     ]
   };
 
@@ -194,15 +206,6 @@ export function buildEmulatorLivenessMessage(params: BuildEmulatorLivenessMessag
  * @returns The verdict.
  */
 export function resolveEmulatorLivenessVerdict(params: ResolveEmulatorLivenessVerdictParams): EmulatorLivenessVerdict {
-  /*
-   * The two probes are read asymmetrically, deliberately. Only `'answered'`
-   * clears the guest, because an `errored` shell is adb's own refusal
-   * (`adb.exe: device offline`) rather than the guest speaking — it is not
-   * evidence of life. Only `'no-answer'` convicts the emulator, because an
-   * errored console *is* the emulator speaking, and a live process that refuses
-   * a command is not a wedged one. Each probe is trusted in the direction it can
-   * actually testify.
-   */
   if (params.shellProbe === 'answered') {
     return 'alive';
   }
@@ -221,5 +224,5 @@ export function resolveEmulatorLivenessVerdict(params: ResolveEmulatorLivenessVe
     return 'guest-unresponsive';
   }
 
-  return params.consoleProbe === 'no-answer' ? 'emulator-wedged' : 'guest-unresponsive';
+  return params.consoleProbe === 'answered' ? 'guest-unresponsive' : 'emulator-wedged';
 }

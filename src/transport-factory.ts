@@ -226,6 +226,20 @@ const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
  * slowly.
  */
 const DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS = 15_000;
+/*
+ * How many times each liveness probe is asked before its silence is believed.
+ * One retry, matching `AVD_PROBE_ATTEMPT_COUNT` and for the same reason: the
+ * verdict aborts the run, so a second look is far cheaper than a wrong call.
+ */
+const DEVICE_LIVENESS_ATTEMPT_COUNT = 2;
+/*
+ * How many emulators a run may boot before giving up. One retry: the wedge that
+ * motivates it is not deterministic — measured 2026-09-05, a first emulator went
+ * quiet 129s in and the replacement booted 11s later ran the whole suite — but a
+ * cold boot costs ~90-220s, so a second failure is where the run should stop and
+ * say so rather than keep paying.
+ */
+const EMULATOR_BOOT_ATTEMPT_COUNT = 2;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120_000;
 const EMULATOR_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS = 5000;
@@ -855,31 +869,6 @@ class AppiumTransportFactory {
     return this.createNewSession(options);
   }
 
-  /**
-   * Checks that the device is still answering, immediately before the session,
-   * and refuses the run when it is not.
-   *
-   * The readiness gates before this one are deliberately best-effort — they warn
-   * and proceed — so nothing asked whether the device was still there at the
-   * moment it mattered. A guest that went quiet in the meantime was handed to
-   * Appium, which reported `Device <id> was not in the list of connected
-   * devices`; `adb devices` then listed it, and the trail went cold.
-   *
-   * Both probes are only paid for when the first one fails, and the verdict
-   * distinguishes a frozen guest from a wedged emulator — see
-   * `emulator-liveness.ts` for the measurements behind that split.
-   *
-   * @param deviceId - The device the session is about to be created against.
-   * @param emulatorCapture - The emulator's output, when this run started it.
-   * @throws When the device is no longer usable, with a message naming which layer failed.
-   */
-  private async assertDeviceAlive(deviceId: string, emulatorCapture?: EmulatorCapture): Promise<void> {
-    const diagnosis = await this.diagnoseDevice(deviceId, emulatorCapture);
-    if (diagnosis !== undefined) {
-      throw new Error(diagnosis);
-    }
-  }
-
   private async attachToExistingSession(
     sessionId: string,
     deviceId: string,
@@ -1105,44 +1094,108 @@ class AppiumTransportFactory {
     let emulatorProcess: ChildProcess | undefined;
     let ownedEmulatorPids: readonly number[] = [];
 
+    let result: StartAppiumAndEmulatorResult | undefined;
+
     try {
-      const result = await this.startAppiumAndEmulator({
-        appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
-        appiumUrl: url,
-        avdName: options.avdName,
-        deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
-        isAppiumConsoleVisible: options.isAppiumConsoleVisible,
-        isEmulatorVisible: options.isEmulatorVisible,
-        networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
-        port,
-        shouldAutoInstallAppiumDependencies: willAutoInstallAppiumDependencies(options),
-        shouldAutoStartAppium: options.shouldAutoStartAppium,
-        shouldReuseEmulatorSnapshot: options.shouldReuseEmulatorSnapshot
-      });
-
-      appiumProcess = result.appiumProcess;
-      emulatorProcess = result.emulatorProcess;
-      ownedEmulatorPids = result.ownedEmulatorPids;
-      actualDeviceId = result.actualDeviceId;
-
       /*
-       * Before `remote()` launches Obsidian — the last point at which nothing
-       * has to enumerate the device's vaults yet.
+       * Provision, then check the device is still answering — and when it is not
+       * and the emulator is ours, boot a fresh one instead of carrying on.
+       *
+       * A wedge is NOT deterministic, which is what justifies the retry. In the
+       * run that proved it (2026-09-05) the first emulator went quiet 129s in and
+       * the second, booted 11s later from the same AVD with the same arguments,
+       * established a session and drove the WebView to completion. An earlier
+       * draft of this work argued the opposite from the hand-boot data — that a
+       * re-boot buys the same failure 90s later — and that was simply wrong:
+       * every hand-boot was a first boot, so the data said nothing about second
+       * ones.
        */
-      if (willSweepLeftovers(options)) {
-        await this.sweepDeviceLeftoverVaults({
-          deviceId: actualDeviceId,
-          vaultBasePath: options.vaultBasePath ?? DEFAULT_ANDROID_VAULT_BASE_PATH
+      for (let attempt = 1; attempt <= EMULATOR_BOOT_ATTEMPT_COUNT; attempt++) {
+        result = await this.startAppiumAndEmulator({
+          appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
+          appiumUrl: url,
+          avdName: options.avdName,
+          deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
+          isAppiumConsoleVisible: options.isAppiumConsoleVisible,
+          isEmulatorVisible: options.isEmulatorVisible,
+          networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
+          port,
+          shouldAutoInstallAppiumDependencies: willAutoInstallAppiumDependencies(options),
+          shouldAutoStartAppium: options.shouldAutoStartAppium,
+          shouldReuseEmulatorSnapshot: options.shouldReuseEmulatorSnapshot
+        });
+
+        /*
+         * Only ever REPLACE this handle, never clear it. The retry leaves this
+         * run's Appium server running and swaps only the emulator, so the second
+         * pass finds that server reachable, ADOPTS it, and returns no process
+         * handle. Writing that `undefined` over the handle from the first pass
+         * would orphan the very server this run started — the leak L46 exists to
+         * prevent, reintroduced by the retry.
+         */
+        if (result.appiumProcess !== undefined) {
+          appiumProcess = result.appiumProcess;
+        }
+        emulatorProcess = result.emulatorProcess;
+        ownedEmulatorPids = result.ownedEmulatorPids;
+        actualDeviceId = result.actualDeviceId;
+
+        /*
+         * Before `remote()` launches Obsidian — the last point at which nothing
+         * has to enumerate the device's vaults yet.
+         */
+        if (willSweepLeftovers(options)) {
+          await this.sweepDeviceLeftoverVaults({
+            deviceId: actualDeviceId,
+            vaultBasePath: options.vaultBasePath ?? DEFAULT_ANDROID_VAULT_BASE_PATH
+          });
+        }
+
+        /*
+         * The last point at which a device that has gone quiet can still be
+         * reported as itself. Past here the failure belongs to Appium, which can
+         * only say the device is "not in the list of connected devices" — an
+         * error that names the one thing that is not wrong.
+         */
+        const diagnosis = await this.diagnoseDevice(actualDeviceId, result.emulatorCapture);
+        if (diagnosis === undefined) {
+          break;
+        }
+
+        /*
+         * Only an emulator this run started may be replaced. A device that was
+         * adopted (`ownedEmulatorPids` empty) is somebody else's to restart —
+         * the same ownership line teardown draws in never sweeping `qemu*`.
+         */
+        const ownedEmulatorProcess = emulatorProcess;
+        const canRetry = attempt < EMULATOR_BOOT_ATTEMPT_COUNT && ownedEmulatorProcess !== undefined && ownedEmulatorPids.length > 0;
+        if (!canRetry) {
+          throw new Error(diagnosis);
+        }
+
+        this.log(`${diagnosis}\n\nBooting a fresh emulator and trying once more (attempt ${String(attempt + 1)} of ${String(EMULATOR_BOOT_ATTEMPT_COUNT)}).`);
+        /*
+         * Disown BEFORE stopping, not after: this run hands the emulator over to
+         * `stopAutoStartedEmulator` and must not still be holding it if that
+         * throws, or the outer catch's teardown would go after the same
+         * processes a second time.
+         */
+        const doomedDeviceId = actualDeviceId;
+        const doomedPids = ownedEmulatorPids;
+        emulatorProcess = undefined;
+        ownedEmulatorPids = [];
+        actualDeviceId = undefined;
+        await this.stopAutoStartedEmulator({
+          avdName: options.avdName,
+          deviceId: doomedDeviceId,
+          emulatorProcess: ownedEmulatorProcess,
+          ownedEmulatorPids: doomedPids
         });
       }
 
-      /*
-       * The last point at which a device that has gone quiet can still be
-       * reported as itself. Past here the failure belongs to Appium, which can
-       * only say the device is "not in the list of connected devices" — an
-       * error that names the one thing that is not wrong.
-       */
-      await this.assertDeviceAlive(actualDeviceId, result.emulatorCapture);
+      if (result === undefined || actualDeviceId === undefined) {
+        throw new Error(`Could not provision an Android device for AVD "${options.avdName}".`);
+      }
 
       const sessionResult = await this.establishSessionOrDiagnoseDevice(result.emulatorCapture, {
         appId,
@@ -1159,7 +1212,9 @@ class AppiumTransportFactory {
 
       const browser = sessionResult.browser;
       // A wedged adopted server is replaced by one this run owns, so it must be torn down like any other auto-started server.
-      appiumProcess = sessionResult.appiumProcess ?? appiumProcess;
+      if (sessionResult.appiumProcess !== undefined) {
+        appiumProcess = sessionResult.appiumProcess;
+      }
 
       this.log('Appium session established.');
       /*
@@ -1242,9 +1297,20 @@ class AppiumTransportFactory {
    * Probes the device and returns the failure message when it is no longer
    * usable, or `undefined` when it is fine.
    *
-   * Returning the message rather than throwing it is what lets the session path
-   * use the same diagnosis without nesting a `catch` inside a `catch` — there,
-   * the session's own error has to survive as the `cause`.
+   * The readiness gates that run before this one are deliberately best-effort —
+   * they warn and proceed — so nothing asked whether the device was still there
+   * at the moment it mattered. A guest that went quiet in the meantime was
+   * handed to Appium, which reported `Device <id> was not in the list of
+   * connected devices`; `adb devices` then listed it, and the trail went cold.
+   *
+   * The second probe is only paid for when the first one fails, and the verdict
+   * distinguishes a frozen guest from an unreachable emulator — see
+   * `emulator-liveness.ts` for the measurements behind that split.
+   *
+   * Returning the message rather than throwing it is what lets both callers use
+   * the same diagnosis: the provisioning loop decides whether to boot a fresh
+   * emulator, and the session path needs its own error to survive as the
+   * `cause`.
    *
    * @param deviceId - The device to probe.
    * @param emulatorCapture - The emulator's output, when this run started it.
@@ -2007,26 +2073,32 @@ class AppiumTransportFactory {
   }
 
   /**
-   * Runs one liveness probe, keeping silence and refusal apart.
+   * Runs one liveness probe, retrying once before calling it silence.
    *
-   * `execFile` reports a timeout as a killed process, which is the only signal
-   * that separates *"nothing answered"* from *"something answered, with an
-   * error"* — the distinction the whole verdict rests on.
+   * Only success counts as an answer: a failed `adb ... emu` may be the adb
+   * server refusing an `offline` device rather than the console being dead, and
+   * the two are indistinguishable from here (see `emulator-liveness.ts`). The
+   * single retry is the same restraint `probeAvdName` applies for the same
+   * reason — a second look is far cheaper than a wrong verdict, and this one
+   * decides whether a run is aborted.
    *
    * @param input - The adb arguments.
-   * @returns What the probe answered.
+   * @returns Whether the probe got an answer.
    */
-  private runLivenessProbe(input: readonly string[]): Promise<EmulatorLivenessProbeOutcome> {
-    return new Promise((resolve) => {
-      execFile('adb', [...input], { timeout: DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS }, (error) => {
-        if (!error) {
-          resolve('answered');
-          return;
-        }
-
-        resolve(error.killed === true ? 'no-answer' : 'errored');
+  private async runLivenessProbe(input: readonly string[]): Promise<EmulatorLivenessProbeOutcome> {
+    for (let attempt = 1; attempt <= DEVICE_LIVENESS_ATTEMPT_COUNT; attempt++) {
+      const isAnswered = await new Promise<boolean>((resolve) => {
+        execFile('adb', [...input], { timeout: DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS }, (error) => {
+          resolve(!error);
+        });
       });
-    });
+
+      if (isAnswered) {
+        return 'answered';
+      }
+    }
+
+    return 'no-answer';
   }
 
   private async sendKeyEvent(deviceId: string, keyCode: number, description: string): Promise<void> {
