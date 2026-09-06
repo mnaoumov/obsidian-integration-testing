@@ -1014,6 +1014,28 @@ class AppiumTransportFactory {
   }
 
   /**
+   * Checks whether adb still lists the device **in any state**, without letting
+   * an adb that itself fails count as evidence.
+   *
+   * Any state, not just `device`: a dying emulator answers `offline` while it is
+   * still the thing that is wrong (the distinction `adb-device-list.ts` draws
+   * for teardown, and the reasoning carries over). Reading `offline` as gone
+   * here would report `device-gone` for what is really a wedge, sending the
+   * reader to look for a vanished emulator that is in fact still sitting there.
+   *
+   * @param deviceId - The device to look for.
+   * @returns `true` when it is listed; `false` when it is not, or adb could not be run.
+   */
+  private async checkIsDeviceListedQuietly(deviceId: string): Promise<boolean> {
+    try {
+      return checkIsDeviceListed({ deviceId, devicesOutput: await this.getDevicesOutput() });
+    } catch (error: unknown) {
+      this.log(`Could not re-check the device listing: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  /**
    * Decides whether the emulator this run started is really gone.
    *
    * Two independent proofs, cheapest first: none of the PIDs this run owns is
@@ -1235,15 +1257,15 @@ class AppiumTransportFactory {
     }
 
     this.log(`Device ${deviceId} did not answer \`adb -s ${deviceId} shell\`; checking whether the emulator itself is still alive...`);
-    const [consoleProbe, connectedDeviceIds] = await Promise.all([
+    const [consoleProbe, isListedByAdb] = await Promise.all([
       this.probeEmulatorConsole(deviceId),
-      this.getConnectedDeviceIdsQuietly()
+      this.checkIsDeviceListedQuietly(deviceId)
     ]);
 
     const verdict = resolveEmulatorLivenessVerdict({
       consoleProbe,
       deviceId,
-      isListedByAdb: connectedDeviceIds.includes(deviceId),
+      isListedByAdb,
       shellProbe
     });
     this.log(`Device liveness: ${deviceId} shell=${shellProbe}, console=${consoleProbe} -> ${verdict}.`);
