@@ -2424,3 +2424,104 @@ does not touch consumers: a plugin's suite reaches the global-setup vault throug
 which is provisioned. It does affect this repo's own suites, which build their own vaults for isolation —
 `eval-in-obsidian.integration.test.ts` runs against a popout-enabled vault and is the coverage that keeps
 `openSettingsTab`'s pre-attach fallback honest (**L38**).
+
+## L49. A wedged emulator is not an absent device — the console is what tells them apart
+
+**L46** made the teardown prove its claims and **L47** made the preflight stop reading silence as an
+answer. This is the same discipline applied to the *last step before the session*, and it is the entry
+that finally names a failure this repo had been misattributing for days.
+
+### The symptom, and why every reading of it was wrong
+
+Android runs on this host died in setup, before a single test body ran, with one of three errors:
+
+```text
+WebDriverError: Device emulator-5554 was not in the list of connected devices
+adb -s emulator-5554 shell getprop ro.build.version.sdk … Command output: error: closed
+WebDriverError: The operation was aborted due to timeout   (POST /session)
+```
+
+All three name the device. `adb devices` then lists the device instantly, so the obvious next step says
+everything is fine — the same trap `wedged-appium-server.ts` was written to escape, one layer down. The
+three signatures alternated run to run, which made it look like three faults. It is one.
+
+### What it actually is, measured 2026-09-05
+
+Six hand-boots with the harness's exact arguments, polled every 5s, no Appium attached at all. **Every
+one wedged 64–92s after boot** — and the reproducer is that cheap: 92 seconds and no suite.
+
+| Run | Override | Verdict |
+| --- | --- | --- |
+| baseline | none | died 92s |
+| gpu-swiftshader | `-gpu swiftshader_indirect` | died 82s |
+| no-wifi-packet-stream | `-feature -WiFiPacketStream` | died 80s |
+| memory-4096 | `-memory 4096` | died 75s |
+| no-dns-server | `-dns-server` omitted | died 91s |
+| different AVD | `asc_test` (720x1520, 2.5 GB, 4 cores) | died 64s |
+
+At the moment of the wedge:
+
+```text
+80s  emulator console (QEMU, not the guest): HUNG
+80s  qemu-system-x86_64-headless (pid 10004): cpu=0% rss=5.82GB
+80s  host free RAM: 12.1 GB of 31.6 GB
+```
+
+Two observations relocate the fault, and both are the point of this entry:
+
+- **The emulator console hangs too.** `adb … emu <command>` is served by the emulator process, not by the
+  guest's `adbd`. Its silence means the **emulator** is stuck — not a frozen guest behind a healthy
+  emulator, and not the device being absent.
+- **0% CPU.** Blocked, not spinning. Nothing is executing guest code.
+
+Together they explain the downstream symptoms that had looked unrelated: `adb devices` keeps reporting
+`device` because nothing is left running to update that state, and the teardown's `adb emu kill` hangs for
+its full budget because it is asking the wedged console to shut itself down.
+
+### Three attractive suspects, each killed by measurement
+
+Recorded so they are not re-chased — each looked right from the static configuration:
+
+- **lavapipe.** `hw.gpu.mode=auto` resolves to `vulkan_mode_selected:lavapipe`, software Vulkan, driving a
+  1344x2992 framebuffer headless. Bypassing it with `-gpu swiftshader_indirect` changed nothing.
+- **netsim.** The failing runs log `Netsim Wifi … is gone due to Received RST_STREAM` and `Unable to
+  reconnect to packet streamer`. The run with `-feature -WiFiPacketStream` logged **no netsim lines at
+  all** and died anyway, so that is a consequence of the wedge, not its cause.
+- **Memory.** The run with 12.1 GB free wedged exactly like the one with 4.6 GB, and halving the guest to
+  4096 MB made it die *sooner*.
+
+**So this is below the harness.** Three AVDs and five argument sets share only the emulator build
+(36.6.11.0), the system image (`android-37.0/google_apis_playstore_ps16k`, the only one installed on this
+host) and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending to.
+
+### What the harness does about it
+
+It cannot make the emulator work. It can stop misreporting it, which is the difference between a run that
+sends the reader to `adb devices` and one that sends them to the emulator build.
+
+- **`emulator-liveness.ts` (pure, unit-tested)** owns the two-probe verdict: `alive` /
+  `guest-unresponsive` / `emulator-wedged` / `device-gone`. The probes are read **asymmetrically** — only
+  `answered` clears the guest (an errored shell is `adb.exe: device offline`, adb refusing, not the guest
+  speaking), and only `no-answer` convicts the emulator (an errored console *is* the emulator speaking).
+  Each probe is trusted only in the direction it can testify.
+- **A non-emulator is never convicted on its console**, for exactly the reason **L47** gives: `adb … emu`
+  errors against a physical handset however healthy it is. There was one plugged into this host during
+  the investigation, which is how the case came up.
+- **The gate runs immediately before `establishSession`**, the last point at which a device that has gone
+  quiet can still be reported as itself. The readiness gates before it are best-effort by design (**L45**)
+  and answer a different question — *is it ready yet*, not *is it still there*.
+- **A failed session re-probes the device** (`establishSessionOrDiagnoseDevice`) and, when the emulator is
+  wedged, replaces the WebDriver error with the diagnosis while keeping it as the `cause`. Deliberately
+  *not* done by teaching `wedged-appium-server.ts` more error strings: those signatures are not about the
+  server, and the module that owns the server's diagnosis should not start guessing at the device's.
+- **The emulator's captured output now survives past boot.** `stopCapture()` used to fire the moment a
+  device appeared, freezing the emulator's testimony one step before the failure nobody could explain —
+  the hanging-thread and packet-streamer lines are printed later, while the run is inside
+  `establishSession`. The window now closes when the session is established.
+
+### What was deliberately NOT added
+
+**An automatic cold-boot retry.** The obvious reading of `connectionRetryCount: 3` re-attempting against a
+wedged device is "retry the boot instead" — but on the host where this was measured the wedge recurs at
+the same point in every run, so a re-boot buys another 90s and the identical failure. The liveness gate
+already stops the three useless session retries, which is the part that was actually costing anything.

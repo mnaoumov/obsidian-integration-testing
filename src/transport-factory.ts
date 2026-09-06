@@ -33,6 +33,7 @@ import process from 'node:process';
 import type { AppiumServerMarker } from './appium-server-marker.ts';
 import type { AvdProbeResult } from './avd-probe-verdict.ts';
 import type { ProcessListEntry } from './emulator-backend.ts';
+import type { EmulatorLivenessProbeOutcome } from './emulator-liveness.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
@@ -98,6 +99,10 @@ import {
   parseWindowsTaskList,
   selectEmulatorBackendPids
 } from './emulator-backend.ts';
+import {
+  buildEmulatorLivenessMessage,
+  resolveEmulatorLivenessVerdict
+} from './emulator-liveness.ts';
 import {
   buildAvdSnapshotDirectoryCandidates,
   buildSnapshotAgeMessage
@@ -210,6 +215,17 @@ const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownloa
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
+/*
+ * Budget for each of the two liveness probes taken immediately before the
+ * session (see `emulator-liveness.ts`). Well above the 5s the preflight probes
+ * share, because this one runs in the post-boot contention window that inflates
+ * every `adb` round-trip 25-50x (L45) — and here a false "no answer" would
+ * abort a run that was about to work, which is a worse error than waiting.
+ * 15s is what the six hand-boots that measured the wedge used, and no healthy
+ * guest came close to it: the failures hung indefinitely rather than answering
+ * slowly.
+ */
+const DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS = 15_000;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120_000;
 const EMULATOR_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS = 5000;
@@ -311,6 +327,30 @@ interface DeviceReadinessTimeouts {
 }
 
 /**
+ * The emulator's captured output, carried past boot so a failure during session
+ * creation can still quote it.
+ *
+ * Boot used to be the end of the emulator's usefulness as a witness: the capture
+ * was frozen the moment a device appeared, and nothing read it again. But the
+ * lines that explain a wedge — `detected a hanging thread 'QEMU2 main loop'`,
+ * netsim's `Unable to reconnect to packet streamer` — are printed *after* that,
+ * while the harness is inside `establishSession`. So the window now closes when
+ * the session is established rather than when the device appears, and this pair
+ * is what the session path needs to hold to do that (see `emulator-liveness.ts`).
+ */
+interface EmulatorCapture {
+  /**
+  Returns the captured stdout+stderr tail (bounded to the most recent output).
+   */
+  readonly read: () => string;
+
+  /**
+  Freezes the tail. Called once the session is established and the emulator has nothing left to explain.
+   */
+  readonly stop: () => void;
+}
+
+/**
  * Parameters for {@link AppiumTransportFactory.ensureDeviceConnected}.
  */
 interface EnsureDeviceConnectedParams {
@@ -348,6 +388,13 @@ interface EnsureDeviceConnectedResult {
   The actual device ID that is connected (may differ from the requested one).
    */
   readonly actualDeviceId: string;
+
+  /**
+   * The emulator's output capture, when this run started it. Absent for an
+   * adopted device, whose emulator this run never spawned and whose output it
+   * therefore never had.
+   */
+  readonly emulatorCapture?: EmulatorCapture | undefined;
 
   /**
   The emulator process, if one was auto-started.
@@ -601,6 +648,11 @@ interface StartAppiumAndEmulatorResult {
   readonly appiumServerMarker?: AppiumServerMarker | undefined;
 
   /**
+  The emulator's output capture, when this run started it.
+   */
+  readonly emulatorCapture?: EmulatorCapture | undefined;
+
+  /**
   The emulator process, if one was auto-started.
    */
   readonly emulatorProcess?: ChildProcess | undefined;
@@ -801,6 +853,31 @@ class AppiumTransportFactory {
     }
 
     return this.createNewSession(options);
+  }
+
+  /**
+   * Checks that the device is still answering, immediately before the session,
+   * and refuses the run when it is not.
+   *
+   * The readiness gates before this one are deliberately best-effort — they warn
+   * and proceed — so nothing asked whether the device was still there at the
+   * moment it mattered. A guest that went quiet in the meantime was handed to
+   * Appium, which reported `Device <id> was not in the list of connected
+   * devices`; `adb devices` then listed it, and the trail went cold.
+   *
+   * Both probes are only paid for when the first one fails, and the verdict
+   * distinguishes a frozen guest from a wedged emulator — see
+   * `emulator-liveness.ts` for the measurements behind that split.
+   *
+   * @param deviceId - The device the session is about to be created against.
+   * @param emulatorCapture - The emulator's output, when this run started it.
+   * @throws When the device is no longer usable, with a message naming which layer failed.
+   */
+  private async assertDeviceAlive(deviceId: string, emulatorCapture?: EmulatorCapture): Promise<void> {
+    const diagnosis = await this.diagnoseDevice(deviceId, emulatorCapture);
+    if (diagnosis !== undefined) {
+      throw new Error(diagnosis);
+    }
   }
 
   private async attachToExistingSession(
@@ -1037,7 +1114,15 @@ class AppiumTransportFactory {
         });
       }
 
-      const sessionResult = await this.establishSession({
+      /*
+       * The last point at which a device that has gone quiet can still be
+       * reported as itself. Past here the failure belongs to Appium, which can
+       * only say the device is "not in the list of connected devices" — an
+       * error that names the one thing that is not wrong.
+       */
+      await this.assertDeviceAlive(actualDeviceId, result.emulatorCapture);
+
+      const sessionResult = await this.establishSessionOrDiagnoseDevice(result.emulatorCapture, {
         appId,
         appiumServerMarker: result.appiumServerMarker,
         appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
@@ -1055,6 +1140,12 @@ class AppiumTransportFactory {
       appiumProcess = sessionResult.appiumProcess ?? appiumProcess;
 
       this.log('Appium session established.');
+      /*
+       * The emulator has nothing left to explain, so freeze its tail here rather
+       * than at boot. Everything up to this line — including the window in which
+       * a wedge surfaces — is now inside the captured output.
+       */
+      result.emulatorCapture?.stop();
       const appiumTransport = new AppiumTransport({
         appId,
         browser,
@@ -1123,6 +1214,51 @@ class AppiumTransportFactory {
     const ageInSeconds = Math.round((Date.now() - marker.startedAtInMilliseconds) / MILLISECONDS_PER_SECOND);
     const unstoppedSuffix = marker.stopAttemptedAtInMilliseconds === undefined ? '' : ', and an earlier run failed to stop it';
     return `started by an earlier run of this harness, pid ${String(marker.pid)}, up for ${String(ageInSeconds)}s${unstoppedSuffix}`;
+  }
+
+  /**
+   * Probes the device and returns the failure message when it is no longer
+   * usable, or `undefined` when it is fine.
+   *
+   * Returning the message rather than throwing it is what lets the session path
+   * use the same diagnosis without nesting a `catch` inside a `catch` — there,
+   * the session's own error has to survive as the `cause`.
+   *
+   * @param deviceId - The device to probe.
+   * @param emulatorCapture - The emulator's output, when this run started it.
+   * @returns The diagnosis, or `undefined` when the device still answers.
+   */
+  private async diagnoseDevice(deviceId: string, emulatorCapture?: EmulatorCapture): Promise<string | undefined> {
+    const shellProbe = await this.probeDeviceShell(deviceId);
+    if (shellProbe === 'answered') {
+      return undefined;
+    }
+
+    this.log(`Device ${deviceId} did not answer \`adb -s ${deviceId} shell\`; checking whether the emulator itself is still alive...`);
+    const [consoleProbe, connectedDeviceIds] = await Promise.all([
+      this.probeEmulatorConsole(deviceId),
+      this.getConnectedDeviceIdsQuietly()
+    ]);
+
+    const verdict = resolveEmulatorLivenessVerdict({
+      consoleProbe,
+      deviceId,
+      isListedByAdb: connectedDeviceIds.includes(deviceId),
+      shellProbe
+    });
+    this.log(`Device liveness: ${deviceId} shell=${shellProbe}, console=${consoleProbe} -> ${verdict}.`);
+
+    // Unreachable in practice — the verdict is only `'alive'` when the shell answered, which returned above — but it is what narrows the type for the builder.
+    if (verdict === 'alive') {
+      return undefined;
+    }
+
+    return buildEmulatorLivenessMessage({
+      deviceId,
+      emulatorOutput: emulatorCapture?.read() ?? '',
+      probeTimeoutInMilliseconds: DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS,
+      verdict
+    });
   }
 
   private dumpConnectivity(deviceId: string): Promise<ConnectivityProbeResult> {
@@ -1304,19 +1440,26 @@ class AppiumTransportFactory {
     }
     const emulator = this.startEmulator(avdName, shouldReuseSnapshot, isEmulatorVisible);
 
-    let actualDeviceId: string;
-    try {
-      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts);
-    } finally {
-      emulator.stopCapture();
-    }
+    /*
+     * The capture is NOT stopped here any more. It used to be, in a `finally`
+     * the moment a device appeared — which froze the emulator's testimony
+     * exactly one step before the failure this harness could not explain. The
+     * hanging-thread and packet-streamer lines are printed later, while the run
+     * is inside `establishSession`. The window now closes there instead.
+     */
+    const actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts);
 
     const ownedEmulatorPids = await this.listEmulatorBackendPids(emulatorPidsBefore);
     this.log(
       `Emulator "${avdName}" started, device ${actualDeviceId} is connected (owned emulator PIDs: [${ownedEmulatorPids.join(', ')}]).`
     );
     await this.suppressErrorDialogs(actualDeviceId);
-    return { actualDeviceId, emulatorProcess: emulator.process, ownedEmulatorPids };
+    return {
+      actualDeviceId,
+      emulatorCapture: { read: emulator.readOutput, stop: emulator.stopCapture },
+      emulatorProcess: emulator.process,
+      ownedEmulatorPids
+    };
   }
 
   private async ensureUiautomator2DriverInstalled(): Promise<void> {
@@ -1374,6 +1517,40 @@ class AppiumTransportFactory {
       }
 
       return await this.restartWedgedServerAndRetry(params, error);
+    }
+  }
+
+  /**
+   * Establishes the session, and when that fails, asks the device whether it is
+   * still there before letting the failure stand.
+   *
+   * `establishSession` owns exactly one diagnosis — the stale Appium server —
+   * and rethrows everything else untouched. That is right as far as it goes, but
+   * every signature this harness actually fails with on a wedged emulator falls
+   * into "everything else": `Device <id> was not in the list of connected
+   * devices`, `error: closed`, and a bare `POST /session` timeout. Rather than
+   * teaching the server module to recognize error strings that are not about the
+   * server, the device is simply re-probed here, where the device is known. A
+   * wedged emulator then reports itself, and the original error is kept as the
+   * `cause`.
+   *
+   * @param emulatorCapture - The emulator's output, when this run started it.
+   * @param params - The session parameters.
+   * @returns The established session.
+   */
+  private async establishSessionOrDiagnoseDevice(
+    emulatorCapture: EmulatorCapture | undefined,
+    params: EstablishSessionParams
+  ): Promise<EstablishSessionResult> {
+    try {
+      return await this.establishSession(params);
+    } catch (error: unknown) {
+      const diagnosis = await this.diagnoseDevice(params.deviceId, emulatorCapture);
+      if (diagnosis === undefined) {
+        throw error;
+      }
+
+      throw new Error(diagnosis, { cause: error });
     }
   }
 
@@ -1666,6 +1843,29 @@ class AppiumTransportFactory {
   }
 
   /**
+   * Asks the **guest** whether it is still scheduling work, via `adbd`.
+   *
+   * @param deviceId - The device to probe.
+   * @returns What it answered.
+   */
+  private probeDeviceShell(deviceId: string): Promise<EmulatorLivenessProbeOutcome> {
+    return this.runLivenessProbe(['-s', deviceId, 'shell', 'true']);
+  }
+
+  /**
+   * Asks the **emulator process** whether it is still running, via its console.
+   *
+   * The console is served by the emulator itself rather than by the guest, which
+   * is what makes it able to tell a frozen guest from a wedged emulator.
+   *
+   * @param deviceId - The device to probe.
+   * @returns What it answered.
+   */
+  private probeEmulatorConsole(deviceId: string): Promise<EmulatorLivenessProbeOutcome> {
+    return this.runLivenessProbe(['-s', deviceId, 'emu', 'avd', 'status']);
+  }
+
+  /**
    * Replaces a leftover server an earlier run failed to stop, instead of
    * adopting it.
    *
@@ -1784,6 +1984,29 @@ class AppiumTransportFactory {
     return { actualDeviceId: deviceId, ownedEmulatorPids: [] };
   }
 
+  /**
+   * Runs one liveness probe, keeping silence and refusal apart.
+   *
+   * `execFile` reports a timeout as a killed process, which is the only signal
+   * that separates *"nothing answered"* from *"something answered, with an
+   * error"* — the distinction the whole verdict rests on.
+   *
+   * @param input - The adb arguments.
+   * @returns What the probe answered.
+   */
+  private runLivenessProbe(input: readonly string[]): Promise<EmulatorLivenessProbeOutcome> {
+    return new Promise((resolve) => {
+      execFile('adb', [...input], { timeout: DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS }, (error) => {
+        if (!error) {
+          resolve('answered');
+          return;
+        }
+
+        resolve(error.killed === true ? 'no-answer' : 'errored');
+      });
+    });
+  }
+
   private async sendKeyEvent(deviceId: string, keyCode: number, description: string): Promise<void> {
     await new Promise<void>((resolve) => {
       execFile(
@@ -1881,6 +2104,7 @@ class AppiumTransportFactory {
       actualDeviceId: deviceResult.actualDeviceId,
       appiumProcess,
       appiumServerMarker,
+      emulatorCapture: deviceResult.emulatorCapture,
       emulatorProcess: deviceResult.emulatorProcess,
       isAdoptedAppiumServer: !needsAppiumStart,
       ownedEmulatorPids: deviceResult.ownedEmulatorPids
