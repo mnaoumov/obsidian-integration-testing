@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * End-to-end regression test for the `enableCommunityPlugins` global-setup option (T121, Gap 1) and the
+ * End-to-end regression test for the `enableCommunityPlugins` global-setup option (Gap 1) and the
  * {@link buildDemoVaultPopulate} seeding helper (Gap 2).
  *
  * The global setup (`enable-community-plugins-global-setup.ts`) seeds a throwaway demo vault holding two

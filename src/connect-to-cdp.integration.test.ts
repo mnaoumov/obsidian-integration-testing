@@ -166,7 +166,7 @@ describe('connect-to-cdp integration', () => {
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 
   it('reads settings from the requested config folder, not from a stale .obsidian beside it', async () => {
-    // The motivating case (T908): a vault that has both folders. Asserting on
+    // The motivating case: a vault that has both folders. Asserting on
     // `app.vault.configDir` alone would pass even if Obsidian had loaded the stale folder's
     // Settings, so this asserts on a value that differs BETWEEN the two folders.
     const vaultPath = mkdtempSync(join(tmpdir(), 'connect-to-cdp-stale-config-'));

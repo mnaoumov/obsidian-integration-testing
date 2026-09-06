@@ -290,7 +290,7 @@ describe('plugin load detection', () => {
       }
 
       /*
-       * Layer 1 (T88) captures the renderer console only on the swallow path
+       * Layer 1 captures the renderer console only on the swallow path
        * (`!errorMessage && !isLoaded`), which desktop never reaches — every
        * desktop failure throws through the `loadPlugin` monkey-patch. So the
        * capture must stay empty here even for fixtures that `console.error`

@@ -25,7 +25,7 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
 /*
- * 240s + the 120s the network-ready gate (T934, L45) can add on a guest that
+ * 240s + the 120s the network-ready gate (L45) can add on a guest that
  * never reports a validated default network. The old figure was already a
  * practical number rather than the sum of its parts — Appium start and session
  * connection alone budget 180s each — so this raises it by exactly what the new
@@ -142,7 +142,7 @@ describe('mobile trusted input', () => {
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   it('should obey real hit-testing, so a covered element is NOT clicked', async () => {
-    // The mutation check T599 established: a trusted tap goes to whatever is on top at that point, while a
+    // The mutation check established: a trusted tap goes to whatever is on top at that point, while a
     // Dispatched event reaches its target through any overlay. If this passes, the tap is not a dispatch.
     const wasCoveredElementClicked = await evalInObsidian({
       async callback({ lib }): Promise<boolean> {

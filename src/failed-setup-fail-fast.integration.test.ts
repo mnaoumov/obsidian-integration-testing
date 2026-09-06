@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * Regression suite for a **failed** global setup (**L9**, T726).
+ * Regression suite for a **failed** global setup (**L9**).
  *
  * Its project's global setup is wired to fail — an `obsidian-cdp` transport attaching to a port nothing
  * can serve — so every test here runs in the state a worker is left in after a real setup failure: no

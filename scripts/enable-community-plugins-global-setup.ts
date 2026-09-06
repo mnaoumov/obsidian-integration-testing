@@ -3,7 +3,7 @@
  *
  * Vitest global setup for the `enableCommunityPlugins` end-to-end regression test.
  *
- * Exercises BOTH T121 additions against a real Obsidian instance:
+ * Exercises BOTH additions against a real Obsidian instance:
  *
  * - **Gap 2** — {@link buildDemoVaultPopulate} composes the populate map for a throwaway `demo-vault/`
  *   containing two inline dummy community plugins (seeded via `injectPlugins`).

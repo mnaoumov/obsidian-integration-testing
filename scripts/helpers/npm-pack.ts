@@ -19,7 +19,7 @@
  * expensive: the parse succeeded, the cast asserted a shape nothing had checked, `result[0]` was
  * `undefined`, and `publishGitHubRelease` died with `Cannot read properties of undefined (reading
  * 'filename')` at the SECOND-TO-LAST step of a release -- after the bump, changelog, commit, tag and
- * `git push --follow-tags` had all already landed on the remote (T813-P2). So this module validates
+ * `git push --follow-tags` had all already landed on the remote. So this module validates
  * instead of asserting, and every failure names the raw output it could not read.
  *
  * No noise-stripping is needed here, unlike the sibling copy in `obsidian-dev-utils`: `execFromRoot`
