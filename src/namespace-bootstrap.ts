@@ -198,9 +198,9 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * The deliberate seam `obsidian-dev-utils` reads on mobile — the one namespace member that exists for
      * another package rather than for the harness. Its **L17** mirror (`desktop-trusted-input.ts`) can
      * reach a trusted event on desktop by itself, but on mobile the injection has to come from the Node
-     * side over the harness's CDP channel (**L39**), and ODU must never import this package at runtime
-     * (ODU **L4**). So ODU reads these off `window.__obsidianIntegrationTesting` instead, declaring the
-     * shape locally.
+     * side over the harness's CDP channel (**L39**), and `obsidian-dev-utils` must never import this
+     * package at runtime (its own peer-dependency rule). So it reads these off
+     * `window.__obsidianIntegrationTesting` instead, declaring the shape locally.
      *
      * These are the **same function objects** `evalWrapper` puts in a closure's `lib` bag, not wrappers:
      * each already branches on `Platform.isMobile` internally, so the mobile semantics live in exactly one

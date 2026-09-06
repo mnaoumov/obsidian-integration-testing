@@ -14,7 +14,7 @@ import { connectToCdp } from './connect-to-cdp.ts';
 // When the installed asar is reused, but CDP still needs time to come up).
 const LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 
-// The desktop size T461 shoots the plugin store listings at.
+// The desktop size the plugin store listings are shot at.
 const DESKTOP_WIDTH_IN_PIXELS = 1200;
 const DESKTOP_HEIGHT_IN_PIXELS = 800;
 

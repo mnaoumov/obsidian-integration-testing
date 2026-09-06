@@ -5,7 +5,7 @@
  * nothing but its plugin id — the id → repo lookup and the asset URL shapes.
  *
  * A plugin's built files never live in git: `.obsidian/plugins/*` is gitignored in
- * every fleet plugin repo, so a demo vault's injected community plugins exist on
+ * a plugin repo, so a demo vault's injected community plugins exist on
  * exactly the machine that once opened that vault in Obsidian. To install them
  * headlessly (see `demo-vault-bootstrap.ts`) two things must be derivable:
  *

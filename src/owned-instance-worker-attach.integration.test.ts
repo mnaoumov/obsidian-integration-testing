@@ -37,7 +37,7 @@ import { TemporaryVault } from './temporary-vault.ts';
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 /**
-What the T116 routing probe reads back from the window it ran against.
+What the routing probe reads back from the window it ran against.
 */
 interface VaultProbe {
   basePath: string;
@@ -77,7 +77,7 @@ describe('owned instance worker attach', () => {
 });
 
 /*
- * T116 regression: with the global-setup-owned SHARED vault already open, a
+ * Multi-window routing regression: with the global-setup-owned SHARED vault already open, a
  * SECOND vault registered in-worker (attach mode) must route its own evals to its
  * OWN window. Before the fix, `openVaultInRunningInstance` bootstrapped the helper
  * namespace against the not-yet-open fresh vault, poisoning the connection cache

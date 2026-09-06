@@ -200,7 +200,7 @@ const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 
-// --- Console capture (Layer 2 of the plugin-load error surfacing, see T88) ---
+// --- Console capture (Layer 2 of the plugin-load error surfacing) ---
 const CONSOLE_CAPTURE_MARKER_TAG = 'OIT_CAPTURE';
 const CONSOLE_CAPTURE_TAIL_MAX_LENGTH = 8000;
 const ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS = 5000;

@@ -52,7 +52,7 @@ export interface RunObsidianVersionMatrixParams {
    * so an env var can be passed straight through.
    *
    * Each accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`.
-   * Defaults to both ends of the supported range (G99) when omitted or empty, and
+   * Defaults to both ends of the supported range when omitted or empty, and
    * the list is always de-duplicated on the **resolved** version — so when public
    * has caught up to catalyst, the suites run once.
    */

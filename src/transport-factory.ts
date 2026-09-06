@@ -2605,7 +2605,8 @@ class AppiumTransportFactory {
       /*
        * If the server process already died (crashed, or never started), stop
        * polling and surface why — otherwise a doomed server spins out the whole
-       * readiness timeout with no diagnostics (the original T84 symptom).
+       * readiness timeout with no diagnostics, the original symptom this exists
+       * to prevent.
        */
       const exitInfo = launch.readExitInfo();
       if (exitInfo) {
@@ -2790,7 +2791,7 @@ class AppiumTransportFactory {
    *
    * The single owner of "which gates a device passes before a session", so the
    * started-device and reused-device branches cannot diverge on it — the branch
-   * that skipped a gate entirely is the hole T794 fell into (**L43**).
+   * that skipped a gate entirely is the hole a reused device once fell into (**L43**).
    *
    * @param deviceId - The device UDID to gate on.
    * @param timeouts - The two resolved budgets.
@@ -3110,7 +3111,7 @@ function getSettledFailure(outcomes: readonly PromiseSettledResult<unknown>[]): 
  * whose internal `#supports-color` subpath import Jest's VM-modules linker fails
  * to link, so an eagerly-imported `webdriverio` kills a Jest ESM suite at import
  * with `ReferenceError: Cannot access 'supportsColor' before initialization`
- * before a single test runs — which is what made `test:jest` red (T755). A
+ * before a single test runs — which is what once made `test:jest` red. A
  * `moduleNameMapper` cannot patch it: the mapper is bypassed for `#` specifiers.
  *
  * @returns A {@link Promise} that resolves to the `webdriverio` entry points the

@@ -171,7 +171,7 @@ const KEY_CODE_DELETE = 46;
 /**
  * Named keys, with the `text` a real key press would produce (absent when it produces none).
  *
- * Only keys the fleet actually presses are listed, plus the editing keys a caller would reasonably reach
+ * Only keys these suites actually press are listed, plus the editing keys a caller would reasonably reach
  * for next. An unknown multi-character key is a caller error, not a silent no-op — see
  * {@link toKeyCommands}.
  */

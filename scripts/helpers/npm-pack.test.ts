@@ -4,7 +4,7 @@
  * Tests for `parseNpmPackFilename`.
  *
  * The npm 12 payload below is captured verbatim from `npm pack --json` in this repo on npm 12.0.2 /
- * Node 26.5.0 (T813-P2) -- the exact output that broke the 12.0.0 release. Keeping BOTH generations
+ * Node 26.5.0 -- the exact output that broke the 12.0.0 release. Keeping BOTH generations
  * pinned here is the point of the suite: the defect it guards is invisible to the type system (both
  * shapes are valid JSON) and only surfaces after a release has already tagged and pushed.
  */

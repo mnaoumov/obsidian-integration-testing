@@ -25,7 +25,7 @@ const PACKAGE_LIST_OUTPUT = 'package:md.obsidian\npackage:com.android.settings\n
 
 /*
  * Connectivity fixtures shaped on real `dumpsys connectivity` output sampled on
- * `obsidian_test` (T934). Two details are copied from the real dump rather than
+ * `obsidian_test`. Two details are copied from the real dump rather than
  * invented, because both decide the parse:
  *
  * - the agent entry is ONE line, carrying its score policies and its `created` /

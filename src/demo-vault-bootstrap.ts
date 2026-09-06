@@ -9,7 +9,7 @@
  * `manifest.json` to already be on disk, and throws when they are not. Until this
  * module existed the only documented remedy was a **GUI step** — open `demo-vault/`
  * in Obsidian once and let `demo-vault-helper` install the plugin at runtime.
- * `.obsidian/plugins/*` is gitignored in every fleet plugin repo, so that state
+ * `.obsidian/plugins/*` is gitignored in a plugin repo, so that state
  * exists on exactly the one machine that did it and is invisible to a fresh clone,
  * a new machine, or CI. Since a plugin repo's release preflight runs its
  * integration tests, that made *cutting a release from a clean clone* impossible
@@ -17,7 +17,7 @@
  *
  * Downloading the release assets is the exact headless equivalent: the resulting
  * folder is what Obsidian itself would have installed, so the shipped
- * `*-demo-vault-<version>.zip` stays the fleet-standard artifact.
+ * `*-demo-vault-<version>.zip` stays the standard demo-vault artifact.
  *
  * Two entry points, plus the `bootstrap-demo-vault` CLI subcommand:
  *

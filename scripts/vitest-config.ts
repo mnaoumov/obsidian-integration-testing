@@ -11,13 +11,13 @@ const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
 // Every test under `scripts/` — the vendored docs generator (L35), the custom ESLint rules, and the
 // Release-script helpers. Deliberately the whole tree rather than `scripts/docs-gen/**`, which is what it
 // Used to be: that narrower glob silently left `scripts/helpers/eslint-rules/*.test.ts` run by no project
-// At all, and left `scripts/version.ts` with nowhere to put a regression test at all (T813-P2).
+// At all, and left `scripts/version.ts` with nowhere to put a regression test at all.
 const SCRIPTS_TEST_FILES = 'scripts/**/*.test.ts';
 const DOCS_SITE_TEST_FILES = 'docs/src/**/*.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 // Vitest 4 projects do NOT inherit the root-level `test` options, so a project that omits `testTimeout`
-// Silently runs on the built-in 5000 ms default. That is how the release gate went flaky (T765): every
+// Silently runs on the built-in 5000 ms default. That is how the release gate went flaky: every
 // Project here carried a budget EXCEPT `unit-tests` — the only one `npm run test:coverage` runs — so the
 // One project gating a release had the tightest budget in the repo. Spreading the default into each project
 // Makes the omission impossible rather than merely unlikely. The budget covers two costs a per-suite number
@@ -44,7 +44,7 @@ const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.
 // Asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
 const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
 
-// The failed-setup regression suite (T726) runs in its own project because its global setup must FAIL:
+// The failed-setup regression suite runs in its own project because its global setup must FAIL:
 // It attaches to a CDP port nothing can serve, so every test in it runs in the state a worker is left in
 // After a real setup failure. Port 1 is refused outright by `fetch`, so the failure is instant and never
 // Touches the network -- and an `obsidian-cdp` transport takes no setup lock, unlike an Appium one, so
@@ -64,7 +64,7 @@ const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/trusted-input.desktop.integration.t
 
 // An emulator run is 140-200s cold (L19), and every step before the first assertion — boot, Appium session,
 // Vault push, app restart — happens inside the hooks. Raised by the 120s the network-ready gate can add on
-// A guest that never reports a validated default network (T934, L45); `afterAll`'s dispose builds a
+// A guest that never reports a validated default network (L45); `afterAll`'s dispose builds a
 // Transport of its own, so it needs the same headroom the registration hook does.
 const ANDROID_TIMEOUT_IN_MILLISECONDS = 420_000;
 

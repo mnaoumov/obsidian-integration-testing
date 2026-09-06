@@ -5,7 +5,7 @@
  * version.
  *
  * Support is the range `[latest public, latest catalyst]` and both ends must be
- * verified (G99). The two ends are moving targets, and they periodically
+ * verified. The two ends are moving targets, and they periodically
  * **coincide** — when public catches up to catalyst, both specifiers provision
  * the same build, so running the suites twice re-runs the same build and buys
  * nothing. Worse, a consumer that ran both still reports "green on public AND
@@ -32,7 +32,7 @@ import {
 
 /**
  * The version specifiers a matrix run defaults to: both ends of the supported
- * range (G99). They are de-duplicated on their resolved versions, so when public
+ * range. They are de-duplicated on their resolved versions, so when public
  * has caught up to catalyst this yields a single run.
  */
 export const DEFAULT_OBSIDIAN_VERSION_SPECS: readonly string[] = [PUBLIC_LATEST, CATALYST_LATEST];

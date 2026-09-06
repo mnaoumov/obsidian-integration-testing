@@ -148,8 +148,8 @@ async function main(): Promise<void> {
     .filter((version) => to === undefined || compareVersions(version, to) <= 0)
     .filter((version) => shouldForce || table[version]?.runtimeVersions === undefined)
     // Newest-first so the most-relevant versions land first even if interrupted.
-    // Old versions once stuck on the first-run vault selector; T72 fixed the
-    // Owned-vault auto-open (down to 0.6.4), so they now boot and collect too.
+    // Old versions once stuck on the first-run vault selector; the owned-vault
+    // Auto-open (down to 0.6.4) now handles them, so they boot and collect too.
     .sort((aVersion, bVersion) => compareVersions(bVersion, aVersion));
 
   console.log(`Collecting process.versions for ${String(versions.length)} version(s) via the ${platformKey} installer.`);

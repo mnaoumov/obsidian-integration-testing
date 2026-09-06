@@ -10,7 +10,7 @@
  * Inward: every `src/` module must be reachable from something this package actually ships. A module
  * nothing imports and no entry point names is invisible to every other gate here — it type-checks, it
  * lints, it builds, and it is dead. Two modules had already fallen through that gap when this second
- * assertion was written (T812): `obsidian-namespace.ts`, a public-looking type mirror that was never once
+ * assertion was written: `obsidian-namespace.ts`, a public-looking type mirror that was never once
  * re-exported, and `native-dialog-monitor.ts`, orphaned when `d65aa6a` retired its only caller.
  */
 
