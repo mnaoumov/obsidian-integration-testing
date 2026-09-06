@@ -249,6 +249,23 @@ adb -s emulator-5554 shell true          # the guest, via adbd
 adb -s emulator-5554 emu avd status      # the emulator's console -- if THIS hangs, it is not the guest
 ```
 
+**Once you have that shape, it is the machine — so move the run rather than tune it.** Everything a
+project controls has already been eliminated above; what is left is the host's hypervisor, and there is no
+option in this harness that reaches it. Two things are worth knowing before you spend a day on it:
+
+- **On an AMD Windows host, check which accelerator is actually in use.** The emulator normally runs
+  through WHPX, Microsoft's generic hypervisor API. Google also ships the *Android Emulator hypervisor
+  driver* (AEHD) for exactly this reason — its README describes it as the way "to run Android Emulator on
+  Windows without Windows Hypervisor Platform (WHPX)". `emulator -accel-check` reports which one you have.
+  AEHD cannot coexist with Hyper-V, so switching to it means disabling the hypervisor
+  (`bcdedit /set hypervisorlaunchtype off`, elevated, plus a reboot) and losing Hyper-V VMs, WSL2 and
+  Windows Sandbox until you set it back to `auto`.
+- **A Linux CI runner with KVM is the reliable escape hatch.** GitHub-hosted `ubuntu-latest` runners can
+  run the emulator once `/dev/kvm` is made accessible, which makes the Android leg something CI does even
+  when no local machine can. This repo's own `validate-android-emulator.yml` is a worked example: enable
+  KVM, create the AVD to the minimums above, install Obsidian from its published APK, and run the Android
+  project.
+
 ### "The Appium server ... cannot see Android device ..., although this host's adb can"
 
 An Appium server that has been listening for a while can go **stale**: it still answers `/status` with
