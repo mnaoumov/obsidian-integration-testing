@@ -33,7 +33,7 @@
  * | silent | answers | The **guest** is frozen or too busy to schedule `adbd`. |
  * | silent | silent | The **emulator process** is wedged. Nothing will recover it. |
  *
- * Measured 2026-09-05 across six hand-boots on this host — three AVDs and five
+ * Measured 2026-09-05 across six hand-boots on this host — two AVDs and five
  * argument sets — every one of which reached the bottom row 64–92s after boot:
  *
  * ```text

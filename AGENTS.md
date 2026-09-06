@@ -2490,7 +2490,7 @@ Recorded so they are not re-chased — each looked right from the static configu
 - **Memory.** The run with 12.1 GB free wedged exactly like the one with 4.6 GB, and halving the guest to
   4096 MB made it die *sooner*.
 
-**So this is below the harness.** Three AVDs and five argument sets share only the emulator build
+**So this is below the harness.** Two AVDs and five argument sets share only the emulator build
 (36.6.11.0), the system image (`android-37.0/google_apis_playstore_ps16k`, the only one installed on this
 host) and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending to.
 

@@ -227,7 +227,7 @@ it has gone quiet. The message names **which layer** stopped answering, because 
   emulator's own output is appended to the message and is the best evidence for which.
 
 **If the emulator wedges at the same point in every run, the fault is below this harness.** That was
-measured on one host on 2026-09-05: six hand-boots, three AVDs and five different emulator argument sets,
+measured on one host on 2026-09-05: six hand-boots, two AVDs and five different emulator argument sets,
 every one wedging 64–92s after boot with the QEMU backend at **0% CPU** — blocked, not spinning. Changing
 the GPU mode (`-gpu swiftshader_indirect`), disabling the network simulator (`-feature
 -WiFiPacketStream`), halving the guest RAM and dropping `-dns-server` each changed nothing. When you see
