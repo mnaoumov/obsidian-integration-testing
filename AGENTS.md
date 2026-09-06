@@ -2424,3 +2424,144 @@ does not touch consumers: a plugin's suite reaches the global-setup vault throug
 which is provisioned. It does affect this repo's own suites, which build their own vaults for isolation —
 `eval-in-obsidian.integration.test.ts` runs against a popout-enabled vault and is the coverage that keeps
 `openSettingsTab`'s pre-attach fallback honest (**L38**).
+
+## L49. A wedged emulator is not an absent device — the console is what tells them apart
+
+**L46** made the teardown prove its claims and **L47** made the preflight stop reading silence as an
+answer. This is the same discipline applied to the *last step before the session*, and it is the entry
+that finally names a failure this repo had been misattributing for days.
+
+### The symptom, and why every reading of it was wrong
+
+Android runs on this host died in setup, before a single test body ran, with one of three errors:
+
+```text
+WebDriverError: Device emulator-5554 was not in the list of connected devices
+adb -s emulator-5554 shell getprop ro.build.version.sdk … Command output: error: closed
+WebDriverError: The operation was aborted due to timeout   (POST /session)
+```
+
+All three name the device. `adb devices` then lists the device instantly, so the obvious next step says
+everything is fine — the same trap `wedged-appium-server.ts` was written to escape, one layer down. The
+three signatures alternated run to run, which made it look like three faults. It is one.
+
+### What it actually is, measured 2026-09-05
+
+Six hand-boots with the harness's exact arguments, polled every 5s, no Appium attached at all. **Every
+one wedged 64–92s after boot** — and the reproducer is that cheap: 92 seconds and no suite.
+
+| Run | Override | Verdict |
+| --- | --- | --- |
+| baseline | none | died 92s |
+| gpu-swiftshader | `-gpu swiftshader_indirect` | died 82s |
+| no-wifi-packet-stream | `-feature -WiFiPacketStream` | died 80s |
+| memory-4096 | `-memory 4096` | died 75s |
+| no-dns-server | `-dns-server` omitted | died 91s |
+| different AVD | `asc_test` (720x1520, 2.5 GB, 4 cores) | died 64s |
+
+At the moment of the wedge:
+
+```text
+80s  emulator console (QEMU, not the guest): HUNG
+80s  qemu-system-x86_64-headless (pid 10004): cpu=0% rss=5.82GB
+80s  host free RAM: 12.1 GB of 31.6 GB
+```
+
+Two observations relocate the fault, and both are the point of this entry:
+
+- **The emulator console hangs too.** `adb … emu <command>` is served by the emulator process, not by the
+  guest's `adbd`. Its silence means the **emulator** is stuck — not a frozen guest behind a healthy
+  emulator, and not the device being absent.
+- **0% CPU.** Blocked, not spinning. Nothing is executing guest code.
+
+Together they explain the downstream symptoms that had looked unrelated: `adb devices` keeps reporting
+`device` because nothing is left running to update that state, and the teardown's `adb emu kill` hangs for
+its full budget because it is asking the wedged console to shut itself down.
+
+### Three attractive suspects, each killed by measurement
+
+Recorded so they are not re-chased — each looked right from the static configuration:
+
+- **lavapipe.** `hw.gpu.mode=auto` resolves to `vulkan_mode_selected:lavapipe`, software Vulkan, driving a
+  1344x2992 framebuffer headless. Bypassing it with `-gpu swiftshader_indirect` changed nothing.
+- **netsim.** The failing runs log `Netsim Wifi … is gone due to Received RST_STREAM` and `Unable to
+  reconnect to packet streamer`. The run with `-feature -WiFiPacketStream` logged **no netsim lines at
+  all** and died anyway, so that is a consequence of the wedge, not its cause.
+- **Memory.** The run with 12.1 GB free wedged exactly like the one with 4.6 GB, and halving the guest to
+  4096 MB made it die *sooner*.
+
+**So this is below the harness.** Two AVDs and five argument sets share only the emulator build, the
+system image and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending
+to. The first two of those three were then eliminated as well, on the same day:
+
+| Also tested | Result |
+| --- | --- |
+| A different **system image** — `android-36/google_apis` (not 37.0, not Play Store, no 16 KB page size) on a fresh throwaway AVD | 85s of usable life vs 43-71s, then the identical wedge |
+| A different **emulator build** — 36.6.11.0 → 37.1.11.0, same AVD, same arguments | died at 64s, *sooner* than the 92s baseline |
+
+Which leaves the **host**: Windows 11 26200 + WHPX. HVCI is off (`SecurityServicesRunning` is `0`), so
+there is no memory-integrity setting to turn off — VBS is up only because Hyper-V/WHPX is enabled at all.
+Anyone hitting this on their own machine should start from the reproducer below rather than from these
+tests, but should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix
+it, because none of them did here.
+
+Two tooling notes for whoever repeats this: `sdkmanager` / `android sdk install` has no download resume
+and failed three times mid-transfer on a 1.8 GB image (`curl -L --retry 20 --retry-all-errors -C -` is the
+workaround), and `android sdk install emulator` exits **9 even on success** — check `emulator -version`
+rather than the exit code.
+
+### What the harness does about it
+
+It cannot make the emulator work. It can stop misreporting it, which is the difference between a run that
+sends the reader to `adb devices` and one that sends them to the emulator build.
+
+- **`emulator-liveness.ts` (pure, unit-tested)** owns the two-probe verdict: `alive` /
+  `guest-unresponsive` / `emulator-wedged` / `device-gone`. **Only a successful probe is an answer.** An
+  earlier draft split failures into "errored" and "timed out" and read an errored console as *the emulator
+  speaking, with a refusal* — which is wrong: `adb … emu` is routed by the **adb server**, so against an
+  `offline` device adb refuses on the spot and the console is never reached. That draft logged
+  `shell=errored, console=errored -> guest-unresponsive` for a device whose emulator then had to be killed
+  by PID because `adb emu kill` could not reach it either. Each probe is asked twice before its silence is
+  believed, the same one-retry restraint **L47** applies to the AVD probe and for the same reason.
+- **A non-emulator is never convicted on its console**, for exactly the reason **L47** gives: `adb … emu`
+  errors against a physical handset however healthy it is. There was one plugged into this host during
+  the investigation, which is how the case came up.
+- **The gate runs immediately before `establishSession`**, the last point at which a device that has gone
+  quiet can still be reported as itself. The readiness gates before it are best-effort by design (**L45**)
+  and answer a different question — *is it ready yet*, not *is it still there*.
+- **A failed session re-probes the device** (`establishSessionOrDiagnoseDevice`) and, when the emulator is
+  wedged, replaces the WebDriver error with the diagnosis while keeping it as the `cause`. Deliberately
+  *not* done by teaching `wedged-appium-server.ts` more error strings: those signatures are not about the
+  server, and the module that owns the server's diagnosis should not start guessing at the device's.
+- **The emulator's captured output now survives past boot.** `stopCapture()` used to fire the moment a
+  device appeared, freezing the emulator's testimony one step before the failure nobody could explain —
+  the hanging-thread and packet-streamer lines are printed later, while the run is inside
+  `establishSession`. The window now closes when the session is established.
+
+### The wedge is not deterministic, so the run boots a second emulator
+
+**This corrects an earlier reading in this same entry.** The first draft argued *against* an automatic
+cold-boot retry: the wedge recurs at the same point in every run, so a re-boot buys another 90s and the
+identical failure. That inference was drawn from the six hand-boots above — and **every one of them was a
+first boot**, so the data said nothing whatever about second ones.
+
+The run that settled it, 2026-09-05:
+
+```text
+19:06:52  emulator started -> 19:08:20 device connected -> 19:09:01 liveness FAILED
+19:09:12  emulator started -> 19:12:50 device connected -> 19:13:11 session ESTABLISHED
+```
+
+The second emulator — same AVD, same arguments, booted 11 seconds after the first was killed — ran the
+suite to completion. (It happened by accident: the failing run's `afterAll` builds a transport of its own,
+which provisioned again.) A retry would have rescued that run.
+
+So `EMULATOR_BOOT_ATTEMPT_COUNT` is 2. **One** retry: a cold boot costs 90-220s, so a second failure is
+where the run should stop and say so rather than keep paying. Only an emulator this run started is
+replaced — an adopted device is somebody else's to restart, the same ownership line **L46** draws in
+never sweeping `qemu*`. And the emulator is disowned *before* it is stopped, so a throw inside the stop
+cannot leave the outer teardown chasing the same processes twice.
+
+What is still not added is a *session* retry: `connectionRetryCount: 3` re-attempting `POST /session`
+against a device that is already gone remains useless, and the liveness gate now stops those three
+attempts before they are made.

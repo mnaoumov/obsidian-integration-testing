@@ -207,6 +207,48 @@ emulator -avd <name> -no-snapshot-load
 adb -s emulator-5554 emu avd snapshot save default_boot
 ```
 
+If it still dies after cold-booting, the snapshot was not the cause — read the next section.
+
+### "Device ... stopped answering before the Appium session could be established"
+
+The harness probes the device once more immediately before creating the session. When the device has gone
+quiet and the emulator is one the harness started, it **boots a fresh emulator and tries once more** — the
+wedge is not deterministic, and a second boot from the same AVD often runs the whole suite. A device the
+harness merely adopted is never replaced, and a second failure stops the run rather than paying for
+another 90–220s boot.
+
+When the run does stop, the message names **which layer** stopped answering, because the recovery differs:
+
+- **`the EMULATOR is wedged`** — neither the guest nor the emulator's own console answered, each asked
+  twice. The console (`adb -s <device> emu ...`) is served by the emulator process rather than by the
+  guest, so its silence convicts the emulator itself. Nothing recovers a wedged emulator, which is why the
+  harness replaces it rather than retrying against it; seeing this message means the replacement failed
+  too. **`adb devices` will still list the device and will mislead you** — nothing is left running to
+  update that state, which is why this used to surface as Appium's `Device <id> was not in the list of
+  connected devices` and send everybody to the one diagnostic that cannot help.
+- **The guest did not answer but the console did** — the emulator is healthy and the guest is frozen or
+  starved. A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget for
+  waiting one out.
+- **`adb devices` no longer lists it** — the emulator exited, or wedged badly enough to drop off adb. The
+  emulator's own output is appended to the message and is the best evidence for which.
+
+**If the emulator wedges at the same point in every run, the fault is below this harness.** That was
+measured on one host on 2026-09-05: six hand-boots, two AVDs and five different emulator argument sets,
+every one wedging 64–92s after boot with the QEMU backend at **0% CPU** — blocked, not spinning. Changing
+the GPU mode (`-gpu swiftshader_indirect`), disabling the network simulator (`-feature
+-WiFiPacketStream`), halving the guest RAM and dropping `-dns-server` each changed nothing. When you see
+that shape, the fault is in the platform rather than your tests. On that host a newer system image
+(`android-36/google_apis`) and a newer emulator build (37.1.11.0) were both tried and both wedged
+identically, which left the host hypervisor. Reproduce it directly before spending time anywhere else:
+
+```sh
+# Reproduce without Appium or a suite: boot by hand and poll. A healthy guest answers indefinitely.
+emulator -avd <name> -no-snapshot-load -no-snapshot-save -no-window
+# then, every few seconds:
+adb -s emulator-5554 shell true          # the guest, via adbd
+adb -s emulator-5554 emu avd status      # the emulator's console -- if THIS hangs, it is not the guest
+```
+
 ### "The Appium server ... cannot see Android device ..., although this host's adb can"
 
 An Appium server that has been listening for a while can go **stale**: it still answers `/status` with
