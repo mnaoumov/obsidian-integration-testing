@@ -21,7 +21,11 @@ set -euo pipefail
 
 AVD_NAME="$1"
 SYSTEM_IMAGE="$2"
-CONFIG_PATH="$HOME/.android/avd/$AVD_NAME.avd/config.ini"
+# The workflow pins ANDROID_AVD_HOME so this script and the emulator agree; the
+# fallback is avdmanager's own default, for a hand-run outside CI.
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+CONFIG_PATH="$ANDROID_AVD_HOME/$AVD_NAME.avd/config.ini"
+mkdir -p "$ANDROID_AVD_HOME"
 
 # `yes` is killed by SIGPIPE the moment sdkmanager stops reading, and under
 # `pipefail` that non-zero status fails the whole step -- which is exactly how
@@ -36,6 +40,15 @@ sdkmanager --install "$SYSTEM_IMAGE" emulator platform-tools
 # `echo no` declines the "custom hardware profile?" prompt; --force replaces any
 # AVD of the same name rather than failing a re-run.
 echo no | avdmanager create avd --force --name "$AVD_NAME" --package "$SYSTEM_IMAGE"
+
+# A create that "succeeded" but wrote its config somewhere else is the failure
+# mode this guard exists for -- it cost a CI round, reported only as a bare
+# `sed: can't read ...`. Name the path and show what does exist.
+if [ ! -f "$CONFIG_PATH" ]; then
+  echo "avdmanager did not write $CONFIG_PATH. AVDs it can see:" >&2
+  avdmanager list avd >&2 || true
+  exit 1
+fi
 
 # Rewrite rather than append: avdmanager has already written its own value for
 # most of these, and a duplicated key leaves which one wins up to the parser.

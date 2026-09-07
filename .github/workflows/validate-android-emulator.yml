@@ -45,6 +45,13 @@ permissions:
   contents: read
 
 env:
+  # Where the AVD lives, pinned for every step rather than left to be resolved.
+  # avdmanager and the emulator each pick their AVD directory from
+  # ANDROID_AVD_HOME / ANDROID_USER_HOME / ANDROID_SDK_HOME before falling back
+  # to ~/.android/avd, and the hosted runners set some of those: the second CI
+  # attempt created the AVD successfully and then could not find its config.ini,
+  # because the create step and the reader disagreed about which of those won.
+  ANDROID_AVD_HOME: ${{ github.workspace }}/.avd
   # The AVD name the Android project's transport options hard-code
   # (scripts/android-transport-setup.ts), so `suite` must create that one.
   AVD_NAME: ${{ inputs.avdName || 'obsidian_test' }}
