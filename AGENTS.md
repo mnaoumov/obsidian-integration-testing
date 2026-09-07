@@ -2503,6 +2503,50 @@ Anyone hitting this on their own machine should start from the reproducer below 
 tests, but should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix
 it, because none of them did here.
 
+### What the host turned out to be, and what was done about it
+
+Two of the obvious host-side fixes were checked and are dead ends, so nobody re-chases them:
+
+- **There is no update to install.** The machine is fully patched (Windows 11 Pro 25H2, build
+  26200.9168; only a Defender definition update pending), and the System event log carries no WHEA, no
+  Hyper-V and no bugcheck entries around any of the wedges. It is a hang, and the platform never notices
+  it.
+- **The AMD-native accelerator is installed and inert.** This is an AMD host (Ryzen 5 7500F) running the
+  emulator through **WHPX**, Microsoft's generic hypervisor API. Google also ships the *Android Emulator
+  hypervisor driver* (AEHD), whose own README says it exists "to run Android Emulator on Windows
+  **without** Windows Hypervisor Platform (WHPX)" — and it is already installed here, as
+  `C:\Windows\System32\drivers\aehd.sys` with a `SYSTEM_START` service. It sits **STOPPED with exit code
+  31**, because Hyper-V holds the CPU's virtualization extensions and the two cannot coexist. Swapping to
+  it therefore is not a flag: it costs an elevated `bcdedit /set hypervisorlaunchtype off` and a reboot,
+  during which no Hyper-V VM, WSL2 or Windows Sandbox can start (reversible with `auto` and another
+  reboot). **Untested here** — recorded so the next reader knows both that the option exists and what it
+  costs, rather than discovering the service is present and assuming it is in use.
+
+So the remedy is not to repair this workstation but to **run the Android leg somewhere else**:
+
+- **`npm run probe:emulator-wedge`** (`scripts/emulator-wedge-probe.ts`) is the reproducer, kept as a repo
+  asset because it had been rebuilt from scratch twice. It boots one AVD with `buildEmulatorArguments`'
+  own output, watches it with the same two-probe verdict the transport uses, and adds the two readings a
+  run has no reason to collect — the backend's CPU share and the host's free memory. It exits non-zero on
+  a wedge. Four runs on 2026-09-06 wedged at 18s, 5s, 16s and 44s — sooner than the 64–163s above, on a
+  host that was compiling throughout, which is a reminder that the timing is not the signal. The shape is:
+
+  ```text
+     5s  alive               cpu=838%  rss=5.05GB  free=5.39GB
+    12s  alive               cpu=507%  rss=5.62GB  free=5.05GB
+    18s  emulator-wedged     cpu=0%    rss=5.62GB  free=5.55GB
+  ```
+
+  **A quiet guest inside the post-boot settle window is forgiven; a quiet console never is.** Without that
+  allowance the probe convicted a healthy guest 5s after boot while this host was compiling — the same
+  post-boot contention **L45** sizes its budgets for, and exactly the false wedge a loaded CI runner would
+  otherwise produce. The console is served by the emulator process, so its silence is never settling.
+
+- **`.github/workflows/validate-android-emulator.yml`** runs that same probe on a Linux runner and, when
+  it survives, the Android integration project behind it. A runner that survives is what convicts this
+  machine; the probe job is separate from the suite job precisely so the two answers do not have to be
+  untangled from one failure.
+
 Two tooling notes for whoever repeats this: `sdkmanager` / `android sdk install` has no download resume
 and failed three times mid-transfer on a 1.8 GB image (`curl -L --retry 20 --retry-all-errors -C -` is the
 workaround), and `android sdk install emulator` exits **9 even on success** — check `emulator -version`

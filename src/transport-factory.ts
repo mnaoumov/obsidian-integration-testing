@@ -52,6 +52,7 @@ import {
   checkIsDeviceListed,
   listOnlineDeviceIds
 } from './adb-device-list.ts';
+import { resolveEmulatorBinaryPath } from './android-sdk.ts';
 import {
   checkIsAppiumDriverInstalled,
   UIAUTOMATOR2_DRIVER_NAME,
@@ -1449,7 +1450,7 @@ class AppiumTransportFactory {
    * @param avdName - The requested AVD name.
    */
   private async ensureAvdExists(avdName: string): Promise<void> {
-    const emulatorBinary = this.resolveEmulatorBinary();
+    const emulatorBinary = resolveEmulatorBinaryPath();
     this.log(`Verifying AVD "${avdName}" exists (${emulatorBinary} -list-avds)...`);
 
     const [error, stdout] = await new Promise<[Error | null, string]>((resolve) => {
@@ -1991,16 +1992,6 @@ class AppiumTransportFactory {
     return false;
   }
 
-  private resolveEmulatorBinary(): string {
-    const sdkRoot = process.env['ANDROID_HOME'] ?? process.env['ANDROID_SDK_ROOT'];
-    if (!sdkRoot) {
-      throw new Error(
-        'Cannot find Android emulator: neither ANDROID_HOME nor ANDROID_SDK_ROOT environment variable is set.'
-      );
-    }
-    return join(sdkRoot, 'emulator', 'emulator');
-  }
-
   /**
    * Replaces a wedged server this harness started earlier and retries the
    * session once.
@@ -2270,7 +2261,7 @@ class AppiumTransportFactory {
   }
 
   private startEmulator(avdName: string, shouldReuseSnapshot: boolean, isEmulatorVisible?: boolean): ProcessLaunch {
-    const emulatorBinary = this.resolveEmulatorBinary();
+    const emulatorBinary = resolveEmulatorBinaryPath();
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
     const input = buildEmulatorArguments({ avdName, isHidden: isWindowHidden, shouldReuseSnapshot });
     const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);

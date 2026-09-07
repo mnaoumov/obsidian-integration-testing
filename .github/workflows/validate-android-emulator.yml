@@ -1,0 +1,162 @@
+name: Validate Android Emulator
+
+# Runs the Android leg on a Linux runner, because the Windows dev box this repo is
+# developed on cannot run it: any emulator there stops answering 64-163s after boot,
+# with the QEMU backend blocked at 0% CPU and the emulator's own console hung — see
+# **L49**, which records every emulator flag, AVD, system image and emulator build
+# that was ruled out by measurement. This is the same reasoning as
+# validate-installer-path.yml ("the cross-platform coverage the Windows-only local
+# dev box cannot provide"), applied to the one suite that needs a device.
+#
+# TWO JOBS, and the first is the one that answers the question:
+#
+#   probe  boots the AVD with the harness's own arguments and watches it for 300s,
+#          with no Appium and no suite (scripts/emulator-wedge-probe.ts). A runner
+#          that survives is what convicts the workstation the wedge was found on.
+#          ~2 minutes of watching after the boot, and it needs nothing but an AVD.
+#   suite  runs the Android integration project against a real Obsidian install.
+#          Gated on `probe` so a wedged runner reports the wedge rather than a
+#          suite failure that has to be diagnosed back to it.
+#
+# `suite` boots the emulator itself and lets the harness ADOPT it, rather than
+# leaving the boot to the harness: the APK has to be installed into a running
+# guest before the suite starts, and there is no hook between the harness's boot
+# and its first test. Adoption is a documented path (src/avd-probe-verdict.ts),
+# and `probe` is what exercises the harness's own boot arguments.
+#
+# Manual-only (workflow_dispatch), following the two existing validate-* workflows:
+# each run boots an emulator and downloads an APK, so it is not wired to push/PR.
+
+on:
+  workflow_dispatch:
+    inputs:
+      avdName:
+        description: AVD to create and boot
+        default: obsidian_test
+        required: false
+        type: string
+      surviveForInSeconds:
+        description: How long the probe watches a healthy emulator before calling it a survival
+        default: '300'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  # The AVD name the Android project's transport options hard-code
+  # (scripts/android-transport-setup.ts), so `suite` must create that one.
+  AVD_NAME: ${{ inputs.avdName || 'obsidian_test' }}
+  HUSKY: '0'
+  # `google_apis`, never `google_apis_playstore`: a Play-Store image eats most of a
+  # data partition on its own and blocks `adb root`, so a full /data cannot then be
+  # inspected. The Android guide's "AVD provisioning" section is the source of this.
+  SYSTEM_IMAGE: system-images;android-36;google_apis;x86_64
+
+jobs:
+  probe:
+    name: Emulator wedge probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create the AVD
+        run: bash ./.github/scripts/create-avd.sh "$AVD_NAME" "$SYSTEM_IMAGE"
+
+      # Exits non-zero on a wedge, so this step IS the assertion.
+      - name: Probe the emulator
+        run: npm run probe:emulator-wedge -- --avd "$AVD_NAME" --survive-for "${{ inputs.surviveForInSeconds || '300' }}"
+
+  suite:
+    name: Android integration suite
+    needs: probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Create the AVD
+        run: bash ./.github/scripts/create-avd.sh "$AVD_NAME" "$SYSTEM_IMAGE"
+
+      # The same flags buildEmulatorArguments produces for a hermetic cold boot, so
+      # the guest the harness adopts is the guest it would have booted itself.
+      - name: Boot the emulator
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -avd "$AVD_NAME" -no-snapshot-load -no-snapshot-save -dns-server 8.8.8.8 -no-window &
+          adb wait-for-device
+          adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+          adb shell settings put global hide_error_dialogs 1
+          adb devices
+
+      # metadata.json already carries a download URL per Obsidian version for every
+      # target including `apk` — deliberate groundwork nothing consumed until now.
+      # Numeric collation so 1.10.3 sorts above 1.9.14.
+      - name: Install Obsidian
+        run: |
+          APK_URL=$(node -e "
+            const versions = Object.entries(require('./metadata.json'))
+              .filter(([, entry]) => entry.downloads?.apk)
+              .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }));
+            process.stdout.write(versions.at(-1)[1].downloads.apk);
+          ")
+          echo "Installing $APK_URL"
+          curl -L --retry 5 --retry-all-errors -o obsidian.apk "$APK_URL"
+          adb install -r obsidian.apk
+          adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
+
+      # `test:integration` deliberately excludes this project — that aggregate is
+      # desktop and must not boot an emulator — so the project is named explicitly.
+      - name: Run the Android integration project
+        run: npx vitest run --project integration-tests:android-trusted-input
+
+      - name: Capture the emulator log
+        if: always()
+        run: adb logcat -d > logcat.txt || true
+
+      - name: Upload the emulator log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logcat
+          path: logcat.txt
+          if-no-files-found: ignore
