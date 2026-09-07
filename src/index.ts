@@ -149,7 +149,8 @@ export type { SilentAsarFallbackErrorConstructorParams } from './silent-asar-fal
 export { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 export type {
   PopulateFileContent,
-  PopulateFilesParams
+  PopulateFilesParams,
+  TemporaryVaultOptions
 } from './temporary-vault.ts';
 export { TemporaryVault } from './temporary-vault.ts';
 export type {

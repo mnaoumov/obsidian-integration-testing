@@ -25,6 +25,7 @@ import type { ObsidianTransport } from './transport.ts';
 
 import { getTransportOptions } from './context-provider.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
+import { log } from './log.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 import {
   registerVault,
@@ -50,6 +51,21 @@ export type PopulateFileContent = string | Uint8Array | undefined;
  */
 export type PopulateFilesParams = Record<string, PopulateFileContent>;
 
+/**
+ * Options for the {@link TemporaryVault} constructor.
+ */
+export interface TemporaryVaultOptions {
+  /**
+   * Whether {@link TemporaryVault.dispose} removes the vault **directory**.
+   *
+   * When omitted, defaults to whether this instance created that directory — `true` for a temp
+   * directory the constructor made (no `path` argument), `false` for a directory handed to it as an
+   * explicit `path`. A handle over somebody else's directory unregisters the vault but leaves the
+   * files alone, so wrapping a directory cannot destroy it. Set explicitly to override.
+   */
+  readonly shouldRemoveDirectoryOnDispose?: boolean;
+}
+
 const RM_RETRY_DELAY_IN_MILLISECONDS = 500;
 const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10_000;
 
@@ -58,6 +74,10 @@ const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10_000;
  *
  * Creates a temp directory and registers it in the running Obsidian instance
  * so that the Obsidian CLI can target it via `cwd`.
+ *
+ * A handle **owns** the directory only when it created it. {@link TemporaryVault.dispose} deletes an
+ * owned directory and leaves a borrowed one in place — see
+ * {@link TemporaryVaultOptions.shouldRemoveDirectoryOnDispose}, which overrides that default.
  */
 export class TemporaryVault {
   /**
@@ -66,16 +86,28 @@ export class TemporaryVault {
   public readonly path: string;
 
   /**
+   * Whether {@link TemporaryVault.dispose} removes {@link TemporaryVault.path} from disk.
+   */
+  readonly #shouldRemoveDirectoryOnDispose: boolean;
+
+  /**
    * Creates a new temp vault.
    *
    * @param path - An explicit vault path. If omitted, a temp directory is created.
+   * @param options - Vault options.
    */
-  public constructor(path?: string) {
+  public constructor(path?: string, options?: TemporaryVaultOptions) {
     this.path = path ?? mkdtempSync(join(tmpdir(), TEMP_VAULT_DIR_PREFIX));
+    this.#shouldRemoveDirectoryOnDispose = options?.shouldRemoveDirectoryOnDispose ?? path === undefined;
   }
 
   /**
-   * Unregisters the vault from Obsidian and deletes the temp directory.
+   * Unregisters the vault from Obsidian and, when this handle owns the directory, deletes it.
+   *
+   * The directory is removed only when this instance created it, or when
+   * {@link TemporaryVaultOptions.shouldRemoveDirectoryOnDispose} said so explicitly. That is what
+   * makes a handle over a directory somebody else owns — the run's shared setup vault, say, which
+   * `getTemporaryVault()` wraps — safe to dispose from a consumer's `afterAll`.
    *
    * @param transportOverride - An explicit transport to use when unregistering.
    *   When omitted, falls back to the transport configured via the context provider.
@@ -84,7 +116,11 @@ export class TemporaryVault {
     try {
       await unregisterVault(this.path, transportOverride);
     } finally {
-      await retryRm(this.path);
+      if (this.#shouldRemoveDirectoryOnDispose) {
+        await retryRm(this.path);
+      } else {
+        log(`[temporary-vault] Unregistered but kept the vault directory, which this handle does not own: ${this.path}`);
+      }
     }
   }
 

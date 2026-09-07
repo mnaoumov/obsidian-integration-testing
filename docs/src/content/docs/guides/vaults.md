@@ -64,6 +64,23 @@ it('should read a pre-populated file', async () => {
 
 Both `TemporaryVault` and `ContextId` implement `AsyncDisposable`, so `await using` handles cleanup.
 
+### `dispose()` deletes only a directory the handle created
+
+`dispose()` always unregisters the vault from Obsidian, but it removes the **directory** only when that
+handle is the one that created it — a `new TemporaryVault()` with no path, as above. A handle built over a
+path you supplied unregisters and leaves the files where they are.
+
+That is what makes the handle `getTemporaryVault()` returns safe: it wraps the vault the global setup
+provisioned for the whole run, so an `afterAll(() => vault.dispose())` that looks symmetric would otherwise
+delete the directory out from under the open window and every test file that had not run yet.
+
+Pass `shouldRemoveDirectoryOnDispose` to override the default in either direction:
+
+```ts
+// Delete a directory this handle did not create.
+const vault = new TemporaryVault(myScratchPath, { shouldRemoveDirectoryOnDispose: true });
+```
+
 ## Pre-populate before Obsidian opens
 
 For large fixtures, write the files **before** Obsidian opens the vault, so its startup scan indexes them

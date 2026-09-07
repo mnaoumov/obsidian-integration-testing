@@ -325,8 +325,8 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   const transportOptions = buildCdpTransportOptions(options);
   await sweepLeftovers(transportOptions);
   const transport = await createTransportFromOptions(transportOptions);
-  const vault = new TemporaryVault(options?.vault);
   const shouldRemoveVaultOnDispose = options?.shouldRemoveVaultOnDispose ?? (options?.vault === undefined);
+  const vault = new TemporaryVault(options?.vault, { shouldRemoveDirectoryOnDispose: shouldRemoveVaultOnDispose });
 
   // The headless defaults go only into a vault the harness made — the same
   // `options.vault === undefined` discriminator the disposal above turns on. A
@@ -370,11 +370,10 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 
     async dispose(): Promise<void> {
       try {
-        if (shouldRemoveVaultOnDispose) {
-          await vault.dispose(transport);
-        } else {
-          await transport.unregisterVault(vault.path);
-        }
+        // The vault carries `shouldRemoveVaultOnDispose` itself (handed to its constructor above), so
+        // This is one call rather than a branch: it always unregisters, and removes the directory only
+        // When that flag says to.
+        await vault.dispose(transport);
       } finally {
         await transport.dispose?.();
       }
