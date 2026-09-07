@@ -24,7 +24,7 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
 import astro from 'eslint-plugin-astro';
 import { flatConfigs as eslintPluginImportXFlatConfigs } from 'eslint-plugin-import-x';
 // eslint-disable-next-line import-x/no-rename-default, import-x/no-named-as-default -- The default export name `index` is too confusing.
-import jsdoc from 'eslint-plugin-jsdoc';
+import jsdoc, { configs as jsdocConfigs } from 'eslint-plugin-jsdoc';
 import { configs as perfectionistConfigs } from 'eslint-plugin-perfectionist';
 /* v8 ignore start -- Declarative ESLint rule/plugin configuration; correctness is verified by running ESLint, not unit tests. */
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc';
@@ -358,7 +358,7 @@ function getImportXConfigs(): Linter.Config[] {
 function getJsdocsConfigs(): Linter.Config[] {
   return defineConfig([
     {
-      ...jsdoc.configs['flat/recommended-typescript-error'],
+      ...jsdocConfigs['flat/recommended-typescript-error'],
       files: sourceFiles,
       ignores: testFiles
     },
