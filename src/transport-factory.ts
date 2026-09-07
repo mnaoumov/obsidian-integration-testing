@@ -137,6 +137,8 @@ import {
   resolveConcreteVersion
 } from './obsidian-version-switch.ts';
 import { compareVersions } from './obsidian-version.ts';
+import { readOwnedInstanceExitMarker } from './owned-instance-exit-marker.ts';
+import { buildOwnedInstanceExitedErrorFromMarker } from './owned-instance-exited-error.ts';
 import {
   parsePosixLsofPids,
   parseWindowsNetstatPids
@@ -2996,6 +2998,38 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
 }
 
 /**
+ * Verifies the harness-owned instance a worker was told to attach to is still
+ * serving CDP, before handing back a transport that can only fail against it.
+ *
+ * This is the once-per-file check: transport creation is cached per worker, so
+ * a live instance pays one loopback request per test file and a dead one turns
+ * the whole file into a single named error, raised before the first test. It
+ * replaces the `ECONNREFUSED`-per-file cascade a mid-run death used to produce —
+ * and the per-file probe consumers were writing into their own `setupFiles` to
+ * get the same effect.
+ *
+ * Only for the harness's own instances: a plain attach targets a foreign
+ * Obsidian whose absence is the user's to resolve, and `preflightCheck` already
+ * has a story for it.
+ *
+ * @param host - The CDP host to probe.
+ * @param port - The CDP port to probe.
+ * @throws {OwnedInstanceExitedError} When nothing is serving CDP on the port.
+ */
+async function assertHarnessOwnedInstanceIsServing(host: string, port: number): Promise<void> {
+  const cdpUrl = `http://${host}:${String(port)}`;
+  try {
+    const response = await fetch(`${cdpUrl}/json/version`);
+    await response.body?.cancel();
+    return;
+  } catch {
+    // Nothing is listening — the instance the global setup launched is gone.
+  }
+
+  throw buildOwnedInstanceExitedErrorFromMarker(cdpUrl, readOwnedInstanceExitMarker(port));
+}
+
+/**
  * Builds the platform's "list every process" query.
  *
  * @returns The command and arguments to run.
@@ -3033,6 +3067,9 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
   if (options?.port !== undefined) {
     const ownedSuffix = options.isHarnessOwnedInstance ? ' (harness-owned)' : '';
     log(`[transport-factory:obsidian-cdp] Attaching to running Obsidian${ownedSuffix} (host=${options.host ?? 'localhost'}, port=${String(options.port)})`);
+    if (options.isHarnessOwnedInstance) {
+      await assertHarnessOwnedInstanceIsServing(options.host ?? 'localhost', options.port);
+    }
     return new DesktopCdpTransport(normalizeOptionalProperties<DesktopCdpTransportConfig>({
       cdpHost: options.host,
       cdpPort: options.port,

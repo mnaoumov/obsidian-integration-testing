@@ -138,6 +138,8 @@ export {
 } from './obsidian-version.ts';
 export type { OpenObsidianSettingsTabOptions } from './open-obsidian-settings-tab.ts';
 export { openObsidianSettingsTab } from './open-obsidian-settings-tab.ts';
+export type { OwnedInstanceExitedErrorConstructorParams } from './owned-instance-exited-error.ts';
+export { OwnedInstanceExitedError } from './owned-instance-exited-error.ts';
 export type { PollInObsidianParams } from './poll-in-obsidian.ts';
 export { pollInObsidian } from './poll-in-obsidian.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';

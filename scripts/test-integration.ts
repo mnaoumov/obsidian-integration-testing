@@ -16,5 +16,7 @@ await execFromRoot([
   '--project',
   'integration-tests:config-directory-override',
   '--project',
-  'integration-tests:failed-setup'
+  'integration-tests:failed-setup',
+  '--project',
+  'integration-tests:instance-death'
 ]);
