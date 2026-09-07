@@ -37,7 +37,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 ## L3. Testing
 
 - Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:scripts` — the first covers `src/**`, the second everything under `scripts/**` plus the docs site: the vendored docs generator (**L35**), the custom ESLint rules (**L34**), and the release-script helpers (**L37**)). The second project's include was `scripts/docs-gen/**/*.test.ts` until it was widened to `scripts/**/*.test.ts`; the narrow glob had left `scripts/helpers/eslint-rules/*.test.ts` — four real suites, 87 tests, all green the moment they were picked up — run by no project at all, and left the release script with nowhere to put a regression test at all. A test file under `scripts/` is now picked up by construction rather than by remembering to widen a glob.
-- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs five projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded); and `integration-tests:failed-setup` (the failed-setup regression suite — its global setup is wired to FAIL by attaching to a CDP port nothing serves, and the worker asserts it fails with that cause rather than falling back to a transport nobody asked for; hermetic, launches nothing, ~3 s).
+- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs six projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded); `integration-tests:config-directory-override` (the only project that runs under a `configDirectory` override — its `environmentOptions.obsidianTransport` opens the owned vault under `.obsidian-desktop`, and the worker asserts `app.vault.configDir`, that a seeded plugin loaded, and that the headless defaults are readable — i.e. that every pre-open write followed the override); and `integration-tests:failed-setup` (the failed-setup regression suite — its global setup is wired to FAIL by attaching to a CDP port nothing serves, and the worker asserts it fails with that cause rather than falling back to a transport nobody asked for; hermetic, launches nothing, ~3 s).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics. It runs **`unit-tests` alone** (`scripts/test-coverage.ts` passes `--project unit-tests`), so anything wrong with that one project's configuration is a release-gate failure: the gate is a step of `updateVersion`'s preflight (**L37**) and this package publishes only through Trusted Publisher, with no manual route around a red run.
 - **Every Vitest project takes its `testTimeout` from the shared `SHARED_TEST_DEFAULTS` spread** in `scripts/vitest-config.ts`, not from its own line. Vitest 4 projects do **not** inherit the root-level `test` options, so a project that omits `testTimeout` silently runs on the built-in 5000 ms default — and that is exactly what `unit-tests` did for a time, making it the tightest budget in the repo on the one project gating a release. Spreading the default makes the omission impossible rather than merely unlikely; add a project and it is budgeted by construction. The 30 s budget absorbs two costs no per-suite number can predict: v8 coverage instrumentation, **measured at ~2.2x** on this project (whole run 4.8–5.9 s plain vs 9.6–11.0 s instrumented — *not* the ~10x first assumed), and the CPU contention of a box running many concurrent sessions. Only two deliberate overrides sit on top of it: `src/public-api-barrel.test.ts`'s own 120 s (its ts-morph `Project` over the whole `tsconfig.json` measures ~9.5 s instrumented, too close to 30 s under load), and the Android project's 300 s (an emulator run is 140–200 s cold, **L19**).
 - Cross-platform CI validation (manual `workflow_dispatch`, since each run downloads a multi-hundred-MB asset): `.github/workflows/validate-installer-path.yml` validates installer download+extract on ubuntu/macos/windows (opt-in via `OBSIDIAN_TEST_INSTALLER_DOWNLOAD=1`); `.github/workflows/validate-installer-boot.yml` validates the owned-instance **boot** from a pinned installer (`OBSIDIAN_TEST_INSTALLER_BOOT=1`, launches Electron under `xvfb` + `--no-sandbox` on Linux) and, in a Linux-only step, the asar-swap version-pin regression (`OBSIDIAN_TEST_ASAR_SWAP=1` — symlinks a newer cached shell under a versionless dir on `PATH` so shell-version detection returns `undefined`, then asserts an older pinned `obsidianVersion` actually runs). Both pass `GITHUB_TOKEN` so the release-asset API isn't rate-limited to the anonymous quota (which 403s on shared runner IPs → templated-name fallback). A third workflow, `.github/workflows/collect-runtime-versions.yml`, runs the same boot path on a **schedule** rather than on demand — it is the automation that keeps `metadata.json`'s `runtimeVersions` current (see **L20**), and unlike the two validators it commits its result.
@@ -2402,17 +2402,55 @@ Two constraints shape the call sites, and both were bugs until 2026-09-05:
   `populate` so an `app.json` a consumer carries in cannot win over the harness default, and before
   `syncToDevice` so the file reaches an Android device with the rest of the vault. Moving it into
   `TemporaryVault.register()` would be too late for mobile — the push has already happened.
-- **The `configDirectory` override has to reach it.** The old `ensureAlwaysUpdateLinks` hardcoded
-  `.obsidian` while the harness supports opening a vault whose settings live elsewhere (**L5**). Under an
-  override it wrote to a folder the vault never reads and **both** defaults vanished silently.
-  `resolveOwnedConfigDirectory` (`src/transport-options.ts`) answers the question once: the override only
-  when the transport is CDP **and** owned, `undefined` in attach mode (where the user's Obsidian opens the
-  vault under its own config, as that option's own docs say) and on Android (no override exists).
+- **The `configDirectory` override has to reach it — and reach every OTHER pre-open write too.** The old
+  `ensureAlwaysUpdateLinks` hardcoded `.obsidian` while the harness supports opening a vault whose settings
+  live elsewhere (**L5**). Under an override it wrote to a folder the vault never reads and **both** defaults
+  vanished silently. `resolveOwnedConfigDirectory` (`src/transport-options.ts`) answers the question once:
+  the override only when the transport is CDP **and** owned, `undefined` in attach mode (where the user's
+  Obsidian opens the vault under its own config, as that option's own docs say) and on Android (no override
+  exists). `coreSetup` resolves it into a single local and feeds every writer from it — see the next section
+  for who those are.
 - **Never a caller-supplied vault.** `connectToCdp` provisions a vault too and called neither helper before
   2026-09-05, so it lacked both defaults. It now writes them — but only when it made the directory itself
   (`options.vault === undefined`, the same discriminator that already decides whether disposal deletes it).
   A vault the caller named is a real one they keep, and a debugging session has no business rewriting its
   settings.
+
+### Every pre-open write, not just `app.json`
+
+The 2026-09-05 fix threaded the override into `ensureHeadlessVaultConfig` and stopped there, leaving the
+other two writers hardcoding `.obsidian`. Under an override they wrote into a folder nothing opens, and the
+enable that followed reported only `Plugin "…" is in the enabled set but not loaded` — naming nothing about
+a config folder, which is why it survived by reading rather than by failing. `coreSetup` now resolves the
+folder once and hands it to all three:
+
+- **`ensureHeadlessVaultConfig`** — `<configDirectory>/app.json`.
+- **`installPluginIntoVault`** (`src/vault-plugin-install.ts`) — the plugin-under-test's build into
+  `<configDirectory>/plugins/<id>/`, plus the `<configDirectory>/community-plugins.json` enable list. Carved
+  out of `copyPluginIntoVault` for the same reason the config write was carved out: `copyPluginIntoVault` is
+  private and also resolves `dist/`, reads the manifest and refuses a desktop-only plugin on mobile, so the
+  override path was not reachable from a unit test until the write had its own module.
+- **`remapConfigDirectoryKeys`** (`src/global-setup-core.ts`) — the **populate map's** config-folder keys.
+  A populate map names destinations vault-relative and everything that builds one, `buildDemoVaultPopulate`
+  included, writes them under a literal `.obsidian/`, because that is the only folder a map can know about.
+  Rewriting the key in `coreSetup` fixes every consumer at once — a hand-written map as much as a demo
+  vault's — with no second copy of the override for a caller to keep in sync. Safe rather than magic: the
+  vault is one the harness made for this run and has exactly one config folder, so under an override a
+  `.obsidian/` entry is dead weight nothing reads. Only a leading `.obsidian` path **segment** moves.
+
+**`enablePluginInVault` is deliberately exempt.** It evals `app.plugins.enablePlugin` inside Obsidian, which
+resolves paths through the running app's own `configDir` — it touches no filesystem path, so there is
+nothing to thread. Likewise `transport-appium`'s `.obsidian/app.json` marker push: `resolveOwnedConfigDirectory`
+returns `undefined` on Android, so no override exists there. And `cli.ts` / `demo-vault-tree.ts` /
+`buildDemoVaultPopulate`'s **reads** stay `.obsidian`: those name the plugin repo's own committed
+`demo-vault/.obsidian`, a source folder the run's override has no bearing on.
+
+**Coverage:** `src/vault-plugin-install.test.ts` and the `remapConfigDirectoryKeys` block in
+`src/global-setup-core.test.ts` for the units; `integration-tests:config-directory-override` (**L3**) for the
+end-to-end. The install path itself cannot be driven end-to-end from this repo — `coreSetup` takes its
+project root from `findProjectRoot()` rather than a parameter and the harness ships no plugin `dist` — so
+that project forces `installPlugin: false` and proves the other half: a real Obsidian, opened under an
+override, finds what the harness wrote for it.
 
 ### What is still NOT covered, deliberately
 

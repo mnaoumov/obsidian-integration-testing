@@ -14,5 +14,7 @@ await execFromRoot([
   '--project',
   'integration-tests:enable-community-plugins',
   '--project',
+  'integration-tests:config-directory-override',
+  '--project',
   'integration-tests:failed-setup'
 ]);

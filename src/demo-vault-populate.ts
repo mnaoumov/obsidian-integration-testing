@@ -27,10 +27,17 @@ import { join } from 'node:path';
 import type { PopulateFilesParams } from './temporary-vault.ts';
 
 import { REQUIRED_PLUGIN_ASSET_NAMES } from './community-plugin-registry.ts';
+import { DEFAULT_CONFIG_DIRECTORY } from './config-directory.ts';
 import { readDemoVaultTree } from './demo-vault-tree.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
-const OBSIDIAN_CONFIG_DIR = '.obsidian';
+/*
+ * Both the folder the demo vault's own committed config sits in on disk, and the destination the map
+ * names for it. The two coincide by construction: the source is a repo folder Obsidian created under its
+ * default, and a `configDirectory` override on the run is applied to the destination keys later, by
+ * `remapConfigDirectoryKeys` in `global-setup-core`, which is where the override is actually known.
+ */
+const OBSIDIAN_CONFIG_DIR = DEFAULT_CONFIG_DIRECTORY;
 const PLUGINS_DIR = 'plugins';
 const DATA_JSON = 'data.json';
 const DATA_JSON_INDENT = 2;
