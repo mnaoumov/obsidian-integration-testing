@@ -14,6 +14,10 @@
  * So this suite verifies the half that can silently rot — the renderer having
  * Node access, `require('node:net')` resolving, the connection surviving past
  * arming, and re-arming staying idempotent.
+ *
+ * It also covers the one failure the watchdog itself used to cause: a socket
+ * closing under a perfectly live instance. That is reproducible from inside the
+ * harness — close the socket and see whether the app is still there afterwards.
  */
 
 import {
@@ -53,8 +57,22 @@ interface ParentLivenessHolder {
  * The subset of the renderer's watchdog socket a test reads.
  */
 interface ParentLivenessSocket {
+  destroy(): void;
+  localPort?: number;
   readyState?: string;
   remotePort?: number;
+}
+
+/**
+ * What the re-arm check reports back out of the renderer: the socket before the
+ * close and the one that replaced it.
+ */
+interface ReArmedSocketState {
+  afterLocalPort: number | undefined;
+  afterReadyState: string | undefined;
+  afterRemotePort: number | undefined;
+  beforeLocalPort: number | undefined;
+  beforeRemotePort: number | undefined;
 }
 
 /**
@@ -104,6 +122,49 @@ describe('parent-liveness watchdog', () => {
 
     expect(result).toBe('already-armed');
     expect(await readRemotePort()).toBe(before);
+  });
+
+  /*
+   * The regression this suite exists for. A renderer's idle liveness socket sends
+   * `FIN` on its own — measured minutes into a run whose harness was still
+   * listening — and the watchdog used to read that as "the harness died" and
+   * destroy the app, taking every test file scheduled after it with it. Closing
+   * the socket by hand reproduces that exact event; the instance answering this
+   * eval at all is the assertion.
+   */
+  it('survives its socket closing, re-arming on the same port', async () => {
+    const state = await evalInObsidian({
+      async callback({ lib }): Promise<ReArmedSocketState> {
+        // eslint-disable-next-line no-restricted-syntax -- Approved double cast, same rationale as above.
+        const holder = globalThis as unknown as ParentLivenessHolder;
+        const before = holder.__obsidianIntegrationTestingParentLiveness;
+        const beforeLocalPort = before?.localPort;
+        const beforeRemotePort = before?.remotePort;
+
+        before?.destroy();
+        await lib.waitUntil({
+          predicate: (): boolean => {
+            const current = holder.__obsidianIntegrationTestingParentLiveness;
+            return current !== before && current?.readyState === 'open';
+          }
+        });
+
+        const after = holder.__obsidianIntegrationTestingParentLiveness;
+        return {
+          afterLocalPort: after?.localPort,
+          afterReadyState: after?.readyState,
+          afterRemotePort: after?.remotePort,
+          beforeLocalPort,
+          beforeRemotePort
+        };
+      },
+      vaultPath
+    });
+
+    // A new connection, so a new local port — but back to the same harness.
+    expect(state.afterReadyState).toBe('open');
+    expect(state.afterRemotePort).toBe(state.beforeRemotePort);
+    expect(state.afterLocalPort).not.toBe(state.beforeLocalPort);
   });
 });
 
