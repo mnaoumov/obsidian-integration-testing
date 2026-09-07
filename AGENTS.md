@@ -23,7 +23,7 @@ All entry points are under the `obsidian-integration-testing` package; `…/` be
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
-Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`, `leftover-cleanup`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18.
+Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`, `leftover-cleanup`, `process-capture`, `owned-instance-exit-marker`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18 — as is `OwnedInstanceExitedError` (`owned-instance-exited-error.ts`) — see L50.
 
 The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: own vs. attach), with `obsidian-instance.ts` (launch + free port + kill), `obsidian-version*.ts` (asar version resolution/download/cache), and `obsidian-installer.ts` (shell version detect/download/extract — it resolves the installer asset by querying the release's real asset list via the GitHub API and picking the platform-correct name with the pure, unit-tested `installer-asset.ts`, tolerating the historical dot-vs-hyphen separator rename, with a both-separator templated fallback when the API is unavailable). `transport-factory.ts` resolves the owned-instance config (shell exe + asar + temp user-data dir) from the version knobs.
 
@@ -37,7 +37,7 @@ The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: 
 ## L3. Testing
 
 - Unit tests: `npm run test` (Vitest, `--project unit-tests --project unit-tests:scripts` — the first covers `src/**`, the second everything under `scripts/**` plus the docs site: the vendored docs generator (**L35**), the custom ESLint rules (**L34**), and the release-script helpers (**L37**)). The second project's include was `scripts/docs-gen/**/*.test.ts` until it was widened to `scripts/**/*.test.ts`; the narrow glob had left `scripts/helpers/eslint-rules/*.test.ts` — four real suites, 87 tests, all green the moment they were picked up — run by no project at all, and left the release script with nowhere to put a regression test at all. A test file under `scripts/` is now picked up by construction rather than by remembering to widen a glob.
-- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs six projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded); `integration-tests:config-directory-override` (the only project that runs under a `configDirectory` override — its `environmentOptions.obsidianTransport` opens the owned vault under `.obsidian-desktop`, and the worker asserts `app.vault.configDir`, that a seeded plugin loaded, and that the headless defaults are readable — i.e. that every pre-open write followed the override); and `integration-tests:failed-setup` (the failed-setup regression suite — its global setup is wired to FAIL by attaching to a CDP port nothing serves, and the worker asserts it fails with that cause rather than falling back to a transport nobody asked for; hermetic, launches nothing, ~3 s).
+- Integration tests: `npm run test:integration` (desktop requires Obsidian installed — the harness launches its own isolated instance; no CLI or running instance needed). Runs seven projects: `integration-tests` (each suite registers its vault in-worker); `integration-tests:owned-attach` (the L9 regression suite: the global setup owns the instance and the worker **attaches** — its own `globalSetup` writes a fixture plugin into `dist/dev` and wires `vitest-setup` into `setupFiles`); `integration-tests:bare-attach` (the plugin-less counterpart — it points straight at `src/vitest/global-setup-no-plugin.ts`, the same subpath a non-plugin consumer uses, so `createSetup({ installPlugin: false })` is exercised end-to-end); `integration-tests:enable-community-plugins` (its global setup seeds a demo vault with two dummy plugins via `buildDemoVaultPopulate`, enables them through `createSetup({ enableCommunityPlugins })`, and the worker asserts both loaded); `integration-tests:config-directory-override` (the only project that runs under a `configDirectory` override — its `environmentOptions.obsidianTransport` opens the owned vault under `.obsidian-desktop`, and the worker asserts `app.vault.configDir`, that a seeded plugin loaded, and that the headless defaults are readable — i.e. that every pre-open write followed the override); `integration-tests:failed-setup` (the failed-setup regression suite — its global setup is wired to FAIL by attaching to a CDP port nothing serves, and the worker asserts it fails with that cause rather than falling back to a transport nobody asked for; hermetic, launches nothing, ~3 s); and `integration-tests:instance-death` (**L50** — the worker destroys the instance the project owns and asserts the death is reported by name, with the exit code the owning process recorded; it has its own project precisely because it leaves nothing running behind it).
 - Coverage: `npm run test:coverage` — requires 100% on all metrics. It runs **`unit-tests` alone** (`scripts/test-coverage.ts` passes `--project unit-tests`), so anything wrong with that one project's configuration is a release-gate failure: the gate is a step of `updateVersion`'s preflight (**L37**) and this package publishes only through Trusted Publisher, with no manual route around a red run.
 - **Every Vitest project takes its `testTimeout` from the shared `SHARED_TEST_DEFAULTS` spread** in `scripts/vitest-config.ts`, not from its own line. Vitest 4 projects do **not** inherit the root-level `test` options, so a project that omits `testTimeout` silently runs on the built-in 5000 ms default — and that is exactly what `unit-tests` did for a time, making it the tightest budget in the repo on the one project gating a release. Spreading the default makes the omission impossible rather than merely unlikely; add a project and it is budgeted by construction. The 30 s budget absorbs two costs no per-suite number can predict: v8 coverage instrumentation, **measured at ~2.2x** on this project (whole run 4.8–5.9 s plain vs 9.6–11.0 s instrumented — *not* the ~10x first assumed), and the CPU contention of a box running many concurrent sessions. Only two deliberate overrides sit on top of it: `src/public-api-barrel.test.ts`'s own 120 s (its ts-morph `Project` over the whole `tsconfig.json` measures ~9.5 s instrumented, too close to 30 s under load), and the Android project's 300 s (an emulator run is 140–200 s cold, **L19**).
 - Cross-platform CI validation (manual `workflow_dispatch`, since each run downloads a multi-hundred-MB asset): `.github/workflows/validate-installer-path.yml` validates installer download+extract on ubuntu/macos/windows (opt-in via `OBSIDIAN_TEST_INSTALLER_DOWNLOAD=1`); `.github/workflows/validate-installer-boot.yml` validates the owned-instance **boot** from a pinned installer (`OBSIDIAN_TEST_INSTALLER_BOOT=1`, launches Electron under `xvfb` + `--no-sandbox` on Linux) and, in a Linux-only step, the asar-swap version-pin regression (`OBSIDIAN_TEST_ASAR_SWAP=1` — symlinks a newer cached shell under a versionless dir on `PATH` so shell-version detection returns `undefined`, then asserts an older pinned `obsidianVersion` actually runs). Both pass `GITHUB_TOKEN` so the release-asset API isn't rate-limited to the anonymous quota (which 403s on shared runner IPs → templated-name fallback). A third workflow, `.github/workflows/collect-runtime-versions.yml`, runs the same boot path on a **schedule** rather than on demand — it is the automation that keeps `metadata.json`'s `runtimeVersions` current (see **L20**), and unlike the two validators it commits its result.
@@ -2692,3 +2692,65 @@ cannot leave the outer teardown chasing the same processes twice.
 What is still not added is a *session* retry: `connectionRetryCount: 3` re-attempting `POST /session`
 against a device that is already gone remains useless, and the liveness gate now stops those three
 attempts before they are made.
+
+## L50. A death nobody watched for — the owned instance's exit, its stdio, and the marker that carries them
+
+The harness spawned the instance it owns as `spawn(exe, args, { detached: true, stdio: 'ignore' })` +
+`child.unref()`, with **no `exit` listener anywhere in the package**. Three facts were discarded by
+construction: Obsidian's stdout/stderr, the exit code and signal, and the moment of death. Nothing
+noticed the instance was gone until the next CDP call failed.
+
+**What that cost, measured.** In `obsidian-patterns` on 2026-09-05, an instance that died 12 minutes into
+a run turned into **156 failing tests across 21 files** — every one a `TypeError: fetch failed` wrapping
+`connect ECONNREFUSED 127.0.0.1:<cdpPort>`, none of them a test result, and none of them naming the app
+that had gone away. Diagnosing it needed a patched `node_modules` before it could even begin, and the two
+lines that were missing answered the whole question in a single run: `code=0` ruled out every crash
+hypothesis at once, and an empty stdout ruled out an Electron fatal. Both had been guesses for a day.
+
+**Three changes, and the reason each is where it is.**
+
+- **Piped stdio, drained and logged** (`obsidian-instance.ts` + `process-capture.ts`). An Electron or
+  Chromium fatal is written to stderr and nowhere else. The pipes are drained for the process's whole
+  life — a full OS pipe buffer blocks the writer, which here is the app under test — and only a bounded
+  8 000-character tail is retained. **No opt-out knob, deliberately:** a real run prints a handful of
+  lines at boot (`Updates disabled.`, the `DevTools listening on` line, an occasional CLI-server
+  `EADDRINUSE`) and then nothing, so the "noise" the knob would guard against does not exist, while
+  silence demonstrably costs days. Add the knob if a run ever proves otherwise.
+- **An `exit` listener that says so loudly.** `!!! OWNED OBSIDIAN EXITED: pid=… code=… signal=…`. A
+  death the harness **ordered** is logged quietly instead: `kill()` sets a flag first, so teardown and the
+  relaunch loop never masquerade as failures.
+- **A cross-process exit marker** (`owned-instance-exit-marker.ts`). Only the process that launched the
+  instance holds the child and can see `exit`; the test workers get nothing but the port (**L9**). So the
+  exit code crosses the boundary as a JSON sentinel keyed by port, next to the setup lock and the Appium
+  server marker (**L40**), and is read back by whichever process needs it. It is written **only for a
+  death the harness did not order**, and cleared on every deliberate kill and at every launch — a marker
+  left behind by a clean run would convict the next run's healthy instance of an exit that never
+  happened. Reads are tolerant in the same way the Appium marker's are: missing or unreadable is "no
+  marker", and the error is still raised, just without the exit code.
+
+**Acting on it, not just logging it.** `getPageTargets` is the choke point every "talk to the instance"
+path funnels through, and an unreachable endpoint there means two different things. For a
+harness-owned instance — one this process launched, or one a worker was told to attach to — the harness
+owns that port and nothing else may hold it, so nothing answering means *our* instance is gone: it throws
+`OwnedInstanceExitedError` (exported, so consumers can `instanceof` it), carrying the exit code, the
+signal, when it happened and the output tail. In plain **attach** mode the endpoint belongs to a foreign
+Obsidian that is simply not running, and that path keeps its raw failure for `ensureObsidianRunning` to
+act on.
+
+A worker additionally **probes once, at transport creation** (`transport-factory.ts`), which is once per
+test file: a live instance pays one loopback request, and a dead one turns the whole file into a single
+named error raised before its first test. That is the harness-side replacement for the per-file CDP probe
+consumers had started writing into their own `setupFiles` to get the same effect.
+
+**Relaunch-and-continue was considered and rejected.** A desktop run shares one renderer across every
+file, and its accumulated state is part of what the later files are testing; a silently relaunched app
+would go on reporting passes and failures about something the earlier files never ran against. Failing by
+name is the honest outcome, and it is the one that gets fixed.
+
+**Pure/glue split** (as **L20**/**L33**): the capture state machine, the marker, and the error's message
+are unit-tested modules; only the wiring in `obsidian-instance.ts`, `transport-desktop-cdp.ts` and
+`transport-factory.ts` is `v8 ignore`d. What the unit tests cannot reach — a real Obsidian actually
+dying — is covered by `integration-tests:instance-death`, which has its own project for the same reason
+`failed-setup` does: it destroys the instance its project shares. Its companion
+`harness-owned-attach-probe.integration.test.ts` covers the creation-time probe hermetically, by
+attaching to port 1.

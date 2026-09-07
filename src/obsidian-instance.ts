@@ -15,9 +15,17 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 
+import type { ProcessExitInfo } from './process-exit-message.ts';
+
 import { killProcessTree } from './kill-process-tree.ts';
 import { log } from './log.ts';
+import {
+  clearOwnedInstanceExitMarker,
+  writeOwnedInstanceExitMarker
+} from './owned-instance-exit-marker.ts';
+import { OwnedInstanceExitedError } from './owned-instance-exited-error.ts';
 import { startParentLivenessServer } from './parent-liveness.ts';
+import { attachProcessCapture } from './process-capture.ts';
 
 /**
  * Parameters for {@link launchOwnedObsidianInstance}.
@@ -75,11 +83,25 @@ export interface OwnedObsidianInstance {
   The CDP remote-debugging port the instance was launched with.
    */
   readonly port: number;
+
+  /**
+   * Returns how the instance died once it is no longer running, otherwise
+   * `undefined`. This is the in-process half of the answer; a test worker in
+   * another process reads the same facts from the exit marker
+   * (`owned-instance-exit-marker.ts`).
+   */
+  readExitInfo(): ProcessExitInfo | undefined;
+
+  /**
+  Returns the tail of everything the instance wrote to stdout/stderr.
+   */
+  readOutput(): string;
 }
 
 const DEFAULT_CDP_HOST = '127.0.0.1';
 const CDP_READY_POLL_INTERVAL_IN_MILLISECONDS = 1000;
 const CDP_READY_TIMEOUT_IN_MILLISECONDS = 60_000;
+const OBSIDIAN_OUTPUT_TAIL_MAX_LENGTH = 8000;
 
 interface CdpTarget {
   type: string;
@@ -104,24 +126,98 @@ export async function launchOwnedObsidianInstance(
   // Into a failed connect (which it treats as "no watchdog", leaving the instance alive).
   const livenessServer = await startParentLivenessServer();
 
+  // Ports are recycled by the OS, so an older instance's death recorded on this
+  // Port would otherwise be read as this one's.
+  clearOwnedInstanceExitMarker(port);
+
   log(`[obsidian-instance] Launching owned Obsidian: userData=${params.userDataDirectory}, cdpPort=${String(port)}`);
+  /*
+   * Piped rather than `'ignore'`: an Electron/Chromium fatal is written to
+   * stderr and nowhere else, and discarding it is why a dying instance used to
+   * be indistinguishable from a healthy one. The capture drains both pipes for
+   * the process's whole life (a full pipe buffer would block the app itself) and
+   * keeps only a bounded tail.
+   */
   const child = spawn(
     params.exePath,
     [`--user-data-dir=${params.userDataDirectory}`, `--remote-debugging-port=${String(port)}`, ...(params.extraArguments ?? [])],
-    { detached: true, stdio: 'ignore' }
+    { detached: true, stdio: ['ignore', 'pipe', 'pipe'] }
   );
+  const capture = attachProcessCapture(child, {
+    maxOutputLengthInCharacters: OBSIDIAN_OUTPUT_TAIL_MAX_LENGTH,
+    onChunk: (chunk) => {
+      const text = chunk.text.trimEnd();
+      if (text.length > 0) {
+        log(`[obsidian-instance:${chunk.stream}] ${text}`);
+      }
+    }
+  });
+
+  // Set by `kill()`, so a death the harness ordered is never reported as one it
+  // Suffered — a marker left by a clean teardown would convict the next run's
+  // Healthy instance of an exit that never happened.
+  let isKillExpected = false;
+
+  child.once('exit', (code: null | number, signal: NodeJS.Signals | null) => {
+    if (isKillExpected) {
+      log(`[obsidian-instance] Owned Obsidian exited as asked: pid=${String(child.pid)} code=${String(code)} signal=${String(signal)}`);
+      return;
+    }
+
+    // Loud on purpose. This one line is what separates a clean quit from a
+    // Crash, and its absence once cost a day of guessing.
+    log(`[obsidian-instance] !!! OWNED OBSIDIAN EXITED: pid=${String(child.pid)} code=${String(code)} signal=${String(signal)}`);
+    writeOwnedInstanceExitMarker({
+      code,
+      outputTail: capture.readOutput(),
+      pid: child.pid,
+      port,
+      signal
+    });
+  });
+
   child.unref();
 
   try {
     await waitForCdpReady(cdpUrl);
     log(`[obsidian-instance] Owned Obsidian is serving CDP at ${cdpUrl}.`);
-    return { cdpUrl, kill, parentLivenessPort: livenessServer.port, port };
+    return {
+      cdpUrl,
+      kill,
+      parentLivenessPort: livenessServer.port,
+      port,
+      readExitInfo: () => capture.readExitInfo(),
+      readOutput: () => capture.readOutput()
+    };
   } catch (error: unknown) {
+    /*
+     * Read before killing, so the verdict is the instance's own. A CDP timeout
+     * whose process is already gone is not a slow boot — it is a boot that
+     * ended — and saying so beats reporting only the budget it blew.
+     *
+     * Deliberately NOT a fast-fail inside the poll: on some installs the
+     * launched executable is a shim that exits once it has handed off to the
+     * real app, so a dead child mid-poll does not imply a dead instance. Only a
+     * dead child that also never served CDP does.
+     */
+    const exitInfo = capture.readExitInfo();
     kill();
+    if (exitInfo) {
+      throw new OwnedInstanceExitedError({
+        cdpUrl,
+        code: exitInfo.code,
+        outputTail: capture.readOutput(),
+        pid: child.pid,
+        signal: exitInfo.signal,
+        spawnError: exitInfo.spawnError
+      });
+    }
     throw error;
   }
 
   function kill(): void {
+    isKillExpected = true;
+    clearOwnedInstanceExitMarker(port);
     livenessServer.close();
     killProcessTree(child);
   }

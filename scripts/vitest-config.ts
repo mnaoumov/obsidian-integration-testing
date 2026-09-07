@@ -61,6 +61,12 @@ const CONFIG_DIRECTORY_OVERRIDE = '.obsidian-desktop';
 const FAILED_SETUP_TEST_FILE = 'src/failed-setup-fail-fast.integration.test.ts';
 const UNREACHABLE_CDP_PORT = 1;
 
+// The instance-death regression suite runs in its own project because it DESTROYS the instance its project
+// Shares — the same reason the failed-setup suite has one. It owns the instance in the global setup and evals
+// From a worker, so it needs the per-worker resolvers; the plugin-less setup is enough, since what is under
+// Test is the death of the instance rather than anything in a vault.
+const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
+
 // The mobile trusted-input suite runs in its own project because it is the only one that needs a real
 // Android emulator through Appium (see L39). Keeping it out of the default `integration-tests` aggregate is
 // Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator.
@@ -148,6 +154,7 @@ export const config = defineConfig({
             ENABLE_COMMUNITY_PLUGINS_TEST_FILE,
             CONFIG_DIRECTORY_OVERRIDE_TEST_FILE,
             FAILED_SETUP_TEST_FILE,
+            INSTANCE_DEATH_TEST_FILE,
             ANDROID_TRUSTED_INPUT_TEST_FILE,
             DESKTOP_TRUSTED_INPUT_TEST_FILE
           ],
@@ -204,6 +211,19 @@ export const config = defineConfig({
           include: [FAILED_SETUP_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:failed-setup',
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
+        }
+      },
+      {
+        test: {
+          ...SHARED_TEST_DEFAULTS,
+          environment: 'node',
+          exclude: SHARED_EXCLUDE,
+          fileParallelism: false,
+          globalSetup: ['./src/vitest/global-setup-no-plugin.ts'],
+          include: [INSTANCE_DEATH_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:instance-death',
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },

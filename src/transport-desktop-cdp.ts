@@ -61,6 +61,11 @@ import { resolveObsidianExecutable } from './obsidian-executable.ts';
 import { launchOwnedObsidianInstance } from './obsidian-instance.ts';
 import { getVersionMetadata } from './obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './obsidian-version-switch.ts';
+import { readOwnedInstanceExitMarker } from './owned-instance-exit-marker.ts';
+import {
+  buildOwnedInstanceExitedErrorFromMarker,
+  OwnedInstanceExitedError
+} from './owned-instance-exited-error.ts';
 import { buildOwnedObsidianJson } from './owned-vault-seed.ts';
 import { buildParentLivenessWatchdogExpression } from './parent-liveness.ts';
 import {
@@ -746,6 +751,34 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Builds the error for a harness-owned instance that is no longer serving CDP,
+   * from the best evidence this process has.
+   *
+   * Two processes see two different halves of the death. The one that launched
+   * the instance holds the child and can read the exit code straight off it; a
+   * test worker holds nothing but the port, and reads the same facts from the
+   * exit marker the owner wrote (`owned-instance-exit-marker.ts`). With neither
+   * — the marker lost, or a kill so abrupt nothing recorded it — the error still
+   * names the instance as the cause, which is the whole point of it.
+   *
+   * @returns The error to throw in place of a refused connection.
+   */
+  private buildOwnedInstanceExitedError(): OwnedInstanceExitedError {
+    const exitInfo = this.ownedInstance?.readExitInfo();
+    if (exitInfo) {
+      return new OwnedInstanceExitedError({
+        cdpUrl: this.cdpUrl,
+        code: exitInfo.code,
+        outputTail: this.ownedInstance?.readOutput(),
+        signal: exitInfo.signal,
+        spawnError: exitInfo.spawnError
+      });
+    }
+
+    return buildOwnedInstanceExitedErrorFromMarker(this.cdpUrl, readOwnedInstanceExitMarker(this.cdpPort));
+  }
+
+  /**
    * Verifies the running app (asar) version matches the swapped-in pin, storing the
    * verdict on {@link getAsarFallback}. On a **silent fallback** (the installer ran
    * its own bundled asar instead of the pin) it throws {@link SilentAsarFallbackError}
@@ -995,7 +1028,24 @@ export class DesktopCdpTransport implements ObsidianTransport {
       );
     }
 
-    const response = await fetch(`${this.cdpUrl}/json`);
+    let response: Response;
+    try {
+      response = await fetch(`${this.cdpUrl}/json`);
+    } catch (error: unknown) {
+      /*
+       * An unreachable endpoint means different things in the two modes, and
+       * conflating them is what produced the `ECONNREFUSED` cascades. The
+       * harness owns this port and nothing else may hold it, so nothing
+       * answering means OUR instance is gone — say that, with its exit code
+       * when it is known. In plain attach mode the endpoint belongs to a
+       * foreign Obsidian that is simply not running, which `ensureObsidianRunning`
+       * handles by starting one; that path must keep seeing the raw failure.
+       */
+      if (this.ownedConfig || this.isHarnessOwnedInstance) {
+        throw this.buildOwnedInstanceExitedError();
+      }
+      throw error;
+    }
     const targets = await response.json() as CdpTarget[];
     return targets.filter((t) => t.type === 'page');
   }
