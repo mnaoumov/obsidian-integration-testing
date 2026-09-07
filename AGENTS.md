@@ -2754,3 +2754,52 @@ dying — is covered by `integration-tests:instance-death`, which has its own pr
 `failed-setup` does: it destroys the instance its project shares. Its companion
 `harness-owned-attach-probe.integration.test.ts` covers the creation-time probe hermetically, by
 attaching to port 1.
+
+## L51. Two flags mean "the harness owns this", and only one guard read both — teardown is by registration, not by mode
+
+`DesktopCdpTransport` carries two ownership flags, and they are not synonyms. `ownedConfig` is set on
+the transport that **launched** the instance; `isHarnessOwnedInstance` is set on a transport **attached**
+to one somebody else launched. Together they mean "this instance belongs to the harness"; separately they
+mean two different jobs. `preflightCheck` read both. `unregisterVault` read only `ownedConfig`.
+
+A test worker is exactly the case that falls between them: `augmentTransportOptions`
+(`global-setup-core.ts`) hands each worker the owned instance's port plus `isHarnessOwnedInstance: true`,
+and nothing else — the global setup keeps the config, so the worker's `ownedConfig` is `undefined`. It
+therefore fell straight through the teardown guard and ran `destroyCurrentWindow()` on whatever vault it
+was asked to unregister. When that is the vault the run shares, its window is the instance's **only** one:
+the app quits, and every later file fails with `ECONNREFUSED` on a closed CDP port — the exact cascade
+**L50** exists to name, arriving this time from inside the harness.
+
+**Two things the original report got wrong, both worth keeping straight.**
+
+- **`connectToCdp` cannot reach this.** `buildCdpTransportOptions` never sets `isHarnessOwnedInstance`,
+  so a `connectToCdp` transport always takes the full teardown path, by design — a debugging session opens
+  a vault in a foreign Obsidian and must put it back. The flag is set in exactly **one** place, the
+  augmentation above. That makes the exposed population larger, not smaller: not "suites that build their
+  own connection", but **every worker in a `createSetup` run**, which is the default consumption shape.
+- **Making the two guards identical would trade one defect for another.** An attached worker that
+  registers its **own** `TemporaryVault` does need that window closed. A blanket
+  `ownedConfig || isHarnessOwnedInstance` early-return leaks one stale window per temp vault for the life
+  of the run, each left pointing at a directory `TemporaryVault.dispose()` has already deleted. Symmetry
+  was the shape of the fix, not the fix.
+
+**What it does instead: teardown is earned by registration.** The transport remembers, in
+`selfRegisteredVaultPaths`, the vaults its own `registerVault` opened — recorded only on the attach
+branch (`openVaultInRunningInstance`), only on success, and normalized through
+`normalizeVaultPathForComparison` so a separator flavour or a case difference cannot lose an entry. A
+worker attached to a harness-owned instance may tear down only those; everything else in that instance
+belongs to the global setup that launched it. Owned mode still tears nothing down per vault (the instance
+is killed wholesale), and plain attach mode still tears everything down (the foreign Obsidian outlives the
+run). The set is per-transport and per-process, which is exactly the scope the invariant needs: the global
+setup registered the shared vault in a different process, so no worker can ever claim it.
+
+**Pure/glue split** (as **L50**): the decision is `vault-teardown-verdict.ts`, unit-tested across all
+three modes; the transport keeps only the set and the call. The regression that a unit test cannot reach —
+a real instance surviving the call — is the last case in
+`src/owned-instance-worker-attach.integration.test.ts`, deliberately last in the file because a regression
+there destroys the instance the project shares. Reverting the guard makes it fail with
+`OwnedInstanceExitedError: … its process exited with code 0`, which is what the fix is measured against.
+
+**Still open, and not fixable here:** `getTemporaryVault()` hands a consumer a `TemporaryVault` wrapping
+the **shared** setup vault, so calling `.dispose()` on it also `retryRm`s that directory. No
+`unregisterVault` guard can prevent that half; it is tracked separately.

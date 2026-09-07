@@ -33,6 +33,7 @@ import {
 
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
+import { unregisterVault } from './vault-registry.ts';
 
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
@@ -199,5 +200,31 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
     // `open()` attaches the container itself once the popout is off -- the fact AGENTS.md L38 got
     // Wrong, and the reason the helper's own append is a fallback rather than the load-bearing step.
     expect(probe.isContainerAttachedByOpenAlone).toBe(true);
+  });
+});
+
+/*
+ * Teardown-guard regression (AGENTS.md L51), deliberately LAST in the file: if the guard ever
+ * Regresses, this case destroys the instance the whole project shares, and nothing may run after it.
+ *
+ * The worker is attached to a harness-owned instance -- `isHarnessOwnedInstance` set,
+ * `ownedConfig` absent -- which is what the old single-flag guard failed to recognize. It fell
+ * Through and ran `destroyCurrentWindow()` on the shared vault: the instance's ONLY window, so the
+ * App quit and every later file failed with `ECONNREFUSED` on a closed CDP port.
+ *
+ * `unregisterVault` is called directly rather than through `TemporaryVault.dispose()`, which would
+ * Also delete the shared vault directory -- a second hazard this guard cannot reach.
+ */
+describe('unregistering the shared setup vault from an attached worker', () => {
+  it('leaves the instance and its window alive, because the worker did not register it', async () => {
+    await unregisterVault(inject('temporaryVaultPath'));
+
+    const basePath = await evalInObsidian({
+      callback({ app }): string {
+        return (app.vault.adapter as FileSystemAdapter).getBasePath();
+      }
+    });
+
+    expect(basePath).toBe(inject('temporaryVaultPath'));
   });
 });
