@@ -75,7 +75,11 @@ import {
 import { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
 import { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 import { ensureNonNullable } from './type-guards.ts';
-import { areVaultPathsMatching } from './vault-path-match.ts';
+import {
+  areVaultPathsMatching,
+  normalizeVaultPathForComparison
+} from './vault-path-match.ts';
+import { shouldTearDownVaultWindow } from './vault-teardown-verdict.ts';
 import {
   resolveOwnedHiddenLaunchArguments,
   resolveSandboxLaunchArguments,
@@ -336,6 +340,14 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
+  /**
+   * Vault paths THIS transport opened via {@link registerVault}, normalized by
+   * {@link normalizeVaultPathForComparison}. A worker attached to a
+   * harness-owned instance may tear down only these — every other vault in that
+   * instance belongs to the global setup that launched it (see
+   * {@link shouldTearDownVaultWindow}).
+   */
+  private readonly selfRegisteredVaultPaths = new Set<string>();
   private readonly shouldDisableSandbox: boolean;
   private readonly shouldThrowOnSilentAsarFallback: boolean;
   private readonly shouldWarnOnCompatibilityIssues: boolean;
@@ -605,19 +617,39 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     await this.openVaultInRunningInstance(vaultPath);
+    // Recorded only on success, and only here: this is the one branch that opens
+    // A window in an instance this transport did not launch, so it is the one
+    // Branch that earns the right to close one (see `unregisterVault`).
+    this.selfRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
   }
 
   /**
    * Unregisters a vault by destroying its window and removing it from the registry.
    *
+   * Refuses when this transport does not own what it would be tearing down —
+   * see {@link shouldTearDownVaultWindow} for which of the two ownership flags
+   * means what, and why they are not interchangeable.
+   *
    * @param vaultPath - The absolute path to the vault folder.
    */
   public async unregisterVault(vaultPath: string): Promise<void> {
-    if (this.ownedConfig) {
-      // The owned instance is killed wholesale on dispose; no per-vault
-      // Unregister is needed (and the registry lives in the isolated config).
+    const normalizedVaultPath = normalizeVaultPathForComparison(vaultPath);
+    if (
+      !shouldTearDownVaultWindow({
+        isHarnessOwnedInstance: this.isHarnessOwnedInstance,
+        isOwnedInstance: Boolean(this.ownedConfig),
+        isSelfRegistered: this.selfRegisteredVaultPaths.has(normalizedVaultPath)
+      })
+    ) {
+      log(
+        this.ownedConfig
+          ? `[cdp-transport] Skipping per-vault teardown; the owned instance is killed wholesale on dispose: ${vaultPath}`
+          : `[cdp-transport] Skipping per-vault teardown; this worker did not register the vault it was asked to unregister: ${vaultPath}`
+      );
       return;
     }
+
+    this.selfRegisteredVaultPaths.delete(normalizedVaultPath);
 
     try {
       await ensureNamespaceBootstrapped(this, vaultPath);
