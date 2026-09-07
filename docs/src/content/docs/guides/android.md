@@ -260,11 +260,12 @@ option in this harness that reaches it. Two things are worth knowing before you 
   AEHD cannot coexist with Hyper-V, so switching to it means disabling the hypervisor
   (`bcdedit /set hypervisorlaunchtype off`, elevated, plus a reboot) and losing Hyper-V VMs, WSL2 and
   Windows Sandbox until you set it back to `auto`.
-- **A Linux CI runner with KVM is the reliable escape hatch.** GitHub-hosted `ubuntu-latest` runners can
-  run the emulator once `/dev/kvm` is made accessible, which makes the Android leg something CI does even
-  when no local machine can. This repo's own `validate-android-emulator.yml` is a worked example: enable
-  KVM, create the AVD to the minimums above, install Obsidian from its published APK, and run the Android
-  project.
+- **A Linux CI runner with KVM is the reliable escape hatch, and it is proven rather than proposed.**
+  GitHub-hosted `ubuntu-latest` runners can run the emulator once `/dev/kvm` is made accessible, which
+  makes the Android leg something CI does even when no local machine can. This repo's own
+  `validate-android-emulator.yml` is a worked example — enable KVM, create the AVD to the minimums above,
+  install Obsidian from its published APK, run the Android project — and on the host whose wedge is
+  described above, the identical AVD and arguments survived 300s there and the suite passed.
 
 ### "The Appium server ... cannot see Android device ..., although this host's adb can"
 

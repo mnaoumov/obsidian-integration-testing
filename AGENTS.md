@@ -2470,7 +2470,9 @@ Two observations relocate the fault, and both are the point of this entry:
 - **The emulator console hangs too.** `adb … emu <command>` is served by the emulator process, not by the
   guest's `adbd`. Its silence means the **emulator** is stuck — not a frozen guest behind a healthy
   emulator, and not the device being absent.
-- **0% CPU.** Blocked, not spinning. Nothing is executing guest code.
+- **0% CPU.** Blocked, not spinning. Nothing is executing guest code. **On its own this proves nothing** —
+  a healthy idle emulator sits at 0% too, for most of the 300s the runner survives. It is 0% *while both
+  probes go unanswered* that convicts; the CPU reading corroborates the verdict, it does not make it.
 
 Together they explain the downstream symptoms that had looked unrelated: `adb devices` keeps reporting
 `device` because nothing is left running to update that state, and the teardown's `adb emu kill` hangs for
@@ -2542,10 +2544,20 @@ So the remedy is not to repair this workstation but to **run the Android leg som
   post-boot contention **L45** sizes its budgets for, and exactly the false wedge a loaded CI runner would
   otherwise produce. The console is served by the emulator process, so its silence is never settling.
 
-- **`.github/workflows/validate-android-emulator.yml`** runs that same probe on a Linux runner and, when
-  it survives, the Android integration project behind it. A runner that survives is what convicts this
-  machine; the probe job is separate from the suite job precisely so the two answers do not have to be
-  untangled from one failure.
+- **`.github/workflows/validate-android-emulator.yml`** runs that same probe on `ubuntu-latest` and, gated
+  behind it, the Android integration project. **It settles the question: the runner survives.** Measured
+  2026-09-07, same probe, same arguments, same AVD provisioning:
+
+  ```text
+     5s  alive  cpu=380%   ...    301s  alive  cpu=0%
+  SURVIVED: the guest answered 60 of 60 polls across 300s of uptime.
+  ```
+
+  and the suite behind it passed 5/5 against a real Obsidian install, trusted taps included. So the fault
+  is this machine, established by a differential rather than by elimination alone. The probe job is
+  separate from the suite job precisely so those two answers never have to be untangled from one failure —
+  which earned itself immediately: the first two dispatches failed in the probe job's *setup*, and the
+  separation is what made that obvious at a glance.
 
 Two tooling notes for whoever repeats this: `sdkmanager` / `android sdk install` has no download resume
 and failed three times mid-transfer on a 1.8 GB image (`curl -L --retry 20 --retry-all-errors -C -` is the
