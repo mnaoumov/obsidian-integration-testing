@@ -185,7 +185,7 @@ clone, a new machine, or CI has nothing to seed and `buildDemoVaultPopulate` thr
 preflight runs the integration tests, that is enough to block cutting a release. Two headless remedies,
 both of which download the plugin's published GitHub release assets into
 `demo-vault/.obsidian/plugins/<id>/` — the same folder Obsidian itself would have produced, so the shipped
-`*-demo-vault-<version>.zip` is unaffected:
+`*-demo-vault.zip` — which unzips into a single `*-demo-vault-<version>` folder — is unaffected:
 
 - **`buildDemoVaultPopulateAsync`** — the self-healing drop-in. It installs whatever is missing and then
   builds the very same map, so the setup above needs one identifier changed and an `await`-able thunk (both
