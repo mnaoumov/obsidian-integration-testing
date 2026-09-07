@@ -6,6 +6,7 @@ import {
   Socket
 } from 'node:net';
 import {
+  afterEach,
   describe,
   expect,
   it,
@@ -21,6 +22,22 @@ import {
 } from './parent-liveness.ts';
 
 /**
+ * The renderer `window` property the watchdog stores its live socket on.
+ */
+const LIVENESS_FLAG = '__obsidianIntegrationTestingParentLiveness';
+
+/**
+ * How many probes the watchdog makes before concluding the harness is gone.
+ * Mirrors the limit baked into the expression.
+ */
+const RECONNECT_ATTEMPT_LIMIT = 3;
+
+/**
+ * The delay between probes baked into the expression.
+ */
+const RECONNECT_DELAY_IN_MILLISECONDS = 250;
+
+/**
  * Port baked into every expression built by these tests. Never connected to for
  * real — the expression is driven against a stubbed `window`.
  */
@@ -34,6 +51,11 @@ interface CreateWatchdogWindowStubOptions {
   Replacement body for `electronWindow.destroy`.
   */
   readonly destroyImpl?: () => void;
+
+  /**
+  Makes `require('node:net')` throw, so the bare-`net` fallback is exercised.
+  */
+  readonly shouldRejectNodePrefix?: boolean;
 }
 
 /**
@@ -41,17 +63,35 @@ interface CreateWatchdogWindowStubOptions {
  * test can fire them in whatever order it wants to exercise.
  */
 interface SocketStub {
+  /**
+  The events this socket has a listener for, in registration order.
+   */
+  readonly events: string[];
+
+  /**
+   * Invokes the listener the watchdog registered for the event, if any.
+   *
+   * @param event - The event to fire.
+   */
+  fire(event: string): void;
+
   on(event: string, listener: () => void): void;
 }
 
 /**
  * The pieces a test needs to drive an armed watchdog: the stubbed `window` the
- * expression runs against, the listeners it attached, and the spies its
- * shutdown path calls.
+ * expression runs against, every socket it opened, and the spies its shutdown
+ * path calls.
  */
 interface WatchdogWindowStub {
+  connectSpy: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
-  listeners: Map<string, () => void>;
+
+  /**
+   * Every socket handed to the watchdog, in the order it asked for them: the
+   * armed connection first, then one per reconnect probe.
+   */
+  readonly sockets: SocketStub[];
   windowClose: ReturnType<typeof vi.fn>;
   windowStub: WindowStub;
 }
@@ -143,9 +183,14 @@ describe('startParentLivenessServer', () => {
 });
 
 describe('buildParentLivenessWatchdogExpression', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should embed the port and the loopback host', () => {
     const expression = buildParentLivenessWatchdogExpression(STUB_PORT);
-    expect(expression).toContain(`net.connect(${String(STUB_PORT)}, '${PARENT_LIVENESS_HOST}')`);
+    expect(expression).toContain(`var PORT = ${String(STUB_PORT)};`);
+    expect(expression).toContain(`var HOST = '${PARENT_LIVENESS_HOST}';`);
   });
 
   it('should stay parseable on an ES5-era engine', () => {
@@ -179,53 +224,96 @@ describe('buildParentLivenessWatchdogExpression', () => {
   });
 
   it('should fall back to the bare net specifier', () => {
-    const listeners = new Map<string, () => void>();
-    const socket = createSocketStub(listeners);
-    const windowStub: WindowStub = {
-      require: (specifier: string): unknown => {
-        if (specifier === 'node:net') {
-          throw new Error('Cannot find module');
-        }
-        return { connect: (): SocketStub => socket };
-      }
-    };
+    const { sockets, windowStub } = createWatchdogWindowStub({ shouldRejectNodePrefix: true });
 
     expect(evaluateWatchdog(windowStub)).toBe('armed');
-    expect([...listeners.keys()]).toStrictEqual(['connect', 'error', 'close']);
+    expect(sockets[0]?.events).toStrictEqual(['connect', 'error', 'close']);
   });
 
-  it('should destroy the window once an established connection closes', () => {
-    const { destroy, listeners, windowStub } = createWatchdogWindowStub();
+  it('should reconnect rather than destroy when the harness is still listening', () => {
+    const { connectSpy, destroy, sockets, windowStub } = createWatchdogWindowStub();
 
     expect(evaluateWatchdog(windowStub)).toBe('armed');
-    expect(windowStub['__obsidianIntegrationTestingParentLiveness']).toBeDefined();
+    expect(windowStub[LIVENESS_FLAG]).toBe(sockets[0]);
 
-    listeners.get('connect')?.();
-    listeners.get('close')?.();
+    sockets[0]?.fire('connect');
+    sockets[0]?.fire('close');
 
+    // The close asked a question; the probe answers it.
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+    expect(destroy).not.toHaveBeenCalled();
+
+    sockets[1]?.fire('connect');
+
+    // The probe that answered is the new liveness token.
+    expect(windowStub[LIVENESS_FLAG]).toBe(sockets[1]);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('should keep verifying when an adopted socket closes in its turn', () => {
+    const { connectSpy, destroy, sockets, windowStub } = createWatchdogWindowStub();
+
+    evaluateWatchdog(windowStub);
+    sockets[0]?.fire('connect');
+    sockets[0]?.fire('close');
+    sockets[1]?.fire('connect');
+    sockets[1]?.fire('close');
+
+    expect(connectSpy).toHaveBeenCalledTimes(3);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('should ignore an error on a socket that already answered', () => {
+    const { connectSpy, destroy, sockets, windowStub } = createWatchdogWindowStub();
+
+    evaluateWatchdog(windowStub);
+    sockets[0]?.fire('connect');
+    sockets[0]?.fire('close');
+    sockets[1]?.fire('connect');
+    sockets[1]?.fire('error');
+
+    // An error after connecting says nothing about the harness — only the close does.
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+    expect(destroy).not.toHaveBeenCalled();
+  });
+
+  it('should destroy the window once every probe is refused', () => {
+    vi.useFakeTimers();
+    const { connectSpy, destroy, sockets, windowStub } = createWatchdogWindowStub();
+
+    evaluateWatchdog(windowStub);
+    sockets[0]?.fire('connect');
+    sockets[0]?.fire('close');
+    refuseEveryProbe(sockets);
+
+    expect(connectSpy).toHaveBeenCalledTimes(1 + RECONNECT_ATTEMPT_LIMIT);
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 
   it('should leave the instance running when the connection never established', () => {
-    const { destroy, listeners, windowStub } = createWatchdogWindowStub();
+    const { connectSpy, destroy, sockets, windowStub } = createWatchdogWindowStub();
 
     evaluateWatchdog(windowStub);
-    listeners.get('error')?.();
-    listeners.get('close')?.();
+    sockets[0]?.fire('error');
+    sockets[0]?.fire('close');
 
+    // Fail-open: never having reached the harness is not evidence it died.
+    expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(destroy).not.toHaveBeenCalled();
   });
 
   it('should fall back to window.close when destroy throws', () => {
-    const { listeners, windowClose, windowStub } = createWatchdogWindowStub({
+    vi.useFakeTimers();
+    const { sockets, windowClose, windowStub } = createWatchdogWindowStub({
       destroyImpl: (): never => {
         throw new Error('window already destroyed');
       }
     });
 
     evaluateWatchdog(windowStub);
-    listeners.get('connect')?.();
-    listeners.get('close')?.();
+    sockets[0]?.fire('connect');
+    sockets[0]?.fire('close');
+    refuseEveryProbe(sockets);
 
     expect(windowClose).toHaveBeenCalledTimes(1);
   });
@@ -248,37 +336,54 @@ async function connectToLivenessServer(port: number): Promise<Socket> {
 }
 
 /**
- * Creates a socket stand-in that records every listener into the given map.
+ * Creates a socket stand-in that records the watchdog's listeners and lets a
+ * test fire them back.
  *
- * @param listeners - The map to record listeners into.
  * @returns The socket stub.
  */
-function createSocketStub(listeners: Map<string, () => void>): SocketStub {
+function createSocketStub(): SocketStub {
+  const listeners = new Map<string, () => void>();
+  const events: string[] = [];
   return {
+    events,
+    fire(event: string): void {
+      listeners.get(event)?.();
+    },
     on(event: string, listener: () => void): void {
       listeners.set(event, listener);
+      events.push(event);
     }
   };
 }
 
 /**
- * Builds a `window` stub whose `require('node:net')` yields a socket recording
- * its listeners, so a test can drive the watchdog's handlers directly.
+ * Builds a `window` stub whose `require('node:net')` hands out a fresh recording
+ * socket per `connect`, so a test can drive the watchdog's armed connection and
+ * each of its reconnect probes independently.
  *
  * @param options - The {@link CreateWatchdogWindowStubOptions}.
- * @returns The stub plus the spies and captured listeners.
+ * @returns The stub plus the spies and the sockets it handed out.
  */
 function createWatchdogWindowStub(options?: CreateWatchdogWindowStubOptions): WatchdogWindowStub {
-  const listeners = new Map<string, () => void>();
-  const socket = createSocketStub(listeners);
+  const sockets: SocketStub[] = [];
+  const connectSpy = vi.fn((): SocketStub => {
+    const socket = createSocketStub();
+    sockets.push(socket);
+    return socket;
+  });
   const destroy = vi.fn(options?.destroyImpl);
   const windowClose = vi.fn();
   const windowStub: WindowStub = {
     close: windowClose,
     electronWindow: { destroy },
-    require: (): unknown => ({ connect: (): SocketStub => socket })
+    require: (specifier: string): unknown => {
+      if (options?.shouldRejectNodePrefix === true && specifier === 'node:net') {
+        throw new Error('Cannot find module');
+      }
+      return { connect: connectSpy };
+    }
   };
-  return { destroy, listeners, windowClose, windowStub };
+  return { connectSpy, destroy, sockets, windowClose, windowStub };
 }
 
 /**
@@ -300,6 +405,21 @@ function evaluateWatchdog(windowStub: WindowStub): string {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func -- Evaluating the built expression IS the behavior under test; the source is our own builder.
   const run = new Function('window', `return ${buildParentLivenessWatchdogExpression(STUB_PORT)};`) as (win: WindowStub) => string;
   return run(windowStub);
+}
+
+/**
+ * Refuses every probe the watchdog makes, draining the retry delay between them,
+ * until the attempt budget is spent.
+ *
+ * Requires fake timers to be installed by the caller.
+ *
+ * @param sockets - The sockets the watchdog has been handed, appended to as it probes.
+ */
+function refuseEveryProbe(sockets: SocketStub[]): void {
+  for (let attempt = 1; attempt <= RECONNECT_ATTEMPT_LIMIT; attempt++) {
+    sockets.at(-1)?.fire('error');
+    vi.advanceTimersByTime(RECONNECT_DELAY_IN_MILLISECONDS);
+  }
 }
 
 /**

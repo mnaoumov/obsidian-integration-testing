@@ -1464,12 +1464,43 @@ too heavy a dependency for this harness, and it would put a compile step in ever
 **What we use instead.** The one cross-platform resource the kernel reclaims deterministically on process
 death: a socket. `parent-liveness.ts` listens on an ephemeral loopback port **before** the spawn; once the
 vault is ready the transport evaluates `buildParentLivenessWatchdogExpression(port)` in the renderer, which
-`require('node:net')`-connects back. However the harness dies, the kernel closes its end, the renderer sees
-`close`, and the window destroys itself. No polling, no heartbeat interval, no timeout to tune. This is the
+`require('node:net')`-connects back. However the harness dies, the kernel closes its end and the renderer
+sees `close`. No polling, no heartbeat interval, no timeout to tune. This is the
 mirror image of `obsidian-dev-utils`' `watchDevInstanceAndStopOnClose`, which stops the dev build when the
 instance is closed; together the two make neither able to outlive the other.
 
-**Fail-open, deliberately.** The renderer arms the destroy handler only after the connection is actually
+**A close is a question, not a verdict — VERIFY BEFORE DESTROYING.** The first version of this watchdog
+destroyed the window straight from the `close` handler, and that cost far more than the leak it prevents: **a
+socket closing is not the same event as a process dying**. Measured in `obsidian-patterns` on 2026-09-05 over
+four instrumented desktop-aggregate runs, a renderer's idle liveness socket sent `FIN` **on its own** — 3 min
+13 s into one run, 11 min 56 s into another — while the harness's server logged `hadError=false`,
+`listening=true` and went on working for another 14 minutes. Every test file scheduled after the destroy then
+failed in ~60–90 ms with `TypeError: fetch failed` wrapping `connect ECONNREFUSED 127.0.0.1:<cdpPort>`; the
+worst run reported **156 failures across 21 files**, not one of them a test result, and the repo's standing
+"two consecutive green aggregates" bar was unreachable while it stood. Nothing was exhausted (working set
+798→920→907 MB, handles 4 895→5 099, threads flat) and traps on `electronWindow.destroy`/`close`,
+`window.close` and `remote.app.quit` caught no other caller. **Why** an idle unref'd loopback socket in an
+Electron renderer sends `FIN` is still not established — and does not need to be: the lifetimes vary run to
+run, so no fixed timeout explains it, and the fix is correct either way.
+
+So the `close` handler now **reconnects to the same loopback port** before concluding anything. A live
+harness is still listening, so the probe succeeds and the new socket becomes the liveness token (stored back
+onto `window.__obsidianIntegrationTestingParentLiveness`, which is what the integration suite and the
+idempotency short-circuit read); only when nothing answers after `RECONNECT_ATTEMPT_LIMIT` (3) probes spaced
+`RECONNECT_DELAY_IN_MILLISECONDS` (250) apart — what a dead harness actually looks like — is the window
+destroyed. Measured recovery: **11 ms**. The leak the watchdog exists to prevent is still prevented, within a
+second of the harness dying.
+
+A reconnect rather than a check on the harness's pid, because it proves the thing the watchdog actually
+depends on — the liveness server still serving — and because it stays correct against a *busy* harness: the
+kernel completes a loopback handshake out of the listen backlog even while Node's event loop is blocked. Its
+one residual ambiguity is accepted knowingly: a successful probe proves *something* is listening on that
+ephemeral port, not that it is ours. The probe follows the close by milliseconds, so another process winning
+that exact port in between is not a risk worth a handshake protocol. Note also that `ParentLivenessServer.close()`
+**keeps** already-accepted connections (Node's `server.close()` only stops listening) — what it guarantees is
+that a probe arriving afterwards is refused, which is the right answer from a torn-down harness.
+
+**Fail-open, deliberately.** The renderer arms the destroy path only after the connection is actually
 established, and a renderer without Node access reports `'unavailable'`. A watchdog that cannot reach the
 harness leaves the instance running rather than killing a window a developer is working in; arming failures
 are logged and swallowed, never fatal to a launch. Arming is idempotent — a retried readiness pass finds the
@@ -1477,9 +1508,13 @@ stored socket and returns `'already-armed'` rather than opening a second connect
 
 **Pure/glue split** (as **L20**/**L18**/**L31**/**L32**): the server and the expression builder live in
 `parent-liveness.ts` and are fully unit-tested — the server against real loopback sockets, the expression by
-evaluating it through `new Function('window', …)` against a stubbed `window`, which is what lets the
-destroy/fail-open/fallback branches be driven without a renderer. Only the wiring in `obsidian-instance.ts`
-and `transport-desktop-cdp.ts` is `v8 ignore`d. The expression is written in ES5 style (`var`, `function`,
+evaluating it through `new Function('window', …)` against a stubbed `window` whose `net.connect` hands out a
+fresh recording socket per call, which is what lets the reconnect/adopt/exhaust/fail-open/fallback branches be
+driven without a renderer (fake timers cover the retry delay). Only the wiring in `obsidian-instance.ts`
+and `transport-desktop-cdp.ts` is `v8 ignore`d. The behavior the unit tests cannot reach — the socket actually
+closing under a live app — is covered end to end in `parent-liveness.integration.test.ts`, which destroys the
+renderer's socket and asserts a re-armed socket on the same remote port; the instance answering the eval at
+all is the real assertion. The expression is written in ES5 style (`var`, `function`,
 no optional chaining) for the same reason as `DISMISS_TRUST_DIALOG_EXPR`: it has to parse on the Chromium
 80-era renderers of the oldest supported Obsidian versions (**L26**).
 
