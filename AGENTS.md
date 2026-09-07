@@ -2801,6 +2801,40 @@ a real instance surviving the call — is the last case in
 there destroys the instance the project shares. Reverting the guard makes it fail with
 `OwnedInstanceExitedError: … its process exited with code 0`, which is what the fix is measured against.
 
-**Still open, and not fixable here:** `getTemporaryVault()` hands a consumer a `TemporaryVault` wrapping
-the **shared** setup vault, so calling `.dispose()` on it also `retryRm`s that directory. No
-`unregisterVault` guard can prevent that half; it is tracked separately.
+**The other half of `dispose()` — the directory — is fixed one layer up, in `TemporaryVault` itself; see
+**L52**.** No `unregisterVault` guard could have reached it.
+
+## L52. A `TemporaryVault` deletes only a directory it created — ownership is per-instance, not per-path
+
+`TemporaryVault.dispose()` used to end in an unconditional `await retryRm(this.path)` inside a `finally`.
+`getTemporaryVault()` (both adapters) returns `new TemporaryVault(inject('temporaryVaultPath'))` — a full,
+public handle over the **shared** vault the global setup provisioned for the whole run — so a consumer's
+`afterAll(() => vault.dispose())`, which reads as the symmetric counterpart of the documented
+`new TemporaryVault()` + `dispose()` pair, deleted that directory out from under the still-open window and
+under every test file that had not run yet. **L51** fixed the unregister half and named this one as still
+open; it sits above the transport, where no `unregisterVault` guard reaches.
+
+**The discriminator has to be instance ownership, not the path.** The obvious guard — compare `this.path`
+against the run's shared vault through the same `setVaultPathResolver` seam — is wrong, and wrong in a way
+that only Jest shows. Jest's global setup and global teardown share one module instance and one
+`globalThis.__obsidianIntegrationTesting`, which `setup()` populates, so `getVaultPath()` resolves during
+`coreTeardown` too: the guard would have refused the harness's own disposal of the vault it created, and
+leaked the directory on every Jest run instead of deleting one on some Vitest runs.
+
+**What it does instead:** the constructor records `options?.shouldRemoveDirectoryOnDispose ?? path === undefined`
+— a handle owns the directory only when it made one — and `dispose()` still always unregisters but
+`retryRm`s only an owned directory, logging the path it kept otherwise. This is not a new rule; it is the
+rule `connectToCdp` already applied one layer up as `shouldRemoveVaultOnDispose ?? (options?.vault === undefined)`,
+moved down into the class so every caller gets it. `connectToCdp` now hands its flag to the constructor,
+which both preserves its explicit override and collapses its `dispose()` branch to one call.
+
+**The change was free because nothing real relied on the old default.** Across every repo that consumes
+this package, each `new TemporaryVault(...)` outside this repo's own unit tests passes **no** argument; the
+only sites passing a path are `getTemporaryVault()` (the defect) and `connectToCdp` (which keeps its
+opt-in). That is why the default was flipped rather than a `false` threaded through the two accessors — the
+honest invariant cost the same as the narrow patch.
+
+The regression is the last case in `src/owned-instance-worker-attach.integration.test.ts`, immediately after
+**L51**'s and last for the same reason: it disposes the `getTemporaryVault()` handle and asserts both that
+the directory survives and that the window over it still answers. Reverting the fix deletes the vault the
+project shares.

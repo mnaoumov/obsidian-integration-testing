@@ -22,6 +22,7 @@
 
 import type { FileSystemAdapter } from 'obsidian';
 
+import { existsSync } from 'node:fs';
 import {
   afterAll,
   beforeAll,
@@ -34,6 +35,7 @@ import {
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 import { unregisterVault } from './vault-registry.ts';
+import { getTemporaryVault } from './vitest/global-setup.ts';
 
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 
@@ -212,13 +214,41 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
  * Through and ran `destroyCurrentWindow()` on the shared vault: the instance's ONLY window, so the
  * App quit and every later file failed with `ECONNREFUSED` on a closed CDP port.
  *
- * `unregisterVault` is called directly rather than through `TemporaryVault.dispose()`, which would
- * Also delete the shared vault directory -- a second hazard this guard cannot reach.
+ * `unregisterVault` is called directly rather than through `TemporaryVault.dispose()` so that this
+ * Case measures the transport guard alone; the directory half is the case below.
  */
 describe('unregistering the shared setup vault from an attached worker', () => {
   it('leaves the instance and its window alive, because the worker did not register it', async () => {
     await unregisterVault(inject('temporaryVaultPath'));
 
+    const basePath = await evalInObsidian({
+      callback({ app }): string {
+        return (app.vault.adapter as FileSystemAdapter).getBasePath();
+      }
+    });
+
+    expect(basePath).toBe(inject('temporaryVaultPath'));
+  });
+});
+
+/*
+ * Directory-guard regression (AGENTS.md L52), the other half of the pair above and for the same
+ * Reason the LAST thing in this file: a regression here deletes the vault directory the whole
+ * Project shares, out from under the open window.
+ *
+ * `getTemporaryVault()` hands back a full `TemporaryVault` over the run's SHARED vault, so a
+ * Consumer's `afterAll(() => vault.dispose())` reads as symmetric and is not. `dispose()` used to end
+ * In an unconditional `retryRm(this.path)` inside a `finally`, above the transport and past the guard
+ * The case above measures. It now removes only a directory the handle itself created.
+ */
+describe('disposing the shared setup vault handle from an attached worker', () => {
+  it('keeps the vault directory, because the handle did not create it', async () => {
+    const vault = getTemporaryVault();
+    await vault.dispose();
+
+    expect(existsSync(vault.path)).toBe(true);
+
+    // Not just the directory: the window over it still answers, so the run could have continued.
     const basePath = await evalInObsidian({
       callback({ app }): string {
         return (app.vault.adapter as FileSystemAdapter).getBasePath();

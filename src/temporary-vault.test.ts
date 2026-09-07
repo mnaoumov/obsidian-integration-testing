@@ -15,6 +15,7 @@ const mockWriteFileSync = vi.hoisted(() => vi.fn());
 const mockRm = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
 const mockRegisterVault = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
 const mockUnregisterVault = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
+const mockLog = vi.hoisted(() => vi.fn<(message: string) => void>());
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -39,6 +40,10 @@ vi.mock('./vault-registry.ts', () => ({
   unregisterVault: mockUnregisterVault
 }));
 
+vi.mock('./log.ts', () => ({
+  log: mockLog
+}));
+
 beforeEach(() => {
   mockMkdirSync.mockReset();
   mockMkdtempSync.mockReset().mockReturnValue('/tmp/temp-vault-abc');
@@ -46,6 +51,7 @@ beforeEach(() => {
   mockRm.mockReset().mockResolvedValue(undefined);
   mockRegisterVault.mockReset().mockResolvedValue(undefined);
   mockUnregisterVault.mockReset().mockResolvedValue(undefined);
+  mockLog.mockReset();
   vi.restoreAllMocks();
 });
 
@@ -137,11 +143,32 @@ describe('register', () => {
 });
 
 describe('dispose', () => {
-  it('should unregister and remove the vault directory', async () => {
+  it('should unregister and remove a directory it created', async () => {
+    const vault = new TemporaryVault();
+    await vault.dispose();
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', undefined);
+    expect(mockRm).toHaveBeenCalledWith('/tmp/temp-vault-abc', { force: true, recursive: true });
+  });
+
+  it('should unregister but keep a directory it did not create', async () => {
     const vault = new TemporaryVault('/vault');
     await vault.dispose();
     expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
+    expect(mockRm).not.toHaveBeenCalled();
+    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('/vault'));
+  });
+
+  it('should remove a directory it did not create when told to explicitly', async () => {
+    const vault = new TemporaryVault('/vault', { shouldRemoveDirectoryOnDispose: true });
+    await vault.dispose();
     expect(mockRm).toHaveBeenCalledWith('/vault', { force: true, recursive: true });
+  });
+
+  it('should keep a directory it created when told to explicitly', async () => {
+    const vault = new TemporaryVault(undefined, { shouldRemoveDirectoryOnDispose: false });
+    await vault.dispose();
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', undefined);
+    expect(mockRm).not.toHaveBeenCalled();
   });
 
   it('should retry rm when it fails temporarily', async () => {
@@ -154,7 +181,7 @@ describe('dispose', () => {
       }
     });
 
-    const vault = new TemporaryVault('/vault');
+    const vault = new TemporaryVault();
     await vault.dispose();
     expect(mockRm).toHaveBeenCalledTimes(2);
   });
@@ -175,7 +202,7 @@ describe('dispose', () => {
 
     mockRm.mockRejectedValue(new Error('EBUSY'));
 
-    const vault = new TemporaryVault('/vault');
+    const vault = new TemporaryVault();
     await expect(vault.dispose()).rejects.toThrow('EBUSY');
   });
 });
@@ -183,9 +210,9 @@ describe('dispose', () => {
 describe('Symbol.asyncDispose', () => {
   it('should dispose when used with await using', async () => {
     {
-      await using _vault = new TemporaryVault('/vault');
+      await using _vault = new TemporaryVault();
     }
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', undefined);
     expect(mockRm).toHaveBeenCalled();
   });
 });
