@@ -23,7 +23,14 @@ AVD_NAME="$1"
 SYSTEM_IMAGE="$2"
 CONFIG_PATH="$HOME/.android/avd/$AVD_NAME.avd/config.ini"
 
-yes | sdkmanager --licenses > /dev/null
+# `yes` is killed by SIGPIPE the moment sdkmanager stops reading, and under
+# `pipefail` that non-zero status fails the whole step -- which is exactly how
+# the first CI run died, one second in, with `yes: standard output: Broken pipe`.
+# The licenses are already accepted by android-actions/setup-android, so this is
+# belt-and-braces and its own failure must not be the step's; a license that
+# really was missing surfaces on the install below instead.
+yes 2>/dev/null | sdkmanager --licenses > /dev/null 2>&1 || true
+
 sdkmanager --install "$SYSTEM_IMAGE" emulator platform-tools
 
 # `echo no` declines the "custom hardware profile?" prompt; --force replaces any
