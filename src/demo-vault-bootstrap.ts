@@ -17,7 +17,8 @@
  *
  * Downloading the release assets is the exact headless equivalent: the resulting
  * folder is what Obsidian itself would have installed, so the shipped
- * `*-demo-vault-<version>.zip` stays the standard demo-vault artifact.
+ * `*-demo-vault.zip` — which unzips into a single `*-demo-vault-<version>` folder —
+ * stays the standard demo-vault artifact.
  *
  * Two entry points, plus the `bootstrap-demo-vault` CLI subcommand:
  *

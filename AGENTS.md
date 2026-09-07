@@ -1923,7 +1923,8 @@ server and starting a fresh one fixed the suite with no other change.
 - **Downloading the release assets is the exact equivalent.** A plugin's published `main.js` /
   `manifest.json` / `styles.css` are what Obsidian's own community browser installs, so writing them into
   `demo-vault/.obsidian/plugins/<id>/` produces the same folder — and therefore the same standard
-  `*-demo-vault-<version>.zip`, which is supposed to carry `fix-require-modules` anyway.
+  `*-demo-vault.zip`, which unzips into a single `*-demo-vault-<version>` folder and is supposed to
+  carry `fix-require-modules` anyway.
 - **The id → repo mapping is not hardcoded; it comes from Obsidian.**
   `community-plugin-registry.ts` (pure, unit-tested) holds the registry URL —
   `obsidianmd/obsidian-releases`' `community-plugins.json`, the same table the in-app browser installs from —
