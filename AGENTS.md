@@ -2828,11 +2828,11 @@ rule `connectToCdp` already applied one layer up as `shouldRemoveVaultOnDispose 
 moved down into the class so every caller gets it. `connectToCdp` now hands its flag to the constructor,
 which both preserves its explicit override and collapses its `dispose()` branch to one call.
 
-**The change was free because nothing real relied on the old default.** Across the whole `@obsidian` fleet,
-every `new TemporaryVault(...)` outside this repo's own unit tests passes **no** argument; the only sites
-passing a path are `getTemporaryVault()` (the defect) and `connectToCdp` (which keeps its opt-in). That is
-why the default was flipped rather than a `false` threaded through the two accessors — the honest invariant
-cost the same as the narrow patch.
+**The change was free because nothing real relied on the old default.** Across every repo that consumes
+this package, each `new TemporaryVault(...)` outside this repo's own unit tests passes **no** argument; the
+only sites passing a path are `getTemporaryVault()` (the defect) and `connectToCdp` (which keeps its
+opt-in). That is why the default was flipped rather than a `false` threaded through the two accessors — the
+honest invariant cost the same as the narrow patch.
 
 The regression is the last case in `src/owned-instance-worker-attach.integration.test.ts`, immediately after
 **L51**'s and last for the same reason: it disposes the `getTemporaryVault()` handle and asserts both that
