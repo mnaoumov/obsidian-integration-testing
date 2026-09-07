@@ -44,6 +44,15 @@ const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.
 // Asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
 const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
 
+// The `configDirectory` override suite runs in its own project because the override is a property of the
+// Whole run: its global setup opens the owned vault under `.obsidian-desktop`, and every other integration
+// Project deliberately runs under Obsidian's default. It evals from a worker to assert that what the harness
+// Wrote before open — the seeded plugin, the headless `app.json` — actually reached the folder the vault
+// Opened, so it needs its own global setup plus the per-worker resolvers.
+const CONFIG_DIRECTORY_OVERRIDE_TEST_FILE = 'src/config-directory-override.integration.test.ts';
+// Kept in sync with the `CONFIG_DIRECTORY` the companion test asserts `app.vault.configDir` against.
+const CONFIG_DIRECTORY_OVERRIDE = '.obsidian-desktop';
+
 // The failed-setup regression suite runs in its own project because its global setup must FAIL:
 // It attaches to a CDP port nothing can serve, so every test in it runs in the state a worker is left in
 // After a real setup failure. Port 1 is refused outright by `fetch`, so the failure is instant and never
@@ -137,6 +146,7 @@ export const config = defineConfig({
             OWNED_ATTACH_TEST_FILE,
             BARE_ATTACH_TEST_FILE,
             ENABLE_COMMUNITY_PLUGINS_TEST_FILE,
+            CONFIG_DIRECTORY_OVERRIDE_TEST_FILE,
             FAILED_SETUP_TEST_FILE,
             ANDROID_TRUSTED_INPUT_TEST_FILE,
             DESKTOP_TRUSTED_INPUT_TEST_FILE
@@ -207,6 +217,27 @@ export const config = defineConfig({
           include: [ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
           maxWorkers: 1,
           name: 'integration-tests:enable-community-plugins',
+          setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
+        }
+      },
+      {
+        test: {
+          ...SHARED_TEST_DEFAULTS,
+          environment: 'node',
+          // The whole point of the project: the owned vault opens under a config folder that is not
+          // `.obsidian`, so every pre-open write the harness makes has to follow it there.
+          environmentOptions: {
+            obsidianTransport: {
+              configDirectory: CONFIG_DIRECTORY_OVERRIDE,
+              type: 'obsidian-cdp'
+            }
+          },
+          exclude: SHARED_EXCLUDE,
+          fileParallelism: false,
+          globalSetup: ['./scripts/config-directory-override-global-setup.ts'],
+          include: [CONFIG_DIRECTORY_OVERRIDE_TEST_FILE],
+          maxWorkers: 1,
+          name: 'integration-tests:config-directory-override',
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },

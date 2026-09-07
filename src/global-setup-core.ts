@@ -15,11 +15,8 @@ import {
   rmSync
 } from 'node:fs';
 import {
-  cp,
-  mkdir,
   readFile,
-  stat,
-  writeFile
+  stat
 } from 'node:fs/promises';
 import {
   basename,
@@ -34,6 +31,7 @@ import type { PopulateFilesParams } from './temporary-vault.ts';
 import type { ObsidianTransportOptions } from './transport-options.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { DEFAULT_CONFIG_DIRECTORY } from './config-directory.ts';
 import { DesktopOnlyPluginSkipError } from './desktop-only-plugin-skip-error.ts';
 import {
   enablePluginWithErrorCapture,
@@ -63,14 +61,12 @@ import {
   checkIsMobileTransport,
   resolveOwnedConfigDirectory
 } from './transport-options.ts';
+import { installPluginIntoVault } from './vault-plugin-install.ts';
 
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DIST_DEV = 'dist/dev';
 const DIST_BUILD = 'dist/build';
 const MAIN_JS = 'main.js';
-const OBSIDIAN_CONFIG_DIR = '.obsidian';
-const PLUGINS_DIR = 'plugins';
-const COMMUNITY_PLUGINS_JSON = 'community-plugins.json';
 
 /**
  * Tracks setups that completed successfully but haven't been torn down yet.
@@ -109,8 +105,8 @@ export interface CoreSetupParams {
    * Whether to install and enable the built plugin in the temp vault. Defaults
    * to `true`. Set to `false` for a **non-plugin** consumer (e.g. a typings
    * crawler) that only needs a registered, empty vault to `evalInObsidian`
-   * against: the plugin `dist`/`manifest.json` read, the copy into
-   * `.obsidian/plugins`, the `community-plugins.json` write, and the enable step
+   * against: the plugin `dist`/`manifest.json` read, the copy into the config
+   * folder's `plugins/`, the `community-plugins.json` write, and the enable step
    * are all skipped, while the transport, temp vault, registration, and
    * worker-facing endpoint provisioning still run unchanged.
    */
@@ -121,6 +117,11 @@ export interface CoreSetupParams {
    * its startup scan indexes them in one pass (see {@link TemporaryVault.populate}).
    * Use this for large fixtures — writing thousands of notes after open and
    * forcing a re-scan is far slower and less reliable.
+   *
+   * Keys naming the config folder are written as `.obsidian/…`; under a
+   * `configDirectory` override {@link remapConfigDirectoryKeys} redirects them to
+   * the folder the vault will actually read, so a map does not have to carry a
+   * second copy of the override.
    */
   readonly populate?: PopulateFilesParams | undefined;
 
@@ -160,6 +161,12 @@ export interface CoreSetupResult {
  * Parameters for {@link copyPluginIntoVault}.
  */
 interface CopyPluginIntoVaultParams {
+  /**
+  The config folder the vault will read, when overridden away from `.obsidian` — the resolved
+  {@link resolveOwnedConfigDirectory} value, which is `undefined` for Obsidian's own default.
+   */
+  readonly configDirectory: string | undefined;
+
   /**
   Short label for log messages.
    */
@@ -343,22 +350,30 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     temporaryVault = new TemporaryVault();
     log(`[integration-setup:${label}] Created temp vault: ${temporaryVault.path}`);
 
+    /*
+     * Which folder this vault will actually read, resolved once and handed to every writer below.
+     * Every pre-open write has to agree on it: one that hardcodes `.obsidian` under an override writes
+     * somewhere nothing looks, and nothing throws to say so.
+     */
+    const configDirectory = resolveOwnedConfigDirectory(transportOptions);
+
     let pluginId: string | undefined;
 
     if (shouldInstallPlugin) {
-      pluginId = await copyPluginIntoVault({ label, projectRoot, temporaryVault, transport });
+      pluginId = await copyPluginIntoVault({ configDirectory, label, projectRoot, temporaryVault, transport });
     } else {
       log(`[integration-setup:${label}] Skipping plugin install (installPlugin: false) — registering an empty vault.`);
     }
 
     if (params?.populate) {
-      const entryCount = Object.keys(params.populate).length;
+      const populate = remapConfigDirectoryKeys(params.populate, configDirectory);
+      const entryCount = Object.keys(populate).length;
       log(`[integration-setup:${label}] Populating vault with ${String(entryCount)} entries before open...`);
-      temporaryVault.populate(params.populate);
+      temporaryVault.populate(populate);
     }
 
     await ensureHeadlessVaultConfig({
-      configDirectory: resolveOwnedConfigDirectory(transportOptions),
+      configDirectory,
       label,
       vaultPath: temporaryVault.path
     });
@@ -445,6 +460,39 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
 }
 
 /**
+ * Redirects a populate map's config-folder entries to the folder the vault will actually read.
+ *
+ * A populate map names its destinations vault-relative, and everything that builds one — including
+ * `buildDemoVaultPopulate`, which seeds `.obsidian/*` config files and injected community plugins'
+ * binaries — writes them under a literal `.obsidian/`, because that is the folder Obsidian uses when nothing
+ * overrides it. Under a `configDirectory` override those entries land in a folder the vault never opens, and
+ * the plugins seeded that way come back as the generic "enabled but not loaded" with nothing naming a config
+ * folder. Rewriting the key here fixes every consumer at once — a hand-written map as much as a demo vault's
+ * — and needs no second copy of the override for a caller to keep in sync with their transport options.
+ *
+ * Safe rather than magic: the vault is one the harness made for this run and has exactly one config folder,
+ * so under an override a `.obsidian/` entry is dead weight nothing reads. Only a leading `.obsidian` path
+ * SEGMENT moves; a note whose name merely contains the string does not.
+ *
+ * @param populate - The consumer's populate map.
+ * @param configDirectory - The resolved override, or `undefined` for Obsidian's default (a no-op).
+ * @returns The map with its config-folder keys redirected, or the original map when there is nothing to move.
+ */
+export function remapConfigDirectoryKeys(populate: PopulateFilesParams, configDirectory: string | undefined): PopulateFilesParams {
+  if (configDirectory === undefined || configDirectory === DEFAULT_CONFIG_DIRECTORY) {
+    return populate;
+  }
+
+  const prefix = `${DEFAULT_CONFIG_DIRECTORY}/`;
+  const remapped: PopulateFilesParams = {};
+  for (const [path, content] of Object.entries(populate)) {
+    remapped[path.startsWith(prefix) ? `${configDirectory}/${path.slice(prefix.length)}` : path] = content;
+  }
+
+  return remapped;
+}
+
+/**
  * Resolves transport options for an integration run.
  *
  * Desktop launches are normally visible, but test setup explicitly keeps its
@@ -515,14 +563,17 @@ function augmentTransportOptions(
  * Copies the built plugin into the temp vault and marks it as a community plugin.
  *
  * Reads `manifest.json` from the newer of `dist/dev`/`dist/build`, rejects a
- * desktop-only plugin on a mobile transport, copies the build into
- * `.obsidian/plugins/<id>`, and writes `.obsidian/community-plugins.json`.
+ * desktop-only plugin on a mobile transport, then hands the write itself to
+ * {@link installPluginIntoVault} — which puts the build in
+ * `<configDirectory>/plugins/<id>` and writes
+ * `<configDirectory>/community-plugins.json`, honouring a `configDirectory`
+ * override so the plugin lands where the vault will actually look for it.
  *
  * @param params - The copy parameters.
  * @returns The plugin id read from the manifest.
  */
 async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<string> {
-  const { label, projectRoot, temporaryVault, transport } = params;
+  const { configDirectory, label, projectRoot, temporaryVault, transport } = params;
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
@@ -538,10 +589,8 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
   const buildStat = await stat(mainJs);
   log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
 
-  const pluginDirectory = join(temporaryVault.path, OBSIDIAN_CONFIG_DIR, PLUGINS_DIR, pluginId);
-  await mkdir(pluginDirectory, { recursive: true });
-  await cp(distPath, pluginDirectory, { recursive: true });
-  await writeFile(join(temporaryVault.path, OBSIDIAN_CONFIG_DIR, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+  await installPluginIntoVault({ configDirectory, distPath, pluginId, vaultPath: temporaryVault.path });
+  log(`[integration-setup:${label}] Installed "${pluginId}" into ${configDirectory ?? DEFAULT_CONFIG_DIRECTORY}/plugins (and enabled it there).`);
 
   return pluginId;
 }
