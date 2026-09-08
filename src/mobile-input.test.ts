@@ -92,18 +92,30 @@ describe('toCdpInputCommands: pointer', () => {
     ]);
   });
 
-  it('should add a dwell before the release for a long press, and only for a long press', () => {
-    const [, tapRelease] = toCdpInputCommands({ kind: 'tap', modifiers: [], x: 1, y: 2 });
-    const [, longPressRelease] = toCdpInputCommands({ kind: 'longPress', modifiers: [], x: 1, y: 2 });
-
-    expect(tapRelease?.delayBeforeInMilliseconds).toBeUndefined();
-    expect(longPressRelease?.delayBeforeInMilliseconds).toBe(600);
+  // A touch pair held apart by a dwell is injected past Android's gesture recognizer, so no long press is
+  // Ever recognized and the pair reads as a tap however long the wait. The single gesture command is the
+  // Whole fix, so the shape is asserted exactly rather than by a property.
+  it('should synthesize a long press as ONE gesture command, not a touch pair', () => {
+    expect(toCdpInputCommands({ kind: 'longPress', modifiers: [], x: 10.5, y: 20.5 })).toEqual([
+      {
+        method: 'Input.synthesizeTapGesture',
+        params: { duration: 600, gestureSourceType: 'touch', x: 10.5, y: 20.5 }
+      }
+    ]);
   });
 
-  it('should never delay the press itself', () => {
-    const [press] = toCdpInputCommands({ kind: 'longPress', modifiers: [], x: 1, y: 2 });
+  it('should hold the long press past Android\'s 500ms recognition threshold', () => {
+    const [gesture] = toCdpInputCommands({ kind: 'longPress', modifiers: [], x: 1, y: 2 });
 
-    expect(press?.delayBeforeInMilliseconds).toBeUndefined();
+    expect(gesture?.params['duration']).toBeGreaterThan(500);
+  });
+
+  // The gesture API takes no modifier bitmask, and a touch screen has no modifier keys to hold during a
+  // Press — so a modifier a caller passes is dropped rather than mistranslated into the tap's spelling.
+  it('should not carry modifiers on a long press, which has nowhere to put them', () => {
+    const [gesture] = toCdpInputCommands({ kind: 'longPress', modifiers: ['shift'], x: 1, y: 2 });
+
+    expect(gesture?.params).not.toHaveProperty('modifiers');
   });
 
   it('should carry modifiers on both halves of the gesture', () => {

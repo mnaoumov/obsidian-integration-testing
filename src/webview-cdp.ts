@@ -196,18 +196,16 @@ export class WebViewCdpConnection {
   }
 
   /**
-   * Sends an ordered command sequence, honoring each command's delay.
+   * Sends an ordered command sequence, one command at a time.
+   *
+   * Each command is awaited before the next is sent, which is the only ordering guarantee an input
+   * sequence needs — a long-press holds itself for its own `duration` rather than asking the host to
+   * sleep between two touches, so there is no inter-command delay to honor.
    *
    * @param commands - The commands to send, in order.
    */
   public async sendAll(commands: readonly CdpInputCommand[]): Promise<void> {
     for (const command of commands) {
-      if (command.delayBeforeInMilliseconds !== undefined) {
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, command.delayBeforeInMilliseconds);
-        });
-      }
-
       await this.send(command.method, command.params);
     }
   }

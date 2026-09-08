@@ -32,19 +32,14 @@ export const MOBILE_INPUT_BINDING_NAME = '__obsidianIntegrationTestingInput';
 export const MOBILE_INPUT_TIMEOUT_IN_MILLISECONDS = 15_000;
 
 /**
- * A single Chrome DevTools Protocol command, plus how long to wait before sending it.
+ * A single Chrome DevTools Protocol command.
  *
- * The delay is carried here rather than applied by the producer so that the whole sequence stays pure
- * data — a test asserts the dwell without waiting for it.
+ * It once also carried a `delayBeforeInMilliseconds`, so the host would sleep between the two halves of a
+ * long-press. That dwell is gone: the gesture is now one `Input.synthesizeTapGesture` that holds itself
+ * for its own `duration`, so no command in any sequence needs to be spaced from the one before it, and a
+ * knob nothing sets is worse than no knob.
  */
 export interface CdpInputCommand {
-  /**
-   * Milliseconds to wait before sending this command. Absent means "send immediately".
-   *
-   * Used only by the long-press dwell.
-   */
-  readonly delayBeforeInMilliseconds?: number;
-
   /**
    * The CDP method name, e.g. `Input.dispatchTouchEvent`.
    */
@@ -134,9 +129,14 @@ export interface MobilePointerInputRequest {
 /**
  * How long a long-press holds the touch down before releasing it.
  *
- * Obsidian Mobile implements long-press in JavaScript (a timer started on `touchstart`) rather than
- * relying on a native gesture, so this has to clear *its* threshold, not Android's. 600ms is the
- * conventional Android long-press threshold and clears Obsidian's comfortably.
+ * It has to clear **Android's** long-press threshold, which is 500ms by default: the gesture is
+ * recognized by the platform, and the `contextmenu` Obsidian's menus hang off is what the recognizer
+ * emits. 600ms clears that with margin without making every long-press test noticeably slower.
+ *
+ * This corrects the former reading — that Obsidian Mobile implements long-press itself, on a JavaScript
+ * `touchstart` timer, so the dwell only had to clear *its* threshold. Measured against a real
+ * `.nav-file-title`, a 600ms dwell between two dispatched touches opened the note instead of its menu;
+ * see {@link toPointerCommands} for why the dwell alone was never going to be enough.
  */
 const LONG_PRESS_DWELL_IN_MILLISECONDS = 600;
 
@@ -363,9 +363,21 @@ function toKeyCommands(request: MobileKeyInputRequest): CdpInputCommand[] {
 /**
  * Builds the command sequence for a tap or a long-press.
  *
- * A trusted touch pair is all Chromium needs — it synthesizes `pointerdown` / `touchstart` /
- * `pointerup` / `touchend` / `click` from it, every one `isTrusted`. The release carries an empty
- * `touchPoints` list, which is CDP's spelling for "all fingers lifted".
+ * **The two gestures take different CDP routes, and that asymmetry is the whole point.**
+ *
+ * A tap is a trusted touch pair, which is all Chromium needs — it synthesizes `pointerdown` /
+ * `touchstart` / `pointerup` / `touchend` / `click` from it, every one `isTrusted`. The release carries
+ * an empty `touchPoints` list, which is CDP's spelling for "all fingers lifted".
+ *
+ * A long-press cannot be that same pair held apart by a dwell, because `Input.dispatchTouchEvent` injects
+ * a `WebTouchEvent` **past** Android's gesture recognizer: no recognizer sees the hold, so no long-press
+ * gesture is ever produced and the pair is classified as a tap however long the dwell is.
+ * `Input.synthesizeTapGesture` instead goes through Chromium's synthetic-gesture controller, which builds
+ * real `MotionEvent`s and feeds them to the platform recognizer — the step the dispatch route skips.
+ *
+ * Measured on a live emulator (2026-09-08): the dispatch pair with a 600ms dwell, aimed at a **real**
+ * `.nav-file-title` in the file explorer, produced `pointerdown` / `touchstart` / `touchend` / `click` and
+ * **opened the note** — a tap. No `contextmenu`, and no Obsidian menu.
  *
  * @param request - The pointer request.
  * @returns The commands to send, in order.
@@ -373,13 +385,28 @@ function toKeyCommands(request: MobileKeyInputRequest): CdpInputCommand[] {
 function toPointerCommands(request: MobilePointerInputRequest): CdpInputCommand[] {
   const modifiers = toCdpModifiers(request.modifiers);
 
+  if (request.kind === 'longPress') {
+    // `synthesizeTapGesture` takes no modifier bitmask — CDP's gesture API has no parameter for one — and
+    // A touch screen has no modifier keys to hold during a press, so there is nothing to carry here.
+    return [
+      {
+        method: 'Input.synthesizeTapGesture',
+        params: {
+          duration: LONG_PRESS_DWELL_IN_MILLISECONDS,
+          gestureSourceType: 'touch',
+          x: request.x,
+          y: request.y
+        }
+      }
+    ];
+  }
+
   return [
     {
       method: 'Input.dispatchTouchEvent',
       params: { modifiers, touchPoints: [{ x: request.x, y: request.y }], type: 'touchStart' }
     },
     {
-      ...(request.kind === 'longPress' && { delayBeforeInMilliseconds: LONG_PRESS_DWELL_IN_MILLISECONDS }),
       method: 'Input.dispatchTouchEvent',
       params: { modifiers, touchPoints: [], type: 'touchEnd' }
     }

@@ -190,6 +190,22 @@ problem trusted input exists to solve. Branch on `Platform.isDesktopApp` when a 
 Coordinates on mobile are CSS pixels in the WebView's own viewport — the same numbers
 `getBoundingClientRect()` reports — so there is no device-pixel-ratio conversion to do.
 
+A long-press on mobile is a real platform gesture, and it **must land inside the viewport**: aimed outside
+it, the injection fails with `Position out of bounds` rather than pressing nothing quietly. So being laid
+out is not enough — an element in a sidebar that is still sliding open already has its full width at a
+negative `left`, and its centre point is off-screen. Wait for the element's **centre to be inside the
+viewport** before pressing it:
+
+```ts
+await lib.waitUntil({
+  predicate: () => {
+    const rect = element.getBoundingClientRect();
+    return rect.left + rect.width / 2 >= 0 && rect.top + rect.height / 2 >= 0;
+  }
+});
+await lib.clickElement({ button: 'right', element });
+```
+
 ## Related
 
 - [The `lib` bag](/obsidian-integration-testing/guides/lib/) — where these helpers come from, and how to
