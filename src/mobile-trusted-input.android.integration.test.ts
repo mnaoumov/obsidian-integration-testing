@@ -35,6 +35,15 @@ const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**
+ * What the long-press test reports back: the events that reached the pressed element, and the menu the
+ * press produced.
+ */
+interface LongPressResult {
+  readonly events: ObservedEvent[];
+  readonly menuItems: string[];
+}
+
+/**
  * One observed DOM event: its type, and whether the browser vouched for it.
  */
 interface ObservedEvent {
@@ -169,6 +178,83 @@ describe('mobile trusted input', () => {
     });
 
     expect(wasCoveredElementClicked).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The test whose absence let a broken long-press ship. `button: 'right'` used to be a dispatched touch
+  // Pair held apart by a dwell, which Android's gesture recognizer never sees — so it was classified as a
+  // Tap, and a long press on a file OPENED it instead of opening its menu. Every other assertion in this
+  // File still passed, because none of them pressed anything for longer than an instant.
+  //
+  // It presses a REAL Obsidian element rather than a probe `div` on purpose: a synthetic element has no
+  // Obsidian handler, so it can only ever show that the `contextmenu` arrived, never that a consumer's
+  // Menu opens from it. Both halves are asserted here — the trusted event AND the menu it produced.
+  it('should open a REAL Obsidian menu from a long press, rather than tapping the element', async () => {
+    const result = await evalInObsidian({
+      async callback({ app, lib }): Promise<LongPressResult> {
+        // A file explorer with nothing in it renders no `.nav-file-title` to press, and the registered
+        // Vault reports no markdown files here, so seed one rather than depending on the vault's contents.
+        if (app.vault.getMarkdownFiles().length === 0) {
+          await lib.createNote({ content: '# long press\n', path: 'long-press.md' });
+        }
+
+        const leaf = app.workspace.getLeavesOfType('file-explorer')[0];
+        app.workspace.leftSplit.expand();
+        if (leaf) {
+          await app.workspace.revealLeaf(leaf);
+        }
+
+        // The item must be ON SCREEN, not merely laid out. The drawer slides in from the left, so during
+        // The animation an item already has its full width at a NEGATIVE `left` — and the gesture's centre
+        // Point is then off the viewport, which `Input.synthesizeTapGesture` rejects with "Position out of
+        // Bounds" rather than pressing anything. Waiting on the centre point rather than on the width is
+        // What makes this wait for the drawer to arrive instead of merely to exist.
+        function findVisibleNavFile(): HTMLElement | undefined {
+          return [...document.querySelectorAll<HTMLElement>('.nav-file-title')].find((item) => {
+            const rect = item.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            return rect.width > 0
+              && centerX >= 0 && centerX <= globalThis.innerWidth
+              && centerY >= 0 && centerY <= globalThis.innerHeight;
+          });
+        }
+
+        await lib.waitUntil({ predicate: () => findVisibleNavFile() !== undefined });
+        const navFile = findVisibleNavFile();
+        if (!navFile) {
+          throw new Error('The file explorer rendered no visible `.nav-file-title` to long-press.');
+        }
+
+        const events: ObservedEvent[] = [];
+        function listener(event: Event): void {
+          events.push({ isTrusted: event.isTrusted, type: event.type });
+        }
+
+        // Capture phase: Obsidian's own handler opens the menu and may stop propagation on the way.
+        navFile.addEventListener('contextmenu', listener, { capture: true });
+        try {
+          await lib.clickElement({ button: 'right', element: navFile });
+          await lib.waitUntil({ predicate: () => document.querySelector('.menu') !== null });
+
+          return {
+            events,
+            menuItems: [...document.querySelectorAll('.menu-item-title')].map((item) => item.textContent)
+          };
+        } finally {
+          navFile.removeEventListener('contextmenu', listener, { capture: true });
+          // A real menu leaks into the next test unless it is taken down (**L11**).
+          for (const menu of document.querySelectorAll('.menu')) {
+            menu.remove();
+          }
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    // The mechanism: the platform recognized a long press and emitted a genuine `contextmenu`.
+    expect(result.events.some((event) => event.type === 'contextmenu' && event.isTrusted)).toBe(true);
+    // The consumer-visible effect: Obsidian's own file menu, which is what every converted suite needs.
+    expect(result.menuItems).toContain('Rename...');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   it('should refuse a hover rather than silently do nothing', async () => {
