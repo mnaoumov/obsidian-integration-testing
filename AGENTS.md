@@ -1819,7 +1819,8 @@ the Appium session:
    with a JSON request, and awaits.
 3. `Runtime.bindingCalled` arrives on **our** socket while chromedriver's Execute Script is still pending
    on **its** socket, so there is no contention. The host injects `Input.dispatchTouchEvent` /
-   `dispatchKeyEvent`, then resolves the renderer's promise with a concurrent `Runtime.evaluate`.
+   `dispatchKeyEvent` / `synthesizeTapGesture` (which command realizes which gesture is the long-press
+   bullet below), then resolves the renderer's promise with a concurrent `Runtime.evaluate`.
 
 **CDP takes CSS pixels in the page's own viewport**, so the device-pixel mapping never has to be written —
 the single biggest reason this route is cheaper than the native one.
@@ -1848,10 +1849,33 @@ it.
 - **`middle` clicks and hovers throw on mobile, deliberately.** Touch has no middle button and no hover
   state. A silent no-op would leave a test asserting against something that never happened — the exact
   false-confidence failure trusted input exists to end — so the helper says so instead.
-- **Long-press is Obsidian's own gesture, not Android's.** Obsidian Mobile implements it in JavaScript on a
-  `touchstart` timer, so the 600ms dwell has to clear *its* threshold. A synthetic element with no such
-  handler will not produce a `contextmenu` from a dwell, which is why long-press has to be verified against
-  a real Obsidian element rather than a probe `div`.
+- **Long-press is Android's gesture, not Obsidian's — and it needs a different CDP command than a tap.**
+  A tap is `Input.dispatchTouchEvent`; a long-press is a single `Input.synthesizeTapGesture` with a
+  `duration` past Android's 500ms recognition threshold. The two routes differ because
+  `dispatchTouchEvent` injects a `WebTouchEvent` **past** the platform's gesture recognizer: nothing sees
+  the hold, so no long press is ever recognized and the pair is classified as a tap however long the host
+  waits between the two halves. `synthesizeTapGesture` goes through Chromium's synthetic-gesture
+  controller, which builds real `MotionEvent`s and feeds them to that recognizer.
+
+  **This corrects the former reading**, which was that Obsidian Mobile implements long-press itself on a
+  JavaScript `touchstart` timer, so the dwell only had to clear *its* threshold — and that a probe `div`
+  therefore could not show a `contextmenu` even from a working gesture. Measured on a live emulator
+  (2026-09-08) with the dwell route, against a **real** `.nav-file-title` in the file explorer: the press
+  produced `pointerdown` / `touchstart` / `touchend` / `click` and **opened the note**. No `contextmenu`,
+  no menu. With the gesture route, the same press emits a trusted `contextmenu` and Obsidian's own file
+  menu opens. The old reading was not merely incomplete — it explained the symptom away, and three
+  consumer suites were filed as plugin defects on the strength of it.
+
+  **Press a real Obsidian element, not a probe `div`** — the advice survives its old justification, for a
+  better reason: a `div` shows only that the event arrived, never that a consumer's menu opens from it.
+  `mobile-trusted-input.android.integration.test.ts` now asserts both halves, so the claim in this bullet
+  is enforced rather than remembered.
+- **A long-press aimed off the viewport now THROWS, where the old dwell silently did nothing.**
+  `synthesizeTapGesture` validates its point and answers `Position out of bounds`, which is the better
+  failure — a gesture that pressed nothing used to leave the test asserting against an event that never
+  happened. It does mean an element that is laid out but not yet **on screen** is a real error: a sidebar
+  mid-animation already has its full width at a negative `left`, so wait on the element's **centre point
+  being inside the viewport**, not on its width.
 - **`obsidian-dev-utils` reaches this mechanism through `ns.trustedInput`, and only through it** (added
   2026-08-31). Everything above happens inside the renderer closure, so a caller outside the
   harness has no way in — and `obsidian-dev-utils` must never import this package at runtime (its own peer-dependency rule), which rules out
