@@ -177,13 +177,13 @@ export function buildEmulatorLivenessMessage(params: BuildEmulatorLivenessMessag
       'The console is served by the emulator process, not by the guest, so its silence means the EMULATOR is wedged — not the guest, not the Appium server, and not the device being absent.',
       '`adb devices` will still list this device and will mislead you: nothing is left running to update that state.',
       'A wedged emulator does not come back, so retrying the session against it cannot succeed. One this run started is replaced with a fresh boot automatically, which means seeing this message is the replacement failing too.',
-      'If it recurs at the same point in every run, the fault is below the harness: check the emulator build, the system image and the host hypervisor rather than these tests.'
+      'If it recurs at the same point in every run, the fault is below the harness — and the first thing to check is what filters this host\'s sockets. Endpoint-security, content-blocking and VPN products install socket filter drivers in the path of every socket call the emulator makes, the console\'s localhost connection included; stopping that service has fixed exactly this signature. After that, the emulator build, the system image and the host hypervisor.'
     ],
     'guest-unresponsive': [
       `The guest (\`adb -s ${params.deviceId} shell\`) did not answer within ${budget}, but the emulator's own console did.`,
       'So the emulator process is healthy and the guest is frozen or too starved to schedule `adbd`.',
       'A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget that governs waiting one out.',
-      'But if it recurs at the same point in every run, no timeout will fix it — the fault is below the harness, in the emulator build, the system image or the host hypervisor.'
+      'But if it recurs at the same point in every run, no timeout will fix it, and the host is not merely busy. Check what filters this host\'s sockets first — a content-blocking, endpoint-security or VPN socket filter driver produces this verdict as readily as it produces a fully wedged emulator — then the emulator build, the system image and the host hypervisor.'
     ]
   };
 

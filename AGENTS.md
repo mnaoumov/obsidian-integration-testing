@@ -2573,15 +2573,70 @@ to. The first two of those three were then eliminated as well, on the same day:
 | A different **system image** — `android-36/google_apis` (not 37.0, not Play Store, no 16 KB page size) on a fresh throwaway AVD | 85s of usable life vs 43-71s, then the identical wedge |
 | A different **emulator build** — 36.6.11.0 → 37.1.11.0, same AVD, same arguments | died at 64s, *sooner* than the 92s baseline |
 
-Which leaves the **host**: Windows 11 26200 + WHPX. HVCI is off (`SecurityServicesRunning` is `0`), so
-there is no memory-integrity setting to turn off — VBS is up only because Hyper-V/WHPX is enabled at all.
+Which leaves the **host** — and the host here is Windows 11 26200 + WHPX, so the hypervisor is what the
+elimination pointed at. It was the wrong half of the host: the next section names what it actually was,
+and it is not the hypervisor. Recorded in that order because the elimination above is sound and worth
+repeating; it just does not reach far enough on its own. (HVCI is off — `SecurityServicesRunning` is `0` —
+so there was never a memory-integrity setting to turn off either; VBS is up only because Hyper-V/WHPX is
+enabled at all.)
+
 Anyone hitting this on their own machine should start from the reproducer below rather than from these
-tests, but should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix
+tests, and should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix
 it, because none of them did here.
 
 ### What the host turned out to be, and what was done about it
 
-Two of the obvious host-side fixes were checked and are dead ends, so nobody re-chases them:
+**It is a host socket-filter driver.** Measured 2026-09-07 on the machine above, idle throughout, same
+AVD and the same arguments in every run — the only variable is which filter product was running:
+
+| Run | Content blocker | VPN | Verdict |
+| --- | --- | --- | --- |
+| baseline | running | running | `emulator-wedged` at 89s |
+| filters stopped | stopped | stopped | **survived the full 240s** |
+| **content blocker stopped** | **stopped** | running | **survived the full 240s** |
+| **VPN stopped** | running | **stopped** | `guest-unresponsive` at 52s |
+
+The last two rows are the whole result: stopping the VPN changes nothing, stopping the content blocker
+fixes it. On this host that is AdGuard, whose `adgnetworksockdrv.sys` is a socket filter sitting in the
+path of every host socket call the emulator makes — and it updated itself about ninety minutes before the
+first wedge. **The product is incidental; the driver class is the finding.** Any endpoint-security,
+content-blocking or VPN product that installs a socket or WFP filter can do this, so *what is filtering
+this host's sockets* is a question worth asking before concluding a machine is beyond repair.
+
+**This also explains the observation above that nothing else could.** The emulator's own console is a
+localhost TCP socket, so it traverses the same filter as everything else — which is why the console hangs
+alongside the guest, and why the 0% CPU reading is a thread blocked in a syscall rather than one spinning.
+That pair of symptoms was read as "the fault is below the harness, in the hypervisor". It was below the
+harness; it was not the hypervisor.
+
+**The remedy is to stop the filter service for the duration of the run**, from an elevated prompt:
+
+```powershell
+Stop-Service 'Adguard Service' -Force   # substitute whatever filters sockets on your host
+# ... run the Android leg ...
+Start-Service 'Adguard Service'
+```
+
+Two things whoever does this needs to know:
+
+- **`StopPending` is already enough, and is the normal outcome.** The service frequently does not reach
+  `Stopped` within 20s and parks in `StopPending`; the driver has disengaged by then regardless. A sweep
+  of thirteen repos' Android legs ran to completion on 2026-09-08 with the service in exactly that state,
+  so a script that treats anything but `Stopped` as failure will abort runs that would have passed.
+- **Check Driver Verifier before stopping anything.** If the filter driver is one Verifier is verifying,
+  stopping the service bugchecks the machine with `0xC4` DRIVER_VERIFIER_DETECTED_VIOLATION — that
+  happened here, twice, and cost two reboots before the pattern was recognised. `verifier /query` lists
+  what is armed; `verifier /reset` plus a reboot disarms it. Verifier was *also* armed over this exact
+  driver list on this host, which made it a compelling suspect in its own right — it is not the cause, and
+  two runs with it disarmed wedged sooner than the armed baseline.
+
+Restoring the service afterwards matters: it is the host's actual content blocker, not test scaffolding.
+
+**CI remains the unattended route** — nothing below changes, and a Linux runner needs none of this — but
+the local Android leg is no longer blocked on relocating it.
+
+Two obvious host-side fixes were checked before the filter driver was found, and are dead ends, so nobody
+re-chases them:
 
 - **There is no update to install.** The machine is fully patched (Windows 11 Pro 25H2, build
   26200.9168; only a Defender definition update pending), and the System event log carries no WHEA, no
@@ -2598,7 +2653,9 @@ Two of the obvious host-side fixes were checked and are dead ends, so nobody re-
   reboot). **Untested here** — recorded so the next reader knows both that the option exists and what it
   costs, rather than discovering the service is present and assuming it is in use.
 
-So the remedy is not to repair this workstation but to **run the Android leg somewhere else**:
+Two assets carried the investigation, and both keep their value now that the cause is known — the first is
+how you establish that a host is affected at all, the second is how the Android leg runs where no host
+fix is available:
 
 - **`npm run probe:emulator-wedge`** (`scripts/emulator-wedge-probe.ts`) is the reproducer, kept as a repo
   asset because it had been rebuilt from scratch twice. It boots one AVD with `buildEmulatorArguments`'

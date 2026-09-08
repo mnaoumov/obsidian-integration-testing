@@ -18,6 +18,12 @@
  * host — another workstation, a CI runner — and a clean survival is what
  * convicts the machine the wedge was found on.
  *
+ * And it is how you A/B a single host. Stop one suspect service, run it again,
+ * and the pair of verdicts is the answer: that is how a content blocker's
+ * socket filter driver was identified as the cause on the host in **L49**,
+ * after the emulator build, the system image and the hypervisor had all been
+ * eliminated. `--survive-for 240` is the watch length those runs used.
+ *
  * ## Why it cannot drift from the harness
  *
  * A probe that booted with its own hand-written flag list would measure a

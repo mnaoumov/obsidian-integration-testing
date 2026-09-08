@@ -128,6 +128,25 @@ describe('buildEmulatorLivenessMessage', () => {
     expect(message).toContain('deviceIdleTimeoutInMilliseconds');
   });
 
+  /*
+   * The one host where this was chased to the end lost a week to the emulator
+   * build, the system image and the hypervisor before anybody asked what was
+   * filtering its sockets — which is what it turned out to be. Both recurring
+   * verdicts must name that first, so the next reader spends the week on
+   * something else.
+   */
+  it.each(['emulator-wedged', 'guest-unresponsive'] as const)('should send a recurring %s to the host\'s socket filters first', (verdict) => {
+    const message = buildEmulatorLivenessMessage({
+      deviceId: EMULATOR_DEVICE_ID,
+      emulatorOutput: '',
+      probeTimeoutInMilliseconds: PROBE_TIMEOUT_IN_MILLISECONDS,
+      verdict
+    });
+
+    expect(message).toContain('filters this host\'s sockets');
+    expect(message).toContain('VPN');
+  });
+
   it('should say the device left when adb no longer lists it', () => {
     const message = buildEmulatorLivenessMessage({
       deviceId: EMULATOR_DEVICE_ID,

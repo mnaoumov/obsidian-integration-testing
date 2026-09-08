@@ -249,9 +249,32 @@ adb -s emulator-5554 shell true          # the guest, via adbd
 adb -s emulator-5554 emu avd status      # the emulator's console -- if THIS hangs, it is not the guest
 ```
 
-**Once you have that shape, it is the machine — so move the run rather than tune it.** Everything a
-project controls has already been eliminated above; what is left is the host's hypervisor, and there is no
-option in this harness that reaches it. Two things are worth knowing before you spend a day on it:
+**Once you have that shape, it is the machine — but check one thing before you give up on it.**
+
+**Ask what is filtering this host's sockets.** Endpoint-security, content-blocking and VPN products
+install socket or WFP filter drivers that sit in the path of every socket call the emulator makes,
+including the localhost connection its own console is served over — which is exactly why the console goes
+quiet alongside the guest. Stop the service, from an elevated prompt, and run the probe again:
+
+```powershell
+Get-Service | Where-Object Status -eq 'Running'   # find the blocker/VPN/AV service
+Stop-Service '<that service>' -Force
+npm run probe:emulator-wedge -- --survive-for 240
+Start-Service '<that service>'                    # put it back afterwards
+```
+
+That was the answer on the host measured above: with a content blocker's socket filter stopped, the same
+AVD and arguments that had wedged at 49–89s survived the full 240s watch, and a thirteen-repo Android
+sweep then ran to completion. Stopping the VPN alongside it changed nothing, so test one product at a
+time rather than stopping everything at once. Two practical notes: the service often parks in
+`StopPending` rather than reaching `Stopped`, and that is already enough; and if Windows **Driver
+Verifier** is armed over that driver (`verifier /query`), stopping the service will bugcheck the machine
+with `0xC4` — disarm it with `verifier /reset` and a reboot first.
+
+If nothing filters this host's sockets, or stopping it changes nothing, then it is the platform and the
+answer is to **move the run rather than tune it**. Everything a project controls has already been
+eliminated above; what is left is the host's hypervisor, and there is no option in this harness that
+reaches it. Two things are worth knowing before you spend a day on it:
 
 - **On an AMD Windows host, check which accelerator is actually in use.** The emulator normally runs
   through WHPX, Microsoft's generic hypervisor API. Google also ships the *Android Emulator hypervisor
