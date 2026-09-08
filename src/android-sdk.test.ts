@@ -11,8 +11,7 @@ import { resolveEmulatorBinaryPath } from './android-sdk.ts';
 
 const SDK_ROOT = '/opt/android-sdk';
 const LEGACY_SDK_ROOT = '/opt/android-sdk-legacy';
-const NO_SDK_ROOT_MESSAGE =
-  'Cannot find Android emulator: neither ANDROID_HOME nor ANDROID_SDK_ROOT environment variable is set.';
+const NO_SDK_ROOT_MESSAGE = 'Cannot find Android emulator: neither ANDROID_HOME nor ANDROID_SDK_ROOT environment variable is set.';
 
 /*
  * `vi.stubEnv` mutates the one `process.env` the module under test reads through its `node:process`
