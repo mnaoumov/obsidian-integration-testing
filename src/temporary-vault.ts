@@ -125,12 +125,17 @@ export class TemporaryVault {
   }
 
   /**
-   * Writes files and folders into the vault directory.
+   * Writes files and folders into the vault directory **on the host**.
    * Parent directories are created automatically.
    *
    * - `string` values are written as UTF-8 text files.
    * - `Uint8Array` values (including `Buffer`) are written as binary files.
    * - Paths ending with `/` are treated as empty folders (value must be `undefined`).
+   *
+   * The write is always host-local — {@link TemporaryVault.path} is a host path, and on a mobile
+   * transport the vault the app opens lives on the device instead. {@link TemporaryVault.register}
+   * carries the directory across before it registers, so populate-then-register is all a caller
+   * needs; {@link TemporaryVault.syncToDevice} is the seam that does the carrying.
    *
    * @param files - Map of file/folder paths to content.
    */
@@ -155,11 +160,23 @@ export class TemporaryVault {
   /**
    * Registers this vault in the running Obsidian instance so the CLI can target it.
    *
+   * Pushes the vault directory to the target device first, via
+   * {@link TemporaryVault.syncToDevice} — a no-op on a transport whose app already reads the host
+   * filesystem. That ordering used to be the caller's to remember, and a caller who forgot got a
+   * silently **empty** vault rather than an error: every pre-registration
+   * {@link TemporaryVault.populate} write stayed on the host while the app opened the device's copy.
+   * Folding it in here makes populate-then-register correct on every transport.
+   *
+   * The transport is resolved once and handed to both steps, so a push and the registration that
+   * follows it can never land on two different transports.
+   *
    * @param transportOverride - An explicit transport to use. When omitted,
    *   falls back to the transport configured via the context provider.
    */
   public async register(transportOverride?: ObsidianTransport): Promise<void> {
-    await registerVault(this.path, transportOverride);
+    const transport = transportOverride ?? await getOrCreateTransport(getTransportOptions());
+    await this.syncToDevice(transport);
+    await registerVault(this.path, transport);
   }
 
   /**
@@ -180,8 +197,10 @@ export class TemporaryVault {
    * On desktop transports this is a no-op (files are already local).
    * On mobile transports (Appium) this pushes files to the device.
    *
-   * Call this after {@link populate} and before {@link register} when using
-   * a mobile transport.
+   * {@link TemporaryVault.register} calls this itself, so a populate-then-register sequence needs
+   * nothing extra. Call it directly only to carry across files written **after** registration: the
+   * host directory is not mirrored, so a later write into {@link TemporaryVault.path} stays on the
+   * host until this runs again.
    *
    * @param transportOverride - An explicit transport to use. When omitted,
    *   falls back to the transport configured via the context provider.

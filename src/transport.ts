@@ -132,7 +132,13 @@ export interface ObsidianTransport {
    * Registers a vault path so Obsidian can target it.
    *
    * On desktop: uses Electron IPC to open the vault and polls for readiness.
-   * On mobile: pushes vault files to the device and restarts the app.
+   * On mobile: pushes only a minimal `.obsidian` marker so the folder is recognized as a vault,
+   * points the app's `localStorage` at it, and reloads.
+   *
+   * It does **not** carry the vault's contents across on either platform — that is
+   * {@link ObsidianTransport.pushFiles}' job, which `TemporaryVault.register` runs first. A caller
+   * driving a transport directly has to push before registering, or the app opens an empty vault
+   * with nothing raised to say so.
    *
    * @param vaultPath - The absolute path to the vault folder.
    */

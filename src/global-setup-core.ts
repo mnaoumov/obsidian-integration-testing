@@ -378,8 +378,8 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
       vaultPath: temporaryVault.path
     });
 
-    log(`[integration-setup:${label}] Syncing vault to device...`);
-    await temporaryVault.syncToDevice(transport);
+    // `register` pushes the directory to the device before registering it, so every write above —
+    // The plugin copy, the populate map, and the headless config just written — reaches the app.
     log(`[integration-setup:${label}] Registering vault...`);
     await temporaryVault.register(transport);
     log(`[integration-setup:${label}] Vault registered.`);

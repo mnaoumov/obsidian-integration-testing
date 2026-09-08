@@ -2458,10 +2458,12 @@ know they existed would be a consumer copying the harness's job.
 
 Two constraints shape the call sites, and both were bugs until 2026-09-05:
 
-- **After `populate`, before `syncToDevice`.** `coreSetup` calls it in that gap deliberately: after
+- **After `populate`, before `register`.** `coreSetup` calls it in that gap deliberately: after
   `populate` so an `app.json` a consumer carries in cannot win over the harness default, and before
-  `syncToDevice` so the file reaches an Android device with the rest of the vault. Moving it into
-  `TemporaryVault.register()` would be too late for mobile — the push has already happened.
+  `register` so the file reaches an Android device with the rest of the vault. The deadline used to be
+  the separate `syncToDevice` call that sat between the two; `register` now owns that push (**L53**), so
+  the gap is one call narrower but the constraint is unchanged — every pre-open write has to be on the
+  host before `register` carries the directory across.
 - **The `configDirectory` override has to reach it — and reach every OTHER pre-open write too.** The old
   `ensureAlwaysUpdateLinks` hardcoded `.obsidian` while the harness supports opening a vault whose settings
   live elsewhere (**L5**). Under an override it wrote to a folder the vault never reads and **both** defaults
@@ -2919,3 +2921,38 @@ The regression is the last case in `src/owned-instance-worker-attach.integration
 **L51**'s and last for the same reason: it disposes the `getTemporaryVault()` handle and asserts both that
 the directory survives and that the window over it still answers. Reverting the fix deletes the vault the
 project shares.
+
+## L53. `populate` writes to the HOST — `register` is what carries the vault to the device
+
+`TemporaryVault.populate` writes with `writeFileSync` into `TemporaryVault.path`, which is always a **host**
+path. On Android the vault the app opens is the device's copy under the Appium transport's `vaultBasePath`,
+so a file written before registration reaches the app only if something pushes the directory across. That
+something is `TemporaryVault.syncToDevice()`, which delegates to the transport's optional `pushFiles`.
+
+**The transport's `registerVault` does not push vault contents, on either platform.**
+`AppiumTransport.registerVault` pushes only a minimal `.obsidian` marker so the folder is recognized as a
+vault, points the app's `localStorage` at it, and reloads. The `ObsidianTransport.registerVault` docblock
+claimed otherwise — *"On mobile: pushes vault files to the device and restarts the app"* — until 2026-09-08,
+and that false contract is the likeliest reason the one caller that got this wrong believed `register()`
+sufficed.
+
+**What went wrong.** `coreSetup` had the sequence right (populate → sync → register), but the Android
+trusted-input suite is the only `TemporaryVault` caller outside it, and it called populate → register. Its
+vault therefore opened **empty**: `app.vault.getMarkdownFiles()` returned `[]` and the file explorer rendered
+no `.nav-file-title`. Nothing failed, because until the long-press test needed a real file to press, every
+test in that file built its own DOM nodes and read nothing from the vault. A silently empty vault satisfied
+every assertion in it for the suite's whole life.
+
+**The fix is that the ordering is no longer the caller's to remember.** `TemporaryVault.register()` resolves
+the transport once, calls `syncToDevice` with it, and only then registers. On a desktop transport
+`syncToDevice` returns before it collects anything (no `pushFiles`), so the fold costs nothing there and the
+host directory is the very one Obsidian opens. `coreSetup`'s separate `syncToDevice` call was dropped as
+redundant. `syncToDevice` stays public for the case the fold cannot cover: files written **after**
+registration, which no longer have a push to ride along with.
+
+**What holds it.** Unit tests in `src/temporary-vault.test.ts` assert the push happens *before* the
+registration, that one transport resolution serves both, and that a transport without `pushFiles` collects
+nothing. The end-to-end guard is in the Android suite, which now asserts from inside the app that the
+populated `note.md` is in `app.vault.getMarkdownFiles()` — without it a re-broken push goes straight back to
+being invisible. The long-press test's workaround, which seeded its own note whenever the vault reported no
+markdown files, was deleted in the same change: it presses the populated file now.
