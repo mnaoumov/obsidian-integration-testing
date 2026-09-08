@@ -1,3 +1,5 @@
+import type { Dirent } from 'node:fs';
+
 import {
   beforeEach,
   describe,
@@ -6,7 +8,10 @@ import {
   vi
 } from 'vitest';
 
+import type { ObsidianTransport } from './transport.ts';
+
 import { noopAsync } from './noop.ts';
+import { strictProxy } from './strict-proxy.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
 const mockMkdirSync = vi.hoisted(() => vi.fn());
@@ -16,6 +21,10 @@ const mockRm = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(u
 const mockRegisterVault = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
 const mockUnregisterVault = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
 const mockLog = vi.hoisted(() => vi.fn<(message: string) => void>());
+const mockGetOrCreateTransport = vi.hoisted(() => vi.fn<() => Promise<ObsidianTransport>>());
+const mockGetTransportOptions = vi.hoisted(() => vi.fn<() => unknown>());
+const mockReaddir = vi.hoisted(() => vi.fn<() => Promise<Dirent[]>>());
+const mockReadFile = vi.hoisted(() => vi.fn<() => Promise<Uint8Array>>());
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
@@ -31,6 +40,8 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
+    readdir: mockReaddir,
+    readFile: mockReadFile,
     rm: mockRm
   };
 });
@@ -40,9 +51,32 @@ vi.mock('./vault-registry.ts', () => ({
   unregisterVault: mockUnregisterVault
 }));
 
+vi.mock('./transport-factory.ts', () => ({
+  getOrCreateTransport: mockGetOrCreateTransport
+}));
+
+vi.mock('./context-provider.ts', () => ({
+  getTransportOptions: mockGetTransportOptions
+}));
+
 vi.mock('./log.ts', () => ({
   log: mockLog
 }));
+
+/**
+ * Builds a stand-in transport for the `register` tests.
+ *
+ * Only `pushFiles` is ever consulted on this path, and whether it is present is exactly what decides
+ * between a mobile transport (the vault directory has to be carried to the device) and a desktop one
+ * (the app already reads the host filesystem), so the rest of the interface is left off.
+ *
+ * @param pushFiles - The transport's `pushFiles`, or `undefined` for a transport that has none.
+ * @returns The stand-in transport.
+ */
+function createTransportStub(pushFiles?: ObsidianTransport['pushFiles']): ObsidianTransport {
+  // `pushFiles` is always an own key, so the proxy answers the presence check rather than throwing on it.
+  return strictProxy<ObsidianTransport>({ pushFiles });
+}
 
 beforeEach(() => {
   mockMkdirSync.mockReset();
@@ -52,6 +86,10 @@ beforeEach(() => {
   mockRegisterVault.mockReset().mockResolvedValue(undefined);
   mockUnregisterVault.mockReset().mockResolvedValue(undefined);
   mockLog.mockReset();
+  mockReaddir.mockReset().mockResolvedValue([]);
+  mockReadFile.mockReset().mockResolvedValue(new Uint8Array());
+  mockGetTransportOptions.mockReset().mockReturnValue({});
+  mockGetOrCreateTransport.mockReset().mockResolvedValue(createTransportStub());
   vi.restoreAllMocks();
 });
 
@@ -135,10 +173,63 @@ describe('populate', () => {
 });
 
 describe('register', () => {
-  it('should call registerVault with the vault path', async () => {
+  it('should call registerVault with the vault path and the resolved transport', async () => {
+    const transport = createTransportStub();
+    mockGetOrCreateTransport.mockResolvedValue(transport);
+
     const vault = new TemporaryVault('/vault');
     await vault.register();
-    expect(mockRegisterVault).toHaveBeenCalledWith('/vault', undefined);
+
+    expect(mockRegisterVault).toHaveBeenCalledWith('/vault', transport);
+  });
+
+  it('should resolve the transport once and hand the same one to both steps', async () => {
+    const pushFiles = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+    const transport = createTransportStub(pushFiles);
+    mockGetOrCreateTransport.mockResolvedValue(transport);
+
+    const vault = new TemporaryVault('/vault');
+    await vault.register();
+
+    // A second resolution could hand the push and the registration two different transports.
+    expect(mockGetOrCreateTransport).toHaveBeenCalledTimes(1);
+    expect(pushFiles).toHaveBeenCalledWith('/vault', {});
+    expect(mockRegisterVault).toHaveBeenCalledWith('/vault', transport);
+  });
+
+  // The defect this ordering exists to prevent: registering first opens the vault on the device before
+  // Its files are there, so the app reads an EMPTY vault and nothing is raised to say so.
+  it('should push the vault directory BEFORE registering it', async () => {
+    const calls: string[] = [];
+    const pushFiles = vi.fn(async () => {
+      calls.push('pushFiles');
+      await Promise.resolve();
+    });
+    mockRegisterVault.mockImplementation(async () => {
+      calls.push('registerVault');
+      await Promise.resolve();
+    });
+
+    const vault = new TemporaryVault('/vault');
+    await vault.register(createTransportStub(pushFiles));
+
+    expect(calls).toStrictEqual(['pushFiles', 'registerVault']);
+  });
+
+  it('should skip the push on a transport that has no pushFiles', async () => {
+    const vault = new TemporaryVault('/vault');
+    await vault.register(createTransportStub());
+
+    // Desktop: the app already reads the host filesystem, so there is nothing to collect or carry.
+    expect(mockReaddir).not.toHaveBeenCalled();
+    expect(mockRegisterVault).toHaveBeenCalledWith('/vault', expect.anything());
+  });
+
+  it('should not resolve a transport when handed an explicit one', async () => {
+    const vault = new TemporaryVault('/vault');
+    await vault.register(createTransportStub());
+
+    expect(mockGetOrCreateTransport).not.toHaveBeenCalled();
   });
 });
 

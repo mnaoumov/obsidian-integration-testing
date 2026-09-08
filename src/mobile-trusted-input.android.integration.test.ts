@@ -85,6 +85,22 @@ describe('mobile trusted input', () => {
     expect(isMobile).toBe(true);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
+  // The second guard, and the reason this file once ran against an EMPTY vault for its whole life:
+  // `populate` writes to the HOST filesystem, while the app on Android opens the device's copy. Until
+  // `register` learned to push the directory across, the note below never arrived — and nothing raised an
+  // Error, because no assertion in this file read the vault's contents. Asserting that the seeded file is
+  // Visible from inside the app is what keeps a re-broken push loud instead of silent.
+  it('should open the vault the harness populated, not an empty one', async () => {
+    const markdownPaths = await evalInObsidian({
+      callback({ app }): string[] {
+        return app.vault.getMarkdownFiles().map((file) => file.path);
+      },
+      vaultPath: vault.path
+    });
+
+    expect(markdownPaths).toContain('note.md');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
   it('should deliver a TRUSTED tap through clickElement', async () => {
     const result = await evalInObsidian({
       async callback({ lib }): Promise<ProbeResult> {
@@ -191,12 +207,7 @@ describe('mobile trusted input', () => {
   it('should open a REAL Obsidian menu from a long press, rather than tapping the element', async () => {
     const result = await evalInObsidian({
       async callback({ app, lib }): Promise<LongPressResult> {
-        // A file explorer with nothing in it renders no `.nav-file-title` to press, and the registered
-        // Vault reports no markdown files here, so seed one rather than depending on the vault's contents.
-        if (app.vault.getMarkdownFiles().length === 0) {
-          await lib.createNote({ content: '# long press\n', path: 'long-press.md' });
-        }
-
+        // The `note.md` the suite populates is what gets pressed — the test above proves it is there.
         const leaf = app.workspace.getLeavesOfType('file-explorer')[0];
         app.workspace.leftSplit.expand();
         if (leaf) {
