@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## 12.1.0
+
+- chore: lint
+- chore: update libs
+- fix(temporary-vault): carry the vault to the device before registering it
+- fix(mobile-input): recognize a long press as a gesture, not a dwell
+- fix(emulator-liveness): send a recurring wedge to the host socket filters first
+- fix(temporary-vault): delete only a directory the handle itself created
+- test(coverage): restore the 100% gate and make it name the failing file
+- docs(demo-vault): name the unversioned demo-vault archive
+- fix(unregister-vault): tear down only the vaults this transport registered
+- fix(obsidian-instance): observe the owned instance's exit instead of discarding it
+- fix(parent-liveness): verify the harness is gone before destroying the window
+- fix(global-setup): send every pre-open vault write to the overridden config folder
+- fix(ci): run every workflow on actions that target Node 24
+- docs(android): record that the runner survives, so the fault is the machine
+- fix(ci): pin where the AVD lives, so create and boot agree on it
+- fix(ci): do not let a SIGPIPE'd `yes` fail the AVD step
+- feat(android): run the Android leg on a CI runner, with a kept wedge probe
+- docs: write what a reader of this repo can check, not a private label
+- fix(android): diagnose a wedged emulator instead of blaming the device
+- fix(setup): keep the settings modal in the window the harness drives
+- fix(android): refuse to launch beside a device that did not answer
+- fix(android): verify every auto-started process actually stopped
+- fix(android): wait for a validated network, not just an idle device
+- feat(cdp): open a vault whose config folder is not .obsidian
+- docs(agents): record the fflate override as L44, beside the other two
+- chore(deps): sweep to latest and override fflate off the vulnerable line
+- refactor(build): drop the duplicate compile script and keep the short name
+- fix(version): read npm pack --json under npm 12, where it stopped being an array
+- refactor: delete two modules nothing imports, and close the gap that hid them
+- fix(android): budget the emulator's cold boot separately from layout readiness
+
 ## 12.0.0
 
 - feat(trusted-input): publish the helpers as ns.trustedInput, the seam dev-utils reads on mobile
