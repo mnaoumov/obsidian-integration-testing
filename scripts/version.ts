@@ -28,6 +28,7 @@ import {
 } from '../src/type-guards.ts';
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
+import { getPackageManagerRunCommand } from './helpers/package-manager.ts';
 import {
   execFromRoot,
   getRootFolder,
@@ -496,7 +497,7 @@ function normalizeOptionalProperties<T>(object: UndefinedOnPartialDeep<T>): T {
 }
 
 async function npmRun(command: string): Promise<void> {
-  await execFromRoot(['npm', 'run', command]);
+  await execFromRoot([...getPackageManagerRunCommand(), command]);
 }
 
 async function readJson<T>(path: string): Promise<T> {
