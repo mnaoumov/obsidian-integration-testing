@@ -16,6 +16,14 @@ import type { ObsidianAndroidAppiumTransportOptions } from './transport-options.
 export const DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS = 180_000;
 
 /**
+ * Default for {@link ObsidianAndroidAppiumTransportOptions.scriptTimeoutInMilliseconds}.
+ *
+ * The same 30s WebDriver would apply on its own, stated here so the cap is a
+ * declared number rather than an invisible protocol default.
+ */
+export const DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS = 30_000;
+
+/**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.sessionConnectionRetryTimeoutInMilliseconds}.
  */
 export const DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180_000;
@@ -36,6 +44,25 @@ export function resolveAppiumStartTimeoutInMilliseconds(
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.appiumStartTimeoutInMilliseconds ?? DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS;
+}
+
+/**
+ * Resolves the per-script (per-`evalInObsidian`) timeout, applying the default
+ * when the option is omitted.
+ *
+ * This is sent as the W3C `timeouts.script` capability, so the cap a closure
+ * runs under is one this harness states rather than one WebDriver supplies
+ * silently. It is deliberately NOT the knob to reach for when a closure times
+ * out: the closure is what should get shorter, with the waiting moved to Node
+ * via `pollInObsidian`.
+ *
+ * @param options - The Android Appium transport options.
+ * @returns The timeout in milliseconds.
+ */
+export function resolveScriptTimeoutInMilliseconds(
+  options: ObsidianAndroidAppiumTransportOptions
+): number {
+  return options.scriptTimeoutInMilliseconds ?? DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS;
 }
 
 /**

@@ -67,6 +67,7 @@ import {
 } from './appium-server-marker.ts';
 import {
   resolveAppiumStartTimeoutInMilliseconds,
+  resolveScriptTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
 import {
@@ -215,7 +216,6 @@ const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Appium server (it has no effect as a capability) avoids the failure
 // "No Chromedriver found that can automate Chrome ...".
 const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownload';
-const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
 const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 /*
@@ -260,10 +260,23 @@ const EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS = 20_000;
 const HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS = 30_000;
 const HTTP_MULTIPLE_CHOICES = 300;
 const HTTP_OK = 200;
+// The W3C default, restated because `timeouts` is set as a whole bag; no element is ever located implicitly here.
+const IMPLICIT_WAIT_TIMEOUT_IN_MILLISECONDS = 0;
 const KEYCODE_MENU = 82;
 const KEYCODE_WAKEUP = 224;
 const MILLISECONDS_PER_SECOND = 1000;
 const NETWORK_READY_POLL_INTERVAL_IN_MILLISECONDS = 2000;
+/*
+ * How long the server waits for a new command before assuming the client quit
+ * and ending the session. Appium reads `newCommandTimeout` in SECONDS, which the
+ * name this constant used to carry (`COMMAND_TIMEOUT_IN_MILLISECONDS`) got
+ * wrong — the value was always the intended five minutes, and only the unit in
+ * the name was a lie. It is unrelated to the per-script cap, which is
+ * `timeouts.script`.
+ */
+const NEW_COMMAND_TIMEOUT_IN_SECONDS = 300;
+// The W3C default, restated for the same reason as the implicit wait above.
+const PAGE_LOAD_TIMEOUT_IN_MILLISECONDS = 300_000;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120_000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 /*
@@ -466,6 +479,11 @@ interface EstablishSessionParams {
   The Appium server port.
    */
   readonly port: number;
+
+  /**
+  Resolved per-script (per-`evalInObsidian`) cap in milliseconds, sent as the W3C `timeouts.script` capability.
+   */
+  readonly scriptTimeoutInMilliseconds: number;
 
   /**
   Resolved WebDriverIO connection retry timeout in milliseconds.
@@ -904,6 +922,9 @@ class AppiumTransportFactory {
       deviceId,
       isSessionOwner: false,
       platform: 'android',
+      // The session this reattaches to was created with the same resolution, so the number reported on a
+      // Script timeout is the one that session is actually enforcing.
+      scriptTimeoutInMilliseconds: resolveScriptTimeoutInMilliseconds(options),
       shouldSweepLeftovers: willSweepLeftovers(options),
       ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
       ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
@@ -1063,12 +1084,23 @@ class AppiumTransportFactory {
         'appium:appPackage': params.appId,
         'appium:autoGrantPermissions': true,
         'appium:automationName': 'UiAutomator2',
-        'appium:newCommandTimeout': COMMAND_TIMEOUT_IN_MILLISECONDS,
+        'appium:newCommandTimeout': NEW_COMMAND_TIMEOUT_IN_SECONDS,
         'appium:noReset': true,
         'appium:udid': params.deviceId,
         'appium:uiautomator2ServerInstallTimeout': SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS,
         'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
-        'platformName': 'Android'
+        'platformName': 'Android',
+        /*
+         * `script` is declared rather than left to WebDriver's own 30s default, so the per-closure cap is a
+         * Number this harness owns and can report when a closure outruns it. The other two are restated at
+         * Their W3C defaults only because the capability is all-or-nothing — WebDriverIO's `Timeouts` type
+         * Has no partial form — so they change nothing.
+         */
+        'timeouts': {
+          implicit: IMPLICIT_WAIT_TIMEOUT_IN_MILLISECONDS,
+          pageLoad: PAGE_LOAD_TIMEOUT_IN_MILLISECONDS,
+          script: params.scriptTimeoutInMilliseconds
+        }
       },
       connectionRetryCount: APPIUM_CONNECTION_RETRY_COUNT,
       connectionRetryTimeout: params.sessionConnectionRetryTimeoutInMilliseconds,
@@ -1208,6 +1240,7 @@ class AppiumTransportFactory {
         isAdoptedServer: result.isAdoptedAppiumServer,
         isAppiumConsoleVisible: options.isAppiumConsoleVisible,
         port,
+        scriptTimeoutInMilliseconds: resolveScriptTimeoutInMilliseconds(options),
         sessionConnectionRetryTimeoutInMilliseconds: resolveSessionConnectionRetryTimeoutInMilliseconds(options),
         shouldAutoStartAppium: options.shouldAutoStartAppium,
         url
@@ -1231,6 +1264,8 @@ class AppiumTransportFactory {
         browser,
         deviceId: actualDeviceId,
         platform: 'android',
+        // The same number the session was created with above, so a script timeout reports the cap that killed it.
+        scriptTimeoutInMilliseconds: resolveScriptTimeoutInMilliseconds(options),
         shouldSweepLeftovers: willSweepLeftovers(options),
         ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
         ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),

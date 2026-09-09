@@ -71,11 +71,16 @@ import {
   classifyAppStartupProbe,
   compareAppStartupMilestones
 } from './app-startup-progress.ts';
+import { DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS } from './appium-session-config.ts';
 import {
   decodeBase64Png,
   isPng
 } from './capture-screenshot.ts';
 import { errorToString } from './error-to-string.ts';
+import {
+  EvalCapExceededError,
+  isScriptTimeoutError
+} from './eval-cap-exceeded-error.ts';
 import { exec } from './exec.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
@@ -157,6 +162,17 @@ export interface AppiumTransportConfig {
    * Target platform. Determines WebView context naming and device file paths.
    */
   platform: 'android' | 'ios';
+
+  /**
+   * The per-script cap, in milliseconds, this session was given as its W3C
+   * `timeouts.script` capability.
+   *
+   * Carried only so a script timeout can be reported with the number that
+   * produced it; the capability itself is set when the session is created.
+   *
+   * @default `30000`
+   */
+  scriptTimeoutInMilliseconds?: number;
 
   /**
    * Whether registering a vault also prunes the **other** `temp-vault-*`
@@ -298,6 +314,7 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly isSessionOwner: boolean;
   private readonly layoutReadyTimeoutInMilliseconds: number;
   private readonly platform: 'android' | 'ios';
+  private readonly scriptTimeoutInMilliseconds: number;
   private readonly shouldSweepLeftovers: boolean;
   private readonly vaultBasePath: string;
 
@@ -316,6 +333,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.appStartTimeoutInMilliseconds = config.appStartTimeoutInMilliseconds ?? DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS;
+    this.scriptTimeoutInMilliseconds = config.scriptTimeoutInMilliseconds ?? DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS;
     this.shouldSweepLeftovers = config.shouldSweepLeftovers ?? true;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? DEFAULT_ANDROID_VAULT_BASE_PATH;
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
@@ -419,6 +437,21 @@ export class AppiumTransport implements ObsidianTransport {
     } catch (error: unknown) {
       // Context may have been lost mid-execution (e.g. page reload).
       this.isInWebViewContext = false;
+
+      /*
+       * A script timeout is the one failure here that says nothing about the app.
+       * WebDriver reports it as a bare `script timeout` naming only this method, which reads as a broken
+       * Device rather than as a closure that waits too long inside Obsidian.
+       */
+      if (isScriptTimeoutError(error)) {
+        throw new EvalCapExceededError({
+          capInMilliseconds: this.scriptTimeoutInMilliseconds,
+          cause: error,
+          optionName: 'scriptTimeoutInMilliseconds',
+          transportName: 'Android (Appium)'
+        });
+      }
+
       throw error;
     }
   }

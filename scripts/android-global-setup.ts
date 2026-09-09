@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * Global setup for the `integration-tests:android-trusted-input` project: takes the shared-emulator setup
+ * Global setup for the `integration-tests:android` project: takes the shared-emulator setup
  * lock for the run, and releases it on teardown.
  *
  * This project has no transport global setup — each test owns its own `TemporaryVault` — so it never went

@@ -1275,7 +1275,7 @@ never "there is only one window, use it".
 
 ## L29. Node-side kick-off + poll (`pollInObsidian`)
 
-A single `evalInObsidian` closure cannot run past CDP's ~30s `Runtime.evaluate` cap, so a long-running
+A single `evalInObsidian` closure cannot run past the transport's per-eval cap, so a long-running
 in-Obsidian operation (e.g. a whole plugin/vault bootstrap) cannot be awaited inside one closure.
 `pollInObsidian` (`src/poll-in-obsidian.ts`, exported from the barrel) drives it from **Node** instead:
 an optional short `start` closure kicks the work off once, then a short `poll` closure is re-evaluated on
@@ -1289,6 +1289,38 @@ Pure/testable split (mirrors L18/L21–L27): the timing loop is the pure, unit-t
 (`src/poll-until.ts`, clock + sleep injected for deterministic tests); `pollInObsidian` is the thin
 integration-only wiring (drives a live Obsidian), `v8 ignore`d and covered by
 `poll-in-obsidian.integration.test.ts`.
+
+### The cap is DECLARED on both transports, and an overrun says so
+
+The 30s was never a law; it was two different defaults that happened to agree, and neither was written
+down where a test author would see it. Desktop enforces `commandTimeoutInMilliseconds`
+(`transport-desktop-cdp.ts`, 30s, settable per transport and via the CLI `--command-timeout`). Android
+used to enforce nothing of its own: no `timeouts` capability was sent, so WebDriver applied its own 30s
+script timeout. It now sends `scriptTimeoutInMilliseconds` (`resolveScriptTimeoutInMilliseconds` in
+`appium-session-config.ts`, same 30s default) as the W3C `timeouts.script` capability, so the number is
+one this harness owns.
+
+**Raising either is almost never the answer** — the closure is what should get shorter. The knobs exist so
+the cap is explicit and symmetric, not as an escape hatch.
+
+What actually changed the failure mode is the reporting. An overrun used to surface as a bare
+`WebDriverError: script timeout` naming only `AppiumTransport.evaluate` on Android, and a generic
+`CDP command timed out … : Runtime.evaluate` on desktop — both of which read as a broken device or a
+wedged app. A plugin release was once held for two days by that reading. Both transports now raise
+**`EvalCapExceededError`** (`src/eval-cap-exceeded-error.ts`), one message naming the cap, the transport,
+the option that sets it, and `pollInObsidian`, with the raw transport error kept as `cause`.
+
+Two details worth keeping:
+
+- **Only the eval carrying a caller's closure is re-reported.** The desktop transport raises
+  `CdpCommandTimeoutError` (`src/cdp-command-timeout-error.ts`) for *any* timed-out CDP command, and only
+  `evaluate()` translates it. The harness's own `Runtime.evaluate` calls — trust dialog, parent-liveness
+  watchdog, boot probes — time out for reasons that have nothing to do with a test waiting, and matching
+  on the method name would produce the same misdiagnosis pointing the other way.
+- `appium:newCommandTimeout` is read by Appium in **seconds**, not milliseconds. Its constant was named
+  `COMMAND_TIMEOUT_IN_MILLISECONDS` and is now `NEW_COMMAND_TIMEOUT_IN_SECONDS`; the value (300 = five
+  minutes) was always right and only the unit in the name was wrong. It is unrelated to the per-script
+  cap.
 
 ## L30. Security overrides (`brace-expansion` GHSA-mh99-v99m-4gvg)
 
@@ -2267,7 +2299,7 @@ stayed invisible through several rounds of "no emulator is running".
   port query — takes `SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS` (5s), **not** the async path's 30s:
   this one blocks the exit handler itself, so losing the escalation beats holding the process for half a
   minute, and the line it prints never claimed a verified stop anyway. Note the caveat
-  `android-trusted-input-global-setup.ts` already records: Vitest terminates workers abruptly, so **neither**
+  `android-global-setup.ts` already records: Vitest terminates workers abruptly, so **neither**
   teardown path is guaranteed a turn — which is why the *next* run's preflight is the second line of defence.
 - **A failed stop keeps its marker, stamped.** The old code cleared the marker on every teardown, so a
   server we could not kill read as a **foreign, user-managed** server to the next run — the one kind

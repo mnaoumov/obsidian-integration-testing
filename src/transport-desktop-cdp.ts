@@ -45,10 +45,12 @@ import {
   decodeBase64Png,
   isPng
 } from './capture-screenshot.ts';
+import { CdpCommandTimeoutError } from './cdp-command-timeout-error.ts';
 import { resolveAsarFallbackAction } from './compatibility-options.ts';
 import { ConfigDirectoryFallbackError } from './config-directory-fallback-error.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { resolveElectronCompatibility } from './electron-compatibility.ts';
+import { EvalCapExceededError } from './eval-cap-exceeded-error.ts';
 import { exec } from './exec.ts';
 import { log } from './log.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
@@ -490,11 +492,31 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public async evaluate(expression: string, options: TransportEvalOptions): Promise<string> {
     const ws = await this.ensureConnection(options.cwd);
-    const response = await this.sendCommand(ws, 'Runtime.evaluate', {
-      awaitPromise: true,
-      expression,
-      returnByValue: true
-    });
+    let response;
+
+    try {
+      response = await this.sendCommand(ws, 'Runtime.evaluate', {
+        awaitPromise: true,
+        expression,
+        returnByValue: true
+      });
+    } catch (error: unknown) {
+      /*
+       * Only THIS eval carries a caller's closure — the harness's own `Runtime.evaluate` calls (the trust
+       * Dialog, the watchdog, the boot probes) time out for reasons that have nothing to do with a test's
+       * Waiting, and reporting the cap for those would be the same misdiagnosis pointing the other way.
+       */
+      if (error instanceof CdpCommandTimeoutError) {
+        throw new EvalCapExceededError({
+          capInMilliseconds: this.commandTimeoutInMilliseconds,
+          cause: error,
+          optionName: 'commandTimeoutInMilliseconds',
+          transportName: 'desktop (CDP)'
+        });
+      }
+
+      throw error;
+    }
 
     if (response.result?.exceptionDetails) {
       const desc = response.result.exceptionDetails.exception?.description
@@ -1446,7 +1468,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     return new Promise<CdpResponse>((resolve, reject) => {
       const timeout = setTimeout(() => {
         ws.removeEventListener('message', handler);
-        reject(new Error(`CDP command timed out after ${String(this.commandTimeoutInMilliseconds)}ms: ${method}`));
+        reject(new CdpCommandTimeoutError({ method, timeoutInMilliseconds: this.commandTimeoutInMilliseconds }));
       }, this.commandTimeoutInMilliseconds);
 
       function handler(event: MessageEvent): void {

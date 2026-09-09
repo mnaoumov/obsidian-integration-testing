@@ -210,6 +210,26 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly pluginEnableRetryDelayInMilliseconds?: number;
 
   /**
+   * Timeout in milliseconds for a single script executed inside Obsidian — the
+   * per-`evalInObsidian` cap on this transport.
+   *
+   * It is sent as the W3C `timeouts.script` capability. Left unset, WebDriver
+   * applies its own 30s default, which is where the cap silently came from
+   * before: the number was never declared anywhere, and a closure that outran it
+   * failed as a bare `WebDriverError: script timeout` naming only the transport,
+   * which reads as a broken device rather than as a test that waits too long.
+   *
+   * Raising it is almost never the right answer. A closure that needs to wait
+   * longer than this should not be waiting inside Obsidian at all — use
+   * `pollInObsidian`, which keeps each closure short and does the waiting
+   * from Node. The knob exists so the cap is explicit and matches
+   * {@link ObsidianCdpTransportOptions.commandTimeoutInMilliseconds} on desktop.
+   *
+   * @default `30000`
+   */
+  readonly scriptTimeoutInMilliseconds?: number;
+
+  /**
    * Timeout in milliseconds for establishing the Appium session (WebDriverIO
    * `remote()` — UiAutomator2 server install + app launch).
    *
