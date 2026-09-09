@@ -1295,22 +1295,48 @@ integration-only wiring (drives a live Obsidian), `v8 ignore`d and covered by
 The 30s was never a law; it was two different defaults that happened to agree, and neither was written
 down where a test author would see it. Desktop enforces `commandTimeoutInMilliseconds`
 (`transport-desktop-cdp.ts`, 30s, settable per transport and via the CLI `--command-timeout`). Android
-used to enforce nothing of its own: no `timeouts` capability was sent, so WebDriver applied its own 30s
-script timeout. It now sends `scriptTimeoutInMilliseconds` (`resolveScriptTimeoutInMilliseconds` in
-`appium-session-config.ts`, same 30s default) as the W3C `timeouts.script` capability, so the number is
-one this harness owns.
+enforces `scriptTimeoutInMilliseconds` (`resolveScriptTimeoutInMilliseconds` in
+`appium-session-config.ts`, same 30s default) in `AppiumTransport.evaluate`, **on the Node side**.
 
-**Raising either is almost never the answer** — the closure is what should get shorter. The knobs exist so
-the cap is explicit and symmetric, not as an escape hatch.
+**The W3C `timeouts.script` capability is declared and does nothing — do not mistake it for the
+mechanism.** Measured on a live emulator (2026-09-09): it is accepted, and `getTimeouts()` reports
+`{implicit: 0, pageLoad: 300000, script: 30000}` from the WebView context, and nothing ever acts on it.
+Over-cap closures — sleeping and spinning, with and without an explicit `setTimeouts` — ran past a 60s
+ceiling without WebDriver raising `script timeout` once. It stays declared because it is free, it states
+the intended budget honestly, and it would start working on its own if a future driver honoured it.
+`isScriptTimeoutError` is kept for the same reason and is, today, unreachable on this driver.
 
-What actually changed the failure mode is the reporting. An overrun used to surface as a bare
-`WebDriverError: script timeout` naming only `AppiumTransport.evaluate` on Android, and a generic
-`CDP command timed out … : Runtime.evaluate` on desktop — both of which read as a broken device or a
+**What Android actually does past roughly half a minute is hang, not fail.** The closure completes in the
+guest on schedule — timers armed at 30s and 40s fired within ~13ms of nominal, on a page reporting
+`visible`/focused with Obsidian the top-resumed activity — and its Execute Script response never reaches
+the client. The session itself is usually fine: a vault read-back was answered **528ms** after one such
+abandonment. So the failure is in the response path, and a hang is the one failure mode a test author
+cannot act on, which is why the wait is bounded in the transport.
+
+**Raising either cap is almost never the answer** — the closure is what should get shorter. The knobs exist
+so the cap is explicit and symmetric, not as an escape hatch.
+
+What changed the failure mode is the reporting. An overrun used to surface as a silent hang on Android and
+a generic `CDP command timed out … : Runtime.evaluate` on desktop, which reads as a broken device or a
 wedged app. A plugin release was once held for two days by that reading. Both transports now raise
 **`EvalCapExceededError`** (`src/eval-cap-exceeded-error.ts`), one message naming the cap, the transport,
 the option that sets it, and `pollInObsidian`, with the raw transport error kept as `cause`.
 
-Two details worth keeping:
+Four details worth keeping:
+
+- **The eval after an overrun is granted a recovery grace** (`CAP_RECOVERY_GRACE_IN_MILLISECONDS`, the cap
+  again) on top of the cap. Appium serializes commands per session and the abandoned closure keeps running
+  in the guest, so the next command queues behind whatever is left of it: measured, with the cap firing at
+  30s against a 40s closure, the following vault read-back **failed at 30 206ms**, while the same read-back
+  issued after that closure had finished was answered in **528ms**. Waiting on the abandoned request
+  instead is not an option — that promise is precisely the one that never settles — so what the grace waits
+  out is the guest, and it is a ceiling rather than a delay: it costs nothing when the session comes back
+  promptly. A guest still busy afterwards produces another overrun, which is granted the grace in turn, so
+  the session recovers across evals instead of compounding.
+- **A cap overrun does not reset the WebView context flag.** Every other error in `evaluate` may mean the
+  context was lost mid-execution, so the flag is cleared and the next eval re-switches; an overrun means
+  only that the closure outstayed its budget, and clearing it would charge the next eval a ~17s
+  `switchContext` (**L19**) to recover from something that was never lost.
 
 - **Only the eval carrying a caller's closure is re-reported.** The desktop transport raises
   `CdpCommandTimeoutError` (`src/cdp-command-timeout-error.ts`) for *any* timed-out CDP command, and only

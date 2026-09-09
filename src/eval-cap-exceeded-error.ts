@@ -6,14 +6,22 @@
  * error it replaces.
  *
  * The cap itself is not the problem this module solves — the diagnosis is.
- * Android surfaces the overrun as a bare `WebDriverError: script timeout`
- * naming only `AppiumTransport.evaluate`, and desktop as a generic
- * `CDP command timed out ... : Runtime.evaluate`. Neither names the test's own
- * wait, so both read as a broken device or a wedged app — a plugin release was
+ * Desktop surfaces the overrun as a generic
+ * `CDP command timed out ... : Runtime.evaluate`, which never names the test's
+ * own wait and so reads as a broken device or a wedged app — a plugin release was
  * once held for two days by that reading, with a healthy emulator blamed for
- * having no network. Both transports therefore funnel into the message below,
- * which says what the cap is, which transport enforced it, and what to do
- * instead.
+ * having no network.
+ *
+ * Android is worse, because it surfaces NOTHING. On a live emulator the closure
+ * was measured completing in the guest on schedule — timers armed at 30s and 40s fired within
+ * ~13ms of nominal on a visible, focused page — while its Execute Script response
+ * never reached the client, so the call hung until whichever outer budget gave up
+ * first. A hang names nothing at all, which is why the Android cap is enforced by
+ * the transport on the Node side rather than by the `timeouts.script` capability
+ * it also declares and that nothing acts on.
+ *
+ * Both transports therefore funnel into the message below, which says what the cap
+ * is, which transport enforced it, and what to do instead.
  *
  * A closure that needs to wait longer than the cap should not be waiting inside
  * Obsidian at all. `pollInObsidian` is the sanctioned shape: short closures, and
@@ -83,12 +91,19 @@ export class EvalCapExceededError extends Error {
 }
 
 /**
- * Whether an error is a WebDriver script timeout — the W3C error the Appium
- * transport raises when a script outruns `timeouts.script`.
+ * Whether an error is a WebDriver script timeout — the W3C error a driver would
+ * raise if it enforced `timeouts.script`.
  *
  * Matched on the message rather than on a type, because the error arrives as a
  * generic `WebDriverError` whose only distinguishing mark is the W3C error code
  * in its text.
+ *
+ * **This driver never raises it.** UiAutomator2 was measured accepting the
+ * capability, reporting it back, and enforcing nothing. The predicate is kept
+ * because it costs nothing, it is the right translation if a future driver does
+ * enforce the capability, and it keeps one error covering one condition on both
+ * transports — but the Android cap is enforced Node-side, and this is not what
+ * enforces it.
  *
  * @param error - The error thrown by the transport.
  * @returns `true` when the error is a script timeout.

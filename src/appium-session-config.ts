@@ -18,8 +18,10 @@ export const DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS = 180_000;
 /**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.scriptTimeoutInMilliseconds}.
  *
- * The same 30s WebDriver would apply on its own, stated here so the cap is a
- * declared number rather than an invisible protocol default.
+ * The same 30s WebDriver would nominally apply, stated here so the cap is a
+ * declared number rather than an invisible protocol default — and, since the
+ * protocol default was measured not to be applied at all on this driver, the
+ * only number that actually bounds an Android eval.
  */
 export const DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS = 30_000;
 
@@ -50,11 +52,11 @@ export function resolveAppiumStartTimeoutInMilliseconds(
  * Resolves the per-script (per-`evalInObsidian`) timeout, applying the default
  * when the option is omitted.
  *
- * This is sent as the W3C `timeouts.script` capability, so the cap a closure
- * runs under is one this harness states rather than one WebDriver supplies
- * silently. It is deliberately NOT the knob to reach for when a closure times
- * out: the closure is what should get shorter, with the waiting moved to Node
- * via `pollInObsidian`.
+ * This is what `AppiumTransport.evaluate` enforces on the Node side; it is also
+ * sent as the W3C `timeouts.script` capability, which was measured to be
+ * accepted and never acted on. It is deliberately NOT the knob to reach for when
+ * a closure times out: the closure is what should get shorter, with the waiting
+ * moved to Node via `pollInObsidian`.
  *
  * @param options - The Android Appium transport options.
  * @returns The timeout in milliseconds.

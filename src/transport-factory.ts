@@ -1091,10 +1091,14 @@ class AppiumTransportFactory {
         'appium:uiautomator2ServerLaunchTimeout': SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS,
         'platformName': 'Android',
         /*
-         * `script` is declared rather than left to WebDriver's own 30s default, so the per-closure cap is a
-         * Number this harness owns and can report when a closure outruns it. The other two are restated at
-         * Their W3C defaults only because the capability is all-or-nothing — WebDriverIO's `Timeouts` type
-         * Has no partial form — so they change nothing.
+         * `script` is declared so the per-closure cap is a number this harness owns and states, but the
+         * Declaration is NOT what enforces it: UiAutomator2 was measured accepting this, reporting it
+         * Back as 30000 from the WebView context, and never acting on it — over-cap closures ran past a
+         * 60s ceiling without one `script timeout`. `AppiumTransport.evaluate` enforces the same number
+         * Node-side, and this stays because it is free, it is the honest declaration of the intended
+         * Budget, and it would start working on its own if a future driver honoured it. The other two are
+         * Restated at their W3C defaults only because the capability is all-or-nothing — WebDriverIO's
+         * `Timeouts` type has no partial form — so they change nothing.
          */
         'timeouts': {
           implicit: IMPLICIT_WAIT_TIMEOUT_IN_MILLISECONDS,
