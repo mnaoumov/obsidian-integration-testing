@@ -2956,3 +2956,62 @@ nothing. The end-to-end guard is in the Android suite, which now asserts from in
 populated `note.md` is in `app.vault.getMarkdownFiles()` — without it a re-broken push goes straight back to
 being invisible. The long-press test's workaround, which seeded its own note whenever the vault reported no
 markdown files, was deleted in the same change: it presses the populated file now.
+
+## L54. Photographing the keyboard means photographing the DEVICE, and asking for the IME with a real touch
+
+A mobile store screenshot that shows a text field is dishonest without a keyboard under it, and the harness
+could not take that picture at all. Two separate things were in the way, and only the first is the obvious
+one.
+
+**`captureObsidianScreenshot` photographs the PAGE, not the device.** It goes through Appium in the WebView
+context, so on Android the frame carries no status bar and — the reason it cannot take this shot — no
+keyboard, because the IME is a system window and not part of the page. `captureDeviceScreenshot`
+(`src/device-screenshot.ts`) reads `adb exec-out screencap -p` instead, the same route the trusted-input
+passes already use. It checks the bytes are a PNG before returning them: a device still booting and an adb
+transport that decoded the stream as text both come back as something that is not, and catching it here is
+far cheaper than in an image diff. The bytes must not go through `exec` — that helper decodes stdout as
+UTF-8, which corrupts every byte above 0x7F — hence the separate `runAdbBinary` in `src/adb.ts`.
+
+**The screenshot AVDs suppress the on-screen keyboard.** They are built `hw.keyboard=yes`, so Android draws
+no IME. `withSoftKeyboardEnabled` (`src/device-settings.ts`) flips `secure show_ime_with_hard_keyboard` for
+the duration of a callback and restores the device exactly afterwards, whether the callback returned or
+threw. *Exactly* is load-bearing: `settings get` prints the literal `null` for a setting that was never
+written and `settings put … null` writes the four-character string rather than reproducing the absence, so a
+device that started unset has to be `settings delete`d back. That choice is
+`resolveDeviceSettingRestore` in `src/device-setting-restore.ts`, and it is unit-tested.
+
+**The setting is necessary and NOT sufficient.** A field that takes focus programmatically does not get an
+IME — an Android WebView asks for one on a real gesture, and a run with the setting flipped and no touch
+comes back with exactly the empty band it had before. `raiseSoftKeyboard` (`src/soft-keyboard.ts`) supplies
+that gesture with `adb shell input tap`, then confirms the keyboard actually arrived rather than trusting
+it.
+
+**Nothing in the page reports the keyboard, so the confirmation is geometric.** `innerHeight`,
+`visualViewport` and the modal container all stay at full height with the keyboard shown and `dumpsys
+input_method` reporting `mInputShown=true` — Obsidian Mobile keeps a full-screen container and lifts its
+contents inside it. The only signal is the field's own offset from the bottom, which is what
+`checkIsSoftKeyboardUp` reads. The tap aims at two candidate points, not one: the WebView may or may not
+start at the top of the screen and the page cannot tell which, so `resolveSoftKeyboardTapPoints` offers the
+`screenY`-shifted point and the plain one. Both land inside the field, which is taller than the offset,
+so a wrong guess costs a touch rather than a mis-tap on whatever sits below. A failure writes the device
+framebuffer and the device's own `input_method` state to `dist/screenshots/` before throwing, because a bare
+"the keyboard did not come up" is unreadable and cost two runs before the dump said what was happening.
+
+**Never take the first device `adb devices` lists.** `resolveEmulatorDeviceId`
+(`src/resolve-emulator-device-id.ts`) matches by AVD name. A physical phone is routinely plugged into this
+machine, and the harness's own `obsidian_test` AVD is a different geometry than the `obsidian_screenshots`
+one sized to the store's frame — so picking by position photographs the wrong screen at the wrong size, and
+the dimension assertion that would have caught it fires minutes later.
+
+**Consequence a consumer must accept and write down: a device capture is not byte-reproducible.** The
+status-bar clock and battery are in the frame. That is why the swap is per SHOT rather than per suite — a
+shot with no focused input has no keyboard on a real phone either, so it should stay on
+`captureObsidianScreenshot` and stay reproducible.
+
+**Why the modules are split the way they are.** Everything that shells out sits in a module that is
+`v8 ignore`d whole, and everything pure — the restore decision, the settings argument list, the geometry,
+the AVD selection — lives in its own module with unit tests. That is not tidiness: `perfectionist/sort-modules`
+reorders declarations on `lint:fix`, and a coverage block is positional, so a pure function sharing a file
+with integration code gets sorted inside the ignored region and silently stops being measured. It happened
+during this change before the split. The same reasoning already put `adb-device-list` outside
+`transport-factory`.

@@ -4,6 +4,12 @@
  * Contains the entry point for the integration testing module.
  */
 
+export type { RunAdbParams } from './adb.ts';
+export {
+  runAdbBinary,
+  runAdbText,
+  runAdbTextWithoutDevice
+} from './adb.ts';
 export type {
   AsarFallback,
   AsarFallbackTier,
@@ -69,12 +75,45 @@ export {
 export type { ReadDemoVaultTreeParams } from './demo-vault-tree.ts';
 export { readDemoVaultTree } from './demo-vault-tree.ts';
 export { DesktopOnlyPluginSkipError } from './desktop-only-plugin-skip-error.ts';
+export type { CaptureDeviceScreenshotParams } from './device-screenshot.ts';
+export { captureDeviceScreenshot } from './device-screenshot.ts';
+export type {
+  DeviceSettingRestore,
+  DeviceSettingRestoreDelete,
+  DeviceSettingRestoreWrite
+} from './device-setting-restore.ts';
+export {
+  DeviceSettingRestoreKind,
+  resolveDeviceSettingRestore
+} from './device-setting-restore.ts';
+export type { BuildDeviceSettingsCommandArgumentsParams } from './device-settings-command.ts';
+export {
+  buildDeviceSettingsCommandArguments,
+  DeviceSettingNamespace,
+  DeviceSettingVerb
+} from './device-settings-command.ts';
+export type {
+  DeviceSettingParams,
+  WithSoftKeyboardEnabledParams,
+  WriteDeviceSettingParams
+} from './device-settings.ts';
+export {
+  deleteDeviceSetting,
+  readDeviceSetting,
+  withSoftKeyboardEnabled,
+  writeDeviceSetting
+} from './device-settings.ts';
 export type {
   ElectronCompatibility,
   ElectronCompatibilityTier,
   ResolveElectronCompatibilityParams
 } from './electron-compatibility.ts';
 export { resolveElectronCompatibility } from './electron-compatibility.ts';
+export type {
+  EmulatorDeviceCandidate,
+  SelectEmulatorDeviceIdParams
+} from './emulator-device-id.ts';
+export { selectEmulatorDeviceId } from './emulator-device-id.ts';
 export type {
   ClickElementParams,
   ClickMouseParams,
@@ -143,10 +182,35 @@ export { OwnedInstanceExitedError } from './owned-instance-exited-error.ts';
 export type { PollInObsidianParams } from './poll-in-obsidian.ts';
 export { pollInObsidian } from './poll-in-obsidian.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';
+export type { ResolveEmulatorDeviceIdParams } from './resolve-emulator-device-id.ts';
+export { resolveEmulatorDeviceId } from './resolve-emulator-device-id.ts';
 export type { RunObsidianVersionMatrixParams } from './run-version-matrix.ts';
 export { runObsidianVersionMatrix } from './run-version-matrix.ts';
 export type { SilentAsarFallbackErrorConstructorParams } from './silent-asar-fallback-error.ts';
 export { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
+export type {
+  BuildSoftKeyboardDiagnosticMessageParams,
+  CheckIsSoftKeyboardUpParams,
+  ElementRect,
+  ResolveSoftKeyboardTapPointsParams,
+  SoftKeyboardTapPoint,
+  SoftKeyboardViewportSnapshot
+} from './soft-keyboard-geometry.ts';
+export {
+  buildSoftKeyboardDiagnosticMessage,
+  checkIsSoftKeyboardUp,
+  DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS,
+  parseInputMethodState,
+  resolveSoftKeyboardTapPoints
+} from './soft-keyboard-geometry.ts';
+export type {
+  RaiseSoftKeyboardParams,
+  TapDeviceParams
+} from './soft-keyboard.ts';
+export {
+  raiseSoftKeyboard,
+  tapDevice
+} from './soft-keyboard.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams,
