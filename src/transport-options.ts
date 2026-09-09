@@ -213,11 +213,19 @@ export interface ObsidianAndroidAppiumTransportOptions {
    * Timeout in milliseconds for a single script executed inside Obsidian — the
    * per-`evalInObsidian` cap on this transport.
    *
-   * It is sent as the W3C `timeouts.script` capability. Left unset, WebDriver
-   * applies its own 30s default, which is where the cap silently came from
-   * before: the number was never declared anywhere, and a closure that outran it
-   * failed as a bare `WebDriverError: script timeout` naming only the transport,
-   * which reads as a broken device rather than as a test that waits too long.
+   * It is enforced by the transport itself, on the Node side, and is also sent as
+   * the W3C `timeouts.script` capability — but the capability is decoration.
+   * Measured on a live emulator: it is accepted and reads back as
+   * `30000` in the WebView context, and nothing ever acts on it. Over-cap
+   * closures ran past a 60s ceiling without WebDriver raising `script timeout`
+   * once, in both the sleeping and the spinning shape, with and without an
+   * explicit `setTimeouts`.
+   *
+   * What happens past roughly half a minute is worse than a late answer: the
+   * closure completes in the guest on schedule and its Execute Script response
+   * never reaches the client, so the call simply never returns. This timeout is
+   * what turns that silence into an {@link EvalCapExceededError} naming the
+   * closure as the cause.
    *
    * Raising it is almost never the right answer. A closure that needs to wait
    * longer than this should not be waiting inside Obsidian at all — use
