@@ -1687,8 +1687,11 @@ tagged release that silently never reached npm. If the run cannot be found withi
 the Actions URL rather than failing — the release itself is already good, and the workflow can be re-run or
 dispatched with the tag as input.
 
-Sibling repos (`obsidian-test-mocks`, and `obsidian-dev-utils`' shared `src/script-utils/npm-publish.ts`) still publish with
-`NPM_TOKEN`; this repo is the first one moved.
+The two sibling repos publish the same way now, so no `NPM_TOKEN` is left in any of them to fall back to.
+This repo went first, on 2026-08-22, and both followed the same afternoon: `obsidian-test-mocks` from its
+own OIDC workflow, and `obsidian-dev-utils`' shared `src/script-utils/npm-publish.ts` by dropping
+authentication out of the helper entirely, so `publish()` runs a bare `npm publish --tag` and reads no
+credential.
 
 ### `npm pack --json` changed shape in npm 12 — parse it, never cast it
 
