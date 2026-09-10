@@ -116,13 +116,14 @@ test **files** must not run in parallel against the one shared Obsidian instance
 and a `detachLeavesOfType('markdown')` in one file wipes another's editor. The consuming project must
 run its obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
 
-### Pending migration (`obsidian-dev-utils`)
+### `obsidian-dev-utils`'s copy (migration landed)
 
-`obsidian-dev-utils` ships a local `src/test-helpers/type-into-editor.ts`. Under the base-`lib` +
-duplication decision (see the Current Task hand-off), dev-utils **keeps** its own copies of the
-trusted-input / `waitUntil` helpers (duplication accepted) and exposes them through its `__merged`
-surface, so they merge onto the base `lib`; its integration tests destructure them from `lib`
-(`async callback({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `input`.
+Under the base-`lib` + duplication decision recorded in **L17**, `obsidian-dev-utils` **keeps** its own
+copies of the trusted-input helpers — `src/obsidian/trusted-input.ts` and its `desktop-` / `mobile-`
+variants (duplication accepted) — and exposes them through its `__merged` surface, so they merge onto
+the base `lib`; its integration tests destructure them from `lib`
+(`async callback({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `input`. `waitUntil`
+is **not** among the copied set (**L17**): dev-utils reuses its own `retryWithTimeout` instead.
 
 ## L9. Test workers must register the context resolvers (`vitest-setup` / `jest-setup`)
 
@@ -287,12 +288,14 @@ hovered at a time. As with L8's trusted keyboard focus, pointer-dependent integr
 must not run in parallel against the one shared Obsidian instance — the consuming project must run its
 obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
 
-### Pending migration (`obsidian-dev-utils`)
+### `obsidian-dev-utils`'s consumer test (migration landed)
 
 `obsidian-dev-utils` writes its red-first advanced-note-composer #124 integration test (the
-minimized-modal-bar opaque-on-hover regression) against `lib.hoverElement` from this helper —
-see that repo's `## Current Task — Fix minimized modal bar transparent on hover`, and, per L8's
-pending-migration note, it uses the shipped helper rather than any local stopgap.
+minimized-modal-bar opaque-on-hover regression) against `lib.hoverElement` / `lib.unhoverElement` from
+this helper — see that repo's `src/obsidian/modals/minimizable-modal.obsidian.integration.test.ts`, in
+its `hover` block ("should keep the minimized bar opaque on hover so editor content behind it never
+bleeds through"), and, per L8's note on dev-utils' copy, it uses the shipped helper rather than any
+local stopgap.
 
 ## L12. Reusable async wait (`waitUntil`)
 
@@ -472,8 +475,11 @@ live renderer object injected into `fullArguments` (never JSON-serialized — on
 exactly like `app`, so a back-reference such as `lib.__namespaces` cannot cause a serialization cycle.
 
 Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core namespace bootstrap +
-registry). The intended first provider is `obsidian-dev-utils` exposing its whole library via a flat
-`obsidian-dev-utils/__merged` barrel (see the Current Task hand-off).
+registry). The first provider is `obsidian-dev-utils`, which exposes its whole library via a flat
+`obsidian-dev-utils/__merged` barrel: it calls `registerLibResolver` from
+`src/script-utils/test-runners/integration-test-plugin.ts` with a resolver that returns
+`window.__obsidianDevUtilsModule.__merged`, and augments `interface Lib` in
+`src/@types/obsidian-integration-testing.d.ts`.
 
 ## L17. Helpers Duplicated in `obsidian-dev-utils` — Keep In Sync By Hand
 
