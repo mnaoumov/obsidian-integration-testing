@@ -1620,7 +1620,7 @@ cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that 
 
 ### Incidental fixes the port forced
 
-- **`js-yaml` override `^5.2.3` → `4.3.1`** — js-yaml 5 is ESM-only with no default export, so `astro build`
+- **`js-yaml` override `^5.2.3` → `4.3.1`** (since moved to `4.3.2` by an advisory, see **L55**) — js-yaml 5 is ESM-only with no default export, so `astro build`
   died on import. The `^5.2.3` came from an update sweep, not a requirement; `obsidian-dev-utils` pins the same `4.3.1`.
 - **`scripts/helpers/exec.ts` gained an `env` option** — `docs:dev` needs `ASTRO_DEV_BACKGROUND=1`, and
   `CHILD_ENV` snapshots `process.env` at module load, so setting it in the script would not have reached
@@ -3015,3 +3015,46 @@ reorders declarations on `lint:fix`, and a coverage block is positional, so a pu
 with integration code gets sorted inside the ignored region and silently stops being measured. It happened
 during this change before the split. The same reasoning already put `adb-device-list` outside
 `transport-factory`.
+
+## L55. Security overrides (`js-yaml` GHSA-2883-xcg3-v3hh, `smol-toml` GHSA-7w5x-hrqm-74c2)
+
+The 2026-09-10 sweep opened on 11 high advisories from two roots, and both are transitive — nothing here
+declares either package, so **L30**'s and **L44**'s shape applies again: override the transitive, and record
+why in [`pinned-versions.json`](pinned-versions.json).
+
+**`js-yaml` — an existing pin that had drifted INTO the vulnerable range.** GHSA-2883-xcg3-v3hh
+(`maxTotalMergeKeys` does not bound CPU on empty merge sources) covers `4.0.0 – 4.3.1`, and the override was
+sitting on exactly `4.3.1`. It accounted for 9 of the 11 paths, because every js-yaml consumer here
+(`astro`, `@astrojs/starlight`, `cosmiconfig` under `@commitlint/load`, `@istanbuljs/load-nyc-config`,
+`markdownlint-cli2`) resolves through it. The fix is a patch bump to `4.3.2` — the first 4.x release with it
+— and **not** a move to 5.x: the pin's original reason still holds, js-yaml 5 is ESM-only with no default
+export, so Astro's `import yaml from 'js-yaml'` makes `docs:build` die before it reads a page. Two
+independent conditions now hold that pin, and `pinned-versions.json` says both, because a reader who knows
+only the ESM one would happily bump it back into the advisory range.
+
+**`smol-toml` — held vulnerable by one exact pin, and everything else deduped onto it.** GHSA-7w5x-hrqm-74c2
+(denial of service on malformed TOML) covers `<= 1.7.0`:
+
+```text
+markdownlint-cli2 → smol-toml@1.7.0    ← an EXACT pin, and the only thing holding the tree back
+astro                             ┐
+@astrojs/internal-helpers         ┘ → smol-toml@^1.6.0   ← compatible already, but dedupe onto the pin above
+cspell-config-lib → smol-toml@1.8.0    ← a second, patched copy
+```
+
+`overrides.smol-toml` → `^1.8.0` clears it and **dedupes** the two copies into one, the same double win
+`fflate` gave in **L44**. Caret-ranged so the sweep carries it forward, listed in `pinned-versions.json`
+anyway for the reason **L44** ends on. Its `check` reads markdownlint-cli2's declared range and expects
+`1.7.0`; when that moves, re-resolve without the override before deleting anything, because astro is what
+dedupes onto whatever markdownlint-cli2 asks for.
+
+**The `check` goes through `fs.readFileSync`, not `require()`.** Written the obvious way first, it returned
+empty and failed the sweep's own pins report: `markdownlint-cli2`'s `exports` map does not expose
+`./package.json`, so `require('markdownlint-cli2/package.json')` throws `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+The `@puppeteer/browsers` entry already used the `fs` form for the same reason. Reach for it whenever a
+`check` reads a dependency's own manifest — the `require()` form works only for packages with no `exports`
+map, which is a property of the dependency, not something the check can assume.
+
+**Two words joined `cspell.json` with this change** — `smol` and `hrqm`. GHSA slugs mostly survive the
+spell check by carrying digits (`jmr9-qjv8-65gv` in **L36** never tripped it); an all-letter segment does
+not.

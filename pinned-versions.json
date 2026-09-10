@@ -49,7 +49,7 @@
     },
     "js-yaml": {
       "section": "overrides",
-      "why": "Astro and Starlight `import yaml from 'js-yaml'`, and js-yaml 5 is ESM-only with NO default export - hoisting 5.x into their subtree makes `npm run docs:build` die on 'The requested module js-yaml does not provide an export named default' before it reads a single page. The override exists to keep the whole tree off the vulnerable 3.x line, and 4.3.1 does that just as well while staying loadable; it is also what the other js-yaml consumers here (cosmiconfig under @commitlint/load, @istanbuljs/load-nyc-config under jest, markdownlint-cli2) resolve to. The check records the range astro itself asks for: when astro moves to 5.x, this pin can be dropped. Same pin and same reason as obsidian-dev-utils and obsidian-test-mocks.",
+      "why": "Two conditions hold it here, and both must clear before it can go. (1) Astro and Starlight `import yaml from 'js-yaml'`, and js-yaml 5 is ESM-only with NO default export - hoisting 5.x into their subtree makes `npm run docs:build` die on 'The requested module js-yaml does not provide an export named default' before it reads a single page, so the pin has to stay inside the 4.x line. (2) 4.3.2 is the first 4.x release clearing GHSA-2883-xcg3-v3hh (maxTotalMergeKeys does not limit CPU use for empty merge sources), which covers 4.0.0 - 4.3.1; the previous 4.3.1 pin sat inside that range and left 9 of this tree's 11 high advisories standing. It also keeps the whole tree off the vulnerable 3.x line, and is what the other js-yaml consumers here (cosmiconfig under @commitlint/load, @istanbuljs/load-nyc-config under jest, markdownlint-cli2) resolve to. The check records the range astro itself asks for: when astro moves to 5.x, this pin can be dropped. Same pin and same reason as obsidian-dev-utils and obsidian-test-mocks.",
       "check": "node -e \"process.stdout.write(require('astro/package.json').dependencies['js-yaml'])\"",
       "expect": "^4.3.0"
     },
@@ -58,6 +58,13 @@
       "why": "Live in the tree exactly once, under webdriverio → archiver → archiver-utils, which asks for ^4.17.15. The override forces the newest 4.x across every copy rather than whatever old release the transitive range resolves to. Its justification is simply 'this is the newest lodash', so it goes stale the moment a newer one publishes.",
       "check": "npm view lodash version",
       "expect": "4.18.1"
+    },
+    "smol-toml": {
+      "section": "overrides",
+      "why": "Clears GHSA-7w5x-hrqm-74c2 (smol-toml denial of service via malformed TOML documents), which covers <=1.7.0. Nothing here declares smol-toml directly, so no direct bump can fix it: the tree is held at 1.7.0 by markdownlint-cli2, which pins it EXACTLY at 1.7.0, and astro plus @astrojs/internal-helpers dedupe onto that pin even though both ask for the compatible ^1.6.0. cspell already resolves 1.8.0 on its own, so the override collapses two copies into one rather than adding anything. Caret-ranged so the sweep keeps it current; listed here anyway because the sweep never reports that the advisory it answers is gone and the override with it.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/markdownlint-cli2/package.json','utf8')).dependencies['smol-toml'])\"",
+      "expect": "1.7.0",
+      "manualCheck": "The check reads markdownlint-cli2's own declared range, not a version, because that exact pin is the only thing keeping this tree on a vulnerable smol-toml. It goes through fs.readFileSync rather than require() because markdownlint-cli2's 'exports' map does not expose ./package.json, so require() throws ERR_PACKAGE_PATH_NOT_EXPORTED. When the range moves off 1.7.0, re-resolve without the override: if every remaining consumer lands on 1.7.1 or newer by itself, delete the override and this entry together."
     },
     "typescript": {
       "section": "devDependencies",
