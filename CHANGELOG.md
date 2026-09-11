@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 12.1.2
+
+- fix(mobile-input): inject each trusted gesture once, however many hosts are attached
+
 ## 12.1.1
 
 - docs(agents): retire the dangling Current Task pointers
