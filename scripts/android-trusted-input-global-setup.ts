@@ -2,7 +2,7 @@
  * @file
  *
  * Global setup for the `integration-tests:android-trusted-input` project: takes the shared-emulator setup
- * lock for the run, and releases it on teardown.
+ * lock for the run, and on teardown stops the emulator the run's worker started, then releases the lock.
  *
  * This project has no transport global setup — each test owns its own `TemporaryVault` — so it never went
  * through `coreSetup`, which is what normally acquires this lock (**L7**). Without it the suite would boot
@@ -20,6 +20,7 @@ import { execFileSync } from 'node:child_process';
 import type { SetupLock } from '../src/setup-lock.ts';
 
 import { acquireSetupLock } from '../src/setup-lock.ts';
+import { stopHarnessStartedEmulators } from '../src/transport-factory.ts';
 
 const LOCK_SCOPE = 'android';
 const LOCK_LABEL = 'obsidian-android-appium';
@@ -33,10 +34,25 @@ export async function setup(): Promise<void> {
   lock = await acquireSetupLock({ label: LOCK_LABEL, scope: LOCK_SCOPE });
 }
 
-export function teardown(): void {
+/**
+ * Leaves the host as the run found it: no forwards, no emulator, no lock.
+ *
+ * The emulator stop is here for the same reason the forward cleanup is. This
+ * project's transport lives in the test worker, so the worker is what
+ * auto-starts the emulator — and Vitest ends the worker without a teardown, so
+ * nothing ever stopped it. On 2026-09-10 the one this project left idle ran for
+ * six hours until `netsimd`'s log filled the drive (**L56**). The worker's marker
+ * is how this process, which never held the emulator, finds it; the lock, still
+ * held, is what makes stopping it safe.
+ */
+export async function teardown(): Promise<void> {
   removeWebViewForwards();
-  lock?.release();
-  lock = undefined;
+  try {
+    await stopHarnessStartedEmulators();
+  } finally {
+    lock?.release();
+    lock = undefined;
+  }
 }
 
 /**

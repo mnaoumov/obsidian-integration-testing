@@ -34,6 +34,7 @@ import type { AppiumServerMarker } from './appium-server-marker.ts';
 import type { AvdProbeResult } from './avd-probe-verdict.ts';
 import type { ProcessListEntry } from './emulator-backend.ts';
 import type { EmulatorLivenessProbeOutcome } from './emulator-liveness.ts';
+import type { EmulatorMarker } from './emulator-marker.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
@@ -50,7 +51,8 @@ import type { WedgedAppiumServerReportReason } from './wedged-appium-server.ts';
 
 import {
   checkIsDeviceListed,
-  listOnlineDeviceIds
+  listOnlineDeviceIds,
+  parseAdbDevices
 } from './adb-device-list.ts';
 import { resolveEmulatorBinaryPath } from './android-sdk.ts';
 import {
@@ -94,7 +96,11 @@ import {
   resolveDeviceIdleTimeoutInMilliseconds,
   resolveNetworkReadyTimeoutInMilliseconds
 } from './device-readiness.ts';
-import { buildEmulatorArguments } from './emulator-arguments.ts';
+import {
+  buildEmulatorArguments,
+  buildEmulatorEnvironment,
+  NETSIM_LOG_FILTER
+} from './emulator-arguments.ts';
 import {
   parsePosixProcessList,
   parseWindowsTaskList,
@@ -104,6 +110,15 @@ import {
   buildEmulatorLivenessMessage,
   resolveEmulatorLivenessVerdict
 } from './emulator-liveness.ts';
+import {
+  clearEmulatorMarker,
+  clearEmulatorMarkerIfStopped,
+  listEmulatorMarkers,
+  readEmulatorMarker,
+  resolveEmulatorMarkerVerdict,
+  selectLiveMarkedPids,
+  writeEmulatorMarker
+} from './emulator-marker.ts';
 import {
   buildAvdSnapshotDirectoryCandidates,
   buildSnapshotAgeMessage
@@ -217,6 +232,7 @@ const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30_000;
 const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownload';
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 300;
 const DEFAULT_TRANSPORT_TYPE = 'obsidian-cdp';
+const ANDROID_APPIUM_TRANSPORT_TYPE: ObsidianAndroidAppiumTransportOptions['type'] = 'obsidian-android-appium';
 const DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 /*
  * Budget for each of the two liveness probes taken immediately before the
@@ -305,9 +321,9 @@ interface AsarPlan {
  */
 interface CheckIsEmulatorGoneParams {
   /**
-  The device the emulator serves.
+  The device the emulator serves, or `undefined` when none ever appeared — the PIDs are then the only proof.
    */
-  readonly deviceId: string;
+  readonly deviceId?: string | undefined;
 
   /**
   The emulator PIDs this run owns.
@@ -564,6 +580,24 @@ interface ProcessLaunch {
 }
 
 /**
+ * Parameters for {@link AppiumTransportFactory.reclaimLeftoverEmulators}.
+ */
+interface ReclaimLeftoverEmulatorsParams {
+  /**
+  An AVD whose leftover is left alone — the one a preflight is about to adopt instead.
+   */
+  readonly exceptAvdName?: string | undefined;
+
+  /**
+   * `'preflight'` spares an emulator another live harness process still owns.
+   * `'end-of-run'` does not: the caller is the run's own global teardown under
+   * the `android` lock, so that owner can only be one of this run's test
+   * workers, which no longer has a turn to stop it.
+   */
+  readonly scope: 'end-of-run' | 'preflight';
+}
+
+/**
  * Parameters for {@link AppiumTransportFactory.startAppiumAndEmulator}.
  */
 interface ReclaimUnstoppedAppiumServerParams {
@@ -709,22 +743,25 @@ interface StopAutoStartedAppiumServerParams {
 
 interface StopAutoStartedEmulatorParams {
   /**
-  The AVD name, named in the warning so the leftover is identifiable.
+  The AVD name, named in the warning so the leftover is identifiable, and the key of its marker.
    */
   readonly avdName: string;
 
   /**
-  The device the emulator is serving, polled to decide whether it actually stopped.
+   * The device the emulator is serving, shut down over its console and polled
+   * to decide whether it actually stopped. `undefined` when the emulator failed
+   * before any device appeared.
    */
-  readonly deviceId: string;
+  readonly deviceId?: string | undefined;
 
   /**
-  The emulator launcher process this run spawned.
+   * The emulator launcher process this run spawned. `undefined` for a leftover
+   * this run took over, whose launcher belonged to another process.
    */
-  readonly emulatorProcess: ChildProcess;
+  readonly emulatorProcess?: ChildProcess | undefined;
 
   /**
-  The emulator PIDs this run owns, escalated to when the launcher's tree kill leaves one behind.
+  The emulator PIDs this run owns, escalated to when the console and the launcher's tree kill leave one behind.
    */
   readonly ownedEmulatorPids: readonly number[];
 }
@@ -751,7 +788,7 @@ interface StopAutoStartedProcessesParams {
   readonly emulatorProcess?: ChildProcess | undefined;
 
   /**
-  The emulator PIDs this run owns.
+  The emulator PIDs this run owns — started, or taken over as a leftover. Non-empty means the emulator is this run's to stop.
    */
   readonly ownedEmulatorPids: readonly number[];
 
@@ -764,6 +801,28 @@ interface StopAutoStartedProcessesParams {
   The Appium server URL.
    */
   readonly url: URL;
+}
+
+interface StopEmulatorAfterFailedStartParams {
+  /**
+  The AVD the emulator was started for.
+   */
+  readonly avdName: string;
+
+  /**
+  The online devices listed before the launch.
+   */
+  readonly deviceIdsBefore: readonly string[];
+
+  /**
+  The launch that failed.
+   */
+  readonly emulator: ProcessLaunch;
+
+  /**
+  The emulator processes that predate the launch, and are therefore not this run's.
+   */
+  readonly emulatorPidsBefore: readonly number[];
 }
 
 interface SweepDeviceLeftoverVaultsParams {
@@ -813,9 +872,9 @@ interface ResolveAndReportCompatibilityParams {
  */
 interface WaitForEmulatorStoppedParams {
   /**
-  The device the emulator serves.
+  The device the emulator serves, or `undefined` when none ever appeared.
    */
-  readonly deviceId: string;
+  readonly deviceId?: string | undefined;
 
   /**
   The emulator PIDs this run owns.
@@ -870,6 +929,39 @@ class AppiumTransportFactory {
     }
 
     return this.createNewSession(options);
+  }
+
+  /**
+   * Stops the emulators this harness started that no live run is responsible
+   * for, and drops the markers that no longer describe a running emulator.
+   *
+   * Only ever acts on a **marker-verified** emulator: one whose marker names a
+   * PID that is still a live emulator process. An emulator without a marker —
+   * booted by hand, by CI, or by another tool — is never touched, which keeps
+   * the L46 line: never a `qemu*` sweep.
+   *
+   * Callers must hold the `android` setup lock (L7), which is what makes a
+   * leftover safe to stop: no other Android run can be mid-flight on it.
+   *
+   * @param params - Which AVD to leave alone, and whether this run is ending.
+   */
+  public async reclaimLeftoverEmulators(params: ReclaimLeftoverEmulatorsParams): Promise<void> {
+    const markers = listEmulatorMarkers().filter((marker) => marker.avdName !== params.exceptAvdName);
+    if (markers.length === 0) {
+      return;
+    }
+
+    const processes = await this.queryHostProcesses();
+    if (processes === undefined) {
+      // Without a listing every marker would read as stale, and deleting them would leave the leftovers impossible to convict.
+      this.log(`Cannot judge ${String(markers.length)} emulator marker(s) without a host process listing; leaving them for a later run.`);
+      return;
+    }
+
+    const liveEmulatorPids = selectEmulatorBackendPids({ knownPids: [], processes });
+    for (const marker of markers) {
+      await this.reclaimLeftoverEmulator(marker, liveEmulatorPids, params.scope);
+    }
   }
 
   private async attachToExistingSession(
@@ -1042,6 +1134,10 @@ class AppiumTransportFactory {
       return false;
     }
 
+    if (params.deviceId === undefined) {
+      return true;
+    }
+
     try {
       return !checkIsDeviceListed({ deviceId: params.deviceId, devicesOutput: await this.getDevicesOutput() });
     } catch (error: unknown) {
@@ -1166,12 +1262,13 @@ class AppiumTransportFactory {
         }
 
         /*
-         * Only an emulator this run started may be replaced. A device that was
+         * Only an emulator this run owns may be replaced — one it started, or a
+         * leftover of this harness it took over. A device that was merely
          * adopted (`ownedEmulatorPids` empty) is somebody else's to restart —
          * the same ownership line teardown draws in never sweeping `qemu*`.
          */
         const ownedEmulatorProcess = emulatorProcess;
-        const canRetry = attempt < EMULATOR_BOOT_ATTEMPT_COUNT && ownedEmulatorProcess !== undefined && ownedEmulatorPids.length > 0;
+        const canRetry = attempt < EMULATOR_BOOT_ATTEMPT_COUNT && ownedEmulatorPids.length > 0;
         if (!canRetry) {
           throw new Error(diagnosis);
         }
@@ -1482,6 +1579,14 @@ class AppiumTransportFactory {
   private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
     const { avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds } = params;
     const timeouts: DeviceReadinessTimeouts = { deviceIdleTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds };
+    /*
+     * Before the device listing, so a leftover stopped here is not listed. Only
+     * OTHER AVDs: a leftover of this one is worth adopting (and owning) below.
+     * This is the sequence that filled the drive: a leaked `obsidian_test` sat
+     * beside every later run, each of which probed it as `other-avd`, booted
+     * its own emulator next to it, and left it running.
+     */
+    await this.reclaimLeftoverEmulators({ exceptAvdName: avdName, scope: 'preflight' });
     const deviceIdsBefore = await this.getConnectedDeviceIds();
     this.log(`Checking existing devices for AVD "${avdName}"... (connected: [${deviceIdsBefore.join(', ')}])`);
 
@@ -1529,6 +1634,7 @@ class AppiumTransportFactory {
     if (shouldReuseSnapshot) {
       this.logSnapshotAge(avdName);
     }
+    const launchedAtInMilliseconds = Date.now();
     const emulator = this.startEmulator(avdName, shouldReuseSnapshot, isEmulatorVisible);
 
     /*
@@ -1538,12 +1644,32 @@ class AppiumTransportFactory {
      * hanging-thread and packet-streamer lines are printed later, while the run
      * is inside `establishSession`. The window now closes there instead.
      */
-    const actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts);
+    let actualDeviceId: string;
+    try {
+      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts);
+    } catch (error: unknown) {
+      /*
+       * This emulator is ours and this is the last point anything holds it: a
+       * rejection here reaches the caller with no device result, so its
+       * teardown has no process to stop. A boot that failed a readiness gate —
+       * the idle wait, the network wait — used to leave a running emulator
+       * behind exactly this way.
+       */
+      await this.stopEmulatorAfterFailedStart({ avdName, deviceIdsBefore, emulator, emulatorPidsBefore });
+      throw error;
+    }
 
     const ownedEmulatorPids = await this.listEmulatorBackendPids(emulatorPidsBefore);
     this.log(
       `Emulator "${avdName}" started, device ${actualDeviceId} is connected (owned emulator PIDs: [${ownedEmulatorPids.join(', ')}]).`
     );
+    /*
+     * Recorded here — including when this code runs in a test worker, which is
+     * the case the in-memory ownership lost: the worker dies without a
+     * teardown, and the marker is what lets the run's global teardown, or the
+     * next run, find and stop what it started.
+     */
+    writeEmulatorMarker({ avdName, deviceId: actualDeviceId, ownedEmulatorPids, startedAtInMilliseconds: launchedAtInMilliseconds });
     await this.suppressErrorDialogs(actualDeviceId);
     return {
       actualDeviceId,
@@ -1752,25 +1878,10 @@ class AppiumTransportFactory {
    * @returns The emulator PIDs not in `knownPids`.
    */
   private async listEmulatorBackendPids(knownPids: readonly number[]): Promise<number[]> {
-    const query = buildHostProcessQuery();
-    const output = await new Promise<string>((resolve) => {
-      execFile(
-        query.command,
-        query.commandArguments,
-        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
-        (error, stdout) => {
-          if (error) {
-            this.log(`Warning: could not list host processes (\`${query.command}\`): ${error.message}`);
-          }
-          resolve(error ? '' : stdout);
-        }
-      );
-    });
-
-    const processes = parseHostProcessList(output);
-    if (processes.length === 0) {
+    const processes = await this.queryHostProcesses();
+    if (processes === undefined) {
       this.log(
-        `Warning: \`${query.command}\` listed no processes, so this run cannot identify the emulator backend it owns. Teardown will fall back to \`adb devices\` alone and will have no PID to escalate to.`
+        'Warning: the host process listing failed, so this run cannot identify the emulator backend it owns. Teardown will fall back to `adb devices` alone and will have no PID to escalate to.'
       );
       return [];
     }
@@ -1957,6 +2068,78 @@ class AppiumTransportFactory {
   }
 
   /**
+   * Lists every process on the host.
+   *
+   * A host always has processes, so a listing that parses to **zero** rows is a
+   * failed query however it exited, and comes back as `undefined` exactly like
+   * one that did not run — never as an empty list a caller could read as "no
+   * emulator is running".
+   *
+   * @returns The host's processes, or `undefined` when the listing failed.
+   */
+  private async queryHostProcesses(): Promise<ProcessListEntry[] | undefined> {
+    const query = buildHostProcessQuery();
+    const output = await new Promise<string>((resolve) => {
+      execFile(
+        query.command,
+        query.commandArguments,
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          if (error) {
+            this.log(`Warning: could not list host processes (\`${query.command}\`): ${error.message}`);
+          }
+          resolve(error ? '' : stdout);
+        }
+      );
+    });
+
+    const processes = parseHostProcessList(output);
+    if (processes.length === 0) {
+      this.log(`Warning: \`${query.command}\` listed no processes.`);
+      return undefined;
+    }
+
+    return processes;
+  }
+
+  /**
+   * Acts on one emulator marker for {@link reclaimLeftoverEmulators}.
+   *
+   * @param marker - The marker to judge.
+   * @param liveEmulatorPids - The emulator processes currently running on the host.
+   * @param scope - Whether an emulator another live harness process owns is spared.
+   */
+  private async reclaimLeftoverEmulator(marker: EmulatorMarker, liveEmulatorPids: readonly number[], scope: ReclaimLeftoverEmulatorsParams['scope']): Promise<void> {
+    const verdict = resolveEmulatorMarkerVerdict({
+      currentPid: process.pid,
+      isOwnerAlive: checkIsProcessAlive(marker.ownerPid),
+      liveEmulatorPids,
+      marker
+    });
+
+    if (verdict === 'stale-marker') {
+      this.log(`Dropping the emulator marker for AVD "${marker.avdName}": none of its PIDs [${marker.ownedEmulatorPids.join(', ')}] is a running emulator any more.`);
+      clearEmulatorMarker(marker.avdName);
+      return;
+    }
+
+    if (verdict === 'in-use-by-live-run' && scope === 'preflight') {
+      this.log(`Leaving the emulator for AVD "${marker.avdName}" on device ${marker.deviceId} alone: the harness process that owns it (PID ${String(marker.ownerPid)}) is still running.`);
+      return;
+    }
+
+    const ageInSeconds = Math.round((Date.now() - marker.startedAtInMilliseconds) / MILLISECONDS_PER_SECOND);
+    this.log(
+      `Stopping the emulator for AVD "${marker.avdName}" on device ${marker.deviceId}: this harness started it ${String(ageInSeconds)}s ago, and no live run is left to stop it.`
+    );
+    await this.stopAutoStartedEmulator({
+      avdName: marker.avdName,
+      deviceId: marker.deviceId,
+      ownedEmulatorPids: selectLiveMarkedPids(marker, liveEmulatorPids)
+    });
+  }
+
+  /**
    * Replaces a leftover server an earlier run failed to stop, instead of
    * adopting it.
    *
@@ -2041,28 +2224,48 @@ class AppiumTransportFactory {
    * @param avdName - The AVD it is serving.
    * @param deviceId - The device to adopt.
    * @param timeouts - The two post-boot readiness budgets.
-   * @returns The adopted device, owning no emulator PIDs.
+   * @returns The adopted device, owning the emulator's PIDs only when it is a leftover this harness started.
    */
   private async reuseConnectedDevice(avdName: string, deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<EnsureDeviceConnectedResult> {
-    this.log(`AVD "${avdName}" is already running on device ${deviceId}, reusing.`);
-    await this.suppressErrorDialogs(deviceId);
     /*
-     * A reused device gets the SAME settle gate a harness-started one gets.
-     * Appearing in `adb devices` says only that adbd is up: the guest can
-     * still be running the boot animation or optimizing packages, and a
-     * session established against that contends with the churn and inflates
-     * every subsequent round-trip 25-50x (L19). Skipping the gate here is
-     * what let a release preflight spend its whole layout-ready budget on a
-     * handful of contended probes while `adb devices` reported `device`
-     * throughout. The same argument applies to the network gate: a device
-     * that has been up for seconds is exactly one with no validated network
-     * yet.
+     * A device this run did not start is not this run's to stop — unless this
+     * harness started it and nothing live is responsible for it any more. Then
+     * it is taken over, so this run's teardown stops it and a leaked emulator
+     * serves at most one more run instead of living for ever.
      */
-    await this.waitForBoot(deviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
-    await this.waitForDeviceReady(deviceId, timeouts);
-    await this.wakeScreen(deviceId);
-    // A device this run did not start is not this run's to stop.
-    return { actualDeviceId: deviceId, ownedEmulatorPids: [] };
+    const ownedEmulatorPids = await this.takeOverLeftoverEmulator(avdName, deviceId);
+    this.log(
+      ownedEmulatorPids.length > 0
+        ? `AVD "${avdName}" is already running on device ${deviceId} as a leftover this harness started; reusing it and taking it over (owned emulator PIDs: [${ownedEmulatorPids.join(', ')}]), so this run stops it.`
+        : `AVD "${avdName}" is already running on device ${deviceId}, reusing.`
+    );
+
+    try {
+      await this.suppressErrorDialogs(deviceId);
+      /*
+       * A reused device gets the SAME settle gate a harness-started one gets.
+       * Appearing in `adb devices` says only that adbd is up: the guest can
+       * still be running the boot animation or optimizing packages, and a
+       * session established against that contends with the churn and inflates
+       * every subsequent round-trip 25-50x (L19). Skipping the gate here is
+       * what let a release preflight spend its whole layout-ready budget on a
+       * handful of contended probes while `adb devices` reported `device`
+       * throughout. The same argument applies to the network gate: a device
+       * that has been up for seconds is exactly one with no validated network
+       * yet.
+       */
+      await this.waitForBoot(deviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
+      await this.waitForDeviceReady(deviceId, timeouts);
+      await this.wakeScreen(deviceId);
+    } catch (error: unknown) {
+      // As with a launch that fails its gates: a rejection here hands the caller nothing to stop.
+      if (ownedEmulatorPids.length > 0) {
+        await this.stopAutoStartedEmulator({ avdName, deviceId, ownedEmulatorPids });
+      }
+      throw error;
+    }
+
+    return { actualDeviceId: deviceId, ownedEmulatorPids };
   }
 
   /**
@@ -2267,7 +2470,13 @@ class AppiumTransportFactory {
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
     const input = buildEmulatorArguments({ avdName, isHidden: isWindowHidden, shouldReuseSnapshot });
     const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);
+    const { environment, isNetsimLogGuarded } = buildEmulatorEnvironment(process.env);
     this.log(`Running: ${emulatorBinary} ${input.join(' ')}`);
+    this.log(
+      isNetsimLogGuarded
+        ? `netsimd log level: RUST_LOG=${NETSIM_LOG_FILTER} (keeps its wifi-stats warning from growing its log without bound).`
+        : `netsimd log level: RUST_LOG=${String(environment['RUST_LOG'])}, set by the caller — the harness's bounded default is off, and netsimd's log can grow without bound.`
+    );
     /*
      * Pipe (rather than ignore) stdout/stderr so an early failure such as
      * "x86_64 emulation currently requires hardware acceleration" can be
@@ -2275,6 +2484,7 @@ class AppiumTransportFactory {
      */
     const child = spawn(emulatorBinary, input, {
       detached,
+      env: environment,
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide
     });
@@ -2398,11 +2608,20 @@ class AppiumTransportFactory {
    * with the same AVD` — a FATAL the emulator writes to its own stdout, where
    * nobody sees it.
    *
+   * Works without a launcher handle too: a leftover this run took over has only
+   * its PIDs, which is all the escalation below ever needed. The marker goes
+   * only with a **verified** stop, so an emulator that outlived this attempt
+   * stays convictable by the next one.
+   *
    * @param params - The emulator process, the device it serves and the PIDs this run owns.
    */
   private async stopAutoStartedEmulator(params: StopAutoStartedEmulatorParams): Promise<void> {
-    await this.killEmulatorConsole(params.deviceId);
-    killProcessTree(params.emulatorProcess);
+    if (params.deviceId !== undefined) {
+      await this.killEmulatorConsole(params.deviceId);
+    }
+    if (params.emulatorProcess) {
+      killProcessTree(params.emulatorProcess);
+    }
 
     const waitParams: WaitForEmulatorStoppedParams = {
       deviceId: params.deviceId,
@@ -2418,7 +2637,7 @@ class AppiumTransportFactory {
       if (survivingPids.length > 0) {
         hasEscalated = true;
         this.log(
-          `Auto-started emulator outlived the launcher's process tree; escalating to the backend PID(s) this run started: [${survivingPids.join(', ')}].`
+          `Auto-started emulator outlived its console shutdown and the launcher's process tree; escalating to the emulator PID(s) this run owns: [${survivingPids.join(', ')}].`
         );
         for (const pid of survivingPids) {
           killProcessTreeByPid(pid);
@@ -2428,11 +2647,15 @@ class AppiumTransportFactory {
     }
 
     this.log(buildTeardownMessage({
-      evidence: `AVD "${params.avdName}" on device ${params.deviceId}`,
+      evidence: params.deviceId === undefined ? `AVD "${params.avdName}"` : `AVD "${params.avdName}" on device ${params.deviceId}`,
       outcome: resolveTeardownOutcome({ hasEscalated, isStopped }),
       subject: 'Auto-started emulator',
       timeoutInMilliseconds: EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS
     }));
+
+    if (isStopped) {
+      clearEmulatorMarkerIfStopped(params.avdName);
+    }
   }
 
   /**
@@ -2463,18 +2686,24 @@ class AppiumTransportFactory {
       }
     }
 
-    if (params.emulatorProcess) {
-      killProcessTree(params.emulatorProcess);
+    if (params.emulatorProcess || params.ownedEmulatorPids.length > 0) {
+      if (params.emulatorProcess) {
+        killProcessTree(params.emulatorProcess);
+      }
       const survivingPids = params.ownedEmulatorPids.filter((pid) => checkIsProcessAlive(pid));
       for (const pid of survivingPids) {
         killProcessTreeByPid(pid);
       }
 
-      this.log(
-        survivingPids.length > 0
-          ? `Auto-started emulator: stop requested and surviving backend PID(s) [${survivingPids.join(', ')}] killed — sync teardown cannot wait to confirm.`
-          : 'Auto-started emulator: stop requested, no process of this run left running.'
-      );
+      if (survivingPids.length > 0) {
+        // Keep the marker: nothing here waited to see these die, so the next run must still be able to convict them.
+        this.log(
+          `Auto-started emulator: stop requested and surviving emulator PID(s) [${survivingPids.join(', ')}] killed — sync teardown cannot wait to confirm.`
+        );
+      } else {
+        this.log('Auto-started emulator: stop requested, no process of this run left running.');
+        clearEmulatorMarkerIfStopped(params.avdName);
+      }
     }
   }
 
@@ -2484,7 +2713,8 @@ class AppiumTransportFactory {
    * @param params - Everything this run started.
    */
   private async stopAutoStartedProcessesVerified(params: StopAutoStartedProcessesParams): Promise<void> {
-    if (!params.appiumProcess && !params.emulatorProcess) {
+    const isEmulatorOwned = params.emulatorProcess !== undefined || params.ownedEmulatorPids.length > 0;
+    if (!params.appiumProcess && !isEmulatorOwned) {
       return;
     }
 
@@ -2498,7 +2728,7 @@ class AppiumTransportFactory {
       });
     }
 
-    if (params.emulatorProcess && params.deviceId !== undefined) {
+    if (isEmulatorOwned) {
       await this.stopAutoStartedEmulator({
         avdName: params.avdName,
         deviceId: params.deviceId,
@@ -2506,6 +2736,37 @@ class AppiumTransportFactory {
         ownedEmulatorPids: params.ownedEmulatorPids
       });
     }
+  }
+
+  /**
+   * Stops an emulator this run launched whose start failed before it could be
+   * handed back — the boot, idle or network wait gave up on it, or it never
+   * produced a device at all.
+   *
+   * The PIDs come from the same pre-launch snapshot a successful start uses. The
+   * device is whichever emulator appeared across the launch, in any state; when
+   * that is not exactly one, the stop goes by PIDs alone rather than guess.
+   *
+   * @param params - The launch, and what predated it.
+   */
+  private async stopEmulatorAfterFailedStart(params: StopEmulatorAfterFailedStartParams): Promise<void> {
+    const ownedEmulatorPids = await this.listEmulatorBackendPids(params.emulatorPidsBefore);
+    let newDeviceIds: string[] = [];
+    try {
+      newDeviceIds = parseAdbDevices(await this.getDevicesOutput())
+        .map((entry) => entry.deviceId)
+        .filter((deviceId) => checkIsEmulatorDeviceId(deviceId) && !params.deviceIdsBefore.includes(deviceId));
+    } catch (error: unknown) {
+      this.log(`Could not list devices while stopping the failed emulator: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    this.log(`Emulator "${params.avdName}" failed to start; stopping it (owned emulator PIDs: [${ownedEmulatorPids.join(', ')}]).`);
+    await this.stopAutoStartedEmulator({
+      avdName: params.avdName,
+      deviceId: newDeviceIds.length === 1 ? newDeviceIds[0] : undefined,
+      emulatorProcess: params.emulator.process,
+      ownedEmulatorPids
+    });
   }
 
   private async suppressErrorDialogs(deviceId: string): Promise<void> {
@@ -2584,6 +2845,54 @@ class AppiumTransportFactory {
       }
     } catch (error: unknown) {
       this.log(`Warning: failed to sweep leftover temp vaults: ${error instanceof Error ? error.message : 'unknown error'}`);
+    }
+  }
+
+  /**
+   * Takes over the running emulator of an AVD when it is a leftover this harness
+   * started, so this run becomes the one responsible for stopping it.
+   *
+   * @param avdName - The AVD the device is serving.
+   * @param deviceId - The device serving it.
+   * @returns The emulator PIDs this run now owns; empty when the emulator is not a harness leftover.
+   */
+  private async takeOverLeftoverEmulator(avdName: string, deviceId: string): Promise<number[]> {
+    const marker = readEmulatorMarker(avdName);
+    if (!marker) {
+      return [];
+    }
+
+    const processes = await this.queryHostProcesses();
+    if (processes === undefined) {
+      this.log(`Cannot tell whether AVD "${avdName}" is a leftover this harness started without a host process listing; reusing it without taking it over.`);
+      return [];
+    }
+
+    const liveEmulatorPids = selectEmulatorBackendPids({ knownPids: [], processes });
+    const verdict = resolveEmulatorMarkerVerdict({
+      currentPid: process.pid,
+      isOwnerAlive: checkIsProcessAlive(marker.ownerPid),
+      liveEmulatorPids,
+      marker
+    });
+
+    switch (verdict) {
+      case 'harness-leftover': {
+        const ownedEmulatorPids = selectLiveMarkedPids(marker, liveEmulatorPids);
+        writeEmulatorMarker({ avdName, deviceId, ownedEmulatorPids, startedAtInMilliseconds: marker.startedAtInMilliseconds });
+        return ownedEmulatorPids;
+      }
+      case 'in-use-by-live-run': {
+        this.log(`AVD "${avdName}" was started by a harness process that is still running (PID ${String(marker.ownerPid)}); that process stays responsible for stopping it.`);
+        return [];
+      }
+      case 'stale-marker': {
+        clearEmulatorMarker(avdName);
+        return [];
+      }
+      default: {
+        return assertNever(verdict);
+      }
     }
   }
 
@@ -2995,6 +3304,24 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
   // eslint-disable-next-line require-atomic-updates -- Single-threaded worker; no concurrent writes.
   cachedTransport = result;
   return result;
+}
+
+/**
+ * Stops every emulator this harness started whose run can no longer stop it
+ * itself, verifying each stop.
+ *
+ * For the global teardown of a Vitest project whose transport lives in its test
+ * workers rather than in a transport global setup: the worker auto-starts the
+ * emulator, Vitest ends the worker without a teardown, and only the main
+ * process's teardown gets a turn — holding no handle to the emulator, but able
+ * to find it by its marker (`emulator-marker.ts`).
+ *
+ * Call it while holding the `android` setup lock (L7): that is what guarantees
+ * no other Android run is using a marked emulator. Emulators without a marker are
+ * never touched.
+ */
+export async function stopHarnessStartedEmulators(): Promise<void> {
+  await new AppiumTransportFactory(ANDROID_APPIUM_TRANSPORT_TYPE).reclaimLeftoverEmulators({ scope: 'end-of-run' });
 }
 
 /**
