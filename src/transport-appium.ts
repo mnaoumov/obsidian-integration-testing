@@ -80,7 +80,9 @@ import { exec } from './exec.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
 import {
+  buildClaimInputExpression,
   buildResolveInputExpression,
+  checkInputClaimGranted,
   MOBILE_INPUT_BINDING_NAME,
   toCdpInputCommands
 } from './mobile-input.ts';
@@ -278,6 +280,7 @@ export class AppiumTransport implements ObsidianTransport {
    * Appium session, opened lazily on first evaluate and reused (see **L39**).
    */
   private inputChannel: null | WebViewCdpConnection = null;
+
   /**
    * Set once the trusted-input channel is known not to be openable here (iOS, a remote hub, no local
    * `adb`), so the attempt is not repeated on every evaluate.
@@ -786,6 +789,20 @@ export class AppiumTransport implements ObsidianTransport {
     try {
       const { id, request } = JSON.parse(payload) as MobileInputEnvelope;
       requestId = id;
+
+      // Exactly-once across every attached host. `Runtime.bindingCalled` is broadcast to ALL attached
+      // CDP sessions, so without this each process injects the gesture again: measured 2026-09-10, a
+      // Vitest main process and its worker serviced request `id=1` in the same millisecond, and one
+      // `clickElement` reached the page as two `pointerdown` / `touchstart` pairs.
+      //
+      // A LOSER MUST RETURN SILENTLY: the winner is the one that injects and the one that resolves the
+      // Renderer's promise, so answering here as well would resolve a request whose gesture this
+      // Process never sent.
+      const claim = await connection.send('Runtime.evaluate', { expression: buildClaimInputExpression(id), returnByValue: true });
+      if (!checkInputClaimGranted(claim)) {
+        return;
+      }
+
       await connection.sendAll(toCdpInputCommands(request));
       await connection.send('Runtime.evaluate', { expression: buildResolveInputExpression(id) });
     } catch (error: unknown) {

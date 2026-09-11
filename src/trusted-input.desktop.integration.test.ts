@@ -102,8 +102,16 @@ describe('desktop trusted input', () => {
     });
 
     expect(result.hasOnlyTrustedEvents).toBe(true);
-    expect(result.events.map((event) => event.type)).toContain('mousedown');
-    expect(result.events.map((event) => event.type)).toContain('click');
+
+    // COUNTS, not `toContain` — the mobile twin's presence-only form let a DOUBLED gesture ship
+    // Unnoticed. Desktop injects straight through `webContents.sendInputEvent` with no broadcast
+    // Channel to duplicate it, so this is a guard against the class of bug rather than a fix for a
+    // Live one.
+    expect(countByType(result.events)).toStrictEqual({
+      click: 1,
+      mousedown: 1,
+      mouseup: 1
+    });
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   it('should deliver a TRUSTED key press through pressKey', async () => {
@@ -151,3 +159,19 @@ describe('desktop trusted input', () => {
     expect(wasHovered).toBe(true);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 });
+
+/**
+ * Counts observed events by type, so a suite can assert HOW MANY of each a gesture produced.
+ *
+ * @param events - The events one gesture delivered.
+ * @returns A count per event type, with absent types simply missing rather than zero — so
+ *   `toStrictEqual` states the whole expected shape in one assertion.
+ */
+function countByType(events: readonly ObservedEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    counts[event.type] = (counts[event.type] ?? 0) + 1;
+  }
+
+  return counts;
+}

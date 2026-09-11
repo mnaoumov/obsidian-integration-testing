@@ -136,8 +136,19 @@ describe('mobile trusted input', () => {
 
     // The point of the whole feature. An untrusted dispatch would satisfy every other assertion here.
     expect(result.hasOnlyTrustedEvents).toBe(true);
-    expect(result.events.map((event) => event.type)).toContain('click');
-    expect(result.events.map((event) => event.type)).toContain('touchstart');
+
+    // COUNTS, not `toContain`. A tap is ONE of each event, and the presence-only form this replaces
+    // Passed just as happily on the TWO `pointerdown` / `touchstart` pairs the dispatch route actually
+    // Delivered — which is how a doubled tap shipped unnoticed and toggled a consumer's panel open and
+    // Straight back shut. Multiplicity is the property that was never asserted, so it is what is
+    // Asserted here.
+    expect(countByType(result.events)).toStrictEqual({
+      click: 1,
+      pointerdown: 1,
+      pointerup: 1,
+      touchend: 1,
+      touchstart: 1
+    });
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   it('should deliver a TRUSTED key press through pressKey', async () => {
@@ -287,3 +298,19 @@ describe('mobile trusted input', () => {
     expect(errorMessage).toContain('has no meaning on mobile');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 });
+
+/**
+ * Counts observed events by type, so a suite can assert HOW MANY of each a gesture produced.
+ *
+ * @param events - The events one gesture delivered.
+ * @returns A count per event type, with absent types simply missing rather than zero — so
+ *   `toStrictEqual` states the whole expected shape in one assertion.
+ */
+function countByType(events: readonly ObservedEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    counts[event.type] = (counts[event.type] ?? 0) + 1;
+  }
+
+  return counts;
+}
