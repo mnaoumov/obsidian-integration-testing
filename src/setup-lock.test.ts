@@ -8,7 +8,11 @@ import {
   vi
 } from 'vitest';
 
-import { acquireSetupLock } from './setup-lock.ts';
+import {
+  acquireSetupLock,
+  checkIsSetupLockHeld,
+  tryAcquireSetupLock
+} from './setup-lock.ts';
 
 interface ErrnoError extends Error {
   code: string;
@@ -474,6 +478,156 @@ describe('acquireSetupLock', () => {
 
     expect(mockRmSync).toHaveBeenCalledTimes(1);
     expect(mockRmSync).toHaveBeenCalledWith(LOCK_PATH, { force: true });
+  });
+});
+
+describe('tryAcquireSetupLock', () => {
+  const THREE_MINUTES_IN_MILLISECONDS = 3 * 60 * 1000;
+  const THIRTY_MINUTES_IN_MILLISECONDS = 30 * 60 * 1000;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('takes a free lock at once, and the handle releases it', () => {
+    const lock = tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' });
+
+    expect(mockMkdirSync).toHaveBeenCalledWith(LOCK_DIR, { recursive: true });
+    expect(mockWriteFileSync).toHaveBeenCalledWith(LOCK_PATH, expect.any(String), { flag: 'wx' });
+    lock?.release();
+    expect(mockRmSync).toHaveBeenCalledWith(LOCK_PATH, { force: true });
+  });
+
+  it('returns nothing while a live holder keeps beating', () => {
+    mockWriteFileSync.mockImplementation(() => {
+      throw makeErrnoError('EEXIST');
+    });
+    mockReadFileSync.mockReturnValue(lockInfoJson());
+    mockKill.mockReturnValue(undefined);
+
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeUndefined();
+    expect(mockRmSync).not.toHaveBeenCalled();
+  });
+
+  it('returns nothing when the lock file cannot be read', () => {
+    mockWriteFileSync.mockImplementation(() => {
+      throw makeErrnoError('EEXIST');
+    });
+    mockReadFileSync.mockImplementation(() => {
+      throw makeErrnoError('ENOENT');
+    });
+
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeUndefined();
+    expect(mockRmSync).not.toHaveBeenCalled();
+  });
+
+  it('steals a lock whose same-host holder is dead', () => {
+    mockWriteFileSync
+      .mockImplementationOnce(() => {
+        throw makeErrnoError('EEXIST');
+      })
+      .mockImplementationOnce(() => undefined);
+    mockReadFileSync.mockReturnValue(lockInfoJson());
+    mockKill.mockImplementation(() => {
+      throw makeErrnoError('ESRCH');
+    });
+
+    const lock = tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' });
+
+    expect(mockRmSync).toHaveBeenCalledWith(LOCK_PATH, { force: true });
+    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Stealing stale \'desktop\' setup lock from pid 9999'));
+    expect(lock).toHaveProperty('release');
+  });
+
+  it('returns nothing when another run recreates the lock between the steal and the claim', () => {
+    mockWriteFileSync.mockImplementation(() => {
+      throw makeErrnoError('EEXIST');
+    });
+    mockReadFileSync.mockReturnValue(lockInfoJson());
+    mockKill.mockImplementation(() => {
+      throw makeErrnoError('ESRCH');
+    });
+
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeUndefined();
+    expect(mockRmSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('steals a silent live-PID lock on the default threshold', () => {
+    mockWriteFileSync
+      .mockImplementationOnce(() => {
+        throw makeErrnoError('EEXIST');
+      })
+      .mockImplementationOnce(() => undefined);
+    mockReadFileSync.mockReturnValue(lockInfoJson({ heartbeatAtInMilliseconds: Date.now() - THREE_MINUTES_IN_MILLISECONDS }));
+    mockKill.mockReturnValue(undefined);
+
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toHaveProperty('release');
+  });
+
+  it('leaves the same silent live-PID lock alone under a wider threshold', () => {
+    mockWriteFileSync.mockImplementation(() => {
+      throw makeErrnoError('EEXIST');
+    });
+    mockReadFileSync.mockReturnValue(lockInfoJson({ heartbeatAtInMilliseconds: Date.now() - THREE_MINUTES_IN_MILLISECONDS }));
+    mockKill.mockReturnValue(undefined);
+
+    const lock = tryAcquireSetupLock({
+      label: 'emulator-reaper',
+      scope: 'desktop',
+      staleAfterSilenceInMilliseconds: THIRTY_MINUTES_IN_MILLISECONDS
+    });
+
+    expect(lock).toBeUndefined();
+    expect(mockRmSync).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkIsSetupLockHeld', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('reports a free scope when there is no lock file', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw makeErrnoError('ENOENT');
+    });
+
+    expect(checkIsSetupLockHeld('desktop')).toBe(false);
+  });
+
+  it('reports a live holder', () => {
+    mockReadFileSync.mockReturnValue(lockInfoJson());
+    mockKill.mockReturnValue(undefined);
+
+    expect(checkIsSetupLockHeld('desktop')).toBe(true);
+  });
+
+  it('reports a dead holder as not holding it', () => {
+    mockReadFileSync.mockReturnValue(lockInfoJson());
+    mockKill.mockImplementation(() => {
+      throw makeErrnoError('ESRCH');
+    });
+
+    expect(checkIsSetupLockHeld('desktop')).toBe(false);
+  });
+
+  it('counts a lock file it cannot parse as held', () => {
+    mockReadFileSync.mockReturnValue('{ half-written');
+
+    expect(checkIsSetupLockHeld('desktop')).toBe(true);
+  });
+
+  it('counts a lock file it cannot read for a reason other than absence as held', () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw makeErrnoError('EBUSY');
+    });
+
+    expect(checkIsSetupLockHeld('desktop')).toBe(true);
   });
 });
 

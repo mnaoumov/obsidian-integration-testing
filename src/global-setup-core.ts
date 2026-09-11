@@ -52,7 +52,10 @@ import {
   resolvePluginEnableRetryDelayInMilliseconds,
   shouldRetryPluginEnable
 } from './plugin-enable-retry.ts';
-import { acquireSetupLock } from './setup-lock.ts';
+import {
+  acquireSetupLock,
+  ANDROID_SETUP_LOCK_SCOPE
+} from './setup-lock.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
@@ -84,8 +87,6 @@ let isCleanupHandlerRegistered = false;
  * run to proceed. See {@link acquireSetupLock}.
  */
 const setupLocks = new Map<CoreSetupResult, SetupLock>();
-
-const ANDROID_LOCK_SCOPE = 'android';
 
 /**
  * Parameters for {@link coreSetup}.
@@ -743,7 +744,7 @@ function findProjectRoot(): string {
  * @returns The lock scope string, or `undefined` if no lock is needed.
  */
 function getLockScope(transportOptions: ObsidianTransportOptions | undefined): string | undefined {
-  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_LOCK_SCOPE : undefined;
+  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_SETUP_LOCK_SCOPE : undefined;
 }
 
 /**

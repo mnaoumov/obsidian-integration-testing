@@ -10,8 +10,8 @@
  * the two would corrupt each other (`ECONNREFUSED`, "vault not open") — the exact collision the lock exists
  * to prevent. Observed live: the lock file read `FREE` while this project was running.
  *
- * The scope string must match the one `coreSetup` uses for the Appium transport, or the two would take
- * different locks and serialize against nothing.
+ * The scope is `ANDROID_SETUP_LOCK_SCOPE`, the one `coreSetup` uses for the Appium transport — a different
+ * string would take a different lock and serialize against nothing.
  */
 /* v8 ignore start -- Integration-time setup covered by the Android integration suite, not unit tests. */
 
@@ -19,10 +19,12 @@ import { execFileSync } from 'node:child_process';
 
 import type { SetupLock } from '../src/setup-lock.ts';
 
-import { acquireSetupLock } from '../src/setup-lock.ts';
+import {
+  acquireSetupLock,
+  ANDROID_SETUP_LOCK_SCOPE
+} from '../src/setup-lock.ts';
 import { stopHarnessStartedEmulators } from '../src/transport-factory.ts';
 
-const LOCK_SCOPE = 'android';
 const LOCK_LABEL = 'obsidian-android-appium';
 const ADB_TIMEOUT_IN_MILLISECONDS = 15_000;
 // `adb forward --list` prints three columns: `<deviceId> tcp:<port> localabstract:<socketName>`.
@@ -31,7 +33,7 @@ const FORWARD_LIST_COLUMN_COUNT = 3;
 let lock: SetupLock | undefined;
 
 export async function setup(): Promise<void> {
-  lock = await acquireSetupLock({ label: LOCK_LABEL, scope: LOCK_SCOPE });
+  lock = await acquireSetupLock({ label: LOCK_LABEL, scope: ANDROID_SETUP_LOCK_SCOPE });
 }
 
 /**

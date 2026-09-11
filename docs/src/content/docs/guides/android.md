@@ -205,6 +205,14 @@ leaves a marked leftover, and the next Android run deals with it:
   the end.
 - A leftover of any other AVD is **stopped** before the run starts its own.
 
+A run that is killed with no Android run after it is covered too. Beside every emulator it starts, the
+harness spawns a small detached **reaper** process. The reaper waits until no Android run holds the
+`android` setup lock any more, then takes the lock and stops the marked emulator itself, usually within
+five seconds of the kill. Its log is `<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`.
+A reaper is armed only while a run holds that lock, which the global setups do. If you create an Android
+transport by hand without taking the lock, no reaper is armed; the run log says so, and only the next
+Android run stops a leftover.
+
 An emulator without a marker is never touched: one you booted by hand, one CI booted, or one another tool
 started. The harness only adopts it, as described above.
 

@@ -40,6 +40,13 @@ import process from 'node:process';
 import { errorToString } from './error-to-string.ts';
 import { log } from './log.ts';
 
+/**
+ * The scope every Android run serializes on: the Appium transport's global
+ * setup, a project that takes the lock itself, and the emulator reaper all
+ * have to name the same one, or they serialize against nothing.
+ */
+export const ANDROID_SETUP_LOCK_SCOPE = 'android';
+
 const LOCK_DIR_NAME = 'obsidian-integration-testing';
 const LOCK_FILE_SUFFIX = '.setup.lock';
 const POLL_INTERVAL_IN_MILLISECONDS = 500;
@@ -94,6 +101,34 @@ export interface SetupLock {
   Releases the lock. Safe to call more than once.
    */
   release(): void;
+}
+
+/**
+ * Parameters for {@link tryAcquireSetupLock}.
+ */
+export interface TryAcquireSetupLockParams {
+  /**
+  Short transport label for log messages, recorded in the lock file as the holder's.
+   */
+  readonly label: string;
+
+  /**
+  Logical scope the lock serializes within — see {@link AcquireSetupLockParams.scope}.
+   */
+  readonly scope: string;
+
+  /**
+   * How long a same-host holder whose PID is still alive may go without a
+   * heartbeat before its lock counts as abandoned.
+   *
+   * A dead holder PID is abandoned at once whatever this says. The default is
+   * the threshold every waiting run steals on; a caller that is *always* waiting
+   * — the emulator reaper — passes a far wider one, so a live run that blocks
+   * its event loop for a couple of minutes is not robbed of its lock.
+   *
+   * @default 2 minutes
+   */
+  readonly staleAfterSilenceInMilliseconds?: number | undefined;
 }
 
 /**
@@ -227,6 +262,31 @@ interface RefreshHeartbeatParams {
 }
 
 /**
+ * Parameters for {@link stealStaleLock}.
+ */
+interface StealStaleLockParams {
+  /**
+  The abandoned holder's lock info.
+   */
+  readonly info: LockFileInfo;
+
+  /**
+  The transport label of the stealing run.
+   */
+  readonly label: string;
+
+  /**
+  The path to the lock file to remove.
+   */
+  readonly lockFilePath: string;
+
+  /**
+  The lock scope, for the log message.
+   */
+  readonly scope: string;
+}
+
+/**
  * Acquires the cross-process setup lock for the given scope, waiting until any
  * competing run releases it (or its lock is detected as stale).
  *
@@ -259,9 +319,8 @@ export async function acquireSetupLock(params: AcquireSetupLockParams): Promise<
     }
 
     const info = readLockFileInfo(lockFilePath);
-    if (info && checkIsLockStale(info)) {
-      log(`[integration-setup:${label}] Stealing stale '${scope}' setup lock from ${describeInfo(info)}.`);
-      rmSync(lockFilePath, { force: true });
+    if (info && checkIsLockStale(info, HEARTBEAT_STALE_IN_MILLISECONDS)) {
+      stealStaleLock({ info, label, lockFilePath, scope });
       // Retry immediately — but still honour the deadline, so a lock that a
       // Competing run keeps recreating cannot spin this loop forever.
       if (Date.now() >= deadlineInMilliseconds) {
@@ -301,6 +360,72 @@ export async function acquireSetupLock(params: AcquireSetupLockParams): Promise<
 }
 
 /**
+ * Reports whether a run currently holds the setup lock for a scope.
+ *
+ * A lock file that exists but cannot be read counts as held — the same answer
+ * {@link acquireSetupLock} gives by waiting on it: it is either mid-write or
+ * corrupt, and either way no run can take it.
+ *
+ * @param scope - The lock scope.
+ * @returns `true` when a holder that is not stale owns the lock.
+ */
+export function checkIsSetupLockHeld(scope: string): boolean {
+  let text: string;
+  try {
+    text = readFileSync(getLockFilePath(scope), 'utf-8');
+  } catch (error: unknown) {
+    return getErrorCode(error) !== 'ENOENT';
+  }
+
+  let info: LockFileInfo;
+  try {
+    info = JSON.parse(text) as LockFileInfo;
+  } catch {
+    return true;
+  }
+
+  return !checkIsLockStale(info, HEARTBEAT_STALE_IN_MILLISECONDS);
+}
+
+/**
+ * Takes the setup lock for a scope if it is free or abandoned, without waiting.
+ *
+ * One attempt: a live holder — or a lock file that cannot be read — means
+ * `undefined`, and the caller decides whether to try again later.
+ *
+ * @param params - The lock parameters.
+ * @returns A handle whose {@link SetupLock.release} frees the lock, or `undefined` while another run holds it.
+ * @throws If the file system fails for any reason other than the lock file already existing.
+ */
+export function tryAcquireSetupLock(params: TryAcquireSetupLockParams): SetupLock | undefined {
+  const { label, scope } = params;
+  const lockFilePath = getLockFilePath(scope);
+  mkdirSync(getLockDirectory(), { recursive: true });
+
+  let ownInfo = tryCreateLockFile(lockFilePath, label);
+  if (!ownInfo) {
+    const info = readLockFileInfo(lockFilePath);
+    if (!info || !checkIsLockStale(info, params.staleAfterSilenceInMilliseconds ?? HEARTBEAT_STALE_IN_MILLISECONDS)) {
+      return undefined;
+    }
+
+    stealStaleLock({ info, label, lockFilePath, scope });
+    ownInfo = tryCreateLockFile(lockFilePath, label);
+    if (!ownInfo) {
+      // Another run recreated it between the steal and this attempt; it is theirs now.
+      return undefined;
+    }
+  }
+
+  return createLockHandle({
+    label,
+    lockFilePath,
+    ownInfo,
+    scope
+  });
+}
+
+/**
  * Determines whether a lock can be considered abandoned.
  *
  * A live holder refreshes its heartbeat every
@@ -316,13 +441,14 @@ export async function acquireSetupLock(params: AcquireSetupLockParams): Promise<
  * {@link STALE_LOCK_AGE_IN_MILLISECONDS} threshold is used instead.
  *
  * @param info - The parsed lock info.
+ * @param heartbeatStaleInMilliseconds - How long a same-host holder whose PID is alive may stay silent.
  * @returns `true` if the lock is stale and may be stolen.
  */
-function checkIsLockStale(info: LockFileInfo): boolean {
+function checkIsLockStale(info: LockFileInfo, heartbeatStaleInMilliseconds: number): boolean {
   const silentForInMilliseconds = Date.now() - getLastSeenAtInMilliseconds(info);
 
   if (info.hostname === hostname()) {
-    return !checkIsProcessAlive(info.pid) || silentForInMilliseconds > HEARTBEAT_STALE_IN_MILLISECONDS;
+    return !checkIsProcessAlive(info.pid) || silentForInMilliseconds > heartbeatStaleInMilliseconds;
   }
 
   return silentForInMilliseconds > STALE_LOCK_AGE_IN_MILLISECONDS;
@@ -583,6 +709,16 @@ function readLockFileInfo(lockFilePath: string): LockFileInfo | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Removes an abandoned holder's lock file, saying whose it was.
+ *
+ * @param params - The abandoned holder, and who is taking over.
+ */
+function stealStaleLock(params: StealStaleLockParams): void {
+  log(`[integration-setup:${params.label}] Stealing stale '${params.scope}' setup lock from ${describeInfo(params.info)}.`);
+  rmSync(params.lockFilePath, { force: true });
 }
 
 /**
