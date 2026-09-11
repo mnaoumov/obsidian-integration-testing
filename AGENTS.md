@@ -1827,7 +1827,8 @@ the Appium session:
 2. `Runtime.addBinding` installs a function on the page. The renderer computes the target rect, calls it
    with a JSON request, and awaits.
 3. `Runtime.bindingCalled` arrives on **our** socket while chromedriver's Execute Script is still pending
-   on **its** socket, so there is no contention. The host injects `Input.dispatchTouchEvent` /
+   on **its** socket, so there is no contention. The host first **claims** the request in the page
+   (`claimInput`, the exactly-once bullet below), then injects `Input.dispatchTouchEvent` /
    `dispatchKeyEvent` / `synthesizeTapGesture` (which command realizes which gesture is the long-press
    bullet below), then resolves the renderer's promise with a concurrent `Runtime.evaluate`.
 
@@ -1839,9 +1840,26 @@ Measured on a live emulator (2026-08-30) before any of it was built: a CDP touch
 `bindingCalled` does fire while an awaited evaluate is pending; and a second CDP client attaches happily
 alongside a live Appium session. `src/mobile-trusted-input.android.integration.test.ts` re-asserts the
 `isTrusted` half on every run, because that property is the entire point and no weaker observation implies
-it.
+it — and asserts the exact per-type event **counts** of a tap, for the reason in the next section.
 
 ### Consequences worth knowing
+
+- **Every attached host receives every `bindingCalled`, so injection is claimed exactly once, in the
+  page.** CDP broadcasts the event to **every** session attached to the WebView, and a consumer's Vitest
+  run holds two input channels to it — the main process and its worker. Until 12.1.2 each one injected
+  the gesture: measured on a device, two pids serviced request `id=1` in the same millisecond, and one
+  `clickElement` reached the page as `pointerdown, touchstart, pointerdown, touchstart, pointerup,
+  touchend, click`. A key press doubled the same way, and two overlapping `synthesizeTapGesture` calls
+  produced **no** events at all. Downstream that looked like unrelated plugin bugs — a panel toggling open
+  and straight back shut, an Escape closing a menu and then the drawer behind it, a long press raising no
+  menu. It never showed here because this repo's own suite runs **one** process, and because its
+  assertions were `toContain('touchstart')`, which two satisfy as happily as one. Now the host evaluates
+  `claimInput(id)` first — the page is the only thing every host shares, and it runs the racing evaluates
+  one after another — and a host that gets `false` returns without injecting **or answering**, leaving
+  the winner to do both. `checkInputClaimGranted` **fails open**: only a literal `false` suppresses
+  injection, because a page that has dropped the namespace should get a doubled tap rather than a gesture
+  nobody sends. Both trusted-input suites assert **counts**, not presence; do not relax that back to
+  `toContain`, which is the assertion shape that let this ship.
 
 - **The helpers are `Promise<void>`, and the `await` is load-bearing.** `pressKey` / `moveMouse` /
   `clickMouse` / `clickElement` stopped being synchronous when the mobile round-trip was added; the
