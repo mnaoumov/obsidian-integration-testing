@@ -65,6 +65,12 @@ async function main(): Promise<void> {
     build({
       ...commonOptions,
       format: 'cjs',
+      /*
+       * `emulator-reaper.ts` names its own file as `__filename` where that
+       * exists and `import.meta.url` otherwise, so the emptied `import.meta`
+       * this warns about is never read in the CJS build.
+       */
+      logOverride: { 'empty-import-meta': 'silent' },
       outdir: 'dist/lib/cjs',
       outExtension: { '.js': '.cjs' },
       plugins: [rewriteExtensionsPlugin('.cjs')]
