@@ -2455,7 +2455,8 @@ The pre-booted-AVD adoption path is now *safe* (it refuses instead of colliding)
 hand-booted healthy AVD is still only adopted when its probe answers. And as **L46**'s caveat already
 records, Vitest kills workers at the hook timeout, so no teardown gets a turn and the next run's preflight
 remains the second line of defence — which is precisely why that preflight must not be the thing that
-launches a colliding emulator.
+launches a colliding emulator. **L56** gives that preflight the record it lacked: an emulator marker, which
+turns an adopted leftover this harness started into one the adopting run owns and stops.
 
 ## L48. Headless vault defaults — two `app.json` keys the harness writes, and where the write has to land
 
@@ -3085,3 +3086,142 @@ map, which is a property of the dependency, not something the check can assume.
 **Two words joined `cspell.json` with this change** — `smol` and `hrqm`. GHSA slugs mostly survive the
 spell check by carrying digits (`jmr9-qjv8-65gv` in **L36** never tripped it); an all-letter segment does
 not.
+
+## L56. An emulator the harness started stays the harness's until a stop is verified — and `netsimd`'s log is capped
+
+**What happened.** On 2026-09-10 an idle headless emulator ran from 19:20 until 01:24 the next morning, and
+the network simulator it starts, `netsimd`, wrote **278 GB** to `%TEMP%\netsimd\netsim_stderr.log`. That
+file is on the same drive as every repo, so the drive filled up and took builds, git, npm and every agent
+shell down with it. 22,429 of the 22,430 lines in a kept 4 MB tail are the same warning:
+
+```text
+netsimd W … external/netsim+/rust/daemon/src\wifi\stats.rs:121 - Frame error: Failed to process IEEE
+802.11 response: when parsing Ieee80211 needed length of 1 but got 0
+```
+
+Two independent failures combined, and each one is fixed on its own.
+
+### The flood is a netsimd bug; `RUST_LOG` is the only lever
+
+netsimd's `hostapd_response_task` (`rust/hostapd-rs/src/hostapd.rs` upstream) never checks the socket
+`read()` for `Ok(0)`. Once hostapd's socket closes, every pass forwards an **empty** packet, the Wi-Fi
+manager fails to decode it ("needed length of 1 but got 0"), and `wifi/stats.rs` `warn!`s each failure
+with no rate limit. The session stats file recorded **1.78 billion** frame errors against zero hostapd
+errors. That was emulator 37.1.11 with netsimd 0.3.114, the newest stable at the time of writing. No public
+report or fix was found, and nothing starts the loop on demand, so it cannot be reproduced to order.
+
+netsimd has no `--no-wifi` flag and no quieter-than-default flag (`-v` only raises it). Its level is
+env_logger's `RUST_LOG`, defaulting to `info`, read from the environment the emulator hands down. So
+`buildEmulatorEnvironment` (`emulator-arguments.ts`) spawns the emulator with `RUST_LOG=error`, and both
+spawn sites use it: `startEmulator` and `scripts/emulator-wedge-probe.ts`. Some facts about that choice:
+
+- **An explicit `RUST_LOG` wins.** The run logs that the guard is off, because `warn` or chattier brings
+  the flood back.
+- **Why `error` and not a directive for the one module:** nothing reads that log, real netsim errors are
+  still recorded, and a *level* is verifiable. `netsimd I` lines stop appearing. A module directive could
+  only be checked by reproducing a flood nobody can trigger.
+- **Known limit:** netsimd is shared between emulators and reads its environment once. An emulator that
+  joins a netsimd a foreign emulator started gets that netsimd's level.
+- Redirecting the log with `ANDROID_TMP` would only move the unbounded file; `--logtostderr` would pour
+  the flood into the emulator pipe the harness drains.
+- `-feature -WiFiPacketStream` also silences it (**L49** measured "no netsim lines at all"), but it changes
+  how the guest gets Wi-Fi, and the **L45** network gate validates a Wi-Fi transport. It is kept as the
+  fallback, not the fix.
+
+The log was only the symptom. It grew for six hours because nothing stopped the emulator.
+
+### Four ways an auto-started emulator outlived its run
+
+Ownership lived only in the memory of the process that launched the emulator. It was lost four ways:
+
+| | Path | What happened |
+| --- | --- | --- |
+| **A** | Started from a test worker | This repo's `integration-tests:android-trusted-input` project has no transport global setup, so `getOrCreateTransport` builds the transport, and boots the emulator, **in the worker**. Nothing disposes that cached transport (`TemporaryVault.dispose` only unregisters), and Vitest ends workers abruptly. The project's global teardown ran but held no handle. **This is the one that filled the drive**: its 19:20:16 baseline run started the emulator. |
+| **B** | Runner killed | SIGKILL, Task Manager, an IDE stop: no teardown path runs. |
+| **C** | Leftover adopted | `reuseConnectedDevice` returned `ownedEmulatorPids: []` ("not this run's to stop"), so a leftover was nobody's to stop, ever. On 09-10 every later run probed the leaked `obsidian_test` as `other-avd`, booted its own `obsidian_screenshots` beside it, and left it alone. |
+| **D** | Start failed its gates | When `waitForNewDevice` threw (boot, idle or network wait), `ensureDeviceConnected` rejected with no result, so `startAppiumAndEmulator`'s cleanup had no emulator handle. The running emulator was simply dropped. |
+
+### The marker
+
+`emulator-marker.ts` writes `<tmpdir>/obsidian-integration-testing/<avdName>.emulator.json` =
+`{ avdName, deviceId, ownedEmulatorPids, ownerPid, startedAtInMilliseconds }` as soon as a started emulator
+connects. That includes a start from a worker, which is the whole fix for **A**. Only a **verified** stop
+removes it. `clearEmulatorMarkerIfStopped` also re-checks the marker's own PIDs, because a stop is verified
+against the PIDs *it* owned: a launch that died instantly owns nothing and would otherwise erase the record
+of an emulator still running.
+
+**Evidence decides, not the file.** `resolveEmulatorMarkerVerdict` (pure, unit-tested) returns one of three
+answers:
+
+- `stale-marker`: none of the marker's PIDs is in the host's **emulator process listing**. The check is
+  not a signal-0 probe, so a recycled PID never convicts.
+- `in-use-by-live-run`: the owner PID is alive and not the caller.
+- `harness-leftover`: everything else.
+
+Where each path is now closed:
+
+- **Preflight** (`ensureDeviceConnected`, under the `android` lock, **L7**):
+  - Every marker-verified leftover of **another** AVD is stopped before the device listing. That closes
+    the 09-10 sequence.
+  - A leftover of the **requested** AVD is adopted **and taken over**: the marker is rewritten with this
+    run as owner and its live PIDs become `ownedEmulatorPids`. That closes **C**, and a leak serves at most
+    one more run.
+  - The retry-a-wedged-emulator path (**L49**) now keys on owned PIDs rather than on holding a launcher,
+    so a taken-over leftover can be replaced too.
+- **`stopHarnessStartedEmulators()`** (`transport-factory.ts`) is the same reclaim with scope
+  `'end-of-run'`, which also stops an emulator whose owner is still alive. The owner can only be one of
+  the ending run's workers. `scripts/android-trusted-input-global-setup.ts` calls it before releasing the
+  lock, which closes **A** directly.
+- **`stopAutoStartedEmulator` works without a launcher handle:** console `emu kill`, then the owned PIDs,
+  then the usual two-proof verify and **L46** verdict line. Both teardown paths now gate on "owns an
+  emulator" (a process *or* PIDs), not on `emulatorProcess` alone.
+- **`stopEmulatorAfterFailedStart`** stops a launch whose gates failed, using the same pre-launch PID
+  snapshot. That closes **D**.
+- **A failed host process listing never deletes a marker.** `queryHostProcesses` returns `undefined` for
+  a failed query or a zero-row listing, and the reclaim then leaves the markers for a later run. An empty
+  listing would otherwise read every marker as stale.
+
+**What stays untouched, deliberately:** any emulator without a marker. That covers one booted by hand, the
+CI workflow's (`validate-android-emulator.yml` boots its own, and the harness adopts it), and anything
+predating this change. **L46**'s "never a `qemu*` sweep" stands.
+
+### End-to-end evidence (2026-09-11, this host, AdGuard stopped per L49)
+
+**Before, on `main`.** A run of `integration-tests:android-trusted-input` leaves
+`qemu-system-x86_64-headless` and `netsimd` running with nothing recorded, which is exactly the incident.
+Only a hand `adb emu kill` removed them.
+
+**After, one run per path:**
+
+```text
+A  android-trusted-input, global teardown:
+   Stopping the emulator for AVD "obsidian_test" on device emulator-5554: this harness started it 64s ago,
+   and no live run is left to stop it.
+   Auto-started emulator stopped (verified: AVD "obsidian_test" on device emulator-5554 released).
+
+other-AVD  obsidian_screenshots run, after an obsidian_test run was SIGKILLed mid-flight:
+   Stopping the emulator for AVD "obsidian_test" on device emulator-5554: …
+   Auto-started emulator stopped (verified: …)          ← before "Checking existing devices…"
+
+C  obsidian_test run, after another SIGKILLed obsidian_test run:
+   AVD probe: emulator-5554=match.
+   AVD "obsidian_test" is already running on device emulator-5554 as a leftover this harness started;
+   reusing it and taking it over (owned emulator PIDs: [62632]), so this run stops it.
+   Auto-started emulator stopped (verified: …)
+```
+
+After each run: no `qemu*` process, no `netsimd`, no marker. Two more facts from these runs:
+
+- **`RUST_LOG` reaches netsimd.** The captured `netsim_stderr.log` holds no `rust/daemon` line at all.
+  It keeps only a few `src/hci/*.cc` INFO lines, which come from netsim's separate C++ logger. The
+  wifi-stats warning is on the Rust side, so it is covered. A pre-change log from the same day was full of
+  Rust INFO lines.
+- A short-lived `emulator.exe` appears at the moment of shutdown and exits within seconds. That is the
+  emulator's own, not a leak; a snapshot taken right after a verified stop can catch it.
+
+### What is still open
+
+**B without a later run.** A killed runner whose emulator is never followed by another Android run on that
+host still leaves it idle. After this change that costs no disk, but the netsimd loop can still spin a core.
+The candidate fix is a small host-side reaper armed on the **L33** liveness socket; it is tracked
+separately.

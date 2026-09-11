@@ -194,6 +194,26 @@ holding the AVD is `qemu-system-x86_64-headless`, **not** `qemu-system-x86_64`, 
 `Get-Process -Name qemu-system-x86_64` filter does not find it — match `qemu*` instead. Physical handsets
 and TCP-attached devices are never probed, so a phone plugged into the host cannot trigger this.
 
+### An emulator left running by an earlier run
+
+The harness stops every emulator it starts, and it records each one in a small marker file under
+`<tmpdir>/obsidian-integration-testing/<avd>.emulator.json` until that stop is verified. A run that dies
+before stopping its emulator (killed, or ended from a test worker whose teardown never ran) therefore
+leaves a marked leftover, and the next Android run deals with it:
+
+- A leftover of the AVD it wants is **reused and taken over**: the log says so, and that run stops it at
+  the end.
+- A leftover of any other AVD is **stopped** before the run starts its own.
+
+An emulator without a marker is never touched: one you booted by hand, one CI booted, or one another tool
+started. The harness only adopts it, as described above.
+
+The harness also launches the emulator with `RUST_LOG=error` so the network simulator it spawns, `netsimd`,
+cannot fill the disk. One of its Wi-Fi loops can log a single warning tens of thousands of times a second
+into `%TEMP%\netsimd\netsim_stderr.log`, and an idle emulator once grew that file to 278 GB. If you set
+`RUST_LOG` yourself, your value wins and the run logs that the guard is off. If that file is ever huge,
+stop the emulator and `netsimd`, then delete it; it holds nothing but that warning.
+
 ### The emulator dies about a minute into every run
 
 If the guest boots, serves `adb`, accepts a session, and then drops to `offline` roughly 30–90s later —
