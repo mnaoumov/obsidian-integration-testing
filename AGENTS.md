@@ -1524,6 +1524,11 @@ all is the real assertion. The expression is written in ES5 style (`var`, `funct
 no optional chaining) for the same reason as `DISMISS_TRUST_DIALOG_EXPR`: it has to parse on the Chromium
 80-era renderers of the oldest supported Obsidian versions (**L26**).
 
+**The emulator does not use this socket, on purpose.** Its equivalent, **L56**'s emulator reaper, watches
+the `android` setup lock instead. A socket ties a lifetime to the process that opened it. On Android that
+process can be a test worker that Vitest ends during a healthy run, while the lock belongs to the run
+itself.
+
 ## L34. Lint — `eslint-plugin-unicorn`, ported from `obsidian-dev-utils`
 
 `scripts/eslint-config.ts` is a hand-maintained sibling of `obsidian-dev-utils`' shared config (this repo
@@ -3172,9 +3177,12 @@ Where each path is now closed:
   `'end-of-run'`, which also stops an emulator whose owner is still alive. The owner can only be one of
   the ending run's workers. `scripts/android-trusted-input-global-setup.ts` calls it before releasing the
   lock, which closes **A** directly.
-- **`stopAutoStartedEmulator` works without a launcher handle:** console `emu kill`, then the owned PIDs,
-  then the usual two-proof verify and **L46** verdict line. Both teardown paths now gate on "owns an
-  emulator" (a process *or* PIDs), not on `emulatorProcess` alone.
+- **`EmulatorReclaimer.stopEmulator` works without a launcher handle:** console `emu kill`, then the owned
+  PIDs, then the usual two-proof verify and **L46** verdict line. Both teardown paths now gate on "owns an
+  emulator" (a process *or* PIDs), not on `emulatorProcess` alone. The reclaim and the stop live in
+  `emulator-reclaim.ts`, not in `AppiumTransportFactory`, so the reaper below can load them; the factory
+  holds one `EmulatorReclaimer` and delegates, and the log lines are unchanged.
+- **The emulator reaper** closes **B**, the killed runner with no later run; see the section below.
 - **`stopEmulatorAfterFailedStart`** stops a launch whose gates failed, using the same pre-launch PID
   snapshot. That closes **D**.
 - **A failed host process listing never deletes a marker.** `queryHostProcesses` returns `undefined` for
@@ -3219,9 +3227,126 @@ After each run: no `qemu*` process, no `netsimd`, no marker. Two more facts from
 - A short-lived `emulator.exe` appears at the moment of shutdown and exits within seconds. That is the
   emulator's own, not a leak; a snapshot taken right after a verified stop can catch it.
 
-### What is still open
+### The reaper: a killed runner with no Android run after it
 
-**B without a later run.** A killed runner whose emulator is never followed by another Android run on that
-host still leaves it idle. After this change that costs no disk, but the netsimd loop can still spin a core.
-The candidate fix is a small host-side reaper armed on the **L33** liveness socket; it is tracked
-separately.
+The marker only helps a *later* run. If the runner is killed and no Android run follows on that host, the
+leftover idles indefinitely. After the `RUST_LOG` cap that costs no disk, but netsimd's empty-read loop can
+still spin a core. `emulator-reaper.ts` closes that last gap.
+
+**What it is.** Every time the harness records an emulator as its own, it spawns a small detached Node
+process beside it. That happens twice: after `writeEmulatorMarker` for a fresh start, and on a
+`harness-leftover` takeover. The reaper holds no handle to the emulator. The marker says what to stop, and
+the stop is `EmulatorReclaimer.reclaimLeftoverEmulators({ scope: 'end-of-run' })`, the one the run's own
+global teardown uses.
+
+**What it waits for: the `android` setup lock, not the L33 socket.** The task that opened this work
+proposed arming the reaper on the **L33** parent-liveness socket. That was rejected because the socket
+belongs to the process that *started* the emulator. On path **A** that process is a Vitest worker, and
+Vitest ends workers during a healthy run, so a socket-armed reaper would stop the emulator mid-run or race
+the next worker's takeover. The lock (**L7**) is held by the run's main process for the whole run, and a
+live holder is exactly what "an Android run is in flight" means. So every
+`EMULATOR_REAPER_POLL_INTERVAL_IN_MILLISECONDS` (5 s, one heartbeat) the reaper does this:
+
+1. **Re-read the marker.** It exits quietly in three cases:
+   - the marker is gone, because the run stopped the emulator;
+   - the marker's `startedAtInMilliseconds` differs, meaning a later emulator of the AVD with its own
+     reaper (a takeover keeps the original launch time, so this key names one emulator across owners);
+   - none of the marker's PIDs is alive.
+2. **Try to take the lock** (`tryAcquireSetupLock`, one attempt). If a live run holds it, the reaper
+   waits for the next poll.
+3. **Once the lock is taken**, re-check the marker, since the run may have ended normally in between. Then
+   reclaim while holding the lock and release it. Holding the lock is the precondition every leftover stop
+   documents: no run can adopt an emulator that is mid-shutdown. The reaper makes one attempt, and an
+   unverified stop keeps the marker for the next run, as always.
+
+What the reaper does is exactly what the next run's preflight would do, at the first moment that run could
+have done it. It also finishes the job of `process.on('exit')`'s best-effort teardown, which kills without
+waiting and keeps the marker when PIDs survive.
+
+**A wider silence threshold than a waiting run's.** A dead same-host holder PID is abandoned at once, which
+is what a SIGKILL leaves behind. But a *live*-PID holder that has stopped beating is abandoned only after
+`EMULATOR_REAPER_LOCK_SILENCE_IN_MILLISECONDS` (30 min, the lock's cross-host threshold), passed as
+`staleAfterSilenceInMilliseconds`. The usual 2-minute threshold is fine for a run that happens to be
+waiting, but a reaper is *always* waiting. At 2 minutes, a live run that blocked its event loop would lose
+its emulator. Only a recycled PID should ever reach 30 minutes.
+
+**Fail-open, like the L33 watchdog.** The spawner arms a reaper only when `checkIsSetupLockHeld('android')`
+says a live run holds the lock right now. A run that takes no lock, such as a hand-wired
+`createTransportFromOptions`, gets no reaper and logs `No emulator reaper armed …`. Otherwise its missing
+lock would read as "the run is over". A spawn failure is logged and never fails the launch. A reaper that
+cannot read the lock gives up rather than guess.
+
+**What it still does not cover: a kill during the boot itself.** The marker — and therefore the reaper —
+is written once the device connects, about 45 s into a cold boot. A runner killed inside that window
+leaves a running emulator with no marker at all, which every later run correctly refuses to touch (**L46**).
+Closing it means writing the marker at launch, from the launcher PID, and filling in the backend PIDs once
+the device appears. That window predates the reaper and is tracked separately.
+
+**Duplicates are harmless.** A takeover arms a second reaper for an emulator whose first reaper may still
+be watching. That covers emulators started by an older harness, which have no reaper at all. The first
+reaper to take the lock stops the emulator; the other then finds the marker gone.
+
+**How it is launched.** The spawner runs `process.execPath -e <buildEmulatorReaperBootstrap()> <own module
+URL> <avdName> <startedAtInMilliseconds>`, detached and `windowsHide`, then `unref()`s the child. The
+bootstrap `import()`s the module and calls `runEmulatorReaper`, falling back to `default` for a CJS module
+whose named export Node's lexer misses. That one bootstrap loads all three forms the module ships as:
+
+- `.mjs` (ESM build);
+- `.cjs` (CJS build);
+- `.ts` in this repo's own suites, which plain Node 26 type-strips.
+
+The module's own URL is `__filename` in the CJS build and `import.meta.url` otherwise.
+`scripts/build-lib.ts` silences esbuild's `empty-import-meta` warning for the CJS build, since that
+emptied `import.meta` is never read there. **Keep the reaper's import graph small and erasable.** It must
+never reach `obsidian-metadata.ts`, which reads the build-time `OBSIDIAN_METADATA` global and cannot load
+under plain Node. That constraint is why the reclaim moved out of `transport-factory.ts`.
+
+**Where its output goes.** The child's stdout/stderr go to
+`<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`, so the **L46** verdict lines of a stop
+nobody watched are still on record. The spawner starts the file afresh once it passes
+`EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES` (1 MB), so this log can never become the next unbounded file.
+
+**The pure/glue split** follows **L33**. Unit-tested in `emulator-reaper.test.ts`:
+
+- the watch verdict;
+- the argument codec;
+- the log-cap decision;
+- the bootstrap, run for real with `node -e` against ESM, CJS and default-only CJS fixtures.
+
+`tryAcquireSetupLock` and `checkIsSetupLockHeld` are covered in `setup-lock.test.ts`. The spawn and the
+loop are `v8 ignore`d, and the device evidence below covers them. `ANDROID_SETUP_LOCK_SCOPE` is now the one
+definition of `'android'`, shared by `coreSetup`, the trusted-input project's global setup, and the reaper.
+
+**The Appium server is deliberately left alone.** A worker-started Appium server (path **A**) is still
+adopted by the next run rather than stopped at the global teardown. An idle server grows no log and spins
+no core, **L40**'s marker and wedged-server restart already reclaim a stale or wedged one, and adopting it
+spares each run the server's start time (owner decision, 2026-09-11).
+
+### Reaper evidence (2026-09-11, this host)
+
+Three device checks. **AdGuard was left RUNNING**: the owner's application exclusions for `emulator.exe`
+and `qemu-system-x86_64-headless.exe` make the **L49** service stop unnecessary, and every boot here was
+clean.
+
+```text
+B, the target — a SIGKILLed run with nothing after it:
+   16:21:59  the run SIGKILLs itself; netsimd + qemu running, reaper armed
+   16:22:01  Stealing stale 'android' setup lock from pid 12604 (obsidian-android-appium)
+   16:22:02  Stopping the emulator for AVD "obsidian_test" … no live run is left to stop it.
+   16:22:04  Auto-started emulator stopped (verified: … released)   ← 5s after the kill
+   16:22:08  no qemu, no netsimd, no marker, no lock, no reaper
+
+A normal run — the worker-started emulator the reaper must NOT touch:
+   72s of tests with the emulator untouched; the global teardown stopped it, and
+   16:23:30  The emulator was stopped; nothing left to watch.       ← the reaper exits itself, 2s later
+
+The race — a SIGKILLed run with the next one starting at once:
+   16:24:37  the NEW run steals the lock first and takes the leftover over (owned PIDs [6136])
+   16:24:51  Auto-started emulator stopped (verified: … released)   by that run's own teardown
+   16:24:51 + 16:24:54  both reapers exit: "The emulator was stopped; nothing left to watch."
+```
+
+The race came out on the "next run wins" side, which is the harder one to get right: the reaper stood down
+without touching an emulator another run had adopted. The other side — the reaper taking the lock first,
+after which the next run waits and boots fresh — was exercised with stand-in processes rather than a real
+emulator. The one failing test in the normal run is the long-press menu timeout, which fails on `main` too.
