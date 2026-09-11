@@ -127,6 +127,23 @@ export interface MobilePointerInputRequest {
 }
 
 /**
+ * The CDP `RemoteObject` an evaluate returns, reduced to the one field this module reads.
+ */
+interface EvaluateRemoteObject {
+  readonly value?: unknown;
+}
+
+/**
+ * The part of a CDP `Runtime.evaluate` reply this module reads.
+ *
+ * Declared rather than imported: the harness talks to the WebView debugger over a raw socket, so there
+ * is no generated protocol type to reach for, and only the returned value matters here.
+ */
+interface EvaluateResult {
+  readonly result?: EvaluateRemoteObject;
+}
+
+/**
  * How long a long-press holds the touch down before releasing it.
  *
  * It has to clear **Android's** long-press threshold, which is 500ms by default: the gesture is
@@ -203,6 +220,26 @@ interface NamedKey {
 }
 
 /**
+ * Builds the expression the host evaluates to claim one input request before injecting it.
+ *
+ * CDP delivers `Runtime.bindingCalled` to **every** attached session, so each Node process holding an
+ * input channel to this WebView services the same request and injects the same gesture. The claim is
+ * what makes the injection exactly-once across all of them: the page is the only thing every host
+ * shares, and it runs the racing evaluates one after another on its single thread, so exactly one of
+ * them gets `true`.
+ *
+ * Optional chaining for the same reason as {@link buildResolveInputExpression}, and it is why
+ * {@link checkInputClaimGranted} treats a non-`false` result as claimed: a page that has dropped the
+ * namespace yields `undefined`, and injecting twice is a far better failure than never injecting.
+ *
+ * @param id - The request id to claim.
+ * @returns A self-contained expression to pass to `Runtime.evaluate`.
+ */
+export function buildClaimInputExpression(id: string): string {
+  return `window.__obsidianIntegrationTesting?.claimInput?.(${JSON.stringify(id)})`;
+}
+
+/**
  * Builds the expression the host evaluates to answer one input request.
  *
  * Optional chaining throughout: by the time the host answers, the page may have navigated and dropped the
@@ -215,6 +252,26 @@ interface NamedKey {
  */
 export function buildResolveInputExpression(id: string, errorMessage?: string): string {
   return `window.__obsidianIntegrationTesting?.resolveInput?.(${JSON.stringify(id)}, ${JSON.stringify(errorMessage ?? null)})`;
+}
+
+/**
+ * Reads a `Runtime.evaluate` result for {@link buildClaimInputExpression} and says whether to inject.
+ *
+ * **Deliberately fails OPEN.** Only a literal `false` — the page actively saying another host already
+ * claimed this id — stops the injection. A missing namespace, a page mid-navigation, or any result
+ * shape this does not recognize yields `true`, because a gesture injected twice is a far better
+ * failure than a gesture never injected at all: the first is a doubled tap, the second is a test that
+ * hangs until the renderer's timeout and reports nothing useful.
+ *
+ * @param result - The raw `Runtime.evaluate` result object.
+ * @returns Whether this host should perform the injection.
+ */
+export function checkInputClaimGranted(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) {
+    return true;
+  }
+
+  return (result as EvaluateResult).result?.value !== false;
 }
 
 /**

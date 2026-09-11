@@ -133,6 +133,25 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly app: App;
 
     /**
+     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is the renderer half of
+     * the mobile trusted-input channel's **exactly-once** guarantee (**L39**).
+     *
+     * CDP broadcasts `Runtime.bindingCalled` to **every** attached session, so every Node process
+     * holding an input channel to this WebView services the same request — and each one injects the
+     * full gesture. With two processes attached (a Vitest main process and its worker, which is the
+     * ordinary consumer shape) one `clickElement` therefore arrived as TWO taps, and one `pressKey` as
+     * two key presses. Measured 2026-09-10: two pids servicing request `id=1` in the same millisecond.
+     *
+     * The claim is made in the PAGE rather than in any host because the page is the only thing all the
+     * hosts share. JavaScript is single-threaded, so two `Runtime.evaluate` calls racing for the same
+     * id are serialized and exactly one sees `true`.
+     *
+     * @param id - The request id to claim.
+     * @returns `true` for the first caller to claim this id, `false` for every later one.
+     */
+    claimInput(id: string): boolean;
+
+    /**
      * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It
      * owns the harness test window's lifecycle via Electron (`window.electronWindow`),
      * which is the harness's concern, not a general utility.
@@ -386,10 +405,24 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const pendingInputs = new Map<string, PendingInput>();
   let nextInputId = 0;
 
+  // Request ids already claimed by some host, so a second attached host does not inject the gesture a
+  // Second time — see `claimInput`. Ids are monotonic within a page, so this only grows as fast as the
+  // Run drives input, and it dies with the page.
+  const claimedInputIds = new Set<string>();
+
   const ns: IntegrationTestingNamespace = {
     get app() {
       // eslint-disable-next-line @typescript-eslint/no-deprecated -- `app` getter reads `window.app` which is set by Obsidian.
       return globalThis.app;
+    },
+
+    claimInput(this: IntegrationTestingNamespace, id: string): boolean {
+      if (claimedInputIds.has(id)) {
+        return false;
+      }
+
+      claimedInputIds.add(id);
+      return true;
     },
 
     contexts: existingContexts,

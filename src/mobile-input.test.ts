@@ -5,11 +5,51 @@ import {
 } from 'vitest';
 
 import {
+  buildClaimInputExpression,
   buildResolveInputExpression,
+  checkInputClaimGranted,
   codePointOf,
   toCdpInputCommands,
   toCdpModifiers
 } from './mobile-input.ts';
+
+describe('buildClaimInputExpression', () => {
+  it('should claim the id in the page', () => {
+    expect(buildClaimInputExpression('7'))
+      .toBe('window.__obsidianIntegrationTesting?.claimInput?.("7")');
+  });
+
+  it('should escape an id that would otherwise break out of the expression', () => {
+    expect(buildClaimInputExpression('7"); alert(1); //'))
+      .toBe(String.raw`window.__obsidianIntegrationTesting?.claimInput?.("7\"); alert(1); //")`);
+  });
+
+  it('should optional-chain the whole call, so claiming against a page that has navigated is a no-op', () => {
+    expect(buildClaimInputExpression('7')).toContain('?.claimInput?.(');
+  });
+});
+
+describe('checkInputClaimGranted', () => {
+  it('should grant the claim when the page says true', () => {
+    expect(checkInputClaimGranted({ result: { type: 'boolean', value: true } })).toBe(true);
+  });
+
+  // The whole point: the SECOND host to service one broadcast `Runtime.bindingCalled` must not inject
+  // The gesture again.
+  it('should refuse the claim when the page says false', () => {
+    expect(checkInputClaimGranted({ result: { type: 'boolean', value: false } })).toBe(false);
+  });
+
+  // Fails OPEN, deliberately. A doubled tap is a bad day; a gesture nobody injects is a hang.
+  it.each([
+    ['an undefined value, as a page without the namespace yields', { result: { type: 'undefined' } }],
+    ['an empty result', {}],
+    ['a null result', null],
+    ['a non-object result', 'unexpected']
+  ])('should grant the claim for %s', (_description, result) => {
+    expect(checkInputClaimGranted(result)).toBe(true);
+  });
+});
 
 describe('buildResolveInputExpression', () => {
   it('should resolve with a null error on success', () => {

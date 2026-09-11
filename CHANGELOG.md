@@ -24,7 +24,7 @@
 - fix(global-setup): send every pre-open vault write to the overridden config folder
 - fix(ci): run every workflow on actions that target Node 24
 - docs(android): record that the runner survives, so the fault is the machine
-- fix(ci): pin where the AVD lives, so create and boot agree on itse
+- fix(ci): pin where the AVD lives, so create and boot agree on it
 - fix(ci): do not let a SIGPIPE'd `yes` fail the AVD step
 - feat(android): run the Android leg on a CI runner, with a kept wedge probe
 - docs: write what a reader of this repo can check, not a private label
