@@ -4,7 +4,37 @@ import {
   it
 } from 'vitest';
 
-import { buildEmulatorArguments } from './emulator-arguments.ts';
+import {
+  buildEmulatorArguments,
+  buildEmulatorEnvironment,
+  NETSIM_LOG_FILTER
+} from './emulator-arguments.ts';
+
+describe('buildEmulatorEnvironment', () => {
+  it('should hand netsimd the bounded log filter when the caller set none', () => {
+    const result = buildEmulatorEnvironment({ PATH: '/usr/bin' });
+    expect(result.environment).toStrictEqual({ PATH: '/usr/bin', RUST_LOG: NETSIM_LOG_FILTER });
+    expect(result.isNetsimLogGuarded).toBe(true);
+  });
+
+  it('should treat an empty RUST_LOG as unset', () => {
+    const result = buildEmulatorEnvironment({ RUST_LOG: '' });
+    expect(result.environment['RUST_LOG']).toBe(NETSIM_LOG_FILTER);
+    expect(result.isNetsimLogGuarded).toBe(true);
+  });
+
+  it('should leave an explicit RUST_LOG alone and report the guard as off', () => {
+    const result = buildEmulatorEnvironment({ RUST_LOG: 'debug' });
+    expect(result.environment['RUST_LOG']).toBe('debug');
+    expect(result.isNetsimLogGuarded).toBe(false);
+  });
+
+  it('should never mutate the environment it extends', () => {
+    const baseEnvironment: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
+    buildEmulatorEnvironment(baseEnvironment);
+    expect(baseEnvironment).toStrictEqual({ PATH: '/usr/bin' });
+  });
+});
 
 describe('buildEmulatorArguments', () => {
   it('should include the AVD name', () => {

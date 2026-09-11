@@ -29,7 +29,8 @@
  * A probe that booted with its own hand-written flag list would measure a
  * configuration nothing else uses, and every conclusion drawn from it would be
  * about that configuration. So the arguments come from
- * {@link buildEmulatorArguments}, the binary from
+ * {@link buildEmulatorArguments} (and the environment from
+ * {@link buildEmulatorEnvironment}), the binary from
  * {@link resolveEmulatorBinaryPath}, the verdict from
  * {@link resolveEmulatorLivenessVerdict} and its explanation from
  * {@link buildEmulatorLivenessMessage} — the same four the transport uses. The
@@ -71,7 +72,10 @@ import {
 } from '../src/adb-device-list.ts';
 import { resolveEmulatorBinaryPath } from '../src/android-sdk.ts';
 import { checkIsEmulatorDeviceId } from '../src/avd-probe-verdict.ts';
-import { buildEmulatorArguments } from '../src/emulator-arguments.ts';
+import {
+  buildEmulatorArguments,
+  buildEmulatorEnvironment
+} from '../src/emulator-arguments.ts';
 import {
   parsePosixProcessList,
   parseWindowsTaskList,
@@ -173,6 +177,8 @@ const emulatorArguments = buildEmulatorArguments({
   isHidden: !values.visible,
   shouldReuseSnapshot: values['reuse-snapshot']
 });
+// The same environment as a run, so a long watch cannot fill the drive with netsimd's log either (L56).
+const emulatorEnvironment = buildEmulatorEnvironment(process.env).environment;
 
 try {
   await runProbe();
@@ -365,7 +371,7 @@ async function runProbe(): Promise<void> {
   const emulatorBinary = resolveEmulatorBinaryPath();
   console.log(`Booting: ${emulatorBinary} ${emulatorArguments.join(' ')}`);
 
-  const emulator = spawn(emulatorBinary, emulatorArguments, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const emulator = spawn(emulatorBinary, emulatorArguments, { env: emulatorEnvironment, stdio: ['ignore', 'pipe', 'pipe'] });
   let emulatorOutput = '';
   function captureOutput(chunk: Buffer): void {
     emulatorOutput += chunk.toString();
