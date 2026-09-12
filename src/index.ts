@@ -111,16 +111,16 @@ export type {
   ResolveElectronCompatibilityParams
 } from './electron-compatibility.ts';
 export { resolveElectronCompatibility } from './electron-compatibility.ts';
-export type { EvalCapExceededErrorConstructorParams } from './eval-cap-exceeded-error.ts';
-export {
-  EvalCapExceededError,
-  isScriptTimeoutError
-} from './eval-cap-exceeded-error.ts';
 export type {
   EmulatorDeviceCandidate,
   SelectEmulatorDeviceIdParams
 } from './emulator-device-id.ts';
 export { selectEmulatorDeviceId } from './emulator-device-id.ts';
+export type { EvalCapExceededErrorConstructorParams } from './eval-cap-exceeded-error.ts';
+export {
+  EvalCapExceededError,
+  isScriptTimeoutError
+} from './eval-cap-exceeded-error.ts';
 export type {
   ClickElementParams,
   ClickMouseParams,

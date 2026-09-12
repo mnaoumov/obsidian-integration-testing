@@ -873,12 +873,14 @@ export class AppiumTransport implements ObsidianTransport {
     const cap = new Promise<never>((_resolve, reject) => {
       capTimer = setTimeout(() => {
         this.isRecoveringFromCapOverrun = true;
-        reject(new EvalCapExceededError({
-          capInMilliseconds: budgetInMilliseconds,
-          cause: new Error(`The Appium Execute Script carrying this closure did not answer within ${String(budgetInMilliseconds)}ms.`),
-          optionName: 'scriptTimeoutInMilliseconds',
-          transportName: 'Android (Appium)'
-        }));
+        reject(
+          new EvalCapExceededError({
+            capInMilliseconds: budgetInMilliseconds,
+            cause: new Error(`The Appium Execute Script carrying this closure did not answer within ${String(budgetInMilliseconds)}ms.`),
+            optionName: 'scriptTimeoutInMilliseconds',
+            transportName: 'Android (Appium)'
+          })
+        );
       }, budgetInMilliseconds);
     });
 
