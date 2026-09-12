@@ -124,7 +124,7 @@ describe('mobile trusted input', () => {
 
         try {
           await lib.clickElement({ element: target });
-          await lib.waitUntil({ predicate: () => events.some((event) => event.type === 'click') });
+          await lib.waitUntil({ message: 'the tap to produce a click', predicate: () => events.some((event) => event.type === 'click') });
 
           return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
         } finally {
@@ -164,7 +164,7 @@ describe('mobile trusted input', () => {
         document.addEventListener('keydown', listener, { capture: true });
         try {
           await lib.pressKey({ key: 'Escape' });
-          await lib.waitUntil({ predicate: () => events.length > 0 });
+          await lib.waitUntil({ message: 'a keydown to reach the document', predicate: () => events.length > 0 });
 
           return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
         } finally {
@@ -218,9 +218,13 @@ describe('mobile trusted input', () => {
   it('should open a REAL Obsidian menu from a long press, rather than tapping the element', async () => {
     const result = await evalInObsidian({
       async callback({ app, lib }): Promise<LongPressResult> {
+        // Sized against the transport's 30s per-eval cap: four attempts at 1.5s is 6s of drawer opening,
+        // Which leaves the 600ms press and the 5s menu wait below a wide margin under it.
+        const DRAWER_OPEN_ATTEMPT_COUNT = 4;
+        const DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS = 1500;
+
         // The `note.md` the suite populates is what gets pressed — the test above proves it is there.
         const leaf = app.workspace.getLeavesOfType('file-explorer')[0];
-        app.workspace.leftSplit.expand();
         if (leaf) {
           await app.workspace.revealLeaf(leaf);
         }
@@ -241,10 +245,62 @@ describe('mobile trusted input', () => {
           });
         }
 
-        await lib.waitUntil({ predicate: () => findVisibleNavFile() !== undefined });
+        // What the explorer actually rendered is the half of the answer a bare timeout throws away, and
+        // It is the half that decides: a drawer that never opened, a vault that came up empty, and an item
+        // Laid out past the viewport all produce the same silence otherwise.
+        function describeNavFiles(): string {
+          const split = `left split ${app.workspace.leftSplit.collapsed ? 'collapsed' : 'expanded'}`;
+          const explorer = leaf ? 'file-explorer leaf present' : 'NO file-explorer leaf';
+          const viewport = `viewport ${String(globalThis.innerWidth)}x${String(globalThis.innerHeight)}`;
+          const items = [...document.querySelectorAll<HTMLElement>('.nav-file-title')];
+          if (items.length === 0) {
+            return `no .nav-file-title at all, ${split}, ${explorer}, ${viewport}`;
+          }
+
+          const boxes = items.map((item) => {
+            const rect = item.getBoundingClientRect();
+            return `[${String(Math.round(rect.left))},${String(Math.round(rect.top))} ${String(Math.round(rect.width))}x${String(Math.round(rect.height))}]`;
+          });
+          return `${String(items.length)} .nav-file-title at ${boxes.join(' ')}, ${split}, ${explorer}, ${viewport}`;
+        }
+
+        // Opening the drawer ONCE is not enough, and re-asserting it on every poll is worse than useless.
+        // Measured over six consecutive runs (2026-09-12): `expand()` takes — `collapsed` goes false and
+        // The drawer starts sliding in — and then, ~100ms later and unprompted, `collapsed` flips back to
+        // True and the drawer slides straight back out, ending hidden at 0x0 with its item still in the
+        // DOM. `revealLeaf` is not the trigger: dropping that call leaves the timeline identical. Nor is
+        // It slowness, since five further seconds of polling never bring the drawer back.
+        //
+        // The collapse is ONE-SHOT, so re-opening does work — but only from REST. `expand()` is NOT
+        // Idempotent mid-animation: called while the drawer is sliding it leaves the element hidden with
+        // `collapsed === false`, stuck that way for the whole of the remaining wait. An attempt timeout
+        // Comfortably longer than the ~300ms slide is what guarantees the next `expand()` is issued from
+        // Rest rather than into a moving drawer.
+        for (let attempt = 1; attempt <= DRAWER_OPEN_ATTEMPT_COUNT; attempt++) {
+          if (app.workspace.leftSplit.collapsed) {
+            app.workspace.leftSplit.expand();
+          }
+
+          try {
+            await lib.waitUntil({
+              message: 'the file explorer to render a `.nav-file-title` whose centre is on screen',
+              predicate: () => findVisibleNavFile() !== undefined,
+              timeoutInMilliseconds: DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS
+            });
+            break;
+          } catch (error) {
+            if (attempt === DRAWER_OPEN_ATTEMPT_COUNT) {
+              throw new Error(
+                `The left drawer never stayed open long enough to press a .nav-file-title, after ${String(attempt)} attempts: ${describeNavFiles()}`,
+                { cause: error }
+              );
+            }
+          }
+        }
+
         const navFile = findVisibleNavFile();
         if (!navFile) {
-          throw new Error('The file explorer rendered no visible `.nav-file-title` to long-press.');
+          throw new Error(`The file explorer rendered no visible .nav-file-title to long-press: ${describeNavFiles()}`);
         }
 
         const events: ObservedEvent[] = [];
@@ -256,7 +312,21 @@ describe('mobile trusted input', () => {
         navFile.addEventListener('contextmenu', listener, { capture: true });
         try {
           await lib.clickElement({ button: 'right', element: navFile });
-          await lib.waitUntil({ predicate: () => document.querySelector('.menu') !== null });
+          try {
+            await lib.waitUntil({
+              message: 'the long press to open a `.menu`',
+              predicate: () => document.querySelector('.menu') !== null
+            });
+          } catch (error) {
+            // Which events the press delivered is the whole diagnosis when no menu appears: a trusted
+            // `contextmenu` with none of Obsidian's menu behind it is a consumer problem, while no
+            // `contextmenu` at all is a gesture one. Losing that list to the timeout would leave the two
+            // Indistinguishable.
+            const observed = events.length === 0
+              ? 'none'
+              : events.map((event) => `${event.type}(isTrusted=${String(event.isTrusted)})`).join(', ');
+            throw new Error(`The long press opened no .menu. Events on the pressed element: ${observed}`, { cause: error });
+          }
 
           return {
             events,
