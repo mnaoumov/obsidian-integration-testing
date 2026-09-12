@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import {
+  closeSync,
   mkdtempSync,
+  openSync,
+  readFileSync,
   rmSync,
   writeFileSync
 } from 'node:fs';
@@ -21,6 +24,7 @@ import type { EmulatorMarker } from './emulator-marker.ts';
 import {
   buildEmulatorReaperArguments,
   buildEmulatorReaperBootstrap,
+  buildEmulatorReaperRelayBootstrap,
   EMULATOR_REAPER_ENTRY_NAME,
   EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES,
   parseEmulatorReaperArguments,
@@ -31,6 +35,24 @@ import {
 const STARTED_AT_IN_MILLISECONDS = 1_757_600_000_000;
 const LIVE_PID = 101;
 const DEAD_PID = 202;
+const RELAY_TEST_TIMEOUT_IN_MILLISECONDS = 30_000;
+const RELAY_RECORD_WAIT_IN_MILLISECONDS = 20_000;
+const RELAY_RECORD_POLL_INTERVAL_IN_MILLISECONDS = 50;
+
+/**
+ * What the fixture reaper reports about itself, so the relay's one property can be asserted.
+ */
+interface RelayRecord {
+  /**
+  The arguments the bootstrap handed it.
+   */
+  argv: string[];
+
+  /**
+  Its parent — the relay, which has already exited.
+   */
+  ppid: number;
+}
 
 function buildMarker(overrides?: Partial<EmulatorMarker>): EmulatorMarker {
   return {
@@ -204,4 +226,79 @@ describe('buildEmulatorReaperBootstrap', () => {
     expect(result.status).toBe(1);
     expect(String(result.stderr)).toContain('reaper blew up');
   });
+});
+
+describe('buildEmulatorReaperRelayBootstrap', () => {
+  /*
+   * The relay exists for exactly one property — the reaper must not be a child
+   * of the run that asked for one, or a kill that walks the run's process tree
+   * takes it too — so the test asserts that property against real processes.
+   * It fails against a spawn that skips the relay: there the reaper's parent is
+   * the caller, and the caller is still running.
+   */
+  let fixtureDirectory = '';
+
+  beforeAll(() => {
+    fixtureDirectory = mkdtempSync(join(tmpdir(), 'emulator-reaper-relay-'));
+    writeFileSync(
+      join(fixtureDirectory, 'entry.mjs'),
+      `import process from 'node:process';\nexport function ${EMULATOR_REAPER_ENTRY_NAME}(argv) { console.log(JSON.stringify({ argv, ppid: process.ppid })); }\n`
+    );
+  });
+
+  afterAll(() => {
+    rmSync(fixtureDirectory, { force: true, recursive: true });
+  });
+
+  it('starts the reaper under a parent that has already exited, and keeps its output on the spawner\'s log', async () => {
+    // A file descriptor, not a pipe: the spawner hands the reaper its capped log this way, and a pipe would keep `spawnSync` waiting for the reaper itself.
+    const logFilePath = join(fixtureDirectory, 'relay.log');
+    const logFileDescriptor = openSync(logFilePath, 'w');
+    let relayResult: ReturnType<typeof spawnSync>;
+    try {
+      relayResult = spawnSync(
+        process.execPath,
+        [
+          '-e',
+          buildEmulatorReaperRelayBootstrap(),
+          buildEmulatorReaperBootstrap(),
+          pathToFileURL(join(fixtureDirectory, 'entry.mjs')).href,
+          'obsidian_test',
+          '42'
+        ],
+        { stdio: ['ignore', logFileDescriptor, logFileDescriptor] }
+      );
+    } finally {
+      closeSync(logFileDescriptor);
+    }
+
+    // `spawnSync` returning at all is the first half of the property: the relay exited on its own, without waiting for the reaper.
+    expect(relayResult.status).toBe(0);
+
+    const record: RelayRecord = await readRelayRecord(logFilePath);
+
+    expect(record.argv).toEqual(['obsidian_test', '42']);
+    // The second half: the reaper's parent is that already-exited relay, so no edge leads back to this process.
+    expect(record.ppid).toBe(relayResult.pid);
+    expect(record.ppid).not.toBe(process.pid);
+  }, RELAY_TEST_TIMEOUT_IN_MILLISECONDS);
+
+  async function readRelayRecord(logFilePath: string): Promise<RelayRecord> {
+    // The reaper outlives the relay by design, so its line reaches the log after `spawnSync` has already returned.
+    const deadline = Date.now() + RELAY_RECORD_WAIT_IN_MILLISECONDS;
+    for (;;) {
+      const line = readFileSync(logFilePath, 'utf-8').trim();
+      if (line) {
+        return JSON.parse(line) as RelayRecord;
+      }
+
+      if (Date.now() > deadline) {
+        throw new Error(`The reaper wrote nothing to ${logFilePath} within ${String(RELAY_RECORD_WAIT_IN_MILLISECONDS)}ms.`);
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, RELAY_RECORD_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+  }
 });
