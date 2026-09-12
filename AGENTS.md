@@ -3408,7 +3408,8 @@ The race — a SIGKILLed run with the next one starting at once:
 The race came out on the "next run wins" side, which is the harder one to get right: the reaper stood down
 without touching an emulator another run had adopted. The other side — the reaper taking the lock first,
 after which the next run waits and boots fresh — was exercised with stand-in processes rather than a real
-emulator. The one failing test in the normal run is the long-press menu timeout, which fails on `main` too.
+emulator. One test failed in that run — the long-press menu timeout, which failed on `main` too. It was
+diagnosed and fixed afterwards; L57 records what it was.
 
 ### The boot window: the marker is written from the launch, not from the device
 
@@ -3494,6 +3495,49 @@ A normal run, all three phases in order:
    23:30:50.753  the reaper exits itself: "The emulator was stopped; nothing left to watch."
 ```
 
-After each: no `qemu*`, no `netsimd`, no marker. The one failing test in the normal run is the long-press
-menu timeout, which fails on `main` too. A short-lived `emulator.exe` was again visible for a few seconds
+After each: no `qemu*`, no `netsimd`, no marker. One test failed in that run — the long-press menu
+timeout, which failed on `main` too, and was diagnosed and fixed afterwards (L57). A short-lived `emulator.exe` was again visible for a few seconds
 after the verified stop — the emulator's own shutdown process, as recorded above, not a leak.
+
+## L57. Obsidian re-collapses the mobile drawer right after `expand()`, and `expand()` is not idempotent mid-slide
+
+A test that needs a real `.nav-file-title` to press has to open the left drawer, and opening it once does
+not do that. Measured over six consecutive Android runs (2026-09-12) with a per-poll timeline taken inside
+the guest:
+
+```text
++0ms    collapsed=false  box=none             expand() took; the explorer has not rendered its item yet
++52ms   collapsed=false  box=-364,65 352x37   item exists, full size, drawer sliding in
++104ms  collapsed=true   box=-277,65 352x37   collapsed flips back UNPROMPTED, mid-slide
++361ms  collapsed=true   box=0,0 0x0          drawer hidden; the item stays in the DOM at zero size
+```
+
+**The item is in the DOM the whole time.** It is the ancestor that is not laid out, so every
+`querySelector` for `.nav-file-title` succeeds while every `getBoundingClientRect()` comes back `0x0`. A
+predicate that waits on the element merely existing is therefore satisfied instantly and wrongly; one that
+waits on its centre being inside the viewport is what actually waits for the drawer — which is the reason
+the wait is written the way it is, quite apart from the "Position out of bounds" rejection it also avoids.
+
+**`revealLeaf` is not the trigger.** Dropping `await app.workspace.revealLeaf(leaf)` entirely leaves the
+timeline identical, collapse included — and the explorer still renders its item. Nor is this slowness:
+five further seconds of polling never bring the drawer back, so a larger timeout buys nothing at all. The
+collapse is ONE-SHOT, part of Obsidian settling the vault it has just opened, which is what makes
+re-opening the right answer rather than waiting longer.
+
+**But re-asserting `expand()` on every poll is worse than the bug it is meant to fix.** `expand()` is not
+idempotent mid-animation: called while the drawer is sliding, it leaves the element hidden at `0x0` with
+`collapsed === false` — stuck in that self-contradiction for the remainder of the wait, so the predicate
+can never pass and the state now lies about itself. A run that re-expanded on every poll got exactly one
+re-expand in and then sat in that state for 4.9 s.
+
+**So the drawer is re-opened only from REST**, which an attempt timeout comfortably longer than the ~300ms
+slide guarantees: by the time an attempt gives up, whatever the drawer was doing has finished. The
+long-press test loops four 1.5 s attempts, sized against the transport per-eval cap of 30 s
+(`DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS`), so the 6 s worst case plus the 600 ms press and the 5 s menu
+wait stay well inside it.
+
+**Every wait in that suite now carries a `message`.** `lib.waitUntil` appends one to its timeout text, and
+the two waits in the long-press test had none — which is the whole reason a deterministic failure,
+reproduced on run after run, could not say which of the two had expired. A wait without a message is a
+timeout that names nothing. The same failure now also reports what the explorer actually held, because "no
+item was on screen" and "here is the item, and its box is 0x0" are different amounts of answer.
