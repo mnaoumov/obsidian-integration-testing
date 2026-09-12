@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 12.2.0
+
+- feat(app-config): add a per-test seam for a vault config key
+- fix(android): keep the emulator reaper alive through a process-tree kill
+- docs(android): fix a garbled clause in the drawer-retry comment
+- fix(android): make the long-press menu test open the drawer reliably
+- feat(transport): land the per-eval cap on both transports
+- fix(emulator): record an emulator from its launch, not from its device
+- fix(scripts): reconcile the shared helper copies across the sibling projects
+- fix(emulator): stop an emulator whose runner was killed, with no run after it
+- fix(emulator): stop every emulator the harness starts, and cap netsimd's log
+- chore: update libs
+- docs(agents): record that trusted input is claimed once across every attached host
+
 ## 12.1.2
 
 - fix(mobile-input): inject each trusted gesture once, however many hosts are attached
