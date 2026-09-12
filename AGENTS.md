@@ -1636,6 +1636,11 @@ cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that 
 - **`scripts/helpers/exec.ts` gained an `env` option** — `docs:dev` needs `ASTRO_DEV_BACKGROUND=1`, and
   `CHILD_ENV` snapshots `process.env` at module load, so setting it in the script would not have reached
   the child.
+  That option only reached the child on one of the two spawn paths, though: `spawnViaShell`'s shell branch
+  passed the module-load snapshot `CHILD_ENV` rather than the merged object, so `docs:dev` — an array
+  command with no newline in it, which takes exactly that branch — never saw
+  `ASTRO_DEV_BACKGROUND=1` at all. Fixed when the shared `scripts/helpers/` copies were reconciled across
+  the sibling projects; both branches now pass the merged environment.
 - **`src/type-guards.ts` gained `assertNever`** — the vendored `link-check.ts` imports `obsidian-dev-utils`'.
 - **`docs-link-check.ts` rewrites `npmjs.com/package/x` → `registry.npmjs.org/x`** before fetching; npmjs
   answers an unattended `fetch` with 403. Same rewrite `scripts/helpers/markdownlint.ts` gives linkinator.
