@@ -22,15 +22,24 @@
  *   leftover nobody's to stop, for ever.
  *
  * The marker is the record: a small JSON sentinel per AVD next to the setup lock,
- * written once the emulator is up and removed only by a verified stop. It is
- * deliberately tolerant — a missing, unreadable or mismatched marker reads as
- * "not ours", the same answer the harness gave before markers existed.
+ * written from the moment the emulator is launched and removed only by a verified
+ * stop. It is deliberately tolerant — a missing, unreadable or mismatched marker
+ * reads as "not ours", the same answer the harness gave before markers existed.
+ *
+ * **It records a launch, not a booted emulator**, and that is the difference
+ * between covering the third case above and covering it only after the ~45s a
+ * cold boot takes. A launch-time marker names the `emulator` launcher alone and
+ * no device yet; the device id arrives when one appears, and the QEMU backend's
+ * PID once the boot completes. Each write keeps the original launch time, so the
+ * reaper armed by the first still recognizes the last as the same emulator.
  *
  * What makes a marker's emulator ours is evidence, not the file: at least one
  * PID it records must still be a **live emulator process** on the host (the
  * caller intersects with the process listing, not a bare signal-0 probe), so a
  * recycled PID or an emulator somebody booted by hand is never mistaken for one
- * this harness started.
+ * this harness started. A launch-time marker satisfies that as written, because
+ * `emulator-backend.ts` counts the `emulator` launcher as one of the emulator
+ * processes — which is why phasing the marker needed no change to the verdict.
  */
 
 import {
@@ -60,12 +69,15 @@ export interface EmulatorMarker {
   readonly avdName: string;
 
   /**
-  The adb serial of the device it serves, e.g. `emulator-5554`.
+   * The adb serial of the device it serves, e.g. `emulator-5554`. Absent while
+   * the emulator is still booting and no device has appeared yet — a marker is
+   * written from the launch, before there is anything to name.
    */
-  readonly deviceId: string;
+  readonly deviceId?: string | undefined;
 
   /**
-  The emulator processes the harness owns: the launcher plus the QEMU backend it forked.
+   * The emulator processes the harness owns: the launcher plus the QEMU backend
+   * it forked — or, until the device appears, the launcher alone.
    */
   readonly ownedEmulatorPids: readonly number[];
 
@@ -74,6 +86,22 @@ export interface EmulatorMarker {
    * that started it, or the one that later took it over as a leftover.
    */
   readonly ownerPid: number;
+
+  /**
+   * The emulator processes that were already running when this launch spawned
+   * its own — present only while the record is still provisional, i.e. before
+   * the backend's own PID is known.
+   *
+   * It is what makes a launch-time marker convictable at all. Killing the
+   * launcher does **not** kill the `qemu-system-*-headless` backend it forked
+   * (**L46**), so a record naming the launcher alone goes stale over an
+   * emulator that is still running — the leak this marker exists to prevent.
+   * With the snapshot, anything in the host's emulator listing that is not in
+   * it was forked by this launch, which is the same pre-launch diff the
+   * successful path uses (`emulator-backend.ts`) and the same one **L46**
+   * requires instead of a `qemu*` sweep.
+   */
+  readonly preLaunchEmulatorPids?: readonly number[] | undefined;
 
   /**
   When the emulator was started (`Date.now()` epoch milliseconds).
@@ -127,9 +155,9 @@ export interface WriteEmulatorMarkerParams {
   readonly avdName: string;
 
   /**
-  The adb serial of the device it serves.
+  The adb serial of the device it serves; omitted while the emulator is still booting.
    */
-  readonly deviceId: string;
+  readonly deviceId?: string | undefined;
 
   /**
   The emulator processes the harness owns.
@@ -137,9 +165,30 @@ export interface WriteEmulatorMarkerParams {
   readonly ownedEmulatorPids: readonly number[];
 
   /**
+  The emulator processes that predate this launch. Written only while the backend's own PID is not known yet.
+   */
+  readonly preLaunchEmulatorPids?: readonly number[] | undefined;
+
+  /**
   When the emulator was launched; omitted → now. A takeover keeps the original launch time.
    */
   readonly startedAtInMilliseconds?: number | undefined;
+}
+
+/**
+ * Says whether a marker still names a process that is running.
+ *
+ * A signal-0 probe, not the emulator listing `resolveEmulatorMarkerVerdict`
+ * intersects with: this answers the cheap question "is there anything left of
+ * what this marker recorded", which is what deciding whether a marker may be
+ * overwritten or removed needs. Convicting one as another run's leftover is the
+ * stronger question, and costs a host process listing.
+ *
+ * @param marker - The marker, or `undefined` when there is none.
+ * @returns `true` when the marker records a PID that is still alive.
+ */
+export function checkIsMarkedEmulatorRunning(marker: EmulatorMarker | undefined): boolean {
+  return marker?.ownedEmulatorPids.some((pid) => checkIsProcessAlive(pid)) ?? false;
 }
 
 /**
@@ -168,8 +217,7 @@ export function clearEmulatorMarker(avdName: string): void {
  * @param avdName - The AVD name.
  */
 export function clearEmulatorMarkerIfStopped(avdName: string): void {
-  const marker = readEmulatorMarker(avdName);
-  if (marker?.ownedEmulatorPids.some((pid) => checkIsProcessAlive(pid))) {
+  if (checkIsMarkedEmulatorRunning(readEmulatorMarker(avdName))) {
     return;
   }
 
@@ -244,14 +292,30 @@ export function resolveEmulatorMarkerVerdict(params: ResolveEmulatorMarkerVerdic
 }
 
 /**
- * Selects the marker's PIDs that are still live emulator processes.
+ * Selects the emulator processes a marker convicts: the PIDs it records that
+ * are still running, plus — while the record is still provisional — whatever
+ * the launch it describes has forked since.
+ *
+ * The second half is what makes a launch-time marker usable. It names the
+ * launcher, and killing the launcher leaves the QEMU backend running
+ * (**L46**), so without the `preLaunchEmulatorPids` diff a stop would kill the
+ * one process that does not hold the AVD and the marker would then read as
+ * stale over a live emulator. The diff claims exactly what the successful path
+ * claims — the emulator processes that appeared across this launch — and never
+ * one that predates it.
  *
  * @param marker - The marker.
  * @param liveEmulatorPids - The emulator processes currently running on the host.
- * @returns The marked PIDs still running, in marker order.
+ * @returns The marked PIDs still running, in marker order, then any this launch forked, in listed order.
  */
 export function selectLiveMarkedPids(marker: EmulatorMarker, liveEmulatorPids: readonly number[]): number[] {
-  return marker.ownedEmulatorPids.filter((pid) => liveEmulatorPids.includes(pid));
+  const livePids = marker.ownedEmulatorPids.filter((pid) => liveEmulatorPids.includes(pid));
+  const { preLaunchEmulatorPids } = marker;
+  if (preLaunchEmulatorPids === undefined) {
+    return livePids;
+  }
+
+  return [...livePids, ...liveEmulatorPids.filter((pid) => !preLaunchEmulatorPids.includes(pid) && !livePids.includes(pid))];
 }
 
 /**
@@ -263,9 +327,12 @@ export function selectLiveMarkedPids(marker: EmulatorMarker, liveEmulatorPids: r
 export function writeEmulatorMarker(params: WriteEmulatorMarkerParams): void {
   const marker: EmulatorMarker = {
     avdName: params.avdName,
-    deviceId: params.deviceId,
+    // Omitted rather than written empty while the emulator is still booting: the stop reads its absence as "no console to shut down".
+    ...(params.deviceId !== undefined && { deviceId: params.deviceId }),
     ownedEmulatorPids: [...params.ownedEmulatorPids],
     ownerPid: process.pid,
+    // Dropped by the write that learns the backend's PID: from then on the owned set is exact and a diff would only widen it.
+    ...(params.preLaunchEmulatorPids !== undefined && { preLaunchEmulatorPids: [...params.preLaunchEmulatorPids] }),
     startedAtInMilliseconds: params.startedAtInMilliseconds ?? Date.now()
   };
 
@@ -299,23 +366,25 @@ function parseMarker(parsed: unknown, avdName: string): EmulatorMarker | undefin
   }
 
   const record = parsed as Record<string, unknown>;
-  const { avdName: markedAvdName, deviceId, ownedEmulatorPids, ownerPid, startedAtInMilliseconds } = record;
+  const { avdName: markedAvdName, deviceId, ownedEmulatorPids, ownerPid, preLaunchEmulatorPids, startedAtInMilliseconds } = record;
 
   if (
     markedAvdName !== avdName
-    || typeof deviceId !== 'string'
+    || (deviceId !== undefined && typeof deviceId !== 'string')
     || typeof ownerPid !== 'number'
     || typeof startedAtInMilliseconds !== 'number'
     || !checkIsNumberArray(ownedEmulatorPids)
+    || (preLaunchEmulatorPids !== undefined && !checkIsNumberArray(preLaunchEmulatorPids))
   ) {
     return undefined;
   }
 
   return {
     avdName,
-    deviceId,
+    ...(deviceId !== undefined && { deviceId }),
     ownedEmulatorPids,
     ownerPid,
+    ...(preLaunchEmulatorPids !== undefined && { preLaunchEmulatorPids }),
     startedAtInMilliseconds
   };
 }

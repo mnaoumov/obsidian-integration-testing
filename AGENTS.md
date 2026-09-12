@@ -3154,17 +3154,19 @@ Ownership lived only in the memory of the process that launched the emulator. It
 ### The marker
 
 `emulator-marker.ts` writes `<tmpdir>/obsidian-integration-testing/<avdName>.emulator.json` =
-`{ avdName, deviceId, ownedEmulatorPids, ownerPid, startedAtInMilliseconds }` as soon as a started emulator
-connects. That includes a start from a worker, which is the whole fix for **A**. Only a **verified** stop
-removes it. `clearEmulatorMarkerIfStopped` also re-checks the marker's own PIDs, because a stop is verified
+`{ avdName, deviceId, ownedEmulatorPids, ownerPid, preLaunchEmulatorPids, startedAtInMilliseconds }` from the
+moment a start is **launched** — see *The boot window* below for the three phases, of which the first two
+carry no backend PID and the first no device either. That includes a start from a worker, which is the whole
+fix for **A**. Only a **verified** stop removes it. `clearEmulatorMarkerIfStopped` also re-checks the marker's own PIDs, because a stop is verified
 against the PIDs *it* owned: a launch that died instantly owns nothing and would otherwise erase the record
 of an emulator still running.
 
 **Evidence decides, not the file.** `resolveEmulatorMarkerVerdict` (pure, unit-tested) returns one of three
 answers:
 
-- `stale-marker`: none of the marker's PIDs is in the host's **emulator process listing**. The check is
-  not a signal-0 probe, so a recycled PID never convicts.
+- `stale-marker`: none of the marker's PIDs is in the host's **emulator process listing**, and — while the
+  record is still provisional — nothing in that listing postdates its `preLaunchEmulatorPids` snapshot
+  either. The check is not a signal-0 probe, so a recycled PID never convicts.
 - `in-use-by-live-run`: the owner PID is alive and not the caller.
 - `harness-leftover`: everything else.
 
@@ -3281,12 +3283,6 @@ says a live run holds the lock right now. A run that takes no lock, such as a ha
 lock would read as "the run is over". A spawn failure is logged and never fails the launch. A reaper that
 cannot read the lock gives up rather than guess.
 
-**What it still does not cover: a kill during the boot itself.** The marker — and therefore the reaper —
-is written once the device connects, about 45 s into a cold boot. A runner killed inside that window
-leaves a running emulator with no marker at all, which every later run correctly refuses to touch (**L46**).
-Closing it means writing the marker at launch, from the launcher PID, and filling in the backend PIDs once
-the device appears. That window predates the reaper and is tracked separately.
-
 **Duplicates are harmless.** A takeover arms a second reaper for an emulator whose first reaper may still
 be watching. That covers emulators started by an older harness, which have no reaper at all. The first
 reaper to take the lock stops the emulator; the other then finds the marker gone.
@@ -3355,3 +3351,91 @@ The race came out on the "next run wins" side, which is the harder one to get ri
 without touching an emulator another run had adopted. The other side — the reaper taking the lock first,
 after which the next run waits and boots fresh — was exercised with stand-in processes rather than a real
 emulator. The one failing test in the normal run is the long-press menu timeout, which fails on `main` too.
+
+### The boot window: the marker is written from the launch, not from the device
+
+The marker above used to be written once the device connected, about 45 s into a cold boot, and the reaper
+was armed with it. A runner killed inside that window left a running emulator with **no marker at all**,
+which every later run correctly refuses to touch (**L46**) and no reaper was watching — the pre-marker
+shape, surviving inside the boot. It is now written **three times**, all carrying the same
+`startedAtInMilliseconds` so the reaper armed by the first recognizes the last as the same emulator:
+
+1. **At the launch**, from the launcher's PID, with no device and with the pre-launch emulator-process
+   snapshot. The reaper is armed here.
+2. **When the device appears**, before the boot/idle/network gates, adding the `deviceId`.
+3. **On success**, the write that always existed: the real owned PIDs (launcher + backend) and the device,
+   dropping the snapshot because the owned set is now exact.
+
+**The verdict needed no change, and that is not luck.** `resolveEmulatorMarkerVerdict` convicts a marker
+only when one of its PIDs is in the host's **emulator** listing, and
+`EMULATOR_BACKEND_NAME_PATTERN` matches the bare `emulator` launcher as well as both QEMU builds. So a
+launch-time marker is evidence by the same rule as a completed one, and the `stale-marker` reasoning — *a
+marker proves nothing without a live emulator process* — stands as written.
+
+**Why the marker also carries `preLaunchEmulatorPids`.** The launcher is not enough on its own, and the
+first evidence run below is why: **the launcher exits with its parent while the
+`qemu-system-x86_64-headless` backend it forked keeps running** — the same asymmetry **L46** is built on,
+reached from the other end. A record naming the launcher alone therefore goes stale over a live emulator,
+which is the leak the marker exists to prevent. The snapshot fixes it without a new liberty:
+`selectLiveMarkedPids` adds every emulator process in the listing that is **not** in the snapshot, which is
+the identical pre-launch diff the success path makes, and still never touches a backend that predates the
+launch.
+
+Three consequences worth keeping:
+
+- **Phase 2 deliberately makes no host process listing.** That query is budgeted at
+  `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` (30 s) for exactly this contended window, and spending it
+  inside the boot path would eat the readiness budgets that follow. The device id is the half that matters
+  there, because the console shutdown is the only stop that releases `multiinstance.lock`.
+- **A launch never overwrites a marker whose processes are still running.** A launch can happen while an
+  older emulator of the same AVD is still up and recorded — an `offline` leftover the probe cannot see,
+  which is the launch that dies on `Running multiple emulators with the same AVD`. Clobbering that marker
+  would erase the only record of a running emulator, the very thing `clearEmulatorMarkerIfStopped` exists
+  to prevent, so the record then waits for the success path as before.
+- **The reaper never reads a provisional marker as stopped.** Its 5 s poll is signal-0 only, and a
+  provisional marker's PID list is knowingly incomplete, so `resolveEmulatorReaperWatch` keeps watching one
+  and leaves the judgement to the reclaim, which does make the listing.
+
+**The cost, measured below: a device-less stop takes ~21 s rather than ~5 s.** With no device there is no
+console to shut down, and the launcher's tree kill does not reach the backend, so the stop waits out
+`EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS` before escalating to the PID the diff identified. It still ends in a
+**verified** stop; it just gets there the slow way.
+
+### Boot-window evidence (2026-09-11, this host)
+
+Two runs of `integration-tests:android-trusted-input`, each killed while `adb devices` was still empty, and
+one normal run. The kill is `Stop-Process -Force` on the npx shim, the Vitest main process holding the lock,
+and the worker that owns the emulator — not a descendant sweep, which would take the detached reaper with
+it (it is a `node` child of the run; that is a Task-Manager-tree hazard the reaper has always had).
+
+```text
+The window itself — a run killed 12s in, with the reaper left to do its job:
+   23:28:50  marker appeared, 12s after launch and before any device:
+             {"avdName":"obsidian_test","ownedEmulatorPids":[31644],"ownerPid":34016,
+              "preLaunchEmulatorPids":[],"startedAtInMilliseconds":1789190930338}
+   23:28:50  KILLED npx 21864, vitest main 27196, worker 34016
+   23:28:52  emulator launcher 31644 is GONE; qemu-system-x86_64-headless 29448 and netsimd are running;
+             adb devices shows emulator-5554 offline    ← the leak, exactly as before the fix
+   23:28:55  Stealing stale 'android' setup lock from pid 27196 (obsidian-android-appium)
+   23:28:55  Stopping the emulator for AVD "obsidian_test" (no device: it was still booting when it was
+             recorded): this harness started it 6s ago, and no live run is left to stop it.
+   23:29:16  escalating to the emulator PID(s) this run owns: [29448]      ← the pre-launch diff, not the marker's PID
+   23:29:17  Auto-started emulator stopped after escalation (verified: AVD "obsidian_test" released)
+   23:29:18  no emulator process, no marker, no lock — 28s after the launch
+
+The reclaim in isolation — the same leftover, judged by a reaper started by hand against its marker:
+   the marker's only recorded PID (launcher 10260) was already dead, and the stop still escalated to
+   [15976], the backend the snapshot identified. Verified released; marker gone.
+
+A normal run, all three phases in order:
+   23:29:40.539  Recorded the emulator launch for AVD "obsidian_test" (launcher PID 36444) before its device exists
+   23:29:40.547  Emulator reaper armed for AVD "obsidian_test" (PID 34448)      ← armed once, at the launch
+   23:29:56.981  Recorded device emulator-5554 against the launch marker         ← 16s later, phase 2
+   23:30:21.582  Emulator "obsidian_test" started … (owned emulator PIDs: [36444, 29104])
+   23:30:48.702  Auto-started emulator stopped (verified: … on device emulator-5554 released)
+   23:30:50.753  the reaper exits itself: "The emulator was stopped; nothing left to watch."
+```
+
+After each: no `qemu*`, no `netsimd`, no marker. The one failing test in the normal run is the long-press
+menu timeout, which fails on `main` too. A short-lived `emulator.exe` was again visible for a few seconds
+after the verified stop — the emulator's own shutdown process, as recorded above, not a leak.

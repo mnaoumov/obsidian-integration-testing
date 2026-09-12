@@ -106,6 +106,7 @@ import {
   resolveEmulatorLivenessVerdict
 } from './emulator-liveness.ts';
 import {
+  checkIsMarkedEmulatorRunning,
   clearEmulatorMarker,
   clearEmulatorMarkerIfStopped,
   readEmulatorMarker,
@@ -561,6 +562,51 @@ interface ReclaimUnstoppedAppiumServerParams {
   The server's URL.
    */
   readonly url: URL;
+}
+
+/**
+ * Parameters for {@link AppiumTransportFactory.recordEmulatorLaunchDevice}.
+ */
+interface RecordEmulatorLaunchDeviceParams {
+  /**
+  The AVD whose launch was recorded.
+   */
+  readonly avdName: string;
+
+  /**
+  The device that has just appeared in ADB.
+   */
+  readonly deviceId: string;
+
+  /**
+  When the emulator was launched — what identifies the launch this device belongs to.
+   */
+  readonly launchedAtInMilliseconds: number;
+}
+
+/**
+ * Parameters for {@link AppiumTransportFactory.recordEmulatorLaunch}.
+ */
+interface RecordEmulatorLaunchParams {
+  /**
+  The AVD being started.
+   */
+  readonly avdName: string;
+
+  /**
+  The launcher just spawned for it.
+   */
+  readonly emulator: ProcessLaunch;
+
+  /**
+  When it was launched, which every later write of this marker keeps.
+   */
+  readonly launchedAtInMilliseconds: number;
+
+  /**
+  The emulator processes that predate the launch, so the backend it forks can be identified without a second snapshot.
+   */
+  readonly preLaunchEmulatorPids: readonly number[];
 }
 
 interface StartAppiumAndEmulatorParams {
@@ -1491,6 +1537,7 @@ class AppiumTransportFactory {
     }
     const launchedAtInMilliseconds = Date.now();
     const emulator = this.startEmulator(avdName, shouldReuseSnapshot, isEmulatorVisible);
+    const isRecordedFromLaunch = this.recordEmulatorLaunch({ avdName, emulator, launchedAtInMilliseconds, preLaunchEmulatorPids: emulatorPidsBefore });
 
     /*
      * The capture is NOT stopped here any more. It used to be, in a `finally`
@@ -1501,7 +1548,9 @@ class AppiumTransportFactory {
      */
     let actualDeviceId: string;
     try {
-      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts);
+      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts, (deviceId) => {
+        this.recordEmulatorLaunchDevice({ avdName, deviceId, launchedAtInMilliseconds });
+      });
     } catch (error: unknown) {
       /*
        * This emulator is ours and this is the last point anything holds it: a
@@ -1522,11 +1571,15 @@ class AppiumTransportFactory {
      * Recorded here — including when this code runs in a test worker, which is
      * the case the in-memory ownership lost: the worker dies without a
      * teardown, and the marker is what lets the run's global teardown, or the
-     * next run, find and stop what it started.
+     * next run, find and stop what it started. This write completes the record
+     * the launch opened: same launch time, now with the QEMU backend the
+     * launcher forked, which is the process that actually holds the AVD.
      */
     writeEmulatorMarker({ avdName, deviceId: actualDeviceId, ownedEmulatorPids, startedAtInMilliseconds: launchedAtInMilliseconds });
-    // The marker covers a run that ends or is followed by another; the reaper covers one killed with nothing after it.
-    this.armEmulatorReaper(avdName, launchedAtInMilliseconds);
+    if (!isRecordedFromLaunch) {
+      // The marker covers a run that ends or is followed by another; the reaper covers one killed with nothing after it.
+      this.armEmulatorReaper(avdName, launchedAtInMilliseconds);
+    }
     await this.suppressErrorDialogs(actualDeviceId);
     return {
       actualDeviceId,
@@ -1913,6 +1966,91 @@ class AppiumTransportFactory {
 
     this.log(`WARNING: ${provenance}, and it survived this run's kill too. Adopting it, which may fail mid-session.`);
     return false;
+  }
+
+  /**
+   * Records an emulator as this run's the moment it is launched, before it has
+   * a device — and arms its reaper there.
+   *
+   * The marker used to be written once the device connected, about 45s into a
+   * cold boot, and the reaper with it. A runner killed inside that window left a
+   * running emulator with **no marker at all**, which every later run correctly
+   * refuses to touch (**L46**) and no reaper was watching: the leftover was
+   * nobody's to stop, for ever. A launch-time marker closes that window with the
+   * one thing already known — the launcher's PID, which `emulator-backend.ts`
+   * counts as an emulator process, so the marker convicts as a
+   * `harness-leftover` exactly like a completed one — plus the pre-launch
+   * snapshot, which is what lets a later reclaim identify the backend the
+   * launcher forks without having been there to watch it.
+   *
+   * **It never overwrites a marker whose processes are still running.** A launch
+   * can happen while an older emulator of the same AVD is still up and recorded
+   * — an `offline` leftover the probe cannot see, which is the launch that dies
+   * on `Running multiple emulators with the same AVD`. Clobbering that marker
+   * would erase the only record of a running emulator, the very thing
+   * `clearEmulatorMarkerIfStopped` exists to prevent. In that case the record
+   * waits for the success path, as before.
+   *
+   * @param params - The AVD, its launcher, and when it was launched.
+   * @returns `true` when the launch was recorded and its reaper armed.
+   */
+  private recordEmulatorLaunch(params: RecordEmulatorLaunchParams): boolean {
+    const { avdName } = params;
+    const launcherPid = params.emulator.process.pid;
+    if (launcherPid === undefined) {
+      this.log(`The emulator launcher for AVD "${avdName}" reported no PID, so its launch cannot be recorded; it is recorded once its device connects.`);
+      return false;
+    }
+
+    const existingMarker = readEmulatorMarker(avdName);
+    if (existingMarker && (selectLiveMarkedPids(existingMarker, params.preLaunchEmulatorPids).length > 0 || checkIsMarkedEmulatorRunning(existingMarker))) {
+      this.log(`Not recording the launch of AVD "${avdName}" yet: its existing marker still names a running process, and that record is the only one of an emulator that may still be up.`);
+      return false;
+    }
+
+    writeEmulatorMarker({
+      avdName,
+      ownedEmulatorPids: [launcherPid],
+      preLaunchEmulatorPids: params.preLaunchEmulatorPids,
+      startedAtInMilliseconds: params.launchedAtInMilliseconds
+    });
+    this.log(`Recorded the emulator launch for AVD "${avdName}" (launcher PID ${String(launcherPid)}) before its device exists, so a kill during the boot still leaves it convictable.`);
+    this.armEmulatorReaper(avdName, params.launchedAtInMilliseconds);
+    return true;
+  }
+
+  /**
+   * Fills the device into the marker this launch wrote, as soon as one appears.
+   *
+   * Worth its own write because the console shutdown is the only stop that
+   * releases the AVD's `multiinstance.lock` (**L46**), and it needs a device to
+   * talk to. Deliberately **no** host process listing here: that query is
+   * budgeted at {@link HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS} for exactly
+   * this contended window, and spending it inside the boot path would eat the
+   * readiness budgets that follow. The backend PIDs arrive with the success
+   * write, one listing, as before.
+   *
+   * Only ever fills in **this** launch's marker: one carrying another launch
+   * time, or a device already, belongs to an emulator this run did not start.
+   *
+   * @param params - The AVD, the device that appeared, and the launch it belongs to.
+   */
+  private recordEmulatorLaunchDevice(params: RecordEmulatorLaunchDeviceParams): void {
+    const { avdName, deviceId } = params;
+    const marker = readEmulatorMarker(avdName);
+    if (!marker || marker.deviceId !== undefined || marker.startedAtInMilliseconds !== params.launchedAtInMilliseconds) {
+      return;
+    }
+
+    writeEmulatorMarker({
+      avdName,
+      deviceId,
+      ownedEmulatorPids: marker.ownedEmulatorPids,
+      // Still provisional: the backend's PID arrives with the success write, and until then the diff is what convicts it.
+      preLaunchEmulatorPids: marker.preLaunchEmulatorPids,
+      startedAtInMilliseconds: marker.startedAtInMilliseconds
+    });
+    this.log(`Recorded device ${deviceId} against the launch marker for AVD "${avdName}", so a stop from here on can shut it down over its console.`);
   }
 
   /**
@@ -2868,7 +3006,22 @@ class AppiumTransportFactory {
     );
   }
 
-  private async waitForNewDevice(deviceIdsBefore: string[], emulator: ProcessLaunch, timeouts: DeviceReadinessTimeouts): Promise<string> {
+  /**
+   * Waits for the emulator this run launched to produce a device, and for that
+   * device to become usable.
+   *
+   * @param deviceIdsBefore - The devices connected before the launch.
+   * @param emulator - The launcher, polled for an early exit.
+   * @param timeouts - The two post-boot readiness budgets.
+   * @param onDeviceAppeared - Called with the new device the moment it is listed, before the readiness gates.
+   * @returns The new device's id.
+   */
+  private async waitForNewDevice(
+    deviceIdsBefore: string[],
+    emulator: ProcessLaunch,
+    timeouts: DeviceReadinessTimeouts,
+    onDeviceAppeared: (deviceId: string) => void
+  ): Promise<string> {
     this.log(
       `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
@@ -2881,6 +3034,7 @@ class AppiumTransportFactory {
       if (newIds.length > 0) {
         const actualDeviceId = newIds[0] ?? '';
         this.log(`Device ${actualDeviceId} appeared in ADB, waiting for boot to complete...`);
+        onDeviceAppeared(actualDeviceId);
         await this.waitForBoot(actualDeviceId, deadline, emulator);
         await this.waitForDeviceReady(actualDeviceId, timeouts);
         await this.wakeScreen(actualDeviceId);
