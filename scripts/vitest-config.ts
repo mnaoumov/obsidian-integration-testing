@@ -67,10 +67,15 @@ const UNREACHABLE_CDP_PORT = 1;
 // Test is the death of the instance rather than anything in a vault.
 const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
 
-// The mobile trusted-input suite runs in its own project because it is the only one that needs a real
-// Android emulator through Appium (see L39). Keeping it out of the default `integration-tests` aggregate is
-// Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator.
-const ANDROID_TRUSTED_INPUT_TEST_FILE = 'src/mobile-trusted-input.android.integration.test.ts';
+// The Android suites run in their own project because they are the only ones that need a real Android
+// Emulator through Appium (see L39). Keeping them out of the default `integration-tests` aggregate is
+// Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator. They share
+// One project rather than taking one each, because each project boots its own emulator session — the cost
+// That dominates an Android run — and these files are serialized within it anyway.
+const ANDROID_TEST_FILES = [
+  'src/mobile-trusted-input.android.integration.test.ts',
+  'src/eval-cap.android.integration.test.ts'
+];
 
 // Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
 // Single shared window's GLOBAL focus and pointer, so pointer-dependent files cannot run against each
@@ -155,7 +160,7 @@ export const config = defineConfig({
             CONFIG_DIRECTORY_OVERRIDE_TEST_FILE,
             FAILED_SETUP_TEST_FILE,
             INSTANCE_DEATH_TEST_FILE,
-            ANDROID_TRUSTED_INPUT_TEST_FILE,
+            ...ANDROID_TEST_FILES,
             DESKTOP_TRUSTED_INPUT_TEST_FILE
           ],
           include: [INTEGRATION_TEST_FILES],
@@ -271,11 +276,11 @@ export const config = defineConfig({
           fileParallelism: false,
           // Takes the shared-emulator lock (L7). This project has no transport global setup, so it never
           // Goes through `coreSetup` — which is what normally acquires it.
-          globalSetup: ['./scripts/android-trusted-input-global-setup.ts'],
+          globalSetup: ['./scripts/android-global-setup.ts'],
           hookTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS,
-          include: [ANDROID_TRUSTED_INPUT_TEST_FILE],
+          include: ANDROID_TEST_FILES,
           maxWorkers: 1,
-          name: 'integration-tests:android-trusted-input',
+          name: 'integration-tests:android',
           setupFiles: [METADATA_SETUP_FILE, './scripts/android-transport-setup.ts'],
           testTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS
         }

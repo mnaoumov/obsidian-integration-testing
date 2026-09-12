@@ -210,6 +210,34 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly pluginEnableRetryDelayInMilliseconds?: number;
 
   /**
+   * Timeout in milliseconds for a single script executed inside Obsidian — the
+   * per-`evalInObsidian` cap on this transport.
+   *
+   * It is enforced by the transport itself, on the Node side, and is also sent as
+   * the W3C `timeouts.script` capability — but the capability is decoration.
+   * Measured on a live emulator: it is accepted and reads back as
+   * `30000` in the WebView context, and nothing ever acts on it. Over-cap
+   * closures ran past a 60s ceiling without WebDriver raising `script timeout`
+   * once, in both the sleeping and the spinning shape, with and without an
+   * explicit `setTimeouts`.
+   *
+   * What happens past roughly half a minute is worse than a late answer: the
+   * closure completes in the guest on schedule and its Execute Script response
+   * never reaches the client, so the call simply never returns. This timeout is
+   * what turns that silence into an {@link EvalCapExceededError} naming the
+   * closure as the cause.
+   *
+   * Raising it is almost never the right answer. A closure that needs to wait
+   * longer than this should not be waiting inside Obsidian at all — use
+   * `pollInObsidian`, which keeps each closure short and does the waiting
+   * from Node. The knob exists so the cap is explicit and matches
+   * {@link ObsidianCdpTransportOptions.commandTimeoutInMilliseconds} on desktop.
+   *
+   * @default `30000`
+   */
+  readonly scriptTimeoutInMilliseconds?: number;
+
+  /**
    * Timeout in milliseconds for establishing the Appium session (WebDriverIO
    * `remote()` — UiAutomator2 server install + app launch).
    *

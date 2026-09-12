@@ -1,7 +1,7 @@
 /**
  * @file
  *
- * Per-worker setup for the `integration-tests:android-trusted-input` project: points the harness at the
+ * Per-worker setup for the `integration-tests:android` project: points the harness at the
  * Android/Appium transport.
  *
  * `src/vitest/setup.ts` cannot be reused here — it reads the options a `globalSetup` published via

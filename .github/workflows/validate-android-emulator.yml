@@ -154,7 +154,7 @@ jobs:
       # `test:integration` deliberately excludes this project — that aggregate is
       # desktop and must not boot an emulator — so the project is named explicitly.
       - name: Run the Android integration project
-        run: npx vitest run --project integration-tests:android-trusted-input
+        run: npx vitest run --project integration-tests:android
 
       - name: Capture the emulator log
         if: always()

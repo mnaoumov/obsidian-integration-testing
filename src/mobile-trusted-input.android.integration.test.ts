@@ -9,7 +9,7 @@
  * CodeMirror, which gate on `e.isTrusted`, ignore it. That is the false-confidence failure mode the
  * trusted-input work exists to end, so it is checked directly rather than inferred from an effect.
  *
- * Runs in its own Vitest project (`integration-tests:android-trusted-input`) against a real emulator via
+ * Runs in its own Vitest project (`integration-tests:android`) against a real emulator via
  * Appium. It is deliberately NOT part of the default `integration-tests` aggregate, which is desktop.
  */
 

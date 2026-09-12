@@ -71,11 +71,16 @@ import {
   classifyAppStartupProbe,
   compareAppStartupMilestones
 } from './app-startup-progress.ts';
+import { DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS } from './appium-session-config.ts';
 import {
   decodeBase64Png,
   isPng
 } from './capture-screenshot.ts';
 import { errorToString } from './error-to-string.ts';
+import {
+  EvalCapExceededError,
+  isScriptTimeoutError
+} from './eval-cap-exceeded-error.ts';
 import { exec } from './exec.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
@@ -161,6 +166,17 @@ export interface AppiumTransportConfig {
   platform: 'android' | 'ios';
 
   /**
+   * The per-script cap, in milliseconds, this session was given as its W3C
+   * `timeouts.script` capability.
+   *
+   * Carried only so a script timeout can be reported with the number that
+   * produced it; the capability itself is set when the session is created.
+   *
+   * @default `30000`
+   */
+  scriptTimeoutInMilliseconds?: number;
+
+  /**
    * Whether registering a vault also prunes the **other** `temp-vault-*`
    * registrations earlier runs left in Obsidian Mobile's `localStorage`.
    *
@@ -201,6 +217,16 @@ const DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS = 180_000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
+/*
+ * Extra budget granted to the ONE eval that follows a cap overrun, on top of the cap itself. The
+ * abandoned closure keeps running in the guest, and Appium serializes commands per session, so the next
+ * command waits out whatever is left of it. Sized at the cap again, which is a pragmatic ceiling rather
+ * than a proof: a closure can outrun any number picked here. It does not need to be a proof, because a
+ * guest that is still busy after it simply produces another overrun on the next eval, which is granted the
+ * grace in turn — so the session recovers over successive evals instead of compounding, and every one of
+ * those evals reports the same honest diagnosis.
+ */
+const CAP_RECOVERY_GRACE_IN_MILLISECONDS = 30_000;
 
 // --- Console capture (Layer 2 of the plugin-load error surfacing) ---
 const CONSOLE_CAPTURE_MARKER_TAG = 'OIT_CAPTURE';
@@ -298,9 +324,19 @@ export class AppiumTransport implements ObsidianTransport {
    * can time out on slow emulators).
    */
   private isInWebViewContext = false;
+
+  /**
+   * Whether the previous eval ended in a cap overrun, so the next one is owed the recovery grace.
+   *
+   * The abandoned closure is still running in the guest, and Appium serializes commands per session, so
+   * the next command queues behind whatever is left of it. See {@link AppiumTransport.evaluateWithinCap}.
+   */
+  private isRecoveringFromCapOverrun = false;
+
   private readonly isSessionOwner: boolean;
   private readonly layoutReadyTimeoutInMilliseconds: number;
   private readonly platform: 'android' | 'ios';
+  private readonly scriptTimeoutInMilliseconds: number;
   private readonly shouldSweepLeftovers: boolean;
   private readonly vaultBasePath: string;
 
@@ -319,6 +355,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.appStartTimeoutInMilliseconds = config.appStartTimeoutInMilliseconds ?? DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS;
+    this.scriptTimeoutInMilliseconds = config.scriptTimeoutInMilliseconds ?? DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS;
     this.shouldSweepLeftovers = config.shouldSweepLeftovers ?? true;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? DEFAULT_ANDROID_VAULT_BASE_PATH;
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
@@ -410,9 +447,19 @@ export class AppiumTransport implements ObsidianTransport {
     await this.ensureInputChannel();
 
     try {
-      const result = await this.browser.execute<null | string | undefined, []>(
-        `return (${expression})`
-      );
+      /*
+       * The cap is enforced HERE, on the Node side, and not by the `timeouts.script` capability the
+       * Session also declares. Measured on a live emulator: the capability is accepted and reads
+       * Back as 30000 in the WebView context, and nothing ever enforces it — over-cap closures in both the
+       * Sleeping and the spinning shape, with and without an explicit `setTimeouts`, ran past a 60s ceiling
+       * Without WebDriver raising `script timeout` even once. What actually happens past roughly half a
+       * Minute is worse than a late answer: the closure COMPLETES in the guest on schedule (timers armed at
+       * 30s and 40s fired within ~13ms of nominal, on a visible and focused page) and its Execute Script
+       * Response never reaches this client — so the promise below simply never settles.
+       *
+       * A hang is the one failure mode a test author cannot act on, so the wait is bounded here.
+       */
+      const result = await this.evaluateWithinCap(`return (${expression})`);
 
       if (result === undefined || result === null) {
         return NO_OUTPUT;
@@ -420,8 +467,32 @@ export class AppiumTransport implements ObsidianTransport {
 
       return result;
     } catch (error: unknown) {
+      /*
+       * A cap overrun is the one failure here that says nothing about the context: the closure outstayed
+       * Its budget, the WebView is still the WebView. Resetting the flag would charge the NEXT eval a
+       * ~17s `switchContext` (**L19**) to recover from something that was never lost.
+       */
+      if (error instanceof EvalCapExceededError) {
+        throw error;
+      }
+
       // Context may have been lost mid-execution (e.g. page reload).
       this.isInWebViewContext = false;
+
+      /*
+       * Kept as a fast path even though this driver was measured never raising it: it costs nothing,
+       * It is the correct translation if a future driver does enforce the capability, and it keeps the two
+       * Transports reporting one error for one condition.
+       */
+      if (isScriptTimeoutError(error)) {
+        throw new EvalCapExceededError({
+          capInMilliseconds: this.scriptTimeoutInMilliseconds,
+          cause: error,
+          optionName: 'scriptTimeoutInMilliseconds',
+          transportName: 'Android (Appium)'
+        });
+      }
+
       throw error;
     }
   }
@@ -762,6 +833,67 @@ export class AppiumTransport implements ObsidianTransport {
     }
 
     throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(this.webviewTimeoutInMilliseconds)}ms. Is the Obsidian app fully loaded?`);
+  }
+
+  /**
+   * Runs one Execute Script under the per-eval cap, raising {@link EvalCapExceededError} if it outlasts it.
+   *
+   * The cap covers the script ALONE — `ensureWebViewContext` and `ensureInputChannel` run before it,
+   * because a `switchContext` legitimately costs ~17s (**L19**) and charging that to a test's own budget
+   * would report the harness's setup as the test's overrun.
+   *
+   * The abandoned request is deliberately left in flight rather than cancelled. Nothing can cancel it:
+   * `Runtime.terminateExecution` over the transport's own CDP channel was measured releasing nothing,
+   * and a guest-side abort hook could not even be installed in time. What the same runs did show is that
+   * the session usually keeps serving — a vault read-back was answered 528ms after one such abandonment,
+   * with the session free — so bounding the wait costs a test its closure, not the rest of its suite.
+   *
+   * @param script - The script to run, already wrapped in its `return (...)`.
+   * @returns The script's result.
+   */
+  private async evaluateWithinCap(script: string): Promise<null | string | undefined> {
+    /*
+     * The eval AFTER an overrun gets a grace period on top of the cap, and this is not generosity. Appium
+     * Serializes commands per session, and an abandoned closure keeps running in the guest — so the next
+     * Command queues behind whatever is left of it and, on the bare cap, is capped in its turn. That is
+     * Measured: with the cap firing at 30s against a 40s closure, the following vault read-back failed at
+     * 30 206ms, while the same read-back issued after the closure had finished was answered in 528ms.
+     *
+     * Waiting on the abandoned request instead would not work: that promise is the one that never settles.
+     * What frees the session is the GUEST finishing, on a schedule this side cannot know — so the grace is
+     * a ceiling, not a delay. It costs nothing when the session comes back promptly, which is the norm.
+     */
+    const budgetInMilliseconds = this.isRecoveringFromCapOverrun
+      ? this.scriptTimeoutInMilliseconds + CAP_RECOVERY_GRACE_IN_MILLISECONDS
+      : this.scriptTimeoutInMilliseconds;
+    this.isRecoveringFromCapOverrun = false;
+
+    let capTimer: NodeJS.Timeout | undefined;
+
+    const cap = new Promise<never>((_resolve, reject) => {
+      capTimer = setTimeout(() => {
+        this.isRecoveringFromCapOverrun = true;
+        reject(
+          new EvalCapExceededError({
+            capInMilliseconds: budgetInMilliseconds,
+            cause: new Error(`The Appium Execute Script carrying this closure did not answer within ${String(budgetInMilliseconds)}ms.`),
+            optionName: 'scriptTimeoutInMilliseconds',
+            transportName: 'Android (Appium)'
+          })
+        );
+      }, budgetInMilliseconds);
+    });
+
+    try {
+      return await Promise.race([
+        this.browser.execute<null | string | undefined, []>(script),
+        cap
+      ]);
+    } finally {
+      if (capTimer !== undefined) {
+        clearTimeout(capTimer);
+      }
+    }
   }
 
   /**

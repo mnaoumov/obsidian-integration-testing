@@ -12,7 +12,7 @@
  *   global setup creates its transport — and auto-starts its emulator — inside a
  *   Vitest worker, and Vitest ends workers abruptly, so the worker's teardown
  *   never gets a turn. The project's own global teardown runs, but held no
- *   handle to the emulator. This repo's `integration-tests:android-trusted-input`
+ *   handle to the emulator. This repo's `integration-tests:android`
  *   project is exactly this, and on 2026-09-10 the emulator it left idle kept
  *   `netsimd` writing until a 278 GB log filled the drive (**L56**).
  * - **The runner is killed** — SIGKILL, Task Manager, an IDE stop button — and
