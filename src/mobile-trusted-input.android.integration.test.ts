@@ -219,7 +219,7 @@ describe('mobile trusted input', () => {
     const result = await evalInObsidian({
       async callback({ app, lib }): Promise<LongPressResult> {
         // Sized against the transport's 30s per-eval cap: four attempts at 1.5s is 6s of drawer opening,
-        // Which leaves the 600ms press and the 5s menu wait below a wide margin under it.
+        // Which leaves the 600ms press and the 5s menu wait below it with room to spare.
         const DRAWER_OPEN_ATTEMPT_COUNT = 4;
         const DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS = 1500;
 
