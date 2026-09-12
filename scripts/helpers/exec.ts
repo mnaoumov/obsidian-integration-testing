@@ -15,8 +15,9 @@ export interface ExecDetailedOptions extends ExecOption {
 
 export interface ExecOption {
   readonly cwd?: string;
+
   /**
-   * Extra environment variables for the child, layered on top of the parent's own environment.
+   * Extra environment variables for the child, merged over the inherited `process.env`.
    */
   readonly env?: Readonly<Record<string, string>>;
   readonly isQuiet?: boolean;
@@ -44,8 +45,8 @@ export function exec(command: CommandPart[] | string, options: ExecOption = {}):
     if (batchResult) {
       return batchResult;
     }
-    const commandArguments = command.filter((part): part is string => typeof part === 'string');
-    const commandLine = toCommandLine(commandArguments);
+    const $arguments = command.filter((part): part is string => typeof part === 'string');
+    const commandLine = toCommandLine($arguments);
 
     const maxCommandLength = getMaxCommandLength();
     if (commandLine.length > maxCommandLength) {
@@ -56,7 +57,7 @@ export function exec(command: CommandPart[] | string, options: ExecOption = {}):
       );
     }
 
-    return execString(commandLine, options, commandArguments);
+    return execString(commandLine, options, $arguments);
   }
 
   const maxCommandLength = getMaxCommandLength();
@@ -98,8 +99,8 @@ function argvQuote(argument: string): string {
   return result;
 }
 
-function toCommandLine(commandArguments: string[]): string {
-  return commandArguments.map((argument) => argvQuote(argument)).join(' ');
+function toCommandLine($arguments: string[]): string {
+  return $arguments.map((argument) => argvQuote(argument)).join(' ');
 }
 
 const CMD_META_RE = /[()%!^"<>&|]/g;
@@ -129,6 +130,12 @@ function execString(command: string, options: ExecOption = {}, rawArguments?: st
     let stdout = '';
     let stderr = '';
 
+    // A child that exits before reading its stdin makes this write fail with EPIPE.
+    // With no listener that is an unhandled 'error' event, which tears down the whole process instead of settling this promise.
+    // Swallow it: the 'close'/'error' handlers below report the command's actual outcome, which is the failure worth surfacing.
+    child.stdin.on('error', () => {
+      // Deliberately ignored -- see above.
+    });
     child.stdin.write(stdin);
     child.stdin.end();
 
@@ -273,21 +280,22 @@ function isExecArgument(part: CommandPart): part is ExecArgument {
 function spawnViaShell(
   command: string,
   cwd: string,
-  extraEnv: Readonly<Record<string, string>>,
+  env: Readonly<Record<string, string>>,
   rawArguments?: string[]
 ): ChildProcessWithoutNullStreams {
-  const env = { ...CHILD_ENV, ...extraEnv };
+  const childEnv = { ...CHILD_ENV, ...env };
+
   if (process.platform === 'win32' && command.includes('\n')) {
     if (!rawArguments) {
       throw new Error('Commands containing newlines cannot be executed through cmd.exe on Windows. Pass an argument array instead of a string.');
     }
-    const [program, ...commandArguments] = rawArguments;
+    const [program, ...$arguments] = rawArguments;
     if (!program) {
       throw new Error('Command array must not be empty');
     }
-    return spawn(program, commandArguments, {
+    return spawn(program, $arguments, {
       cwd,
-      env,
+      env: childEnv,
       stdio: 'pipe'
     });
   }
@@ -295,15 +303,15 @@ function spawnViaShell(
   const shellCommand = process.platform === 'win32' ? commandEscapeCommandLine(command) : command;
   return spawn(shellCommand, [], {
     cwd,
-    env: CHILD_ENV,
+    env: childEnv,
     shell: true,
     stdio: 'pipe'
   });
 }
 
-function trimEnd(string_: string, suffix: string): string {
-  if (string_.endsWith(suffix)) {
-    return string_.slice(0, -suffix.length);
+function trimEnd($string: string, suffix: string): string {
+  if ($string.endsWith(suffix)) {
+    return $string.slice(0, -suffix.length);
   }
-  return string_;
+  return $string;
 }
