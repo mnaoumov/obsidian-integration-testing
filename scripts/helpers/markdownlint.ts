@@ -7,13 +7,13 @@ import {
   toPosixPath
 } from './root.ts';
 
-interface LintParams {
+interface LintOptions {
   readonly paths?: string[] | undefined;
   readonly shouldFix?: boolean | undefined;
 }
 
-export async function lint(params?: LintParams): Promise<void> {
-  const { paths, shouldFix = false } = params ?? {};
+export async function lint(options?: LintOptions): Promise<void> {
+  const { paths, shouldFix = false } = options ?? {};
   const targets = paths?.length ? paths : ['.'];
   await execFromRoot(['npx', 'markdownlint-cli2', ...(shouldFix ? ['--fix'] : []), { batchedArguments: targets }]);
 
@@ -22,11 +22,11 @@ export async function lint(params?: LintParams): Promise<void> {
     : await toArray(glob(['**/*.md'], {
       exclude: [
         '.git/**',
-        // The docs site's pages link by SITE path (`/obsidian-integration-testing/guides/…`), which only
-        // Resolves once Astro has built them; `scripts/docs-link-check.ts` validates those against the
-        // Built output instead. Checking them as filesystem-relative paths here would 404 every one.
-        'docs/**',
         'dist/**',
+        // A repo with a documentation site under `docs/` validates that markdown in `docs:build`, against the BUILT html.
+        // Linkinator would resolve a base-absolute in-site link (`/<site-base>/guides/...`) against the containing folder instead.
+        // So every one of those links would 404 here.
+        'docs/**',
         'node_modules/**'
       ]
     }));
