@@ -11,6 +11,18 @@ export {
   runAdbTextWithoutDevice
 } from './adb.ts';
 export type {
+  AppConfigParams,
+  AppConfigRestore,
+  SetAppConfigParams,
+  WithAppConfigParams
+} from './app-config.ts';
+export {
+  getAppConfig,
+  restoreAppConfig,
+  setAppConfig,
+  withAppConfig
+} from './app-config.ts';
+export type {
   AsarFallback,
   AsarFallbackTier,
   ResolveAsarFallbackParams

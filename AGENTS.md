@@ -1819,7 +1819,9 @@ So the two layers are:
 
 - **The fix is the vault-level default** (**L48**). Every vault the global setup provisions carries
   `settingsPopoutWindow: false`, so a consumer suite — which reaches that vault through
-  `getTemporaryVault()` — needs nothing.
+  `getTemporaryVault()` — needs nothing. The exception is a suite whose *subject* is that second window;
+  it opts back in per test through `withAppConfig` (**L48**), which restores the key afterwards, rather
+  than setting it inline and leaving it on for the rest of the run.
 - **The pre-attach is a fallback, not the fix.** `openSettingsTab` still appends `containerEl` to
   `document.body` before `open()`, and **its order is still load-bearing** (attaching afterwards is too
   late; whatever the modal rendered has already gone where it went). It matters only for a vault that does
@@ -2610,6 +2612,58 @@ project root from `findProjectRoot()` rather than a parameter and the harness sh
 that project forces `installPlugin: false` and proves the other half: a real Obsidian, opened under an
 override, finds what the harness wrote for it.
 
+### A test whose subject IS the popout opts back in through a seam, not by hand
+
+The two defaults stay unconditional, and there is deliberately **no provisioning knob** for either. Adding
+one would not even have helped the case that asked for it: a parameter on the provisioning write is
+per-**vault**, and in `obsidian-dev-utils` the three tests that need the popout share one vault with the
+tests the default protects (measured 2026-09-12 — with the popout off, one asserts the minimizable
+peek-lock stops the settings window being created and reads `app.setting.popout`, and two wait on
+`activeWindow !== window`, so all three simply time out). What they need is per-**test** granularity, so
+that is what the harness exports, in `src/app-config.ts`:
+
+- **`getAppConfig({ configKey, transport?, vaultPath? })`** — Obsidian's own `Vault.getConfig`.
+- **`setAppConfig({ …, value })`** → an `AppConfigRestore` token, and **`restoreAppConfig(token)`** — the
+  `beforeAll` / `afterAll` half.
+- **`withAppConfig({ …, value, callback })`** — scoped: it sets, runs the callback, and restores in a
+  `finally`, so a test cannot forget. The callback runs on the **Node** side, free to make several evals.
+
+Three things it buys over the inline `app.vault.setConfig` a consumer writes inside its own
+`evalInObsidian` closure — which is what those three tests carried before this existed:
+
+- **The value is restored, including *deleting* a key that had never been written.** An inline setter
+  writes into a vault shared with the rest of the run, so every later test in that instance inherits the
+  change — precisely the cross-test contamination the unconditional default exists to end.
+- **One cast instead of one per consumer.** `obsidian-typings`' `ConfigItem` union omits
+  `settingsPopoutWindow`, so `getConfig` / `setConfig` must be bound and widened to pass it at all; every
+  consumer that set the key inline repeated that cast. It disappears from one place when the typings grow
+  the key.
+- **Per-test granularity**, as above.
+
+Two facts about Obsidian shape the restore, both read out of the shipped 1.14.1 bundle rather than assumed:
+
+- `Vault.setConfig(key, value)` **deletes** the key when `value` is `undefined` — which is the only way to
+  restore one the vault never carried — and does nothing at all when the value is unchanged (no save, no
+  `config-changed` event).
+- `Vault.getConfig(key)` substitutes Obsidian's own default for an absent key, so it **cannot** tell *unset*
+  from *set to that default*; restoring from it would leave the key written where it had not been. So
+  presence is read off `app.vault.config`, which carries only the keys changed from their default —
+  `Object.hasOwn` on it is the signal, and being an `object` parameter it needs no cast.
+
+Everything is Node-side by necessity: an `evalInObsidian` callback is serialized into the driven Obsidian
+and can import nothing, so a helper callable from *inside* a closure is not expressible — the same
+constraint that makes `openObsidianSettingsTab` (**L38**) a Node entry point over a renderer-side `lib`
+member.
+
+**Coverage:** `src/app-config.integration.test.ts` (the `integration-tests` project) drives a live instance
+through both restore branches — a key that was absent is deleted again, a key the vault carries gets its
+value written back — and asserts the restore survives a throwing callback. It can reach both because its
+in-worker vault carries no headless default (next section), so the key starts absent. It stops at the config
+layer on purpose: `SettingsModal.shouldUsePopout()` is `getConfig('settingsPopoutWindow')` verbatim, so
+asserting the window behaviour again would add nothing over
+`owned-instance-worker-attach.integration.test.ts`, and would leave a second Electron window in a run other
+suites share.
+
 ### What is still NOT covered, deliberately
 
 A vault a suite builds in-worker with `new TemporaryVault()` gets neither default — the write lives in
@@ -2617,7 +2671,10 @@ A vault a suite builds in-worker with `new TemporaryVault()` gets neither defaul
 does not touch consumers: a plugin's suite reaches the global-setup vault through `getTemporaryVault()`,
 which is provisioned. It does affect this repo's own suites, which build their own vaults for isolation —
 `eval-in-obsidian.integration.test.ts` runs against a popout-enabled vault and is the coverage that keeps
-`openSettingsTab`'s pre-attach fallback honest (**L38**).
+`openSettingsTab`'s pre-attach fallback honest (**L38**). `app-config.integration.test.ts` depends on the
+same gap in the other direction: a vault the harness never provisioned is the only one where the key starts
+**absent**,
+which is what makes the restore-by-delete branch reachable at all.
 
 ## L49. A wedged emulator is not an absent device — the console is what tells them apart
 
