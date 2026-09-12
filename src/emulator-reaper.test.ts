@@ -101,6 +101,20 @@ describe('resolveEmulatorReaperWatch', () => {
     })).toBe('emulator-stopped');
   });
 
+  /*
+   * A launch-time marker names the launcher and leaves the backend to the
+   * pre-launch diff, which needs a host process listing this poll does not
+   * make. Reading it as stopped from PIDs alone is how the reaper would walk
+   * away from a running emulator; the reclaim judges it instead.
+   */
+  it('keeps watching a launch-time marker whose launcher has already exited', () => {
+    expect(resolveEmulatorReaperWatch({
+      armedStartedAtInMilliseconds: STARTED_AT_IN_MILLISECONDS,
+      checkIsPidAlive,
+      marker: buildMarker({ ownedEmulatorPids: [DEAD_PID], preLaunchEmulatorPids: [] })
+    })).toBe('watch');
+  });
+
   it('stands down for a later emulator of the same AVD, even one that is running', () => {
     expect(resolveEmulatorReaperWatch({
       armedStartedAtInMilliseconds: STARTED_AT_IN_MILLISECONDS,

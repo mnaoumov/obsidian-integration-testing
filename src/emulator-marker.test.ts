@@ -11,6 +11,7 @@ import {
 import type { EmulatorMarker } from './emulator-marker.ts';
 
 import {
+  checkIsMarkedEmulatorRunning,
   clearEmulatorMarker,
   clearEmulatorMarkerIfStopped,
   listEmulatorMarkers,
@@ -29,12 +30,28 @@ const CURRENT_PID = vi.hoisted(() => 4242);
 const OTHER_PID = 5151;
 const LAUNCHER_PID = 100;
 const BACKEND_PID = 101;
+/**
+ * An emulator that was already running when the launch below started — another
+ * AVD's, or one booted by hand. Never this launch's to stop.
+ */
+const FOREIGN_PID = 102;
 
 const MARKER: EmulatorMarker = {
   avdName: AVD_NAME,
   deviceId: 'emulator-5554',
   ownedEmulatorPids: [LAUNCHER_PID, BACKEND_PID],
   ownerPid: OTHER_PID,
+  startedAtInMilliseconds: EARLIER_IN_MILLISECONDS
+};
+
+/**
+ * What a launch writes before its emulator has a device: the launcher alone.
+ */
+const LAUNCH_MARKER: EmulatorMarker = {
+  avdName: AVD_NAME,
+  ownedEmulatorPids: [LAUNCHER_PID],
+  ownerPid: OTHER_PID,
+  preLaunchEmulatorPids: [FOREIGN_PID],
   startedAtInMilliseconds: EARLIER_IN_MILLISECONDS
 };
 
@@ -103,6 +120,42 @@ describe('writeEmulatorMarker', () => {
     );
   });
 
+  /*
+   * The launch-time write: the launcher is all that exists yet, and the file
+   * carries no device rather than an empty one, so a stop reads its absence as
+   * "no console to shut down".
+   */
+  it('should omit the device and keep the pre-launch snapshot when the emulator has not produced one yet', () => {
+    writeEmulatorMarker({
+      avdName: AVD_NAME,
+      ownedEmulatorPids: [LAUNCHER_PID],
+      preLaunchEmulatorPids: [FOREIGN_PID],
+      startedAtInMilliseconds: EARLIER_IN_MILLISECONDS
+    });
+
+    expect(mockWriteFileSync).toHaveBeenCalledWith(
+      MARKER_PATH,
+      JSON.stringify({
+        avdName: AVD_NAME,
+        ownedEmulatorPids: [LAUNCHER_PID],
+        ownerPid: CURRENT_PID,
+        preLaunchEmulatorPids: [FOREIGN_PID],
+        startedAtInMilliseconds: EARLIER_IN_MILLISECONDS
+      })
+    );
+  });
+
+  /*
+   * The write that learns the backend's PID drops the snapshot: from then on the
+   * owned set is exact, and a diff could only widen it onto somebody else's.
+   */
+  it('should omit the pre-launch snapshot once the owned PIDs are exact', () => {
+    writeEmulatorMarker({ avdName: AVD_NAME, deviceId: 'emulator-5554', ownedEmulatorPids: [LAUNCHER_PID, BACKEND_PID] });
+
+    const [, content] = mockWriteFileSync.mock.calls[0] ?? [];
+    expect(JSON.parse(content ?? '')).not.toHaveProperty('preLaunchEmulatorPids');
+  });
+
   it('should keep the original start time on a takeover', () => {
     writeEmulatorMarker({
       avdName: AVD_NAME,
@@ -146,6 +199,12 @@ describe('readEmulatorMarker', () => {
     expect(mockReadFileSync).toHaveBeenCalledWith(MARKER_PATH, 'utf-8');
   });
 
+  it('should read back a launch-time marker that has no device yet', () => {
+    mockReadFileSync.mockReturnValue(JSON.stringify(LAUNCH_MARKER));
+
+    expect(readEmulatorMarker(AVD_NAME)).toStrictEqual(LAUNCH_MARKER);
+  });
+
   it('should return undefined when there is no marker', () => {
     mockReadFileSync.mockImplementation(() => {
       throw new Error('ENOENT');
@@ -177,7 +236,8 @@ describe('readEmulatorMarker', () => {
     ['ownerPid', { ownerPid: '5151' }],
     ['startedAtInMilliseconds', { startedAtInMilliseconds: 'yesterday' }],
     ['ownedEmulatorPids (not an array)', { ownedEmulatorPids: 101 }],
-    ['ownedEmulatorPids (a non-number entry)', { ownedEmulatorPids: [100, '101'] }]
+    ['ownedEmulatorPids (a non-number entry)', { ownedEmulatorPids: [100, '101'] }],
+    ['preLaunchEmulatorPids', { preLaunchEmulatorPids: 102 }]
   ])('should return undefined when %s has the wrong type', (_field, override) => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ ...MARKER, ...override }));
 
@@ -265,11 +325,61 @@ describe('clearEmulatorMarkerIfStopped', () => {
   });
 });
 
+describe('checkIsMarkedEmulatorRunning', () => {
+  it('should be true while any of the marker\'s processes is alive', () => {
+    mockKill.mockImplementation((pid) => {
+      if (pid !== BACKEND_PID) {
+        throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+      }
+    });
+
+    expect(checkIsMarkedEmulatorRunning(MARKER)).toBe(true);
+  });
+
+  it('should be false once none of them is', () => {
+    mockKill.mockImplementation(() => {
+      throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+    });
+
+    expect(checkIsMarkedEmulatorRunning(MARKER)).toBe(false);
+  });
+
+  /*
+   * No marker is nothing to protect: this is what lets a launch record itself
+   * over an AVD whose last emulator is gone.
+   */
+  it('should be false when there is no marker', () => {
+    expect(checkIsMarkedEmulatorRunning(undefined)).toBe(false);
+  });
+});
+
 describe('selectLiveMarkedPids', () => {
   it('should keep only the marked PIDs that are live emulator processes, in marker order', () => {
     expect(selectLiveMarkedPids(MARKER, [BACKEND_PID, 999, LAUNCHER_PID])).toStrictEqual([LAUNCHER_PID, BACKEND_PID]);
     expect(selectLiveMarkedPids(MARKER, [BACKEND_PID])).toStrictEqual([BACKEND_PID]);
     expect(selectLiveMarkedPids(MARKER, [999])).toStrictEqual([]);
+  });
+
+  /*
+   * The backend the launcher forked is not in the marker — nothing had listed
+   * the host since the launch — but it is not in the pre-launch snapshot
+   * either, which is exactly what identifies it as this launch's.
+   */
+  it('should add what a launch forked after its snapshot, and never what predates it', () => {
+    expect(selectLiveMarkedPids(LAUNCH_MARKER, [FOREIGN_PID, LAUNCHER_PID, BACKEND_PID])).toStrictEqual([LAUNCHER_PID, BACKEND_PID]);
+  });
+
+  /*
+   * The case the whole snapshot exists for: killing the launcher leaves the
+   * backend running (L46), so without the diff this marker would read as stale
+   * over a live emulator.
+   */
+  it('should convict the backend of a launch whose launcher is already gone', () => {
+    expect(selectLiveMarkedPids(LAUNCH_MARKER, [FOREIGN_PID, BACKEND_PID])).toStrictEqual([BACKEND_PID]);
+  });
+
+  it('should convict nothing when only the emulators that predate the launch are left', () => {
+    expect(selectLiveMarkedPids(LAUNCH_MARKER, [FOREIGN_PID])).toStrictEqual([]);
   });
 });
 
@@ -292,6 +402,17 @@ describe('resolveEmulatorMarkerVerdict', () => {
         marker: { ...MARKER, ownerPid: CURRENT_PID }
       })
     ).toBe('harness-leftover');
+  });
+
+  /*
+   * The boot window, kept as a case because the launch-time marker rests on it:
+   * a marker written at launch names only the `emulator` launcher, which
+   * `emulator-backend.ts` counts among the host's emulator processes — so it
+   * convicts exactly like a completed marker, with no special case here.
+   */
+  it('should convict a launch-time marker whose only live PID is the launcher', () => {
+    expect(resolveEmulatorMarkerVerdict({ currentPid: CURRENT_PID, isOwnerAlive: false, liveEmulatorPids: [LAUNCHER_PID], marker: LAUNCH_MARKER }))
+      .toBe('harness-leftover');
   });
 
   it('should leave an emulator another live harness process owns to that process', () => {

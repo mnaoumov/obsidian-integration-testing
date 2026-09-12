@@ -407,14 +407,22 @@ export class EmulatorReclaimer {
       return;
     }
 
+    /*
+     * A marker written at launch has no device yet: the emulator was still
+     * booting when whatever recorded it stopped looking. The stop below reads
+     * that absence correctly — no console to shut down, the owned PIDs are the
+     * whole of the evidence — so it is described rather than papered over.
+     */
+    const evidence = describeMarkedEmulator(marker);
+
     if (verdict === 'in-use-by-live-run' && scope === 'preflight') {
-      this.log(`Leaving the emulator for AVD "${marker.avdName}" on device ${marker.deviceId} alone: the harness process that owns it (PID ${String(marker.ownerPid)}) is still running.`);
+      this.log(`Leaving the emulator for ${evidence} alone: the harness process that owns it (PID ${String(marker.ownerPid)}) is still running.`);
       return;
     }
 
     const ageInSeconds = Math.round((Date.now() - marker.startedAtInMilliseconds) / MILLISECONDS_PER_SECOND);
     this.log(
-      `Stopping the emulator for AVD "${marker.avdName}" on device ${marker.deviceId}: this harness started it ${String(ageInSeconds)}s ago, and no live run is left to stop it.`
+      `Stopping the emulator for ${evidence}: this harness started it ${String(ageInSeconds)}s ago, and no live run is left to stop it.`
     );
     await this.stopEmulator({
       avdName: marker.avdName,
@@ -455,6 +463,18 @@ function buildHostProcessQuery(): HostCommandQuery {
   return process.platform === 'win32'
     ? { command: 'tasklist', commandArguments: ['/FO', 'CSV', '/NH'] }
     : { command: 'ps', commandArguments: ['-eo', 'pid=,comm='] };
+}
+
+/**
+ * Names the emulator a marker describes, for the log.
+ *
+ * @param marker - The marker.
+ * @returns The AVD and its device, or the AVD alone for a launch that had not produced a device yet.
+ */
+function describeMarkedEmulator(marker: EmulatorMarker): string {
+  return marker.deviceId === undefined
+    ? `AVD "${marker.avdName}" (no device: it was still booting when it was recorded)`
+    : `AVD "${marker.avdName}" on device ${marker.deviceId}`;
 }
 
 /**

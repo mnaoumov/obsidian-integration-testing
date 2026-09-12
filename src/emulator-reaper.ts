@@ -254,6 +254,17 @@ export function resolveEmulatorReaperWatch(params: ResolveEmulatorReaperWatchPar
     return 'superseded';
   }
 
+  /*
+   * A launch-time marker's PID list is deliberately incomplete — it names the
+   * launcher, and the backend it forks is identified by the pre-launch diff,
+   * which costs a host process listing this poll deliberately does not make.
+   * So it is never read as stopped from PIDs alone: the reclaim, which does
+   * make that listing, is what judges it.
+   */
+  if (marker.preLaunchEmulatorPids !== undefined) {
+    return 'watch';
+  }
+
   return marker.ownedEmulatorPids.some((pid) => params.checkIsPidAlive(pid)) ? 'watch' : 'emulator-stopped';
 }
 
