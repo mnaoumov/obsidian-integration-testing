@@ -3345,10 +3345,28 @@ cannot read the lock gives up rather than guess.
 be watching. That covers emulators started by an older harness, which have no reaper at all. The first
 reaper to take the lock stops the emulator; the other then finds the marker gone.
 
-**How it is launched.** The spawner runs `process.execPath -e <buildEmulatorReaperBootstrap()> <own module
-URL> <avdName> <startedAtInMilliseconds>`, detached and `windowsHide`, then `unref()`s the child. The
-bootstrap `import()`s the module and calls `runEmulatorReaper`, falling back to `default` for a CJS module
-whose named export Node's lexer misses. That one bootstrap loads all three forms the module ships as:
+**How it is launched — through a relay, so a process-tree kill cannot take it.** `detached` does **not**
+reparent on Windows. A reaper spawned straight from the harness stays a child of whichever process armed
+it, which puts it squarely inside the run's process tree — so every kill shape that walks that tree takes
+the safety net along with the thing it was guarding. That is not an exotic way to end a run: it is what
+Task Manager's **End task** does, what `taskkill /T` does, what an IDE stop button often does, and what a
+`ParentProcessId` descendant sweep does. Measured 2026-09-11, taking device evidence for the boot-window
+work: a descendant sweep of the run killed reaper PID 23256 along with the Vitest main process and its
+workers, and the leftover `qemu-system-x86_64-headless` and its `netsimd` idled on until a reaper was
+started by hand ten minutes later.
+
+So the spawn goes through a **relay**: `process.execPath -e <buildEmulatorReaperRelayBootstrap()>
+<buildEmulatorReaperBootstrap()> <own module URL> <avdName> <startedAtInMilliseconds>`, detached and
+`windowsHide`, then `unref()`ed. The relay's whole body is one `spawn` of the reaper — `detached`,
+`stdio: ['ignore', 1, 2]` so the reaper inherits the same capped log file, `unref()` — after which it
+exits. By the time any tree-walker takes its snapshot the relay is gone, so **no edge from the run to the
+reaper exists to follow**. It is the double-fork idiom, and it holds on POSIX for the same reason: once
+the relay exits, the reaper belongs to `init`.
+
+The relay knows nothing about what it is passing on: its own arguments are the reaper's entire command
+line, bootstrap first. That bootstrap `import()`s the module and calls `runEmulatorReaper`, falling back
+to `default` for a CJS module whose named export Node's lexer misses. That one bootstrap loads all three
+forms the module ships as:
 
 - `.mjs` (ESM build);
 - `.cjs` (CJS build);
@@ -3360,17 +3378,24 @@ emptied `import.meta` is never read there. **Keep the reaper's import graph smal
 never reach `obsidian-metadata.ts`, which reads the build-time `OBSIDIAN_METADATA` global and cannot load
 under plain Node. That constraint is why the reclaim moved out of `transport-factory.ts`.
 
-**Where its output goes.** The child's stdout/stderr go to
-`<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`, so the **L46** verdict lines of a stop
-nobody watched are still on record. The spawner starts the file afresh once it passes
-`EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES` (1 MB), so this log can never become the next unbounded file.
+**Where its output goes.** The spawner opens
+`<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log` and hands the descriptor down as the
+relay's stdout/stderr; the relay passes its own fds 1 and 2 on to the reaper, so the extra hop changes
+nothing about the log and the **L46** verdict lines of a stop nobody watched are still on record. The
+spawner starts the file afresh once it passes `EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES` (1 MB), so this log
+can never become the next unbounded file. **The armed line no longer names a PID** — the spawner only ever
+sees the relay's, which is not the reaper's and is dead within milliseconds. The reaper's own PID is the
+first line it writes to that log.
 
 **The pure/glue split** follows **L33**. Unit-tested in `emulator-reaper.test.ts`:
 
 - the watch verdict;
 - the argument codec;
 - the log-cap decision;
-- the bootstrap, run for real with `node -e` against ESM, CJS and default-only CJS fixtures.
+- the bootstrap, run for real with `node -e` against ESM, CJS and default-only CJS fixtures;
+- the relay, run for real against a fixture reaper that reports its own `ppid`: the property asserted is
+  that the reaper's parent is the relay and the relay has already exited — which is precisely what a
+  spawn skipping the relay would fail, since there the parent is the caller and the caller is alive.
 
 `tryAcquireSetupLock` and `checkIsSetupLockHeld` are covered in `setup-lock.test.ts`. The spawn and the
 loop are `v8 ignore`d, and the device evidence below covers them. `ANDROID_SETUP_LOCK_SCOPE` is now the one
@@ -3410,6 +3435,41 @@ without touching an emulator another run had adopted. The other side — the rea
 after which the next run waits and boots fresh — was exercised with stand-in processes rather than a real
 emulator. One test failed in that run — the long-press menu timeout, which failed on `main` too. It was
 diagnosed and fixed afterwards; L57 records what it was.
+
+### Relay evidence: the reaper measured against a real tree kill (2026-09-12, this host)
+
+Both shapes built from the shipped `buildEmulatorReaperBootstrap()` /
+`buildEmulatorReaperRelayBootstrap()`, against a fixture reaper that reports its own PID and parent, then
+one `taskkill /F /T` per launcher:
+
+```text
+direct (the pre-fix shape)   launcher 24036 -> reaper 23656 (ppid 24036)
+                             taskkill /F /T 24036 -> "SUCCESS: … 23656 (child process of PID 24036)"
+                             reaper alive afterwards: FALSE
+
+relay  (the shipped shape)   launcher 33576 -> relay 2508 (already exited) -> reaper 20156 (ppid 2508)
+                             taskkill /F /T 33576 -> names 35040 and 33576; the reaper is not in the tree
+                             reaper alive afterwards: TRUE
+```
+
+`taskkill /T` walks `ParentProcessId`, which is the same set of edges a descendant sweep walks, so the
+measurement covers both. The relay hop was already gone from the host listing before the kill ran, which
+is the whole mechanism: there is no edge to walk.
+
+The spawner glue itself — `v8 ignore`d, so nothing but device evidence covers it — was then driven for
+real against a throwaway AVD marker rather than an emulator, which exercises every step but the reclaim:
+
+```text
+[spawner] Emulator reaper armed for AVD "reaper_relay_probe": … Its PID is the first line of its log: …
+00:53:50.856  Watching the emulator started at … (reaper PID 10028); it is stopped once no Android run
+              holds the 'android' setup lock.
+              reaper 10028 -> ppid 21972 (the relay, already exited); the spawner was 14924
+00:54:00.885  The emulator was stopped; nothing left to watch.      ← the marker was removed under the lock
+```
+
+So the relay passes the arguments through in the right order, the reaper loads the real module under
+plain Node, the inherited descriptor lands it on the spawner's capped log, and its parent is a process
+that no longer exists — while the spawner is untouched and still holding the lock.
 
 ### The boot window: the marker is written from the launch, not from the device
 

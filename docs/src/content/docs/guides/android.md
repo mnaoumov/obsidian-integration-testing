@@ -208,7 +208,15 @@ leaves a marked leftover, and the next Android run deals with it:
 A run that is killed with no Android run after it is covered too. Beside every emulator it starts, the
 harness spawns a small detached **reaper** process. The reaper waits until no Android run holds the
 `android` setup lock any more, then takes the lock and stops the marked emulator itself, usually within
-five seconds of the kill. Its log is `<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`.
+five seconds of the kill. Its log is `<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`,
+and the first line it writes there is its own process ID.
+
+The reaper deliberately sits **outside the run's process tree** — it is started through a short-lived
+relay that exits at once, so it has no live parent to be swept up with. That matters because the usual
+ways of stopping a run take the whole tree: Task Manager's **End task**, `taskkill /T`, and most IDE stop
+buttons. Ending a run any of those ways still leaves the reaper watching, and the emulator is stopped
+within seconds.
+
 A reaper is armed only while a run holds that lock, which the global setups do. If you create an Android
 transport by hand without taking the lock, no reaper is armed; the run log says so, and only the next
 Android run stops a leftover.

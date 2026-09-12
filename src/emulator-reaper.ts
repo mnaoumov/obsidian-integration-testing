@@ -52,6 +52,21 @@
  * `OBSIDIAN_METADATA` global. Its stdout/stderr go to a per-AVD log file, capped
  * at {@link EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES}, so the verdict lines the stop
  * prints are on record even though no terminal is left to show them.
+ *
+ * ## It is started through a relay, so a process-tree kill cannot take it
+ *
+ * `detached` does not reparent on Windows: a child spawned straight from the run
+ * stays in the run's process tree, so the kill shapes that walk that tree take
+ * the safety net along with the thing it was guarding — Task Manager's *End
+ * task*, `taskkill /T`, an IDE stop button, a `ParentProcessId` descendant
+ * sweep. Measured on 2026-09-11: a reaper died with the run it was watching, and
+ * the emulator it would have stopped idled on for ten minutes.
+ *
+ * So the spawn goes through a relay — {@link buildEmulatorReaperRelayBootstrap} —
+ * which starts the reaper and exits at once. By the time any tree-walker takes
+ * its snapshot the relay is gone, so there is no edge from the run to the reaper
+ * left to follow. This is the double-fork idiom, and it holds on POSIX for the
+ * same reason: once the relay exits, the reaper belongs to `init`.
  */
 
 import { spawn } from 'node:child_process';
@@ -209,6 +224,38 @@ export function buildEmulatorReaperBootstrap(): string {
 }
 
 /**
+ * Builds the script `node -e` runs as the **relay**: it starts the reaper and
+ * exits at once, so the reaper is left with a dead parent and no tree-walking
+ * kill of the run can reach it. See the relay section in this module's header
+ * for why that indirection exists at all.
+ *
+ * Its own arguments are the reaper's whole command line — the bootstrap script
+ * first, then everything that bootstrap reads — so the relay never has to know
+ * what any of them mean. It hands the reaper its own stdout and stderr, which
+ * are the capped log file the spawner opened, so the log is unaffected by the
+ * extra hop.
+ *
+ * @returns The script.
+ */
+export function buildEmulatorReaperRelayBootstrap(): string {
+  return [
+    'const { spawn } = require("node:child_process");',
+    'try {',
+    '  const child = spawn(process.execPath, ["-e", process.argv[1], ...process.argv.slice(2)], {',
+    '    detached: true,',
+    '    stdio: ["ignore", 1, 2],',
+    '    windowsHide: true',
+    '  });',
+    '  child.once("error", (error) => { console.error(error); });',
+    '  child.unref();',
+    '} catch (error) {',
+    '  console.error(error);',
+    '  process.exitCode = 1;',
+    '}'
+  ].join('\n');
+}
+
+/**
  * Decodes the reaper's command-line arguments.
  *
  * @param argv - The arguments after the module URL.
@@ -362,22 +409,29 @@ export function spawnEmulatorReaper(params: SpawnEmulatorReaperParams): void {
     mkdirSync(getReaperLogDirectory(), { recursive: true });
     const logFileDescriptor = openSync(logFilePath, resolveEmulatorReaperLogOpenFlag(readFileSize(logFilePath)));
     try {
-      const child = spawn(
+      /*
+       * Through the relay, never straight at the reaper: a reaper spawned here
+       * would be a child of this run and would die with it under any kill that
+       * walks the process tree. The relay exits at once, leaving the reaper with
+       * a dead parent and no edge back to this run.
+       */
+      const relay = spawn(
         process.execPath,
         [
           '-e',
+          buildEmulatorReaperRelayBootstrap(),
           buildEmulatorReaperBootstrap(),
           resolveOwnModuleUrl(),
           ...buildEmulatorReaperArguments({ avdName, startedAtInMilliseconds: params.startedAtInMilliseconds })
         ],
         { detached: true, stdio: ['ignore', logFileDescriptor, logFileDescriptor], windowsHide: true }
       );
-      child.once('error', (error) => {
-        params.log(`The emulator reaper for AVD "${avdName}" failed to start: ${error.message}`);
+      relay.once('error', (error) => {
+        params.log(`The emulator reaper relay for AVD "${avdName}" failed to start: ${error.message}`);
       });
-      child.unref();
+      relay.unref();
       params.log(
-        `Emulator reaper armed for AVD "${avdName}" (PID ${String(child.pid)}): if this run is killed, it stops the emulator once no Android run holds the '${ANDROID_SETUP_LOCK_SCOPE}' setup lock. Log: ${logFilePath}`
+        `Emulator reaper armed for AVD "${avdName}": if this run is killed — a process-tree kill included, since the reaper is started through a relay that exits at once — it stops the emulator once no Android run holds the '${ANDROID_SETUP_LOCK_SCOPE}' setup lock. Its PID is the first line of its log: ${logFilePath}`
       );
     } finally {
       closeSync(logFileDescriptor);
