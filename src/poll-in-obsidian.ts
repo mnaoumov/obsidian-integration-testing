@@ -3,8 +3,12 @@
  *
  * Node-side "kick off, then poll" helper over {@link evalInObsidian}.
  *
- * A single `evalInObsidian` closure cannot run longer than CDP's ~30s
- * `Runtime.evaluate` cap, so a long-running in-Obsidian operation (e.g. a whole
+ * A single `evalInObsidian` closure cannot run longer than the transport's
+ * per-eval cap — 30s by default on both, and a declared number rather than an
+ * inherited one: desktop uses `commandTimeoutInMilliseconds`, Android sends
+ * `scriptTimeoutInMilliseconds` as its W3C `timeouts.script` capability. Either
+ * way an overrun is reported as `EvalCapExceededError`, which names the
+ * cap and points here. So a long-running in-Obsidian operation (e.g. a whole
  * plugin/vault bootstrap) cannot be awaited inside one closure. This helper does
  * it from Node instead: it optionally runs a short `start` closure once to kick
  * the work off, then repeatedly runs a short `poll` closure — each a separate,

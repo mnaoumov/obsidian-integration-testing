@@ -28,6 +28,8 @@ export {
   isPng,
   readPngDimensions
 } from './capture-screenshot.ts';
+export type { CdpCommandTimeoutErrorConstructorParams } from './cdp-command-timeout-error.ts';
+export { CdpCommandTimeoutError } from './cdp-command-timeout-error.ts';
 export type { ConfigDirectoryFallbackErrorConstructorParams } from './config-directory-fallback-error.ts';
 export { ConfigDirectoryFallbackError } from './config-directory-fallback-error.ts';
 export {
@@ -109,6 +111,11 @@ export type {
   ResolveElectronCompatibilityParams
 } from './electron-compatibility.ts';
 export { resolveElectronCompatibility } from './electron-compatibility.ts';
+export type { EvalCapExceededErrorConstructorParams } from './eval-cap-exceeded-error.ts';
+export {
+  EvalCapExceededError,
+  isScriptTimeoutError
+} from './eval-cap-exceeded-error.ts';
 export type {
   EmulatorDeviceCandidate,
   SelectEmulatorDeviceIdParams
