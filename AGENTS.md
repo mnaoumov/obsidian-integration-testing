@@ -3204,7 +3204,7 @@ Ownership lived only in the memory of the process that launched the emulator. It
 
 | | Path | What happened |
 | --- | --- | --- |
-| **A** | Started from a test worker | This repo's `integration-tests:android-trusted-input` project has no transport global setup, so `getOrCreateTransport` builds the transport, and boots the emulator, **in the worker**. Nothing disposes that cached transport (`TemporaryVault.dispose` only unregisters), and Vitest ends workers abruptly. The project's global teardown ran but held no handle. **This is the one that filled the drive**: its 19:20:16 baseline run started the emulator. |
+| **A** | Started from a test worker | This repo's `integration-tests:android` project has no transport global setup, so `getOrCreateTransport` builds the transport, and boots the emulator, **in the worker**. Nothing disposes that cached transport (`TemporaryVault.dispose` only unregisters), and Vitest ends workers abruptly. The project's global teardown ran but held no handle. **This is the one that filled the drive**: its 19:20:16 baseline run started the emulator. |
 | **B** | Runner killed | SIGKILL, Task Manager, an IDE stop: no teardown path runs. |
 | **C** | Leftover adopted | `reuseConnectedDevice` returned `ownedEmulatorPids: []` ("not this run's to stop"), so a leftover was nobody's to stop, ever. On 09-10 every later run probed the leaked `obsidian_test` as `other-avd`, booted its own `obsidian_screenshots` beside it, and left it alone. |
 | **D** | Start failed its gates | When `waitForNewDevice` threw (boot, idle or network wait), `ensureDeviceConnected` rejected with no result, so `startAppiumAndEmulator`'s cleanup had no emulator handle. The running emulator was simply dropped. |
@@ -3240,7 +3240,7 @@ Where each path is now closed:
     so a taken-over leftover can be replaced too.
 - **`stopHarnessStartedEmulators()`** (`transport-factory.ts`) is the same reclaim with scope
   `'end-of-run'`, which also stops an emulator whose owner is still alive. The owner can only be one of
-  the ending run's workers. `scripts/android-trusted-input-global-setup.ts` calls it before releasing the
+  the ending run's workers. `scripts/android-global-setup.ts` calls it before releasing the
   lock, which closes **A** directly.
 - **`EmulatorReclaimer.stopEmulator` works without a launcher handle:** console `emu kill`, then the owned
   PIDs, then the usual two-proof verify and **L46** verdict line. Both teardown paths now gate on "owns an
@@ -3260,14 +3260,14 @@ predating this change. **L46**'s "never a `qemu*` sweep" stands.
 
 ### End-to-end evidence (2026-09-11, this host, AdGuard stopped per L49)
 
-**Before, on `main`.** A run of `integration-tests:android-trusted-input` leaves
+**Before, on `main`.** A run of `integration-tests:android` leaves
 `qemu-system-x86_64-headless` and `netsimd` running with nothing recorded, which is exactly the incident.
 Only a hand `adb emu kill` removed them.
 
 **After, one run per path:**
 
 ```text
-A  android-trusted-input, global teardown:
+A  android, global teardown:
    Stopping the emulator for AVD "obsidian_test" on device emulator-5554: this harness started it 64s ago,
    and no live run is left to stop it.
    Auto-started emulator stopped (verified: AVD "obsidian_test" on device emulator-5554 released).
@@ -3461,7 +3461,7 @@ console to shut down, and the launcher's tree kill does not reach the backend, s
 
 ### Boot-window evidence (2026-09-11, this host)
 
-Two runs of `integration-tests:android-trusted-input`, each killed while `adb devices` was still empty, and
+Two runs of `integration-tests:android`, each killed while `adb devices` was still empty, and
 one normal run. The kill is `Stop-Process -Force` on the npx shim, the Vitest main process holding the lock,
 and the worker that owns the emulator — not a descendant sweep, which would take the detached reaper with
 it (it is a `node` child of the run; that is a Task-Manager-tree hazard the reaper has always had).
