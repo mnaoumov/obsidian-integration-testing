@@ -627,6 +627,7 @@ export type ObsidianTransportOptions =
  * @param options - The resolved transport options.
  * @returns `true` for a mobile transport, `false` for desktop.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export function checkIsMobileTransport(options: ObsidianTransportOptions): boolean {
   return options.type === 'obsidian-android-appium';
 }
@@ -644,6 +645,7 @@ export function checkIsMobileTransport(options: ObsidianTransportOptions): boole
  * @param options - The resolved transport options.
  * @returns The overridden config folder name, or `undefined` for Obsidian's default.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export function resolveOwnedConfigDirectory(options: ObsidianTransportOptions): string | undefined {
   if (options.type !== 'obsidian-cdp' || options.port !== undefined) {
     return undefined;

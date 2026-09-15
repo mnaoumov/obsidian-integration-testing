@@ -74,6 +74,7 @@ export function checkIsAppiumDriverInstalled(params: CheckIsAppiumDriverInstalle
  * @returns Whether missing Appium dependencies may be auto-installed.
  */
 export function willAutoInstallAppiumDependencies(
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
   options: ObsidianAndroidAppiumTransportOptions
 ): boolean {
   return options.shouldAutoInstallAppiumDependencies ?? true;

@@ -3123,6 +3123,7 @@ class AppiumTransportFactory {
  * @param options - Transport configuration. Defaults to an owned desktop CDP transport.
  * @returns A new transport instance.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export async function createTransportFromOptions(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   const type = options?.type ?? DEFAULT_TRANSPORT_TYPE;
 
@@ -3153,6 +3154,7 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
  * @returns The cached or newly created transport.
  * @throws {IntegrationSetupFailedError} When this project's global setup failed.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export async function getOrCreateTransport(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   const setupError = getSetupError();
   if (setupError) {

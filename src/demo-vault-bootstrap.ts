@@ -182,6 +182,7 @@ export async function bootstrapDemoVaultPlugins(params: BootstrapDemoVaultPlugin
  * @param params - The same `BuildDemoVaultPopulateParams` the synchronous builder takes.
  * @returns The populate map, ready to hand to a global setup's `populate` or `TemporaryVault.populate`.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `BuildDemoVaultPopulateParams` is re-exported from `index.ts`, so renaming it to `BuildDemoVaultPopulateAsyncParams` is a breaking change held for the next major.
 export async function buildDemoVaultPopulateAsync(params: BuildDemoVaultPopulateParams): Promise<PopulateFilesParams> {
   if (params.injectPlugins !== undefined) {
     await bootstrapDemoVaultPlugins({ demoVaultPath: params.demoVaultPath, injectPlugins: params.injectPlugins });

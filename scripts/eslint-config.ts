@@ -580,24 +580,17 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
       rules: {
         'obsidian-dev-utils/no-unused-params-members': 'error',
         'obsidian-dev-utils/no-used-underscore-variables': 'error',
+        /*
+         * Enforced over `src/` as well as `scripts/`, which is a decision about the library's API rather than a
+         * config default. The rule derives a per-owner bag name (`fooBar(params: FooBarParams)`), and this library
+         * threads a handful of SHARED bags through many helpers apiece — one type cannot carry several per-owner
+         * names at once. Those sites carry a scoped disable naming that architecture; they are permanent, and no
+         * rename can retire them. A second, temporary kind of disable names the item that retires it: a type
+         * `src/index.ts` re-exports cannot be renamed without a major bump, so those wait for one. Every
+         * suppression in the tree says at its site which of the two it is.
+         */
+        'obsidian-dev-utils/params-options-name-match': 'error',
         'obsidian-dev-utils/readonly-params-options-result-members': 'error'
-      }
-    },
-    {
-      /*
-       * Scoped to `scripts/` rather than every file, and the scope is the measurement rather than a preference.
-       * This tree is where the convention was hand-repaired once already — `helpers/eslint.ts`, `helpers/format.ts`
-       * and `helpers/markdownlint.ts` — which is what the rule is here to stop recurring, and it reports ZERO
-       * findings across the tree today. `src/` reports 35, and they are not renames: the library threads a handful
-       * of shared bags (`ObsidianTransportOptions`, `ObsidianAndroidAppiumTransportOptions`, `TransportEvalOptions`,
-       * `CaptureScreenshotParams`, ...) through many helpers apiece, and one type cannot carry the four different
-       * per-owner names the rule derives, so ~24 of the 35 have no fix but a scoped suppression. Ten of the types
-       * are re-exported from `index.ts`, so what remains to rename is a breaking change to a published package.
-       * Widening this glob is therefore a decision about the library's API, tracked separately, not a config edit.
-       */
-      files: scriptFiles,
-      rules: {
-        'obsidian-dev-utils/params-options-name-match': 'error'
       }
     }
   ]);

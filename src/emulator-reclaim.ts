@@ -74,24 +74,9 @@ const EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS = 20_000;
 const MILLISECONDS_PER_SECOND = 1000;
 
 /**
- * A host command and its arguments.
- */
-export interface HostCommandQuery {
-  /**
-  The executable to run.
-   */
-  readonly command: string;
-
-  /**
-  The command's arguments.
-   */
-  readonly commandArguments: string[];
-}
-
-/**
  * Parameters for {@link EmulatorReclaimer.reclaimLeftoverEmulators}.
  */
-export interface ReclaimLeftoverEmulatorsParams {
+export interface EmulatorReclaimerReclaimLeftoverEmulatorsParams {
   /**
   An AVD whose leftover is left alone — the one a preflight is about to adopt instead.
    */
@@ -110,7 +95,7 @@ export interface ReclaimLeftoverEmulatorsParams {
 /**
  * Parameters for {@link EmulatorReclaimer.stopEmulator}.
  */
-export interface StopEmulatorParams {
+export interface EmulatorReclaimerStopEmulatorParams {
   /**
   The AVD name, named in the warning so the leftover is identifiable, and the key of its marker.
    */
@@ -135,7 +120,22 @@ export interface StopEmulatorParams {
   readonly ownedEmulatorPids: readonly number[];
 }
 
-interface CheckIsEmulatorGoneParams {
+/**
+ * A host command and its arguments.
+ */
+export interface HostCommandQuery {
+  /**
+  The executable to run.
+   */
+  readonly command: string;
+
+  /**
+  The command's arguments.
+   */
+  readonly commandArguments: string[];
+}
+
+interface EmulatorReclaimerCheckIsEmulatorGoneParams {
   /**
   The device the emulator serves, or `undefined` when none ever appeared — the PIDs are then the only proof.
    */
@@ -147,7 +147,7 @@ interface CheckIsEmulatorGoneParams {
   readonly ownedEmulatorPids: readonly number[];
 }
 
-interface WaitForEmulatorStoppedParams {
+interface EmulatorReclaimerWaitForEmulatorStoppedParams {
   /**
   The device the emulator serves, or `undefined` when none ever appeared.
    */
@@ -254,7 +254,7 @@ export class EmulatorReclaimer {
    *
    * @param params - Which AVD to leave alone, and whether this run is ending.
    */
-  public async reclaimLeftoverEmulators(params: ReclaimLeftoverEmulatorsParams): Promise<void> {
+  public async reclaimLeftoverEmulators(params: EmulatorReclaimerReclaimLeftoverEmulatorsParams): Promise<void> {
     const markers = listEmulatorMarkers().filter((marker) => marker.avdName !== params.exceptAvdName);
     if (markers.length === 0) {
       return;
@@ -289,7 +289,7 @@ export class EmulatorReclaimer {
    *
    * @param params - The emulator process, the device it serves and the PIDs this run owns.
    */
-  public async stopEmulator(params: StopEmulatorParams): Promise<void> {
+  public async stopEmulator(params: EmulatorReclaimerStopEmulatorParams): Promise<void> {
     if (params.deviceId !== undefined) {
       await this.killEmulatorConsole(params.deviceId);
     }
@@ -297,7 +297,7 @@ export class EmulatorReclaimer {
       killProcessTree(params.emulatorProcess);
     }
 
-    const waitParams: WaitForEmulatorStoppedParams = {
+    const waitParams: EmulatorReclaimerWaitForEmulatorStoppedParams = {
       deviceId: params.deviceId,
       ownedEmulatorPids: params.ownedEmulatorPids,
       timeoutInMilliseconds: EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS
@@ -342,7 +342,7 @@ export class EmulatorReclaimer {
    * @param params - The device and the PIDs this run owns.
    * @returns `true` when nothing of this run's emulator is left.
    */
-  private async checkIsEmulatorGone(params: CheckIsEmulatorGoneParams): Promise<boolean> {
+  private async checkIsEmulatorGone(params: EmulatorReclaimerCheckIsEmulatorGoneParams): Promise<boolean> {
     if (params.ownedEmulatorPids.some((pid) => checkIsProcessAlive(pid))) {
       return false;
     }
@@ -393,7 +393,7 @@ export class EmulatorReclaimer {
    * @param liveEmulatorPids - The emulator processes currently running on the host.
    * @param scope - Whether an emulator another live harness process owns is spared.
    */
-  private async reclaimLeftoverEmulator(marker: EmulatorMarker, liveEmulatorPids: readonly number[], scope: ReclaimLeftoverEmulatorsParams['scope']): Promise<void> {
+  private async reclaimLeftoverEmulator(marker: EmulatorMarker, liveEmulatorPids: readonly number[], scope: EmulatorReclaimerReclaimLeftoverEmulatorsParams['scope']): Promise<void> {
     const verdict = resolveEmulatorMarkerVerdict({
       currentPid: process.pid,
       isOwnerAlive: checkIsProcessAlive(marker.ownerPid),
@@ -437,7 +437,7 @@ export class EmulatorReclaimer {
    * @param params - The device, the PIDs this run owns, and the budget.
    * @returns `true` when the emulator disappeared within the budget.
    */
-  private async waitForEmulatorStopped(params: WaitForEmulatorStoppedParams): Promise<boolean> {
+  private async waitForEmulatorStopped(params: EmulatorReclaimerWaitForEmulatorStoppedParams): Promise<boolean> {
     const deadline = Date.now() + params.timeoutInMilliseconds;
 
     while (Date.now() < deadline) {

@@ -53,6 +53,7 @@ const OUTPUT_MAX_BUFFER_IN_BYTES = 67_108_864;
  * @returns A {@link Promise} that resolves to the raw stdout bytes.
  * @throws Error if adb could not be run, or exited non-zero.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `RunAdbParams` is one bag shared by `runAdbBinary` and `runAdbText`, so no per-owner name can satisfy both.
 export async function runAdbBinary(params: RunAdbParams): Promise<Uint8Array> {
   const commandArguments = ['-s', params.deviceId, ...params.commandArguments];
 
@@ -75,6 +76,7 @@ export async function runAdbBinary(params: RunAdbParams): Promise<Uint8Array> {
  * @returns A {@link Promise} that resolves to stdout, with surrounding whitespace removed.
  * @throws Error if adb could not be run, or exited non-zero.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `RunAdbParams` is one bag shared by `runAdbBinary` and `runAdbText`, so no per-owner name can satisfy both.
 export async function runAdbText(params: RunAdbParams): Promise<string> {
   const stdout = await runAdbBinary(params);
   return new TextDecoder().decode(stdout).trim();

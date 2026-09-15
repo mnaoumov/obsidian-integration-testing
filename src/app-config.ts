@@ -187,6 +187,7 @@ interface WriteInput extends GenericObject {
  * @param params - The key to read, and transport / vault overrides.
  * @returns A {@link Promise} resolving to the key's effective value.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `AppConfigParams` is re-exported from `index.ts`, so renaming it to `GetAppConfigParams` is a breaking change held for the next major.
 export async function getAppConfig(params: AppConfigParams): Promise<unknown> {
   const {
     configKey,

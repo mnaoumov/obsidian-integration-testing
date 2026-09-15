@@ -155,6 +155,7 @@ export function checkNetworkValidated(params: CheckNetworkValidatedParams): bool
  * @returns The timeout in milliseconds.
  */
 export function resolveDeviceIdleTimeoutInMilliseconds(
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.deviceIdleTimeoutInMilliseconds ?? DEFAULT_DEVICE_IDLE_TIMEOUT_IN_MILLISECONDS;
@@ -172,6 +173,7 @@ export function resolveDeviceIdleTimeoutInMilliseconds(
  * @returns The timeout in milliseconds.
  */
 export function resolveNetworkReadyTimeoutInMilliseconds(
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.networkReadyTimeoutInMilliseconds ?? DEFAULT_NETWORK_READY_TIMEOUT_IN_MILLISECONDS;

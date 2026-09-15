@@ -18,7 +18,7 @@
 /**
  * Parameters for {@link appendProcessOutputTail}.
  */
-export interface AppendProcessOutputTailParams {
+export interface AppendProcessOutputTailOptions {
   /**
   The captured stdout+stderr tail (empty when none was captured).
    */
@@ -94,7 +94,7 @@ export interface ProcessExitInfo {
  * @param params - The captured tail and its label.
  * @returns The message, with the tail appended when non-empty.
  */
-export function appendProcessOutputTail(message: string, params: AppendProcessOutputTailParams): string {
+export function appendProcessOutputTail(message: string, params: AppendProcessOutputTailOptions): string {
   const trimmedOutput = params.output.trim();
   if (trimmedOutput.length === 0) {
     return message;
