@@ -4,6 +4,7 @@ import {
   defineObsidianMetadataGlobal,
   readMetadataJsonText
 } from './helpers/metadata-global.ts';
+import { VitestProject } from './helpers/vitest-projects.ts';
 
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
@@ -69,9 +70,11 @@ const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
 
 // The Android suites run in their own project because they are the only ones that need a real Android
 // Emulator through Appium (see L39). Keeping them out of the default `integration-tests` aggregate is
-// Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator. They share
-// One project rather than taking one each, because each project boots its own emulator session — the cost
-// That dominates an Android run — and these files are serialized within it anyway.
+// Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator. That
+// Exemption is declared where it can be checked — `WORKFLOW_ONLY_TEST_PROJECTS` in
+// `helpers/vitest-projects.ts`, which asserts a workflow really does run what no package script does. They
+// Share one project rather than taking one each, because each project boots its own emulator session — the
+// Cost that dominates an Android run — and these files are serialized within it anyway.
 const ANDROID_TEST_FILES = [
   'src/mobile-trusted-input.android.integration.test.ts',
   'src/eval-cap.android.integration.test.ts'
@@ -79,7 +82,12 @@ const ANDROID_TEST_FILES = [
 
 // Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
 // Single shared window's GLOBAL focus and pointer, so pointer-dependent files cannot run against each
-// Other — which the default `integration-tests` project does not guarantee.
+// Other — which the default `integration-tests` project does not guarantee. That is a statement about how
+// This project runs its own files, and NOT a reason to keep it out of the desktop aggregate: it is in
+// `DESKTOP_INTEGRATION_TEST_PROJECTS` like every other desktop project, it launches its own isolated
+// Instance (L7), and it is the only integration file in the repo that touches the pointer or the keyboard,
+// So there is nothing for it to race. Until it was added to that list it sat in no aggregate at all, which
+// Left the repo's only desktop coverage of the trusted-input helpers run by nothing.
 const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/trusted-input.desktop.integration.test.ts';
 
 // An emulator run is 140-200s cold (L19), and every step before the first assertion — boot, Appium session,
@@ -130,7 +138,7 @@ export const config = defineConfig({
           environment: 'node',
           exclude: [...SHARED_EXCLUDE, INTEGRATION_TEST_FILES, JEST_TEST_FILES],
           include: ['src/**/*.test.ts'],
-          name: 'unit-tests',
+          name: VitestProject.UnitTests,
           server: {
             // eslint-disable-next-line unicorn/name-replacements -- `deps` is Vite's own `server.deps` option name.
             deps: {
@@ -145,7 +153,7 @@ export const config = defineConfig({
           environment: 'node',
           exclude: [...SHARED_EXCLUDE],
           include: [SCRIPTS_TEST_FILES, DOCS_SITE_TEST_FILES],
-          name: 'unit-tests:scripts'
+          name: VitestProject.ScriptsUnitTests
         }
       },
       {
@@ -164,7 +172,7 @@ export const config = defineConfig({
             DESKTOP_TRUSTED_INPUT_TEST_FILE
           ],
           include: [INTEGRATION_TEST_FILES],
-          name: 'integration-tests',
+          name: VitestProject.IntegrationTests,
           setupFiles: [METADATA_SETUP_FILE]
         }
       },
@@ -177,7 +185,7 @@ export const config = defineConfig({
           globalSetup: ['./scripts/owned-attach-regression-global-setup.ts'],
           include: [OWNED_ATTACH_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:owned-attach',
+          name: VitestProject.OwnedAttachIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
@@ -193,7 +201,7 @@ export const config = defineConfig({
           globalSetup: ['./src/vitest/global-setup-no-plugin.ts'],
           include: [BARE_ATTACH_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:bare-attach',
+          name: VitestProject.BareAttachIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
@@ -215,7 +223,7 @@ export const config = defineConfig({
           globalSetup: ['./src/vitest/global-setup-no-plugin.ts'],
           include: [FAILED_SETUP_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:failed-setup',
+          name: VitestProject.FailedSetupIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
@@ -228,7 +236,7 @@ export const config = defineConfig({
           globalSetup: ['./src/vitest/global-setup-no-plugin.ts'],
           include: [INSTANCE_DEATH_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:instance-death',
+          name: VitestProject.InstanceDeathIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
@@ -241,7 +249,7 @@ export const config = defineConfig({
           globalSetup: ['./scripts/enable-community-plugins-global-setup.ts'],
           include: [ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:enable-community-plugins',
+          name: VitestProject.EnableCommunityPluginsIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
@@ -262,7 +270,7 @@ export const config = defineConfig({
           globalSetup: ['./scripts/config-directory-override-global-setup.ts'],
           include: [CONFIG_DIRECTORY_OVERRIDE_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:config-directory-override',
+          name: VitestProject.ConfigDirectoryOverrideIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './src/vitest/setup.ts']
         }
       },
@@ -280,7 +288,7 @@ export const config = defineConfig({
           hookTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS,
           include: ANDROID_TEST_FILES,
           maxWorkers: 1,
-          name: 'integration-tests:android',
+          name: VitestProject.AndroidIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE, './scripts/android-transport-setup.ts'],
           testTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS
         }
@@ -293,7 +301,7 @@ export const config = defineConfig({
           fileParallelism: false,
           include: [DESKTOP_TRUSTED_INPUT_TEST_FILE],
           maxWorkers: 1,
-          name: 'integration-tests:desktop-trusted-input',
+          name: VitestProject.DesktopTrustedInputIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE]
         }
       }
