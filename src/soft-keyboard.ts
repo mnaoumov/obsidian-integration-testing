@@ -104,7 +104,7 @@ export interface TapDeviceParams {
 }
 
 /**
- * Where a failed attempt leaves its evidence — gitignored across the fleet, like the capture scratch files.
+ * Where a failed attempt leaves its evidence — under `dist/`, which a plugin repo using this harness gitignores, like the capture scratch files.
  */
 const DEFAULT_DIAGNOSTICS_DIRECTORY = join(process.cwd(), 'dist', 'screenshots');
 

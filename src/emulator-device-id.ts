@@ -4,12 +4,13 @@
  * Picks the running emulator that belongs to a named AVD.
  *
  * A capture suite must never take "the first device `adb devices` lists". Two
- * things routinely make that the wrong device on this fleet: a physical phone is
- * often plugged into the same machine, and the harness's own `obsidian_test` AVD
- * runs at a different geometry than the `obsidian_screenshots` AVD sized to the
- * store's frame. Picking by position silently photographs the wrong screen at
- * the wrong size, and the dimension assertion that would have caught it fires
- * several minutes later, after the run.
+ * things routinely make that the wrong device on a machine running these
+ * suites: a physical phone is often plugged in alongside, and the harness's own
+ * `obsidian_test` AVD runs at a different geometry than the
+ * `obsidian_screenshots` AVD sized to the store's frame. Picking by position
+ * silently photographs the wrong screen at the wrong size, and the dimension
+ * assertion that would have caught it fires several minutes later, after the
+ * run.
  *
  * Pure and unit-tested; the `adb` round-trips that gather the AVD names live in
  * `resolve-emulator-device-id`.
