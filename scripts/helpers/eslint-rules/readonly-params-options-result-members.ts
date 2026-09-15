@@ -12,6 +12,9 @@ import type { Rule } from 'eslint';
 
 import { ensureNonNullable } from '../type-guards.ts';
 
+/**
+Message ID reported when a member of a `*Params`/`*Options`/`*Result` interface is not declared `readonly`.
+ */
 export const MESSAGE_ID = 'readonlyParamsOptionsResultMembers';
 
 interface PropertySignatureNode {
@@ -42,9 +45,9 @@ export const readonlyParamsOptionsResultMembers: Rule.RuleModule = {
   }
 };
 
-function reportNonReadonly(context: Rule.RuleContext, node: Rule.Node): void {
+function reportNonReadonly($context: Rule.RuleContext, node: Rule.Node): void {
   const propertyNode = node as Partial<PropertySignatureNode>;
-  context.report({
+  $context.report({
     fix(fixer) {
       return fixer.insertTextBefore(ensureNonNullable(propertyNode.key), 'readonly ');
     },
