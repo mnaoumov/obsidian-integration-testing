@@ -229,7 +229,14 @@ const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 const CAP_RECOVERY_GRACE_IN_MILLISECONDS = 30_000;
 
 // --- Console capture (Layer 2 of the plugin-load error surfacing) ---
-const CONSOLE_CAPTURE_MARKER_TAG = 'OIT_CAPTURE';
+/**
+ * The `logcat` tag stamped at capture start, and the prefix of the unique marker written under it.
+ *
+ * Process-local rather than a protocol: `beginConsoleCapture` writes it and `readConsoleCaptureSince` searches the dump for
+ * the same string, both from this constant, so the value is free to change. It only has to be unlikely to occur in an
+ * unrelated log line.
+ */
+const CONSOLE_CAPTURE_MARKER_TAG = 'OBSIDIAN_INTEGRATION_TESTING_CAPTURE';
 const CONSOLE_CAPTURE_TAIL_MAX_LENGTH = 8000;
 const ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS = 5000;
 const LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS = 10_000;
