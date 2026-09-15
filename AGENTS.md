@@ -1649,6 +1649,20 @@ never sees. The vendored ambient declarations under `scripts/helpers/@types/` ar
 `prefer-type-literal-last`, which fights `perfectionist/sort-union-types` there in a non-converging fix loop)
 because their names come from a dependency's published schema.
 
+### The custom rule sources are shared byte-for-byte with four sibling repos
+
+`scripts/helpers/eslint-rules/*.ts` (and `scripts/helpers/check-project-types.ts`, and the vendored `@types/markdownlint-cli2-config-schema.d.ts`) are **one copy living in five places**: here, `obsidian-test-mocks`, `obsidian-typings-crawler`, `typescript-template`, and both `obsidian-typings` release branches. `obsidian-test-mocks`' `main` holds the canonical copy. Change a rule **there** and copy the file out verbatim; do not merge line by line, and do not hand-edit the copy here, or the set silently acquires a sixth variant.
+
+**No file in that set may carry an inline `eslint-disable` naming a rule from the local plugin, or from a plugin the siblings do not install.** ESLint fails an entire run with *"Definition for rule was not found"* on an unresolvable rule reference, so a directive that is perfectly valid here breaks lint outright in the repos that do not install that plugin — and it breaks it *there*, where nobody editing this file is looking. `no-async-callback-to-unsafe-return.ts` recurses in two places and trips `unicorn/no-useless-recursion`; the suppression therefore lives in `scripts/eslint-config.ts` as a file-scoped override rather than on the line, and it must stay there.
+
+`scripts/helpers/eslint-rules/obsidian-dev-utils-plugin.ts` is the one file in the folder that is deliberately **not** shared — it is the per-repo registration list, and each repo registers the rules it has. `prefer-noop-async` exists only in `obsidian-test-mocks` and is not carried here.
+
+`tsconfig.eslint-test.json` at the repo root exists solely because `no-async-callback-to-unsafe-return.test.ts` names it as its `defaultProject`; it is seven lines, identical in every sibling, and nothing else reads it.
+
+`params-options-name-match` is enabled at `error` for `scripts/` only. That is a measurement, not an oversight: the tree reports zero findings and is where the convention has already had to be hand-repaired once, while `src/` reports 35 — mostly shared bags (`ObsidianTransportOptions`, `ObsidianAndroidAppiumTransportOptions`, `TransportEvalOptions`, `CaptureScreenshotParams`, ...) threaded through several helpers apiece, which no rename can satisfy because one type cannot carry several per-owner names. Ten of those types are re-exported from `index.ts`, so widening the glob is a decision about this package's public API rather than a config edit.
+
+`scripts/helpers/npm-pack.ts` and its test are a **two-variant** pair shared with `obsidian-test-mocks` alone, and byte-identity is not available for them: the fixtures name the package and version, and the `castTo` import path differs. Keep the *behaviour* the two suites pin identical; expect the rest to differ.
+
 ## L35. Documentation site (`docs/`) — an Astro + Starlight copy-sync of `obsidian-dev-utils`
 
 The user-facing docs are an Astro + Starlight site under `docs/`, served at
