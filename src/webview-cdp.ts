@@ -79,6 +79,12 @@ interface CdpMessage {
   readonly result?: Record<string, unknown>;
 }
 
+/**
+ * A command waiting for its reply: settles the {@link WebViewCdpConnection.send}
+ * call's promise and cancels the timeout that would otherwise fail it.
+ */
+type PendingCommand = (message: CdpMessage) => void;
+
 /* v8 ignore start -- Integration-time code (a live WebSocket to a WebView, adb port forwarding). Covered by the Android integration tests, not by unit tests. It ends before `parseForwardedPort`: `perfectionist/sort-modules` places the pure, unit-tested helpers AFTER this class and `connectToWebViewCdp`, so they must stay measured. */
 
 /**
@@ -105,7 +111,25 @@ export class WebViewCdpConnection {
   private messageId = 0;
 
   /**
+   * The commands still waiting for a reply, keyed by the CDP message id each was
+   * sent with. Emptied by whichever of the reply and the timeout comes first.
+   */
+  private readonly pendingCommands = new Map<number, PendingCommand>();
+
+  /**
    * Wraps an already-open debugger socket, plus what is needed to tear its port forward down.
+   *
+   * ONE `message` listener for the socket's whole life, routing both halves of what
+   * arrives — CDP events to their subscribed handler, command replies to the
+   * {@link send} call waiting on the id. A listener per in-flight command instead
+   * would make the count scale with concurrency, so eleven commands in flight at
+   * once would cross Node's default `maxListeners` of 10 and report a memory leak
+   * that is not one (see the desktop transport's `getPendingCommands`, where the
+   * same shape was measured).
+   *
+   * The parse is guarded because a frame this connection cannot read belongs to
+   * nothing it sent: throwing here would throw out of the event dispatch, where
+   * nothing can catch it.
    *
    * @param webSocket - The open debugger socket.
    * @param deviceId - The adb device id, needed to drop the port forward on dispose.
@@ -113,12 +137,29 @@ export class WebViewCdpConnection {
    */
   public constructor(private readonly webSocket: WebSocket, private readonly deviceId: string, private readonly port: number) {
     this.webSocket.addEventListener('message', (event: MessageEvent) => {
-      const message = JSON.parse(String(event.data)) as CdpMessage;
-      if (message.method === undefined) {
+      let message: CdpMessage;
+      try {
+        message = JSON.parse(String(event.data)) as CdpMessage;
+      } catch {
         return;
       }
 
-      this.eventHandlers.get(message.method)?.(message.params ?? {});
+      if (message.method !== undefined) {
+        this.eventHandlers.get(message.method)?.(message.params ?? {});
+        return;
+      }
+
+      if (message.id === undefined) {
+        return;
+      }
+
+      const pendingCommand = this.pendingCommands.get(message.id);
+      if (!pendingCommand) {
+        return;
+      }
+
+      this.pendingCommands.delete(message.id);
+      pendingCommand(message);
     });
   }
 
@@ -170,28 +211,28 @@ export class WebViewCdpConnection {
 
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        this.webSocket.removeEventListener('message', handler);
+        this.pendingCommands.delete(id);
         reject(new Error(`WebView CDP command timed out after ${String(CDP_COMMAND_TIMEOUT_IN_MILLISECONDS)}ms: ${method}`));
       }, CDP_COMMAND_TIMEOUT_IN_MILLISECONDS);
 
-      const handler = (event: MessageEvent): void => {
-        const message = JSON.parse(String(event.data)) as CdpMessage;
-        if (message.id !== id) {
-          return;
-        }
-
+      this.pendingCommands.set(id, (message) => {
         clearTimeout(timeout);
-        this.webSocket.removeEventListener('message', handler);
         if (message.error) {
           reject(new Error(`WebView CDP command ${method} failed: ${message.error.message ?? 'unknown error'}`));
           return;
         }
 
         resolve(message.result ?? {});
-      };
+      });
 
-      this.webSocket.addEventListener('message', handler);
-      this.webSocket.send(JSON.stringify({ id, method, params }));
+      try {
+        this.webSocket.send(JSON.stringify({ id, method, params }));
+      } catch (error: unknown) {
+        // Nothing will answer a send that threw, so holding the entry for the full timeout would only delay the failure and then misname it.
+        clearTimeout(timeout);
+        this.pendingCommands.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
