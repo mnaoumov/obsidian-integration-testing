@@ -7,10 +7,10 @@
     "means the condition that justified the pin has changed and the pin should be re-examined. `check: null` means no",
     "mechanical test exists — it is reported for manual review on every run instead of going quiet. Every exact pin must",
     "have an entry here, and every entry must correspond to a real pin; the script errors on either mismatch.",
-    "The caret-ranged overrides (glob, readdir-glob, test-exclude, tmp) are swept automatically and",
-    "are deliberately not listed. An advisory-driven override is the exception — it is listed even when caret-ranged,",
-    "because the sweep only keeps it current, it never reports that the advisory it answers is gone and the override with",
-    "it. Modeled on obsidian-dev-utils/pinned-versions.json."
+    "A caret-ranged override needs no entry to stay current — the sweep floats it to the newest publish on its own.",
+    "An advisory-driven one is listed here anyway, even when caret-ranged, because the sweep only keeps it current, it",
+    "never reports that the advisory it answers is gone and the override with it. Modeled on",
+    "obsidian-dev-utils/pinned-versions.json."
   ],
   "pins": {
     "@puppeteer/browsers": {
@@ -26,12 +26,6 @@
       "check": null,
       "expect": null,
       "manualCheck": "Confirm the dependent set first: `npm ls @sinonjs/fake-timers --all` currently shows exactly one path (jest-config → jest-environment-node → @jest/fake-timers), so there is no second consumer left to reconcile. Then drop the override, `npm install`, and run `npm run test:jest` plus `npm test`. If green, delete the override; if the Jest fake-timer suites break on 15.x, replace this entry's why with the concrete failure."
-    },
-    "brace-expansion": {
-      "section": "overrides",
-      "why": "GHSA-rgw5-rvv9-x895 (high, DoS via unbounded intermediate arrays) covers 4.0.0 - 5.0.8; 5.0.9 is the fix. It lives in the tree exactly once, under eslint-plugin-import-x -> minimatch@10.2.5, which declares ^5.0.5 and therefore happily resolves the vulnerable 5.0.8. Nothing in package.json depends on brace-expansion directly, so no direct upgrade can reach it and the override is the only lever. Kept caret-ranged so the sweep carries it forward.",
-      "check": "node -e \"process.stdout.write(require('minimatch/package.json').dependencies['brace-expansion'])\"",
-      "expect": "^5.0.5"
     },
     "deepmerge-ts": {
       "section": "overrides",
