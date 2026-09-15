@@ -1,23 +1,14 @@
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { resolveToolCommand } from './helpers/package-manager.ts';
 import { execFromRoot } from './helpers/root.ts';
+import {
+  DESKTOP_INTEGRATION_TEST_PROJECTS,
+  toProjectArguments
+} from './helpers/vitest-projects.ts';
 
 exitIfScriptDisabled();
 
 await execFromRoot([
   ...resolveToolCommand({ tool: 'vitest' }),
-  '--project',
-  'integration-tests',
-  '--project',
-  'integration-tests:owned-attach',
-  '--project',
-  'integration-tests:bare-attach',
-  '--project',
-  'integration-tests:enable-community-plugins',
-  '--project',
-  'integration-tests:config-directory-override',
-  '--project',
-  'integration-tests:failed-setup',
-  '--project',
-  'integration-tests:instance-death'
+  ...toProjectArguments(DESKTOP_INTEGRATION_TEST_PROJECTS)
 ]);

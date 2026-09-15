@@ -1,6 +1,10 @@
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { resolveToolCommand } from './helpers/package-manager.ts';
 import { execFromRoot } from './helpers/root.ts';
+import {
+  COVERAGE_TEST_PROJECTS,
+  toProjectArguments
+} from './helpers/vitest-projects.ts';
 
 exitIfScriptDisabled();
 
@@ -9,8 +13,7 @@ const FULL_COVERAGE = 100;
 await execFromRoot([
   ...resolveToolCommand({ tool: 'vitest' }),
   'run',
-  '--project',
-  'unit-tests',
+  ...toProjectArguments(COVERAGE_TEST_PROJECTS),
   '--coverage',
   // Enforce the thresholds PER FILE, not only across the total. Pass/fail is unchanged — a 100% total is
   // Reachable only when every file is already at 100% — but the failure then names the offending path
