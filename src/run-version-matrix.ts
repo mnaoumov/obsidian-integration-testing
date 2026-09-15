@@ -45,7 +45,7 @@ export interface RunObsidianVersionMatrixParams {
    * The entry's `version` is the concrete `x.y.z` to pin — typically forwarded to
    * the test-runner child as `OBSIDIAN_VERSION`.
    */
-  readonly run: (entry: ObsidianVersionMatrixEntry) => Promise<void> | void;
+  run(this: void, entry: ObsidianVersionMatrixEntry): Promise<void> | void;
 
   /**
    * The version specifiers to run against: an array, or a comma-separated string

@@ -236,7 +236,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   interface FileSystemAdapterLike {
     basePath?: string;
-    getBasePath?: () => string;
+    getBasePath?(): string;
   }
 
   interface IpcSendSyncParams {
@@ -249,10 +249,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // optional-member view to detect their runtime absence without a false
   // `no-unnecessary-condition`.
   interface PluginsLike {
-    isEnabled?: () => boolean;
-    loadPlugin?: (id: string) => Promise<void>;
+    isEnabled?(): boolean;
+    loadPlugin?(id: string): Promise<void>;
     manifests?: unknown;
-    uninstallPlugin?: (id: string) => Promise<void>;
+    uninstallPlugin?(id: string): Promise<void>;
   }
 
   interface SetLocalStorageItemParams {

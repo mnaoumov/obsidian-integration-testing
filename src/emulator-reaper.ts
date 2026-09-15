@@ -162,7 +162,7 @@ export interface ResolveEmulatorReaperWatchParams {
   /**
   Whether a PID is still running.
    */
-  readonly checkIsPidAlive: (pid: number) => boolean;
+  checkIsPidAlive(this: void, pid: number): boolean;
 
   /**
   The AVD's marker as it reads now, if any.
@@ -182,7 +182,7 @@ export interface SpawnEmulatorReaperParams {
   /**
   Receives the armed / not-armed line.
    */
-  readonly log: (message: string) => void;
+  log(this: void, message: string): void;
 
   /**
   The recorded emulator's launch time, as written into its marker.

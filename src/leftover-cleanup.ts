@@ -126,13 +126,13 @@ export interface SweepDeviceLeftoversParams {
    * must resolve to an empty list rather than reject — a device with no vault
    * directory yet is the normal first-run state, not an error.
    */
-  readonly listNames: () => Promise<readonly string[]>;
+  listNames(this: void): Promise<readonly string[]>;
 
   /**
    * Removes ONE directory, by absolute device path. May reject; the caller
    * treats a rejection as this directory failing and moves on to the next.
    */
-  readonly removeDirectory: (path: string) => Promise<void>;
+  removeDirectory(this: void, path: string): Promise<void>;
 
   /**
   The absolute device path the vaults sit under, including its trailing separator.

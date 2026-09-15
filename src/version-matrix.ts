@@ -186,12 +186,12 @@ export interface RunVersionMatrixEntriesParams {
   /**
   Called just before each entry runs, for progress reporting.
    */
-  readonly onEntryStart: (params: FormatVersionMatrixRunHeaderParams) => void;
+  onEntryStart(this: void, params: FormatVersionMatrixRunHeaderParams): void;
 
   /**
   Runs the suites against a single entry, throwing on failure.
    */
-  readonly run: (entry: ObsidianVersionMatrixEntry) => Promise<void> | void;
+  run(this: void, entry: ObsidianVersionMatrixEntry): Promise<void> | void;
 }
 
 /**
