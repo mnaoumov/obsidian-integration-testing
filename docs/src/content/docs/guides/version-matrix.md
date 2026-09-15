@@ -5,11 +5,7 @@ sidebar:
     order: 7
 ---
 
-Obsidian support is a **range** — `[latest public, latest catalyst]` — and both ends are expected to work.
-The two ends periodically **coincide**: when public catches up to catalyst, `public-latest` and
-`catalyst-latest` provision the same build, so running the suites twice re-runs the same build and
-verifies nothing extra. Worse, a project that runs both still reports "green on public **and** catalyst" —
-a two-end claim it never actually verified.
+Obsidian support is a **range** — `[latest public, latest catalyst]` — and both ends are expected to work. The two ends periodically **coincide**: when public catches up to catalyst, `public-latest` and `catalyst-latest` provision the same build, so running the suites twice re-runs the same build and verifies nothing extra. Worse, a project that runs both still reports "green on public **and** catalyst" — a two-end claim it never actually verified.
 
 `runObsidianVersionMatrix` makes that decision once, in the harness:
 
@@ -34,8 +30,7 @@ await runObsidianVersionMatrix({
 });
 ```
 
-Your test config keeps reading the version the way it always did — the runner just decides how many times
-to invoke it:
+Your test config keeps reading the version the way it always did — the runner just decides how many times to invoke it:
 
 ```ts
 environmentOptions: {
@@ -48,9 +43,7 @@ environmentOptions: {
 
 ## What the runner guarantees
 
-- **De-duplication is keyed on the *resolved* version, never the specifier string.**
-  `['1.13.4', 'catalyst-latest']` collapses to a single run when catalyst *is* `1.13.4`, exactly as
-  `['public-latest', 'catalyst-latest']` does when the channels converge.
+- **De-duplication is keyed on the *resolved* version, never the specifier string.** `['1.13.4', 'catalyst-latest']` collapses to a single run when catalyst *is* `1.13.4`, exactly as `['public-latest', 'catalyst-latest']` does when the channels converge.
 
 - **The decision is always stated in the log**, so one run where you expected two is never ambiguous:
 
@@ -61,24 +54,18 @@ environmentOptions: {
   [version-matrix] Run 1 of 1: 1.13.4 (public-latest, catalyst-latest)
   ```
 
-- **Every version runs before anything is reported.** A failing end never hides the other: the summary
-  names which concrete versions failed and which passed, and the thrown `AggregateError` carries each
-  underlying failure.
+- **Every version runs before anything is reported.** A failing end never hides the other: the summary names which concrete versions failed and which passed, and the thrown `AggregateError` carries each underlying failure.
 
   ```text
   AggregateError: Obsidian version matrix failed on 1 of 2 versions: 1.12.7 (public-latest). Passed: 1.13.4 (catalyst-latest).
   ```
 
-- **Only this runner defaults to both ends.** `obsidianVersion` with no explicit pin still means "whatever
-  your installed Obsidian runs", so `connectToCdp()`, the CLI, and any suite not using the runner are
-  unaffected.
+- **Only this runner defaults to both ends.** `obsidianVersion` with no explicit pin still means "whatever your installed Obsidian runs", so `connectToCdp()`, the CLI, and any suite not using the runner are unaffected.
 
-- **The runner never launches Obsidian itself** — your `run` callback does — so it stays
-  framework-agnostic and works for Vitest, Jest and manual consumers alike.
+- **The runner never launches Obsidian itself** — your `run` callback does — so it stays framework-agnostic and works for Vitest, Jest and manual consumers alike.
 
 ## Related
 
 - [`runObsidianVersionMatrix` API reference](/obsidian-integration-testing/api/run-version-matrix/runObsidianVersionMatrix/)
 - [`DEFAULT_OBSIDIAN_VERSION_SPECS` API reference](/obsidian-integration-testing/api/version-matrix/DEFAULT-OBSIDIAN-VERSION-SPECS/)
-- [Transport modes](/obsidian-integration-testing/guides/transports/#pin-an-obsidian-version) — pinning a
-  single version.
+- [Transport modes](/obsidian-integration-testing/guides/transports/#pin-an-obsidian-version) — pinning a single version.

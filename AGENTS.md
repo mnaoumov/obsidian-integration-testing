@@ -80,414 +80,161 @@ Only the **`android`** scope (`obsidian-android-appium`) takes the lock now; `ge
 
 ## L8. Trusted keyboard input (`typeIntoEditor`)
 
-> **Not desktop-only.** Everything below describes the Electron path. The same helper is trusted on Android
-> too, through a CDP channel to the WebView — see **L39** for the mechanism and its consequences (the
-> helpers are `Promise<void>`, and the `await` matters).
+> **Not desktop-only.** Everything below describes the Electron path. The same helper is trusted on Android too, through a CDP channel to the WebView — see **L39** for the mechanism and its consequences (the helpers are `Promise<void>`, and the `await` matters).
 
-Every `evalInObsidian` callback receives a `typeIntoEditor(params: { editor: Editor; text: string })`
-helper as a **base** member of the injected **`lib`** bag (destructure `callback({ lib: { typeIntoEditor } })`),
-typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
-(`namespace-bootstrap.ts`, the bag `evalWrapper` builds). See **L16** for the `lib` mechanism. Per **L6**
-it lives once on the Obsidian side, so Vitest / Jest / Manual all inherit it.
+Every `evalInObsidian` callback receives a `typeIntoEditor(params: { editor: Editor; text: string })` helper as a **base** member of the injected **`lib`** bag (destructure `callback({ lib: { typeIntoEditor } })`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace (`namespace-bootstrap.ts`, the bag `evalWrapper` builds). See **L16** for the `lib` mechanism. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual all inherit it.
 
-Reliably testing "the user typed into a CodeMirror editor" needs a **trusted** key event (the kind
-only the browser/OS produces). Both in-page alternatives give false results:
+Reliably testing "the user typed into a CodeMirror editor" needs a **trusted** key event (the kind only the browser/OS produces). Both in-page alternatives give false results:
 
-- `dispatchEvent(new KeyboardEvent(...))` is untrusted (`isTrusted: false`) → CodeMirror's DOM
-  observer ignores it and the document never changes, even when everything is wired correctly.
-- `execCommand('insertText')` mutates the selection directly → it inserts text **even when the editor
-  is not focused**, masking focus bugs (e.g. a modal focus trap) as false-positive passes.
+- `dispatchEvent(new KeyboardEvent(...))` is untrusted (`isTrusted: false`) → CodeMirror's DOM observer ignores it and the document never changes, even when everything is wired correctly.
+- `execCommand('insertText')` mutates the selection directly → it inserts text **even when the editor is not focused**, masking focus bugs (e.g. a modal focus trap) as false-positive passes.
 
-`typeIntoEditor` focuses the editor (caret to end), then **presses each code point of `text` via
-`pressKey`** (see **L14**) — typing is just pressing each character key in turn, so it reuses the same
-trusted `keyDown` → `char` → `keyUp` a real user produces rather than duplicating a `sendInputEvent`
-call. Each keystroke is delivered to the window's DOM-focused element and flows through CodeMirror's
-real input pipeline, so the text lands **only if the editor genuinely holds focus** — a faithful
-end-to-end check. (`pressKey` reaches `webContents` via
-`window.electron.remote.getCurrentWebContents()` — using `getCurrentWebContents()`, **not**
-`getFocusedWebContents()`, which returns `null` in the headless/CI case; see L14.) After pressing the
-keys it **polls** (not a fixed delay) until the document reflects the input, or a bounded timeout
-elapses (the expected outcome when the editor is read-only/rejecting, or focus was stolen).
+`typeIntoEditor` focuses the editor (caret to end), then **presses each code point of `text` via `pressKey`** (see **L14**) — typing is just pressing each character key in turn, so it reuses the same trusted `keyDown` → `char` → `keyUp` a real user produces rather than duplicating a `sendInputEvent` call. Each keystroke is delivered to the window's DOM-focused element and flows through CodeMirror's real input pipeline, so the text lands **only if the editor genuinely holds focus** — a faithful end-to-end check. (`pressKey` reaches `webContents` via `window.electron.remote.getCurrentWebContents()` — using `getCurrentWebContents()`, **not** `getFocusedWebContents()`, which returns `null` in the headless/CI case; see L14.) After pressing the keys it **polls** (not a fixed delay) until the document reflects the input, or a bounded timeout elapses (the expected outcome when the editor is read-only/rejecting, or focus was stolen).
 
 ### Consumer responsibility: serialize focus-dependent integration files
 
-Trusted input targets the single shared window's **global** focus, so focus-dependent integration
-test **files** must not run in parallel against the one shared Obsidian instance: they race for focus,
-and a `detachLeavesOfType('markdown')` in one file wipes another's editor. The consuming project must
-run its obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
+Trusted input targets the single shared window's **global** focus, so focus-dependent integration test **files** must not run in parallel against the one shared Obsidian instance: they race for focus, and a `detachLeavesOfType('markdown')` in one file wipes another's editor. The consuming project must run its obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
 
 ### `obsidian-dev-utils`'s copy (migration landed)
 
-Under the base-`lib` + duplication decision recorded in **L17**, `obsidian-dev-utils` **keeps** its own
-copies of the trusted-input helpers — `src/obsidian/trusted-input.ts` and its `desktop-` / `mobile-`
-variants (duplication accepted) — and exposes them through its `__merged` surface, so they merge onto
-the base `lib`; its integration tests destructure them from `lib`
-(`async callback({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `input`. `waitUntil`
-is **not** among the copied set (**L17**): dev-utils reuses its own `retryWithTimeout` instead.
+Under the base-`lib` + duplication decision recorded in **L17**, `obsidian-dev-utils` **keeps** its own copies of the trusted-input helpers — `src/obsidian/trusted-input.ts` and its `desktop-` / `mobile-` variants (duplication accepted) — and exposes them through its `__merged` surface, so they merge onto the base `lib`; its integration tests destructure them from `lib` (`async callback({ lib: { typeIntoEditor } }) { … }`) rather than passing them via `input`. `waitUntil` is **not** among the copied set (**L17**): dev-utils reuses its own `retryWithTimeout` instead.
 
 ## L9. Test workers must register the context resolvers (`vitest-setup` / `jest-setup`)
 
-`getTransportOptions()` / `getVaultPath()` are resolved through resolvers registered by
-`setTransportOptionsResolver` / `setVaultPathResolver`. Those registrations live in the framework
-**global-setup** modules, which run **only in the main process** — not in the test workers that
-actually call `evalInObsidian`. Under the retired CLI default this was invisible: with no resolver,
-`getTransportOptions()` returned `undefined`, and the CLI transport needs no port. The owned-CDP
-default **does** need a port (the free port the owned instance was launched on), so a worker with no
-resolver silently rebuilds an owned transport that never launches → its `cdpUrl` is empty →
-`fetch('/json')` throws `Failed to parse URL from /json` on the first eval.
+`getTransportOptions()` / `getVaultPath()` are resolved through resolvers registered by `setTransportOptionsResolver` / `setVaultPathResolver`. Those registrations live in the framework **global-setup** modules, which run **only in the main process** — not in the test workers that actually call `evalInObsidian`. Under the retired CLI default this was invisible: with no resolver, `getTransportOptions()` returned `undefined`, and the CLI transport needs no port. The owned-CDP default **does** need a port (the free port the owned instance was launched on), so a worker with no resolver silently rebuilds an owned transport that never launches → its `cdpUrl` is empty → `fetch('/json')` throws `Failed to parse URL from /json` on the first eval.
 
 Fix (this is the mechanism — keep it in mind whenever a capability must reach workers):
 
-1. **Propagate the endpoint.** `coreSetup` runs `augmentTransportOptions`, which for an owned
-   `DesktopCdpTransport` injects the launched `host`/`port` plus the internal
-   `isHarnessOwnedInstance` flag into the options handed to workers (mirroring the Appium
-   `sessionId`/`deviceId` reuse path). The factory's `port` branch then builds an **attach**
-   transport; `isHarnessOwnedInstance` makes `preflightCheck` skip the user-scope vault-registration
-   check (the owned vault lives in an isolated user-data config, not the user-scope registry).
-2. **Register the resolver in the worker.** Consumers MUST add the per-worker setup file to their
-   integration vitest project's `setupFiles`: `setupFiles: ['obsidian-integration-testing/vitest-setup']`
-   (Jest: add `obsidian-integration-testing/jest-setup` to `setupFiles`). It registers
-   `setTransportOptionsResolver(() => inject('obsidianTransport'))` and the vault-path resolver, so
-   the worker reads what the global setup published via `provide`.
+1. **Propagate the endpoint.** `coreSetup` runs `augmentTransportOptions`, which for an owned `DesktopCdpTransport` injects the launched `host`/`port` plus the internal `isHarnessOwnedInstance` flag into the options handed to workers (mirroring the Appium `sessionId`/`deviceId` reuse path). The factory's `port` branch then builds an **attach** transport; `isHarnessOwnedInstance` makes `preflightCheck` skip the user-scope vault-registration check (the owned vault lives in an isolated user-data config, not the user-scope registry).
+2. **Register the resolver in the worker.** Consumers MUST add the per-worker setup file to their integration vitest project's `setupFiles`: `setupFiles: ['obsidian-integration-testing/vitest-setup']` (Jest: add `obsidian-integration-testing/jest-setup` to `setupFiles`). It registers `setTransportOptionsResolver(() => inject('obsidianTransport'))` and the vault-path resolver, so the worker reads what the global setup published via `provide`.
 
-Per L6 the mechanism reaches both frameworks. Caveat: Vitest's `provide`/`inject` carries the
-**dynamically** chosen owned port to workers; Jest has no `globalSetup`→worker channel for dynamic
-values (its `globals` are static config), so under Jest the owned-CDP default cannot hand workers the
-auto-chosen port — attach to a fixed `port` via the transport options in `globals`.
+Per L6 the mechanism reaches both frameworks. Caveat: Vitest's `provide`/`inject` carries the **dynamically** chosen owned port to workers; Jest has no `globalSetup`→worker channel for dynamic values (its `globals` are static config), so under Jest the owned-CDP default cannot hand workers the auto-chosen port — attach to a fixed `port` via the transport options in `globals`.
 
-**23-plugin migration impact:** the pending migration is no longer just "switch `type:
-'obsidian-cli'` → `obsidian-cdp`". Every plugin running desktop integration tests with the owned-CDP
-default must also add `obsidian-integration-testing/vitest-setup` to its integration project's
-`setupFiles` (best done once in the shared `obsidian-dev-utils` vitest config so every consumer inherits
-it).
+**23-plugin migration impact:** the pending migration is no longer just "switch `type: 'obsidian-cli'` → `obsidian-cdp`". Every plugin running desktop integration tests with the owned-CDP default must also add `obsidian-integration-testing/vitest-setup` to its integration project's `setupFiles` (best done once in the shared `obsidian-dev-utils` vitest config so every consumer inherits it).
 
 ### A FAILED global setup rides the same channel — and used to wear the same mask
 
-`fetch('/json')` has a second cause, and it is not a misconfiguration: the resolvers are registered
-correctly, but the global setup **failed**, so it published nothing for them to read. The adapter
-caught the failure (deliberately — other projects must still run), logged it, and stored it in
-`provide('setupError')` — which **only `getTemporaryVault()` read**. A test going straight to
-`evalInObsidian` never touched it, so `getTransportOptions()` returned `undefined`, and `undefined`
-means the owned **desktop** CDP default. Observed 2026-08-30 in `obsidian-link-picker`: an Appium setup
-failure (the device was not found) produced nine `Failed to parse URL from /json` failures in an
-`integration-tests:android` project, each one a **desktop** transport, while the real cause sat once,
-far above, in the setup log. The `[1/9]` headline named neither Appium, nor the device, nor the setup.
+`fetch('/json')` has a second cause, and it is not a misconfiguration: the resolvers are registered correctly, but the global setup **failed**, so it published nothing for them to read. The adapter caught the failure (deliberately — other projects must still run), logged it, and stored it in `provide('setupError')` — which **only `getTemporaryVault()` read**. A test going straight to `evalInObsidian` never touched it, so `getTransportOptions()` returned `undefined`, and `undefined` means the owned **desktop** CDP default. Observed 2026-08-30 in `obsidian-link-picker`: an Appium setup failure (the device was not found) produced nine `Failed to parse URL from /json` failures in an `integration-tests:android` project, each one a **desktop** transport, while the real cause sat once, far above, in the setup log. The `[1/9]` headline named neither Appium, nor the device, nor the setup.
 
 The failure now travels the same worker channel as everything else:
 
-1. **Publish it.** On failure the Vitest adapter provides `setupError` as
-   `{ errorName, message, transportLabel }` — the transport the project was configured for, plus the
-   original error's `name` and message (the error object itself does not survive the trip to a worker).
-2. **Register the resolver.** `setSetupErrorResolver` sits beside the other two in `vitest/setup.ts`
-   (the per-worker file — the registration that matters) and `vitest/global-setup.ts`.
-3. **Throw before building anything.** `getOrCreateTransport` — the single ambient-transport entry all
-   four worker-side callers share — throws `IntegrationSetupFailedError` ahead of the cache check, so no
-   transport of the wrong platform is ever constructed. `coreSetup` is unaffected: it builds its own
-   transport through `createTransportFromOptions` with explicit options and passes an explicit
-   `transportOverride` into every `TemporaryVault` call.
-4. **Refuse the nonsense fetch.** `getPageTargets` now throws "No CDP endpoint configured …" when
-   `cdpUrl` is still empty, instead of `fetch`ing a bare path. Not a fix for either cause — a guard so
-   the mask can never be the reported error again.
+1. **Publish it.** On failure the Vitest adapter provides `setupError` as `{ errorName, message, transportLabel }` — the transport the project was configured for, plus the original error's `name` and message (the error object itself does not survive the trip to a worker).
+2. **Register the resolver.** `setSetupErrorResolver` sits beside the other two in `vitest/setup.ts` (the per-worker file — the registration that matters) and `vitest/global-setup.ts`.
+3. **Throw before building anything.** `getOrCreateTransport` — the single ambient-transport entry all four worker-side callers share — throws `IntegrationSetupFailedError` ahead of the cache check, so no transport of the wrong platform is ever constructed. `coreSetup` is unaffected: it builds its own transport through `createTransportFromOptions` with explicit options and passes an explicit `transportOverride` into every `TemporaryVault` call.
+4. **Refuse the nonsense fetch.** `getPageTargets` now throws "No CDP endpoint configured …" when `cdpUrl` is still empty, instead of `fetch`ing a bare path. Not a fix for either cause — a guard so the mask can never be the reported error again.
 
 Consequences worth knowing:
 
-- **Tests FAIL, they do not skip.** A skip turns a dead emulator into a green run. The failure carries
-  the original message, so all nine reports name the real cause.
-- **This changes the `DesktopOnlyPluginSkipError` path too** — that error's own docstring calls a failing
-  global setup "the test runner's only way to skip a project's tests", but it never skipped: it fell
-  through to desktop and re-ran the mobile suite there. It now fails, carrying its own already-explicit
-  message. `errorName` keeps the two distinguishable in a worker.
-- Jest needs no counterpart: `jest/global-setup.ts` does not catch, and a throwing Jest `globalSetup`
-  aborts the run before a worker starts.
+- **Tests FAIL, they do not skip.** A skip turns a dead emulator into a green run. The failure carries the original message, so all nine reports name the real cause.
+- **This changes the `DesktopOnlyPluginSkipError` path too** — that error's own docstring calls a failing global setup "the test runner's only way to skip a project's tests", but it never skipped: it fell through to desktop and re-ran the mobile suite there. It now fails, carrying its own already-explicit message. `errorName` keeps the two distinguishable in a worker.
+- Jest needs no counterpart: `jest/global-setup.ts` does not catch, and a throwing Jest `globalSetup` aborts the run before a worker starts.
 
-**Regression suite:** `integration-tests:failed-setup` (`src/failed-setup-fail-fast.integration.test.ts`).
-Its global setup is wired to fail — the standard plugin-less setup attaching to CDP port `1`, which `fetch`
-refuses outright, so the failure is instant, offline, and takes no setup lock (only Appium transports do,
-and taking the shared `android` lock in the default aggregate would serialize against every other repo's
-Android run). Against the pre-fix code all three of its tests fail with `Failed to parse URL from /json` —
-which is the point: it reproduces the reported symptom, not just the fix.
+**Regression suite:** `integration-tests:failed-setup` (`src/failed-setup-fail-fast.integration.test.ts`). Its global setup is wired to fail — the standard plugin-less setup attaching to CDP port `1`, which `fetch` refuses outright, so the failure is instant, offline, and takes no setup lock (only Appium transports do, and taking the shared `android` lock in the default aggregate would serialize against every other repo's Android run). Against the pre-fix code all three of its tests fail with `Failed to parse URL from /json` — which is the point: it reproduces the reported symptom, not just the fix.
 
 ## L10. `connectToCdp` — standalone CDP debugging helper
 
-`connectToCdp(options?)` (`src/connect-to-cdp.ts`, exported from the main entry) is a thin,
-framework-agnostic convenience over `createTransportFromOptions` + `TemporaryVault` + `evalInObsidian`. It
-launches (or, with `port`, attaches to) a CDP Obsidian instance, opens a vault, bootstraps the runtime
-helper namespace, and returns a disposable `CdpConnection` exposing `port`, `cdpUrl`, `vault`,
-`invoke(expr)` (raw), and `evalInObsidian({ callback, input })` (rich). It targets ad-hoc real-app debugging
-(the CDP-debugging workflow) rather than test suites.
+`connectToCdp(options?)` (`src/connect-to-cdp.ts`, exported from the main entry) is a thin, framework-agnostic convenience over `createTransportFromOptions` + `TemporaryVault` + `evalInObsidian`. It launches (or, with `port`, attaches to) a CDP Obsidian instance, opens a vault, bootstraps the runtime helper namespace, and returns a disposable `CdpConnection` exposing `port`, `cdpUrl`, `vault`, `invoke(expr)` (raw), and `evalInObsidian({ callback, input })` (rich). It targets ad-hoc real-app debugging (the CDP-debugging workflow) rather than test suites.
 
-**Vault-removal safety.** `TemporaryVault.dispose()` unconditionally `rm`s its directory, so a real vault
-passed by path must never be routed through it. `connectToCdp` encodes this: `dispose()` removes the
-vault dir only when `shouldRemoveVaultOnDispose` is `true`, which **defaults to `true` for an implicit
-temp vault** (no `vault` given) and **`false` when a `vault` path is given** (a real vault is never
-auto-deleted). A real vault is only unregistered (window closed), not removed.
+**Vault-removal safety.** `TemporaryVault.dispose()` unconditionally `rm`s its directory, so a real vault passed by path must never be routed through it. `connectToCdp` encodes this: `dispose()` removes the vault dir only when `shouldRemoveVaultOnDispose` is `true`, which **defaults to `true` for an implicit temp vault** (no `vault` given) and **`false` when a `vault` path is given** (a real vault is never auto-deleted). A real vault is only unregistered (window closed), not removed.
 
-The whole module is integration-time glue (spawns Obsidian / CDP), so — like `transport-factory.ts` /
-`obsidian-instance.ts` — it is wrapped in a module-level `v8 ignore` and covered by
-`src/connect-to-cdp.desktop.integration.test.ts`, not unit tests. A thin CLI (`src/cli.ts` +
-`bin/obsidian-integration-testing.mjs`, wired via `package.json` `bin`) wraps it for when an external
-tool must attach to a printed port.
+The whole module is integration-time glue (spawns Obsidian / CDP), so — like `transport-factory.ts` / `obsidian-instance.ts` — it is wrapped in a module-level `v8 ignore` and covered by `src/connect-to-cdp.desktop.integration.test.ts`, not unit tests. A thin CLI (`src/cli.ts` + `bin/obsidian-integration-testing.mjs`, wired via `package.json` `bin`) wraps it for when an external tool must attach to a printed port.
 
 ## L11. Trusted pointer input (`moveMouse` / `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement`)
 
-> **Not desktop-only, but not uniform either.** `clickMouse` / `clickElement` are trusted on Android too
-> (**L39**): the default and `'left'` become a tap, `'right'` a long-press, `'middle'` throws. The three
-> pointer-*move* helpers — `moveMouse`, `hoverElement`, `unhoverElement` — **throw** on mobile, because
-> touch has no hover state. All of them are `Promise<void>`; the `await` matters.
+> **Not desktop-only, but not uniform either.** `clickMouse` / `clickElement` are trusted on Android too (**L39**): the default and `'left'` become a tap, `'right'` a long-press, `'middle'` throws. The three pointer-*move* helpers — `moveMouse`, `hoverElement`, `unhoverElement` — **throw** on mobile, because touch has no hover state. All of them are `Promise<void>`; the `await` matters.
 
-Every `evalInObsidian` callback also gets a trusted-pointer set as **base** members of the injected
-**`lib`** bag (alongside `typeIntoEditor`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into
-the base `lib` in the in-process namespace (`namespace-bootstrap.ts`); see **L16**. Per **L6** they live
-once on the Obsidian side, so Vitest / Jest / Manual all inherit them. This is the pointer analog of L8's
-trusted keyboard input, and shares its mechanism and caveats.
+Every `evalInObsidian` callback also gets a trusted-pointer set as **base** members of the injected **`lib`** bag (alongside `typeIntoEditor`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace (`namespace-bootstrap.ts`); see **L16**. Per **L6** they live once on the Obsidian side, so Vitest / Jest / Manual all inherit them. This is the pointer analog of L8's trusted keyboard input, and shares its mechanism and caveats.
 
-Some CSS is reachable only through a real pointer **state**. `:hover` is the canonical case: it is not
-an event you can synthesize — `dispatchEvent(new MouseEvent('mouseover'))` is untrusted and never sets
-`:hover`, so a test that needs to observe a genuine hover (real theme `var()` values, real compositing;
-e.g. verifying the `.minimized-modal-bar` box stays opaque on hover) cannot hand-simulate it. The only
-faithful trigger is a **trusted** pointer move, injected via Electron's
-`webContents.sendInputEvent({ type: 'mouseMove', x, y })` at the Chromium level — the exact analog of
-`typeIntoEditor`'s trusted keypress. It reaches `webContents` the same way: via
-`window.electron.remote.getCurrentWebContents()` (using `getCurrentWebContents`, **not**
-`getFocusedWebContents`, since headless CI has no OS focus), through the same local `sendInputEvent`
-interface, widened to also accept a `mouseMove` input.
+Some CSS is reachable only through a real pointer **state**. `:hover` is the canonical case: it is not an event you can synthesize — `dispatchEvent(new MouseEvent('mouseover'))` is untrusted and never sets `:hover`, so a test that needs to observe a genuine hover (real theme `var()` values, real compositing; e.g. verifying the `.minimized-modal-bar` box stays opaque on hover) cannot hand-simulate it. The only faithful trigger is a **trusted** pointer move, injected via Electron's `webContents.sendInputEvent({ type: 'mouseMove', x, y })` at the Chromium level — the exact analog of `typeIntoEditor`'s trusted keypress. It reaches `webContents` the same way: via `window.electron.remote.getCurrentWebContents()` (using `getCurrentWebContents`, **not** `getFocusedWebContents`, since headless CI has no OS focus), through the same local `sendInputEvent` interface, widened to also accept a `mouseMove` input.
 
-The same reasoning applies to a **click**, and for a harder reason than `:hover`: Obsidian's own
-listeners routinely gate on `e.isTrusted`, so a dispatched `MouseEvent` does not merely render
-differently — it does **nothing at all**, while the test still passes whatever weaker assertion it
-makes. Obsidian 1.13.7's markdown viewport (margin) menu is the worked example: its `cm.scrollDOM`
-`contextmenu` listener is `if (!e.defaultPrevented && e.isTrusted && …)`, so a dispatched `contextmenu`
-leaves the handler count at 0 and the test looks "untestable" rather than wrong. A trusted
-`mouseMove` → `mouseDown` → `mouseUp` at the same point makes Chromium synthesize the real `click` /
-`contextmenu`; verified against a live Obsidian 1.13.7 on 2026-08-24.
+The same reasoning applies to a **click**, and for a harder reason than `:hover`: Obsidian's own listeners routinely gate on `e.isTrusted`, so a dispatched `MouseEvent` does not merely render differently — it does **nothing at all**, while the test still passes whatever weaker assertion it makes. Obsidian 1.13.7's markdown viewport (margin) menu is the worked example: its `cm.scrollDOM` `contextmenu` listener is `if (!e.defaultPrevented && e.isTrusted && …)`, so a dispatched `contextmenu` leaves the handler count at 0 and the test looks "untestable" rather than wrong. A trusted `mouseMove` → `mouseDown` → `mouseUp` at the same point makes Chromium synthesize the real `click` / `contextmenu`; verified against a live Obsidian 1.13.7 on 2026-08-24.
 
 Five helpers over one shared internal move, so the primitives and the conveniences never diverge:
 
-- **`moveMouse({ x, y })`** — the raw primitive. Injects a single trusted move at the given web-contents
-  DIP coordinates and does **not** poll (callers poll their own readiness signal). Use it directly when
-  an element-relative target does not fit (e.g. a full-viewport element with no point outside its box).
-- **`clickMouse({ x, y, button?, modifiers? })`** — the raw click primitive: trusted `mouseMove` →
-  `mouseDown` → `mouseUp` at one point, no polling. Coordinate-based because the point to click is often
-  **not** any element's center — the editor margin lies inside `cm.scrollDOM` but outside `.cm-sizer`,
-  so it is reachable only by coordinates (with `readableLineLength` on, aim at
-  `(scrollRect.left + sizerRect.left) / 2`). `modifiers` takes Obsidian's `Modifier` names and shares
-  `pressKey`'s mapping, so `'Mod'` cannot mean two different things.
-- **`hoverElement({ element })`** — moves to the element's center, then **polls** (not a fixed delay)
-  until `element.matches(':hover')`, so it is robust under shared-instance load.
-- **`unhoverElement({ element })`** — moves to a point just outside the element's bounding box, then
-  polls until `!element.matches(':hover')`.
+- **`moveMouse({ x, y })`** — the raw primitive. Injects a single trusted move at the given web-contents DIP coordinates and does **not** poll (callers poll their own readiness signal). Use it directly when an element-relative target does not fit (e.g. a full-viewport element with no point outside its box).
+- **`clickMouse({ x, y, button?, modifiers? })`** — the raw click primitive: trusted `mouseMove` → `mouseDown` → `mouseUp` at one point, no polling. Coordinate-based because the point to click is often **not** any element's center — the editor margin lies inside `cm.scrollDOM` but outside `.cm-sizer`, so it is reachable only by coordinates (with `readableLineLength` on, aim at `(scrollRect.left + sizerRect.left) / 2`). `modifiers` takes Obsidian's `Modifier` names and shares `pressKey`'s mapping, so `'Mod'` cannot mean two different things.
+- **`hoverElement({ element })`** — moves to the element's center, then **polls** (not a fixed delay) until `element.matches(':hover')`, so it is robust under shared-instance load.
+- **`unhoverElement({ element })`** — moves to a point just outside the element's bounding box, then polls until `!element.matches(':hover')`.
 - **`clickElement({ element, button?, modifiers? })`** — clicks the element's center via `clickMouse`.
 
-A right click opens a **real** menu, so a suite that drives one must close it (`menu.hide()` in the
-handler, and/or remove leftover `.menu` elements) or it leaks into the next test.
+A right click opens a **real** menu, so a suite that drives one must close it (`menu.hide()` in the handler, and/or remove leftover `.menu` elements) or it leaks into the next test.
 
 ### Consumer responsibility: serialize pointer-dependent integration files
 
-A trusted move changes the single shared window's **global** pointer target, so only one element is
-hovered at a time. As with L8's trusted keyboard focus, pointer-dependent integration test **files**
-must not run in parallel against the one shared Obsidian instance — the consuming project must run its
-obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
+A trusted move changes the single shared window's **global** pointer target, so only one element is hovered at a time. As with L8's trusted keyboard focus, pointer-dependent integration test **files** must not run in parallel against the one shared Obsidian instance — the consuming project must run its obsidian-integration vitest project serially (`fileParallelism: false`, `maxWorkers: 1`).
 
 ### `obsidian-dev-utils`'s consumer test (migration landed)
 
-`obsidian-dev-utils` writes its red-first advanced-note-composer #124 integration test (the
-minimized-modal-bar opaque-on-hover regression) against `lib.hoverElement` / `lib.unhoverElement` from
-this helper — see that repo's `src/obsidian/modals/minimizable-modal.obsidian.integration.test.ts`, in
-its `hover` block ("should keep the minimized bar opaque on hover so editor content behind it never
-bleeds through"), and, per L8's note on dev-utils' copy, it uses the shipped helper rather than any
-local stopgap.
+`obsidian-dev-utils` writes its red-first advanced-note-composer #124 integration test (the minimized-modal-bar opaque-on-hover regression) against `lib.hoverElement` / `lib.unhoverElement` from this helper — see that repo's `src/obsidian/modals/minimizable-modal.obsidian.integration.test.ts`, in its `hover` block ("should keep the minimized bar opaque on hover so editor content behind it never bleeds through"), and, per L8's note on dev-utils' copy, it uses the shipped helper rather than any local stopgap.
 
 ## L12. Reusable async wait (`waitUntil`)
 
-Every `evalInObsidian` callback also gets a `waitUntil(params: WaitUntilParams)` helper as a **base**
-member of the injected **`lib`** bag (alongside `typeIntoEditor` / the L11 pointer set), typed on `Lib`
-(`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
-(`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
-all inherit it.
+Every `evalInObsidian` callback also gets a `waitUntil(params: WaitUntilParams)` helper as a **base** member of the injected **`lib`** bag (alongside `typeIntoEditor` / the L11 pointer set), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace (`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual all inherit it.
 
-Integration-test closures constantly need to wait for an asynchronous effect to settle (a view to
-open, a DOM node to appear, a setting to apply). The closure is serialized via `toString()` and
-**cannot import modules**, so it can't reuse `obsidian-dev-utils`' `retryWithTimeout` / `runWithTimeout`.
-Before this helper, every consumer hand-rolled the same poll loop inside each closure
-(`obsidian-codescript-toolkit` defined a local `waitUntil` per test; `obsidian-advanced-note-composer`'s
-`modal-instructions.desktop.integration.test.ts` hand-rolled one too). Injecting through `CommonArguments`
-is the **only** way to share such a helper into the serialized closure — the same mechanism as
-`hoverElement` / `typeIntoEditor` / `moveMouse`.
+Integration-test closures constantly need to wait for an asynchronous effect to settle (a view to open, a DOM node to appear, a setting to apply). The closure is serialized via `toString()` and **cannot import modules**, so it can't reuse `obsidian-dev-utils`' `retryWithTimeout` / `runWithTimeout`. Before this helper, every consumer hand-rolled the same poll loop inside each closure (`obsidian-codescript-toolkit` defined a local `waitUntil` per test; `obsidian-advanced-note-composer`'s `modal-instructions.desktop.integration.test.ts` hand-rolled one too). Injecting through `CommonArguments` is the **only** way to share such a helper into the serialized closure — the same mechanism as `hoverElement` / `typeIntoEditor` / `moveMouse`.
 
-- **API shape** — a params object `waitUntil({ predicate })`, matching every other `lib` helper
-  (not a positional `waitUntil(() => cond)`), so the injected-helper surface stays uniform.
-- **`predicate`** may be **synchronous or asynchronous** — it is `await`ed on every poll. It is checked
-  immediately, then re-checked every `intervalInMilliseconds` (default `50`) until it returns truthy or
-  `timeoutInMilliseconds` (default `5000`) elapses, at which point the returned `Promise` **rejects**
-  with a clear timeout error (`message` is appended when provided). Both the interval and timeout are
-  overridable via the params. `WaitUntilParams` is exported from the main entry.
+- **API shape** — a params object `waitUntil({ predicate })`, matching every other `lib` helper (not a positional `waitUntil(() => cond)`), so the injected-helper surface stays uniform.
+- **`predicate`** may be **synchronous or asynchronous** — it is `await`ed on every poll. It is checked immediately, then re-checked every `intervalInMilliseconds` (default `50`) until it returns truthy or `timeoutInMilliseconds` (default `5000`) elapses, at which point the returned `Promise` **rejects** with a clear timeout error (`message` is appended when provided). Both the interval and timeout are overridable via the params. `WaitUntilParams` is exported from the main entry.
 
 ### Pending migration (consumer cleanup)
 
-Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUntil` from the `lib` bag
-(destructure `async callback({ app, lib: { waitUntil } }) { … }`). First consumers: `obsidian-advanced-note-composer`
-(`modal-instructions.desktop.integration.test.ts`) and `obsidian-codescript-toolkit`. Each needs its
-`obsidian-integration-testing` dependency bumped to the version that ships this helper.
+Replace the hand-rolled per-closure `waitUntil` loops with the injected `waitUntil` from the `lib` bag (destructure `async callback({ app, lib: { waitUntil } }) { … }`). First consumers: `obsidian-advanced-note-composer` (`modal-instructions.desktop.integration.test.ts`) and `obsidian-codescript-toolkit`. Each needs its `obsidian-integration-testing` dependency bumped to the version that ships this helper.
 
 ## L13. Android boot: suppress crash/ANR dialogs (`hide_error_dialogs`)
 
-A resource-starved emulator can raise a "Process system isn't responding" ANR (an
-`ActivityManagerService` timeout) whose dialog overlays the UI. When it appears **before** Appium
-attaches, nothing can dismiss it and the run hangs or fails intermittently. In
-`transport-factory.ts`, `AppiumTransportFactory.suppressErrorDialogs` runs
-`adb -s <deviceId> shell settings put global hide_error_dialogs 1` so `ActivityManagerService` never
-draws crash/ANR dialogs. `ensureDeviceConnected` calls it for **both** the newly-started path (after
-`waitForNewDevice`, which already waits for `sys.boot_completed`) and the reused-device path — the
-earliest safe point, since `system_server` must be up before `settings put` works. It is best-effort
-(a failure is logged via the same warn-don't-throw pattern as `sendKeyEvent`, since it only
-suppresses a symptom).
+A resource-starved emulator can raise a "Process system isn't responding" ANR (an `ActivityManagerService` timeout) whose dialog overlays the UI. When it appears **before** Appium attaches, nothing can dismiss it and the run hangs or fails intermittently. In `transport-factory.ts`, `AppiumTransportFactory.suppressErrorDialogs` runs `adb -s <deviceId> shell settings put global hide_error_dialogs 1` so `ActivityManagerService` never draws crash/ANR dialogs. `ensureDeviceConnected` calls it for **both** the newly-started path (after `waitForNewDevice`, which already waits for `sys.boot_completed`) and the reused-device path — the earliest safe point, since `system_server` must be up before `settings put` works. It is best-effort (a failure is logged via the same warn-don't-throw pattern as `sendKeyEvent`, since it only suppresses a symptom).
 
-This narrows but cannot fully close the race: an ANR that fires between boot completing and the
-`settings put` still slips through. Fully eliminating it needs a pre-baked snapshot with the flag
-already set (the flag persists across reboot but not `wipe-data`). The ANR itself signals an
-under-provisioned emulator (too few vCPUs/RAM, or missing hardware acceleration), so treat the
-suppression as symptom relief, not a root-cause fix.
+This narrows but cannot fully close the race: an ANR that fires between boot completing and the `settings put` still slips through. Fully eliminating it needs a pre-baked snapshot with the flag already set (the flag persists across reboot but not `wipe-data`). The ANR itself signals an under-provisioned emulator (too few vCPUs/RAM, or missing hardware acceleration), so treat the suppression as symptom relief, not a root-cause fix.
 
 ## L14. Trusted key press (`pressKey`)
 
-> **Not desktop-only.** On Android the same `rawKeyDown` → `char` → `keyUp` sequence is injected through the
-> WebView's debugger (**L39**), equally trusted. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`,
-> `Delete`, the arrows) and single printable characters are supported; any other multi-character name
-> throws rather than pressing nothing. It is `Promise<void>`; the `await` matters.
+> **Not desktop-only.** On Android the same `rawKeyDown` → `char` → `keyUp` sequence is injected through the WebView's debugger (**L39**), equally trusted. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, the arrows) and single printable characters are supported; any other multi-character name throws rather than pressing nothing. It is `Promise<void>`; the `await` matters.
 
-Every `evalInObsidian` callback also gets a `pressKey(params: PressKeyParams)` helper as a **base**
-member of the injected **`lib`** bag (alongside `typeIntoEditor` / the pointer trio / `waitUntil`),
-typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace
-(`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual
-all inherit it. This is the key-press analog of L8's `typeIntoEditor`, and shares its trusted-input
-mechanism and caveats.
+Every `evalInObsidian` callback also gets a `pressKey(params: PressKeyParams)` helper as a **base** member of the injected **`lib`** bag (alongside `typeIntoEditor` / the pointer trio / `waitUntil`), typed on `Lib` (`src/eval-in-obsidian.ts`) and seeded into the base `lib` in the in-process namespace (`namespace-bootstrap.ts`); see **L16**. Per **L6** it lives once on the Obsidian side, so Vitest / Jest / Manual all inherit it. This is the key-press analog of L8's `typeIntoEditor`, and shares its trusted-input mechanism and caveats.
 
-`pressKey` is the shared primitive for **all** trusted keyboard input: `typeIntoEditor` **builds on
-it**, pressing each code point of its `text` via `pressKey` (typing is pressing each character key in
-turn), so the two paths are identical and there is a single `sendInputEvent` keyboard call site.
-`typeIntoEditor` adds the editor-typing wrapper (focus + caret-to-end + poll until the document
-settles); `pressKey` on its own presses a **single key** (optionally with modifiers) on whatever
-element currently holds DOM focus — for special keys (`Enter`, `Escape`, `Tab`, arrows) and modifier
-combos (`Shift+Enter`, `Mod+A`) that plain typing does not cover.
-It injects a trusted `keyDown` → `char` → `keyUp` sequence via
-`webContents.sendInputEvent`, firing the **full real pipeline**: `keydown` → `keypress` →
-`beforeinput` → `input` → `keyup`, all with `isTrusted: true` (untrusted `dispatchEvent(new
-KeyboardEvent(...))` is ignored by CodeMirror and most key handlers). Confirmed end-to-end on Windows
-(Obsidian 1.13.1): all five events fire trusted, and a trusted `Enter` inserts a newline in a live
-CodeMirror editor.
+`pressKey` is the shared primitive for **all** trusted keyboard input: `typeIntoEditor` **builds on it**, pressing each code point of its `text` via `pressKey` (typing is pressing each character key in turn), so the two paths are identical and there is a single `sendInputEvent` keyboard call site. `typeIntoEditor` adds the editor-typing wrapper (focus + caret-to-end + poll until the document settles); `pressKey` on its own presses a **single key** (optionally with modifiers) on whatever element currently holds DOM focus — for special keys (`Enter`, `Escape`, `Tab`, arrows) and modifier combos (`Shift+Enter`, `Mod+A`) that plain typing does not cover. It injects a trusted `keyDown` → `char` → `keyUp` sequence via `webContents.sendInputEvent`, firing the **full real pipeline**: `keydown` → `keypress` → `beforeinput` → `input` → `keyup`, all with `isTrusted: true` (untrusted `dispatchEvent(new KeyboardEvent(...))` is ignored by CodeMirror and most key handlers). Confirmed end-to-end on Windows (Obsidian 1.13.1): all five events fire trusted, and a trusted `Enter` inserts a newline in a live CodeMirror editor.
 
-- **API shape** — `pressKey({ key, modifiers? })`, matching every other `lib` helper (params
-  object). `key` is an **Electron Accelerator key name** (`'Enter'`, `'Escape'`, `'Up'`, `'a'`, …).
-  `modifiers` reuses Obsidian's own `Modifier` type (`'Mod' | 'Ctrl' | 'Meta' | 'Shift' | 'Alt'`) — the
-  same values as an Obsidian `Hotkey` — rather than a bespoke type. `'Mod'` resolves per-platform (Cmd
-  on macOS, Ctrl elsewhere) via **`Platform.isMacOS`** read off the resolved obsidian module
-  (`ns.obsidianModule`, always populated because `evalWrapper` resolves the module before any callback
-  runs); the others map to Electron's lowercase `sendInputEvent` names (`'Ctrl'` → `'control'`, the rest
-  lowercase directly). `PressKeyParams` is exported from the main entry.
-- **No polling** (like `moveMouse`, unlike `typeIntoEditor`): a key press has **no universal
-  observable effect** (`Enter` edits the doc, `Escape` closes a modal, `ArrowDown` moves selection), so
-  it injects and returns; the caller focuses the target first, then awaits the expected effect via
-  `waitUntil`.
-- **Produced character is the literal `key`.** Electron's `char` event inserts the raw `keyCode`
-  (`pressKey({ key: 'a', modifiers: ['Shift'] })` inserts `'a'`, though `keydown.key` reflects Shift as
-  `'A'`). Case-correct text is `typeIntoEditor`'s job, not a key-press primitive's.
+- **API shape** — `pressKey({ key, modifiers? })`, matching every other `lib` helper (params object). `key` is an **Electron Accelerator key name** (`'Enter'`, `'Escape'`, `'Up'`, `'a'`, …). `modifiers` reuses Obsidian's own `Modifier` type (`'Mod' | 'Ctrl' | 'Meta' | 'Shift' | 'Alt'`) — the same values as an Obsidian `Hotkey` — rather than a bespoke type. `'Mod'` resolves per-platform (Cmd on macOS, Ctrl elsewhere) via **`Platform.isMacOS`** read off the resolved obsidian module (`ns.obsidianModule`, always populated because `evalWrapper` resolves the module before any callback runs); the others map to Electron's lowercase `sendInputEvent` names (`'Ctrl'` → `'control'`, the rest lowercase directly). `PressKeyParams` is exported from the main entry.
+- **No polling** (like `moveMouse`, unlike `typeIntoEditor`): a key press has **no universal observable effect** (`Enter` edits the doc, `Escape` closes a modal, `ArrowDown` moves selection), so it injects and returns; the caller focuses the target first, then awaits the expected effect via `waitUntil`.
+- **Produced character is the literal `key`.** Electron's `char` event inserts the raw `keyCode` (`pressKey({ key: 'a', modifiers: ['Shift'] })` inserts `'a'`, though `keydown.key` reflects Shift as `'A'`). Case-correct text is `typeIntoEditor`'s job, not a key-press primitive's.
 
 ### Consumer responsibility: serialize focus-dependent integration files
 
-Identical to L8: a trusted key press targets the single shared window's **global** focus, so
-focus-dependent integration test **files** must not run in parallel against the one shared Obsidian
-instance (`fileParallelism: false`, `maxWorkers: 1`).
+Identical to L8: a trusted key press targets the single shared window's **global** focus, so focus-dependent integration test **files** must not run in parallel against the one shared Obsidian instance (`fileParallelism: false`, `maxWorkers: 1`).
 
 ## L15. Process visibility — integration tests hidden; off-screen, never minimize
 
-Three granular booleans live on the transport options and are resolved by the pure, unit-tested `src/visibility.ts` (the
-launchers themselves — factory / CDP transport / `obsidian-instance` — are `v8 ignore` integration
-glue, so the `@default false` resolution is extracted there to stay testable, mirroring
-`appium-session-config.ts`):
+Three granular booleans live on the transport options and are resolved by the pure, unit-tested `src/visibility.ts` (the launchers themselves — factory / CDP transport / `obsidian-instance` — are `v8 ignore` integration glue, so the `@default false` resolution is extracted there to stay testable, mirroring `appium-session-config.ts`):
 
-- **`isObsidianAppVisible`** (`obsidian-cdp`, owned mode only; default `true`). Integration setup explicitly sets it to `false`. When hidden, the owned instance is
-  launched with `OWNED_HIDDEN_LAUNCH_FLAGS` and, once Electron's remote bridge is up (~4.4s),
-  `DesktopCdpTransport.moveOwnedWindowOffscreen` moves the window beyond all displays via
-  `window.electron.remote.getCurrentWindow().setPosition(...)`. Best-effort (warn, don't throw).
-  Attach mode never moves the user's window.
+- **`isObsidianAppVisible`** (`obsidian-cdp`, owned mode only; default `true`). Integration setup explicitly sets it to `false`. When hidden, the owned instance is launched with `OWNED_HIDDEN_LAUNCH_FLAGS` and, once Electron's remote bridge is up (~4.4s), `DesktopCdpTransport.moveOwnedWindowOffscreen` moves the window beyond all displays via `window.electron.remote.getCurrentWindow().setPosition(...)`. Best-effort (warn, don't throw). Attach mode never moves the user's window.
 - **`isEmulatorVisible`** → `buildEmulatorArguments({ isHidden })` appends `-no-window` (headless emulator).
 - **`shouldReuseEmulatorSnapshot`** → `buildEmulatorArguments({ shouldReuseSnapshot })` decides the snapshot pair: `false` (default) passes `-no-snapshot-load -no-snapshot-save` for a hermetic cold boot, `true` passes neither so the emulator loads **and** saves `default_boot`. Never one without the other — see **L47**.
 - **`isAppiumConsoleVisible`** → `startAppiumServer` spawns with `windowsHide` and discards output; set it to `true` to surface both the console and live logs for debugging.
 
-**Off-screen, NOT minimize — this is the crux (empirically established, see the auto-memory
-`reference_obsidian_background_window_throttling`).** A *minimized* Chromium renderer freezes
-`requestAnimationFrame` (0/s) regardless of any flag (no surface to composite) and inflates CDP command
-latency ~3×; the keep-alive flags rescue `setTimeout` but cannot rescue rAF. An **off-screen** window
-stays `visibilityState: 'visible'` to Chromium, so timers, rAF, `:hover`, and trusted input all behave
-exactly as when visible. Hence hide = move off-screen (+ `--disable-features=CalculateNativeWinOcclusion`
-and the backgrounding-disable flags so a covered/long-running off-screen window is never throttled),
-never `win.minimize()` / `win.hide()`. Confirmed via the real transport: hidden → `screenX` beyond the
-display, `visibility: visible`, rAF ~60/s; regression-tested in `connect-to-cdp.integration.test.ts`.
+**Off-screen, NOT minimize — this is the crux (empirically established, see the auto-memory `reference_obsidian_background_window_throttling`).** A *minimized* Chromium renderer freezes `requestAnimationFrame` (0/s) regardless of any flag (no surface to composite) and inflates CDP command latency ~3×; the keep-alive flags rescue `setTimeout` but cannot rescue rAF. An **off-screen** window stays `visibilityState: 'visible'` to Chromium, so timers, rAF, `:hover`, and trusted input all behave exactly as when visible. Hence hide = move off-screen (+ `--disable-features=CalculateNativeWinOcclusion` and the backgrounding-disable flags so a covered/long-running off-screen window is never throttled), never `win.minimize()` / `win.hide()`. Confirmed via the real transport: hidden → `screenX` beyond the display, `visibility: visible`, rAF ~60/s; regression-tested in `connect-to-cdp.integration.test.ts`.
 
-**Honest limit (not solvable from outside):** Obsidian's own process shows and focuses the window at
-launch, so there is a brief (~1–2 s) flash before it is moved off-screen. The persistent focus theft is
-eliminated; the initial flash is not. Zero-flash would need Obsidian to launch hidden (a main-process
-option the harness does not control) or a separate Win32/virtual desktop. Also: Electron's CDP does
-**not** implement `Browser.getWindowForTarget`/`setWindowBounds`, and `--window-position`/`--window-size`
-are ignored — window control must go through Electron remote (available only in a loaded vault window)
-or OS-level Win32, which is why the move uses Electron remote.
+**Honest limit (not solvable from outside):** Obsidian's own process shows and focuses the window at launch, so there is a brief (~1–2 s) flash before it is moved off-screen. The persistent focus theft is eliminated; the initial flash is not. Zero-flash would need Obsidian to launch hidden (a main-process option the harness does not control) or a separate Win32/virtual desktop. Also: Electron's CDP does **not** implement `Browser.getWindowForTarget`/`setWindowBounds`, and `--window-position`/`--window-size` are ignored — window control must go through Electron remote (available only in a loaded vault window) or OS-level Win32, which is why the move uses Electron remote.
 
 ## L16. Extensible, type-safe `lib` injection (register a whole library into every closure)
 
-Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArguments`, `src/eval-in-obsidian.ts`)
-— a single flat bag of shared closure helpers, so a serialized closure can call them
-(`lib.typeIntoEditor({ editor, text })`, `lib.getFileOrNull({ app, … })`) instead of hand-rolling them
-or reaching a `window` global. Two layers compose into it:
+Every `evalInObsidian` callback receives a **`lib`** arg (on `CommonArguments`, `src/eval-in-obsidian.ts`) — a single flat bag of shared closure helpers, so a serialized closure can call them (`lib.typeIntoEditor({ editor, text })`, `lib.getFileOrNull({ app, … })`) instead of hand-rolling them or reaching a `window` global. Two layers compose into it:
 
-- a **base** the harness itself seeds — the renderer-driving helpers of L8/L11/L12/L14
-  (`typeIntoEditor` / `pressKey` / `moveMouse` / `clickMouse` / `hoverElement` / `unhoverElement` /
-  `clickElement` / `waitUntil` / `createNote` / `openSettingsTab`), so
-  `lib` is never empty and the harness stays self-contained (no dev-utils dependency; it tests them
-  itself); and
-- **provider additions** — a provider package `Object.assign`s its **whole real** renderer-safe library
-  on top, so its functions (and any override of a base helper) win. Nothing dev-utils-owned is
-  reimplemented here.
+- a **base** the harness itself seeds — the renderer-driving helpers of L8/L11/L12/L14 (`typeIntoEditor` / `pressKey` / `moveMouse` / `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement` / `waitUntil` / `createNote` / `openSettingsTab`), so `lib` is never empty and the harness stays self-contained (no dev-utils dependency; it tests them itself); and
+- **provider additions** — a provider package `Object.assign`s its **whole real** renderer-safe library on top, so its functions (and any override of a base helper) win. Nothing dev-utils-owned is reimplemented here.
 
 **Mechanism.**
 
-- **Register (worker-side).** A provider calls `registerLibResolver(resolver)` (`src/lib-registry.ts`)
-  from its per-worker test setup (`setupFiles`) — same worker-registration constraint as the context
-  resolvers (**L9**), because the namespace bootstrap is generated per-worker. A `LibResolver` is a
-  self-contained `(this: void) => object` that runs **in the renderer** and returns an object to merge;
-  it is serialized via `toString()`, so it must not close over module scope — it reads a renderer global
-  a fixture plugin published (e.g. `() => window.__obsidianDevUtilsModule__.__merged`). Registration is
-  deduped by source text.
-- **Bake + merge.** `ensureNamespaceBootstrapped` threads the registered resolvers into
-  `bootstrapNamespace` (serialized as real function literals by the existing `json-with-functions`
-  path). `evalWrapper` runs each resolver and `Object.assign`s the results into one `lib` bag added to
-  `fullArguments`. The bag starts from the harness base helpers, then each provider merges on top (later
-  wins); with no provider it is exactly the base. **Multiple providers compose** (runtime `Object.assign`).
-- **Version gate.** `getBootstrapVersion` / `computeBootstrapVersion` fold the resolver sources into the
-  `window.__obsidianIntegrationTesting.version` used for the bootstrap-skip check, so a changed resolver
-  set (e.g. different test files sharing one owned instance) forces a re-bootstrap instead of leaking a
-  stale `lib`.
+- **Register (worker-side).** A provider calls `registerLibResolver(resolver)` (`src/lib-registry.ts`) from its per-worker test setup (`setupFiles`) — same worker-registration constraint as the context resolvers (**L9**), because the namespace bootstrap is generated per-worker. A `LibResolver` is a self-contained `(this: void) => object` that runs **in the renderer** and returns an object to merge; it is serialized via `toString()`, so it must not close over module scope — it reads a renderer global a fixture plugin published (e.g. `() => window.__obsidianDevUtilsModule__.__merged`). Registration is deduped by source text.
+- **Bake + merge.** `ensureNamespaceBootstrapped` threads the registered resolvers into `bootstrapNamespace` (serialized as real function literals by the existing `json-with-functions` path). `evalWrapper` runs each resolver and `Object.assign`s the results into one `lib` bag added to `fullArguments`. The bag starts from the harness base helpers, then each provider merges on top (later wins); with no provider it is exactly the base. **Multiple providers compose** (runtime `Object.assign`).
+- **Version gate.** `getBootstrapVersion` / `computeBootstrapVersion` fold the resolver sources into the `window.__obsidianIntegrationTesting.version` used for the bootstrap-skip check, so a changed resolver set (e.g. different test files sharing one owned instance) forces a re-bootstrap instead of leaking a stale `lib`.
 
-**Type-safety (declaration merging, the `i18next` `CustomTypeOptions` idiom).** `interface Lib` declares
-the base helpers and is **augmentable**: a provider does
-`declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('…')) {} }`.
-Multiple augmentations merge (like the multiple `Object.assign`s at runtime). Cycle-safe: `lib` is a
-live renderer object injected into `fullArguments` (never JSON-serialized — only `callback`'s return value is),
-exactly like `app`, so a back-reference such as `lib.__namespaces` cannot cause a serialization cycle.
+**Type-safety (declaration merging, the `i18next` `CustomTypeOptions` idiom).** `interface Lib` declares the base helpers and is **augmentable**: a provider does `declare module 'obsidian-integration-testing' { interface Lib extends (typeof import('…')) {} }`. Multiple augmentations merge (like the multiple `Object.assign`s at runtime). Cycle-safe: `lib` is a live renderer object injected into `fullArguments` (never JSON-serialized — only `callback`'s return value is), exactly like `app`, so a back-reference such as `lib.__namespaces` cannot cause a serialization cycle.
 
-Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core namespace bootstrap +
-registry). The first provider is `obsidian-dev-utils`, which exposes its whole library via a flat
-`obsidian-dev-utils/__merged` barrel: it calls `registerLibResolver` from
-`src/script-utils/test-runners/integration-test-plugin.ts` with a resolver that returns
-`window.__obsidianDevUtilsModule.__merged`, and augments `interface Lib` in
-`src/@types/obsidian-integration-testing.d.ts`.
+Per **L6** the mechanism reaches Vitest / Jest / Manual (it lives in the core namespace bootstrap + registry). The first provider is `obsidian-dev-utils`, which exposes its whole library via a flat `obsidian-dev-utils/__merged` barrel: it calls `registerLibResolver` from `src/script-utils/test-runners/integration-test-plugin.ts` with a resolver that returns `window.__obsidianDevUtilsModule.__merged`, and augments `interface Lib` in `src/@types/obsidian-integration-testing.d.ts`.
 
 ## L17. Helpers Duplicated in `obsidian-dev-utils` — Keep In Sync By Hand
 
-A set of harness helpers in `namespace-bootstrap.ts` are **intentionally copy-pasted** into
-`obsidian-dev-utils`, which re-exposes them through its `__merged` surface so a closure's `lib` picks
-up dev-utils' copies (they `Object.assign` over the harness base when the provider resolver is
-registered) and so non-closure/production code can `import` them. The synced set (with its dev-utils
-mirror module):
+A set of harness helpers in `namespace-bootstrap.ts` are **intentionally copy-pasted** into `obsidian-dev-utils`, which re-exposes them through its `__merged` surface so a closure's `lib` picks up dev-utils' copies (they `Object.assign` over the harness base when the provider resolver is registered) and so non-closure/production code can `import` them. The synced set (with its dev-utils mirror module):
 
 | Harness member (`namespace-bootstrap.ts`)                                                                 | dev-utils mirror module    |
 |-----------------------------------------------------------------------------------------------------------|----------------------------|
@@ -497,382 +244,106 @@ mirror module):
 
 Notes on the set:
 
-- **`pressKey` / `moveMouse` / `clickMouse` / `clickElement` are `Promise<void>`** — superseding the former
-  "must stay synchronous (`void`)" rule, which held only while the helpers were Electron-only. The mobile
-  path (**L39**) injects from the Node side, so the renderer must await a round-trip; the declared `Lib`
-  type is what makes `no-floating-promises` force the `await` at call sites instead of letting a missing one
-  race the assertion. The `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation
-  is unaffected either way — `() => Promise<void>` is assignable to `() => void`. `clickElement` still does
-  no *polling* of its own, unlike its element-relative sibling `hoverElement`: `hoverElement` polls
-  `:hover`, and a click has no equivalent state to poll. Deliberately it does **not** hover first — an
-  element that never matches `:hover` (covered by an overlay, say) would then cost the full 5 s timeout on
-  every click.
-- **`moveMouse` / `hoverElement` / `unhoverElement` throw on mobile; `clickMouse({ button: 'middle' })`
-  throws too** — touch has no hover state and no middle button, and a silent no-op would recreate the
-  false-confidence failure these helpers exist to end. `button: 'right'` maps to a long-press. See **L39**.
-- **The Obsidian-`Modifier` → Electron-modifier mapping lives in ONE `toElectronModifiers` helper per
-  copy**, shared by `pressKey` and `clickMouse`, so a key press and a click cannot disagree on what
-  `'Mod'` resolves to. Added 2026-08-26 with the click helpers.
-- **`moveMouseTo` was folded into `moveMouse`** (rounding + `sendInputEvent` inlined); `hoverElement` /
-  `unhoverElement` call `moveMouse({ x, y })` directly. There is no separate `moveMouseTo` to sync.
-- **`waitUntil` is NOT synced** — dev-utils reuses its own `retryWithTimeout` instead of duplicating a
-  poll loop, and the harness keeps `waitUntil` as its own self-contained base helper (its integration
-  suite depends on it).
-- **`openSettingsTab` is NOT synced** (added 2026-08-29 with **L38**) — same reasoning as
-  `waitUntil`. It drives a modal purely to make it *observable to a test*; no production code has a reason
-  to `import` it, which is the only thing the dev-utils copies buy.
-- **`destroyCurrentWindow` / `ipcSendSync` are NOT synced** — they are transport/Electron-only harness
-  primitives (see their `// intentionally not migrated` TSDoc in `namespace-bootstrap.ts`), not
-  general-purpose utilities.
-- **The seven synced input helpers are ALSO published as `ns.trustedInput`** (added 2026-08-31) —
-  the one namespace member that exists *for* dev-utils rather than for the harness. Duplication is enough
-  on desktop, where dev-utils' own copy reaches a trusted event unaided; it is **not** enough on mobile,
-  where the injection must come from the Node side over the harness's CDP channel (**L39**) and dev-utils
-  may not import this package at runtime (its own peer-dependency rule). So dev-utils' mobile mirror reads the helpers off
-  `window.__obsidianIntegrationTesting.trustedInput`, declaring the shape locally. The member exposes the
-  **same function objects** `evalWrapper` puts in a closure's `lib` bag — not wrappers — so the mobile
-  branch stays in exactly one place and the seam cannot drift from the `lib` bag it mirrors.
+- **`pressKey` / `moveMouse` / `clickMouse` / `clickElement` are `Promise<void>`** — superseding the former "must stay synchronous (`void`)" rule, which held only while the helpers were Electron-only. The mobile path (**L39**) injects from the Node side, so the renderer must await a round-trip; the declared `Lib` type is what makes `no-floating-promises` force the `await` at call sites instead of letting a missing one race the assertion. The `interface Lib extends typeof import('obsidian-dev-utils/__merged')` augmentation is unaffected either way — `() => Promise<void>` is assignable to `() => void`. `clickElement` still does no *polling* of its own, unlike its element-relative sibling `hoverElement`: `hoverElement` polls `:hover`, and a click has no equivalent state to poll. Deliberately it does **not** hover first — an element that never matches `:hover` (covered by an overlay, say) would then cost the full 5 s timeout on every click.
+- **`moveMouse` / `hoverElement` / `unhoverElement` throw on mobile; `clickMouse({ button: 'middle' })` throws too** — touch has no hover state and no middle button, and a silent no-op would recreate the false-confidence failure these helpers exist to end. `button: 'right'` maps to a long-press. See **L39**.
+- **The Obsidian-`Modifier` → Electron-modifier mapping lives in ONE `toElectronModifiers` helper per copy**, shared by `pressKey` and `clickMouse`, so a key press and a click cannot disagree on what `'Mod'` resolves to. Added 2026-08-26 with the click helpers.
+- **`moveMouseTo` was folded into `moveMouse`** (rounding + `sendInputEvent` inlined); `hoverElement` / `unhoverElement` call `moveMouse({ x, y })` directly. There is no separate `moveMouseTo` to sync.
+- **`waitUntil` is NOT synced** — dev-utils reuses its own `retryWithTimeout` instead of duplicating a poll loop, and the harness keeps `waitUntil` as its own self-contained base helper (its integration suite depends on it).
+- **`openSettingsTab` is NOT synced** (added 2026-08-29 with **L38**) — same reasoning as `waitUntil`. It drives a modal purely to make it *observable to a test*; no production code has a reason to `import` it, which is the only thing the dev-utils copies buy.
+- **`destroyCurrentWindow` / `ipcSendSync` are NOT synced** — they are transport/Electron-only harness primitives (see their `// intentionally not migrated` TSDoc in `namespace-bootstrap.ts`), not general-purpose utilities.
+- **The seven synced input helpers are ALSO published as `ns.trustedInput`** (added 2026-08-31) — the one namespace member that exists *for* dev-utils rather than for the harness. Duplication is enough on desktop, where dev-utils' own copy reaches a trusted event unaided; it is **not** enough on mobile, where the injection must come from the Node side over the harness's CDP channel (**L39**) and dev-utils may not import this package at runtime (its own peer-dependency rule). So dev-utils' mobile mirror reads the helpers off `window.__obsidianIntegrationTesting.trustedInput`, declaring the shape locally. The member exposes the **same function objects** `evalWrapper` puts in a closure's `lib` bag — not wrappers — so the mobile branch stays in exactly one place and the seam cannot drift from the `lib` bag it mirrors.
 
-This deliberately reimplements logic that lives here rather than sharing one source — normally the
-workspace never duplicates cross-library code — and is accepted for one reason: **dependency hygiene**.
-Sharing a single source would force either the harness to depend on `obsidian-dev-utils`, or
-`obsidian-dev-utils` to take a **runtime** dependency on this test harness (a utility library depending
-on a test harness — backwards). Since dev-utils re-exports these as **values** through its shipped
-`__merged` surface, that runtime edge is unavoidable under the shared-source approach; duplication keeps
-both dependency graphs clean, at the cost of manual sync.
+This deliberately reimplements logic that lives here rather than sharing one source — normally the workspace never duplicates cross-library code — and is accepted for one reason: **dependency hygiene**. Sharing a single source would force either the harness to depend on `obsidian-dev-utils`, or `obsidian-dev-utils` to take a **runtime** dependency on this test harness (a utility library depending on a test harness — backwards). Since dev-utils re-exports these as **values** through its shipped `__merged` surface, that runtime edge is unavoidable under the shared-source approach; duplication keeps both dependency graphs clean, at the cost of manual sync.
 
-**Rule:** the implementations in `namespace-bootstrap.ts` (and `error-to-string.ts` for `errorToString`)
-are the **canonical** copy. Any change to the behavior of a synced helper here MUST be mirrored in
-`obsidian-dev-utils` in the same coordinated change, and vice versa. There is **no automated drift
-check** — a deliberately accepted risk (the alternative `.toString()`-equality test was declined); sync
-is by discipline alone. `obsidian-dev-utils` carries the mirror-image local rule (its own L18) pointing
-back here. When you touch any synced helper, update both copies. (Honest note: for serialized closures this
-duplication yields no functional gain — the harness base already injects the trusted-input helpers; the
-dev-utils copy exists so non-closure/production code can `import` them.)
+**Rule:** the implementations in `namespace-bootstrap.ts` (and `error-to-string.ts` for `errorToString`) are the **canonical** copy. Any change to the behavior of a synced helper here MUST be mirrored in `obsidian-dev-utils` in the same coordinated change, and vice versa. There is **no automated drift check** — a deliberately accepted risk (the alternative `.toString()`-equality test was declined); sync is by discipline alone. `obsidian-dev-utils` carries the mirror-image local rule (its own L18) pointing back here. When you touch any synced helper, update both copies. (Honest note: for serialized closures this duplication yields no functional gain — the harness base already injects the trusted-input helpers; the dev-utils copy exists so non-closure/production code can `import` them.)
 
 ## L18. Dead-boot fast-fail (`RendererFailedToInitializeError`)
 
-When a pinned app version cannot run on the launched Electron shell (an `obsidianInstallerVersion` too old
-for the `obsidianVersion` — e.g. the 1.12.7 asar on the 0.14.5 / Electron 18.0.3 shell), the owned
-renderer loads `index.html` (`document.readyState` reaches `complete`) but the app never bootstraps:
-`document.body` stays empty and `window.app` remains `undefined` (a black screen). Without detection,
-`waitForOwnedVaultReady` cannot tell this terminal state from "still loading" and burns the whole readiness
-timeout before throwing a generic error.
+When a pinned app version cannot run on the launched Electron shell (an `obsidianInstallerVersion` too old for the `obsidianVersion` — e.g. the 1.12.7 asar on the 0.14.5 / Electron 18.0.3 shell), the owned renderer loads `index.html` (`document.readyState` reaches `complete`) but the app never bootstraps: `document.body` stays empty and `window.app` remains `undefined` (a black screen). Without detection, `waitForOwnedVaultReady` cannot tell this terminal state from "still loading" and burns the whole readiness timeout before throwing a generic error.
 
-- **Pure detector** — `src/renderer-boot-detection.ts` (unit-tested, not re-exported):
-  `resolveRendererBootState({ bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete }) →
-  'dead' | 'pending'`. Dead ⇔ the grace has elapsed AND `window.app` is undefined AND the document is
-  `complete` AND `<body>` is empty. This is exactly the confirmed incompatible-shell state and is
-  **unreachable by a healthy boot** (`window.app` is defined early; a slow boot renders a non-empty
-  loading shell), so there is no false-positive path. `resolveDeadBootGraceInMilliseconds` resolves the
-  option (`@default 10000`, `0` disables).
-- **Deliberately DOM-only.** The plan floated an `Runtime.exceptionThrown` heuristic; it was **dropped** —
-  the DOM grace-window signal is deterministic and matches the repro, whereas a live exception monitor
-  risks false-positives (a benign startup exception on a genuinely slow boot) and would ship a
-  perpetually-`false` wired input. Recorded here so the omission is not mistaken for an oversight.
-- **Distinct error** — `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`, **is**
-  exported from the barrel) so callers can `instanceof`-match this specific failure vs a generic readiness
-  timeout.
-- **Largely superseded proactively (see L21).** For a *table-known* below-floor combo, L21's proactive
-  compatibility check now throws `IncompatibleInstallerVersionError` from `resolveOwnedInstanceConfig`
-  **before** launch, so this reactive dead-boot fast-fail remains only the **safety net** for combos the
-  table cannot preempt (an undetectable Linux shell version → `'unknown'`, or an app version absent from
-  `metadata.json`). Its pure `resolveRendererBootState` keeps its unit coverage. There was no dead-boot
-  *integration* test because the proactive throw always fired first — but **one is now possible**: setting
-  `shouldThrowOnIncompatibleInstaller: false` (see L21/L24) makes an `'unrunnable'` pin proceed to launch
-  instead of throwing, so a dead-boot integration test can now drive this reactive path and assert
-  `RendererFailedToInitializeError` (still a heavy download-and-boot suite, so opt-in-gated like the others).
-- **Wiring** — `DesktopCdpTransport.waitForOwnedVaultReady` (owned path only) probes
-  `probeRendererBootState()` each poll iteration; the grace clock starts when the renderer first reports
-  `complete` (a loop-local `documentCompleteSince`), and it throws `RendererFailedToInitializeError` on a
-  `dead` verdict. The knob rides the existing options channel:
-  `ObsidianCdpTransportOptions.deadBootGraceInMilliseconds` → factory
-  `resolveDeadBootGraceInMilliseconds` → transport config field; also on `ConnectToCdpOptions`. Attach mode
-  is unaffected (it targets an already-alive instance).
-- **Not covered by this fast-fail:** on a *hidden* owned dead boot, `moveOwnedWindowOffscreen` still burns
-  its full ~20s poll because the Electron remote bridge never comes up — a separate, smaller waste. And
-  see L15's honest limit: the launch-time flash is unrelated.
+- **Pure detector** — `src/renderer-boot-detection.ts` (unit-tested, not re-exported): `resolveRendererBootState({ bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete }) → 'dead' | 'pending'`. Dead ⇔ the grace has elapsed AND `window.app` is undefined AND the document is `complete` AND `<body>` is empty. This is exactly the confirmed incompatible-shell state and is **unreachable by a healthy boot** (`window.app` is defined early; a slow boot renders a non-empty loading shell), so there is no false-positive path. `resolveDeadBootGraceInMilliseconds` resolves the option (`@default 10000`, `0` disables).
+- **Deliberately DOM-only.** The plan floated an `Runtime.exceptionThrown` heuristic; it was **dropped** — the DOM grace-window signal is deterministic and matches the repro, whereas a live exception monitor risks false-positives (a benign startup exception on a genuinely slow boot) and would ship a perpetually-`false` wired input. Recorded here so the omission is not mistaken for an oversight.
+- **Distinct error** — `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`, **is** exported from the barrel) so callers can `instanceof`-match this specific failure vs a generic readiness timeout.
+- **Largely superseded proactively (see L21).** For a *table-known* below-floor combo, L21's proactive compatibility check now throws `IncompatibleInstallerVersionError` from `resolveOwnedInstanceConfig` **before** launch, so this reactive dead-boot fast-fail remains only the **safety net** for combos the table cannot preempt (an undetectable Linux shell version → `'unknown'`, or an app version absent from `metadata.json`). Its pure `resolveRendererBootState` keeps its unit coverage. There was no dead-boot *integration* test because the proactive throw always fired first — but **one is now possible**: setting `shouldThrowOnIncompatibleInstaller: false` (see L21/L24) makes an `'unrunnable'` pin proceed to launch instead of throwing, so a dead-boot integration test can now drive this reactive path and assert `RendererFailedToInitializeError` (still a heavy download-and-boot suite, so opt-in-gated like the others).
+- **Wiring** — `DesktopCdpTransport.waitForOwnedVaultReady` (owned path only) probes `probeRendererBootState()` each poll iteration; the grace clock starts when the renderer first reports `complete` (a loop-local `documentCompleteSince`), and it throws `RendererFailedToInitializeError` on a `dead` verdict. The knob rides the existing options channel: `ObsidianCdpTransportOptions.deadBootGraceInMilliseconds` → factory `resolveDeadBootGraceInMilliseconds` → transport config field; also on `ConnectToCdpOptions`. Attach mode is unaffected (it targets an already-alive instance).
+- **Not covered by this fast-fail:** on a *hidden* owned dead boot, `moveOwnedWindowOffscreen` still burns its full ~20s poll because the Electron remote bridge never comes up — a separate, smaller waste. And see L15's honest limit: the launch-time flash is unrelated.
 
 ## L19. Android integration performance — cold-cost breakdown & optimization levers (reference)
 
-Durable performance knowledge, **not** a task (migrated 2026-07-12 from a central task entry that was
-really a bundle of profiling findings + future ideas). All the *code* levers here already shipped; the
-remaining levers are provisioning options the user may enable, not pending code work.
+Durable performance knowledge, **not** a task (migrated 2026-07-12 from a central task entry that was really a bundle of profiling findings + future ideas). All the *code* levers here already shipped; the remaining levers are provisioning options the user may enable, not pending code work.
 
 ### Where the 140–200s cold Android cost goes (profiled 2026-07-11 on the real WHPX emulator)
 
 Measured breakdown (see also the auto-memory `reference_android_appium_cold_cost_breakdown`):
 
-- **Emulator cold boot ≈ 112s** — ~32s start→device-online + ~80s device-online→`sys.boot_completed`.
-  Pure boot cost, entirely avoided by a warm/snapshotted guest.
-- **Session `remote()` — the headline "140–200s" is session-DURING-post-boot-churn, not the session
-  itself.** `sys.boot_completed=1` fires **before** the guest is idle (package optimization / services
-  still churning), so UiAutomator2's ~40 serialized `adb`/instrumentation round-trips each contend and
-  inflate ~25–50× (an `adb cmd package list packages` at boot-complete took ~50s vs ~1–2s idle). Let the
-  guest settle and cold `remote()` drops to ~27–53s (vs ~29s fully warm). The ~40 round-trips live inside
-  the driver and are not harness-controllable per-call — the win is to stop paying the cold/contended
-  multiplier.
-- **Appium server cold-start — real but secondary.** `/status` ready ~13.5s warm, of which ~8.7s is
-  loading the UiAutomator2 driver's node modules; cold disk + release-time memory pressure pushed it past
-  the old 60s cliff. (`npx appium` re-install was **ruled out** — it resolves to the global install, no
-  redownload.)
-- **Per-step (cold, idle):** `registerVault` marker push originally 9–21s for a 2-byte file;
-  `getContexts` / `switchContext` ~17s each; `waitForLayoutReady` ~1s (never the real bottleneck — even
-  under 12-core + disk + memory stress it only reached ~8.4s).
+- **Emulator cold boot ≈ 112s** — ~32s start→device-online + ~80s device-online→`sys.boot_completed`. Pure boot cost, entirely avoided by a warm/snapshotted guest.
+- **Session `remote()` — the headline "140–200s" is session-DURING-post-boot-churn, not the session itself.** `sys.boot_completed=1` fires **before** the guest is idle (package optimization / services still churning), so UiAutomator2's ~40 serialized `adb`/instrumentation round-trips each contend and inflate ~25–50× (an `adb cmd package list packages` at boot-complete took ~50s vs ~1–2s idle). Let the guest settle and cold `remote()` drops to ~27–53s (vs ~29s fully warm). The ~40 round-trips live inside the driver and are not harness-controllable per-call — the win is to stop paying the cold/contended multiplier.
+- **Appium server cold-start — real but secondary.** `/status` ready ~13.5s warm, of which ~8.7s is loading the UiAutomator2 driver's node modules; cold disk + release-time memory pressure pushed it past the old 60s cliff. (`npx appium` re-install was **ruled out** — it resolves to the global install, no redownload.)
+- **Per-step (cold, idle):** `registerVault` marker push originally 9–21s for a 2-byte file; `getContexts` / `switchContext` ~17s each; `waitForLayoutReady` ~1s (never the real bottleneck — even under 12-core + disk + memory stress it only reached ~8.4s).
 
 ### Landed code mitigations (all shipped)
 
-- **Boot-idle gate** — `src/device-readiness.ts` (`checkDeviceIdle`: idle ⇔ `init.svc.bootanim==stopped`
-  **and** `cmd package list packages` lists ≥1 package; `resolveDeviceIdleTimeoutInMilliseconds`,
-  `@default 60000`). After `sys.boot_completed`, `waitForNewDevice` waits for idle before `remote()` runs,
-  so the session executes against an idle guest. Best-effort (warns + proceeds on timeout; `0` skips).
-  Option `deviceIdleTimeoutInMilliseconds`. Probes return `''` on adb timeout so a slow/partial
-  `package list` can't falsely read as idle. **This covers a REUSED device too** — the branch
-  that found an AVD already running used to skip the gate entirely, which is the hole a reused device fell into; see
-  **L43**. **The gate is now boot-idle *plus* network-validated**: both idle signals clear well
-  before the guest has a route, so a second phase (`checkNetworkValidated`,
-  `networkReadyTimeoutInMilliseconds`, `@default 120000`) polls `dumpsys connectivity` after it. Both
-  branches now go through the single `waitForDeviceReady`, so neither can drift on which gates it runs —
-  see **L45**.
-- **Configurable timeouts** (all raised/threaded with per-poll elapsed logging, resolved via the testable
-  `appium-session-config.ts`): `appiumStartTimeoutInMilliseconds` (`@default 180000`),
-  `sessionConnectionRetryTimeoutInMilliseconds` (`@default 180000`), `appStartTimeoutInMilliseconds`
-  (`@default 180000`), `layoutReadyTimeoutInMilliseconds` (`@default 90000`). Headroom for the starved/CI
-  regime — not root causes. The last two are the two halves the old single post-reload clock was
-  split into (**L43**).
-- **`registerVault` marker push via `adb`** instead of `browser.pushFile` — measured cold marker 9–21s →
-  ~2.5s, total `registerVault` ~10–24s → ~5.6–7.8s (3–4×). The one measured, unconditional win.
-- **Crash/ANR dialog suppression** — see **L13**. **Process visibility (off-screen, never minimize)** —
-  see **L15**.
+- **Boot-idle gate** — `src/device-readiness.ts` (`checkDeviceIdle`: idle ⇔ `init.svc.bootanim==stopped` **and** `cmd package list packages` lists ≥1 package; `resolveDeviceIdleTimeoutInMilliseconds`, `@default 60000`). After `sys.boot_completed`, `waitForNewDevice` waits for idle before `remote()` runs, so the session executes against an idle guest. Best-effort (warns + proceeds on timeout; `0` skips). Option `deviceIdleTimeoutInMilliseconds`. Probes return `''` on adb timeout so a slow/partial `package list` can't falsely read as idle. **This covers a REUSED device too** — the branch that found an AVD already running used to skip the gate entirely, which is the hole a reused device fell into; see **L43**. **The gate is now boot-idle *plus* network-validated**: both idle signals clear well before the guest has a route, so a second phase (`checkNetworkValidated`, `networkReadyTimeoutInMilliseconds`, `@default 120000`) polls `dumpsys connectivity` after it. Both branches now go through the single `waitForDeviceReady`, so neither can drift on which gates it runs — see **L45**.
+- **Configurable timeouts** (all raised/threaded with per-poll elapsed logging, resolved via the testable `appium-session-config.ts`): `appiumStartTimeoutInMilliseconds` (`@default 180000`), `sessionConnectionRetryTimeoutInMilliseconds` (`@default 180000`), `appStartTimeoutInMilliseconds` (`@default 180000`), `layoutReadyTimeoutInMilliseconds` (`@default 90000`). Headroom for the starved/CI regime — not root causes. The last two are the two halves the old single post-reload clock was split into (**L43**).
+- **`registerVault` marker push via `adb`** instead of `browser.pushFile` — measured cold marker 9–21s → ~2.5s, total `registerVault` ~10–24s → ~5.6–7.8s (3–4×). The one measured, unconditional win.
+- **Crash/ANR dialog suppression** — see **L13**. **Process visibility (off-screen, never minimize)** — see **L15**.
 
 ### Remaining optimization levers (provisioning, user-owned — NOT code)
 
 In descending value:
 
-1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). **Shipped as
-   `shouldReuseEmulatorSnapshot`, and the default stayed cold as this lever always said it must.**
-   Note what the code actually did until then: it passed `-no-snapshot-save` **without**
-   `-no-snapshot-load`, so it never wrote `default_boot` yet resumed it every run — neither hermetic nor
-   warm, and the reason this lever read as un-shipped while the harness was quietly taking the risk. The
-   option now toggles **both** flags together; **L47** has the measurements and the rule.
-2. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in
-   the release environment.
+1. **Warm/snapshot emulator reuse** (biggest single chunk — eliminates the ~112s boot). **Shipped as `shouldReuseEmulatorSnapshot`, and the default stayed cold as this lever always said it must.** Note what the code actually did until then: it passed `-no-snapshot-save` **without** `-no-snapshot-load`, so it never wrote `default_boot` yet resumed it every run — neither hermetic nor warm, and the reason this lever read as un-shipped while the harness was quietly taking the risk. The option now toggles **both** flags together; **L47** has the measurements and the rule.
+2. **Persistent Appium server across runs** — already reused if reachable; just don't kill it per run in the release environment.
 3. **Pre-provision chromedriver + uiautomator2 driver** in the CI image (already present locally).
 
 ### Honest limit
 
-The residual cold cost is dominated by emulator provisioning / host contention (**L13**), which code can
-only be made **resilient** to (the idle-gate), not eliminate. On this fast WHPX host the without-gate
-session isn't as slow as a starved release env sees, so the gate's headline speedup is confidence-based
-for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured.
+The residual cold cost is dominated by emulator provisioning / host contention (**L13**), which code can only be made **resilient** to (the idle-gate), not eliminate. On this fast WHPX host the without-gate session isn't as slow as a starved release env sees, so the gate's headline speedup is confidence-based for the slow/CI regime; the round-trip-inflation mechanism it fixes is directly measured.
 
-**The open question here — capture a real failing layout trip during an actual release, and tell
-layout-slowdown from command-latency burst — was answered on 2026-08-31.** A release preflight
-blew the 90 s budget with `adb devices` reporting `device` throughout, and the answer was
-command-latency burst: the run had **reused** an emulator, so the boot-idle gate above never ran, and
-~2–4 probes against the churning guest consumed the whole budget while `waitForLayoutReady`'s own
-measured cost is ~1 s. Both halves of the fix, and the timeout message that now discriminates the two
-readings without a second trace, are in **L43**.
+**The open question here — capture a real failing layout trip during an actual release, and tell layout-slowdown from command-latency burst — was answered on 2026-08-31.** A release preflight blew the 90 s budget with `adb devices` reporting `device` throughout, and the answer was command-latency burst: the run had **reused** an emulator, so the boot-idle gate above never ran, and ~2–4 probes against the churning guest consumed the whole budget while `waitForLayoutReady`'s own measured cost is ~1 s. Both halves of the fix, and the timeout message that now discriminates the two readings without a second trace, are in **L43**.
 
 ## L20. `metadata.json` — per-version installer-floor table (`minRunnableInstallerVersion`)
 
-Repo-root `metadata.json` is a per-Obsidian-desktop-version data table (one `"x.y.z"` key per release):
-`channel`, optional `available`, `changelogUrl` (per-target changelog pages — see below), per-version
-`downloads` (baked asset URLs — see below),
-per-version `runtimeVersions` + `ecmaScriptVersion` (empirically-collected shell runtime — see below), and
-installer/Electron compatibility knobs. It is a
-**data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is
-injected as the `OBSIDIAN_METADATA` global — esbuild's `define` inlines it into the build (the built
-library stays self-contained, no runtime file read), the unit-test project uses Vitest's `define`, and the
-runtimes with no `define` (the Vitest main process, the Vitest integration projects, and every Jest worker
-— see L6) publish it via the shared `scripts/metadata-global-setup.ts` setup file. Every one of those
-paths — plus the byte-stable catalog read/write — sources the table from
-`scripts/helpers/metadata-global.ts` (`METADATA_JSON_PATH` resolved from `import.meta.dirname`, so the read
-does not depend on the invocation directory; `readMetadataJsonText` for the `define` callers,
-`defineObsidianMetadataGlobal` for the global). The usual format/lint/spellcheck gates apply.
+Repo-root `metadata.json` is a per-Obsidian-desktop-version data table (one `"x.y.z"` key per release): `channel`, optional `available`, `changelogUrl` (per-target changelog pages — see below), per-version `downloads` (baked asset URLs — see below), per-version `runtimeVersions` + `ecmaScriptVersion` (empirically-collected shell runtime — see below), and installer/Electron compatibility knobs. It is a **data table** consumed by `src/obsidian-metadata.ts` (the sole reader; see L21): the whole table is injected as the `OBSIDIAN_METADATA` global — esbuild's `define` inlines it into the build (the built library stays self-contained, no runtime file read), the unit-test project uses Vitest's `define`, and the runtimes with no `define` (the Vitest main process, the Vitest integration projects, and every Jest worker — see L6) publish it via the shared `scripts/metadata-global-setup.ts` setup file. Every one of those paths — plus the byte-stable catalog read/write — sources the table from `scripts/helpers/metadata-global.ts` (`METADATA_JSON_PATH` resolved from `import.meta.dirname`, so the read does not depend on the invocation directory; `readMetadataJsonText` for the `define` callers, `defineObsidianMetadataGlobal` for the global). The usual format/lint/spellcheck gates apply.
 
-**`changelogUrl` — one page per publication target, from Obsidian's own changelog feed.** Obsidian
-publishes a *separate* changelog page per platform (desktop / mobile) and per channel (public / catalyst
-"early access"), each at its own dated slug, so `changelogUrl` is an object with four optional keys —
-`desktop`, `desktopCatalyst`, `mobile`, `mobileCatalyst` — carrying only the pages the feed actually
-published for that version (the catalyst page typically predates the public one by about a day). It
-replaces the single string plus the `changelogUrl_catalyst` sibling that preceded it: that string silently
-mixed channels (105 of the 322 stored values were the public page, 210 the catalyst one, depending only on
-which channel the version happened to be scraped from) and never represented mobile at all.
+**`changelogUrl` — one page per publication target, from Obsidian's own changelog feed.** Obsidian publishes a *separate* changelog page per platform (desktop / mobile) and per channel (public / catalyst "early access"), each at its own dated slug, so `changelogUrl` is an object with four optional keys — `desktop`, `desktopCatalyst`, `mobile`, `mobileCatalyst` — carrying only the pages the feed actually published for that version (the catalyst page typically predates the public one by about a day). It replaces the single string plus the `changelogUrl_catalyst` sibling that preceded it: that string silently mixed channels (105 of the 322 stored values were the public page, 210 the catalyst one, depending only on which channel the version happened to be scraped from) and never represented mobile at all.
 
-The source is `https://obsidian.md/changelog.xml` — one Atom feed, no pagination, covering every release
-from `desktop-v0.0.1` on. Derivation rule, established empirically: **version and platform come from the
-link slug (`/changelog/<date>-<desktop|mobile>-v<version>/`), channel from the title's trailing
-`(Public)` / `(Early access)`.** Two entries carry a typo'd version in their title (`Obsidian 1.0.4
-Mobile` links `…-mobile-v0.1.4/`; `Obsidian 0.6.0 Desktop` links `…-desktop-v0.6.1/`), so trusting the
-title collapses those onto the wrong key; the slug rule yields zero collisions. Entries with no
-`-v<version>` slug (the Publish and Sync changelogs) are skipped.
+The source is `https://obsidian.md/changelog.xml` — one Atom feed, no pagination, covering every release from `desktop-v0.0.1` on. Derivation rule, established empirically: **version and platform come from the link slug (`/changelog/<date>-<desktop|mobile>-v<version>/`), channel from the title's trailing `(Public)` / `(Early access)`.** Two entries carry a typo'd version in their title (`Obsidian 1.0.4 Mobile` links `…-mobile-v0.1.4/`; `Obsidian 0.6.0 Desktop` links `…-desktop-v0.6.1/`), so trusting the title collapses those onto the wrong key; the slug rule yields zero collisions. Entries with no `-v<version>` slug (the Publish and Sync changelogs) are skipped.
 
-**Caveat — a pre-1.4.8 `mobile` page is a different release than the `desktop` page beside it.** Until
-**1.4.8** (2023-09-05) the mobile app ran its own version line, so same-keyed pages document unrelated
-releases (mobile `1.4.5` shipped 2023-05-23, desktop `1.4.5` 2023-08-31; gaps across `1.0.0`–`1.4.6` run
-93–471 days). From 1.4.8 on the two lines track within days. The table is keyed by *desktop* app version,
-so read an old `mobile` value as "the mobile changelog that happens to carry this version number", not as
-"the mobile notes for this release". Two entries (`1.4`, `1.5`) have no feed page of their own and retain
-a hand-entered `desktop` URL that actually points at `v1.4.5` / `v1.5.3`; three (`1.1.8-E21`, `1.2.4`,
-`1.6.3-e30`) carry no `changelogUrl` at all.
+**Caveat — a pre-1.4.8 `mobile` page is a different release than the `desktop` page beside it.** Until **1.4.8** (2023-09-05) the mobile app ran its own version line, so same-keyed pages document unrelated releases (mobile `1.4.5` shipped 2023-05-23, desktop `1.4.5` 2023-08-31; gaps across `1.0.0`–`1.4.6` run 93–471 days). From 1.4.8 on the two lines track within days. The table is keyed by *desktop* app version, so read an old `mobile` value as "the mobile changelog that happens to carry this version number", not as "the mobile notes for this release". Two entries (`1.4`, `1.5`) have no feed page of their own and retain a hand-entered `desktop` URL that actually points at `v1.4.5` / `v1.5.3`; three (`1.1.8-E21`, `1.2.4`, `1.6.3-e30`) carry no `changelogUrl` at all.
 
-**`downloads` — baked asset URLs, resolved from Obsidian's own release assets.** Each version carries
-an optional `downloads` object with the *exact* published URLs for the assets this harness downloads:
-`asar` (the `obsidian-<ver>.asar.gz`), the x64 desktop installers `exe` (Windows) / `dmg` (macOS
-universal) / `tar` (Linux), and the Android `apk`. `asar` is present for every catalogued version; the
-installer keys are present only for versions that ship a public desktop installer (catalyst builds are
-`asar`-only). `apk` is the *public* Android build, published as a GitHub release asset named uniformly
-`Obsidian-<ver>.apk` — it first appears at **1.5.8** and is hyphenated from the start, so unlike the
-desktop installers it has no dot-separator era to guess around. **Nothing consumes `apk` yet** (the Appium
-transport runs an already-installed APK and takes no `obsidianVersion`), so it is deliberate groundwork;
-`selectInstallerDownloadUrl` stays desktop-only and is not extended for it.
+**`downloads` — baked asset URLs, resolved from Obsidian's own release assets.** Each version carries an optional `downloads` object with the *exact* published URLs for the assets this harness downloads: `asar` (the `obsidian-<ver>.asar.gz`), the x64 desktop installers `exe` (Windows) / `dmg` (macOS universal) / `tar` (Linux), and the Android `apk`. `asar` is present for every catalogued version; the installer keys are present only for versions that ship a public desktop installer (catalyst builds are `asar`-only). `apk` is the *public* Android build, published as a GitHub release asset named uniformly `Obsidian-<ver>.apk` — it first appears at **1.5.8** and is hyphenated from the start, so unlike the desktop installers it has no dot-separator era to guess around. **Nothing consumes `apk` yet** (the Appium transport runs an already-installed APK and takes no `obsidianVersion`), so it is deliberate groundwork; `selectInstallerDownloadUrl` stays desktop-only and is not extended for it.
 
-**There is deliberately no catalyst APK key, because there is no catalyst APK URL.** Unlike the desktop
-catalyst asar (`releases.obsidian.md/release/obsidian-<ver>.asar.gz`), the mobile catalyst build is not
-published at a URL at all — Obsidian distributes it through a Discord-gated channel: join their Discord,
-claim the badge, and `#insider-welcome` carries the per-device download instructions
-([Early access versions](https://obsidian.md/help/early-access)). That is why every sibling path probed on
-`releases.obsidian.md` returns the non-existence signature and why the public Android build contains no
-update endpoint to reveal a pattern. So what the table carries for a catalyst mobile build is its
-**changelog** (`changelogUrl.mobileCatalyst`); for the build itself, follow the link above. The asar and
-installer download paths (`obsidian-version-switch.ts` `getAsarDownloadUrls`, `obsidian-installer.ts`
-`resolveInstallerAssetUrls`) try the baked URL **first**, so the common path needs no GitHub release-API
-call and no dot-vs-hyphen asset-name guessing — the hand-rolled URL guesses (`installer-asset.ts`) remain
-the fallback for versions absent from the catalog. `src/installer-asset.ts` `selectInstallerDownloadUrl`
-picks the platform-correct URL (pure, unit-tested).
+**There is deliberately no catalyst APK key, because there is no catalyst APK URL.** Unlike the desktop catalyst asar (`releases.obsidian.md/release/obsidian-<ver>.asar.gz`), the mobile catalyst build is not published at a URL at all — Obsidian distributes it through a Discord-gated channel: join their Discord, claim the badge, and `#insider-welcome` carries the per-device download instructions ([Early access versions](https://obsidian.md/help/early-access)). That is why every sibling path probed on `releases.obsidian.md` returns the non-existence signature and why the public Android build contains no update endpoint to reveal a pattern. So what the table carries for a catalyst mobile build is its **changelog** (`changelogUrl.mobileCatalyst`); for the build itself, follow the link above. The asar and installer download paths (`obsidian-version-switch.ts` `getAsarDownloadUrls`, `obsidian-installer.ts` `resolveInstallerAssetUrls`) try the baked URL **first**, so the common path needs no GitHub release-API call and no dot-vs-hyphen asset-name guessing — the hand-rolled URL guesses (`installer-asset.ts`) remain the fallback for versions absent from the catalog. `src/installer-asset.ts` `selectInstallerDownloadUrl` picks the platform-correct URL (pure, unit-tested).
 
-**The catalog depends on NO third-party source — it reads Obsidian's own endpoints.** We publish
-`metadata.json` as a public runtime feed, so a stalled upstream must not be able to freeze it; it
-previously tracked `jesse-r-s-hines/wdio-obsidian-service`'s `obsidian-versions.json`, and that
-dependency has since been removed. `scripts/refresh-metadata.ts` (`npm run refresh:metadata`, daily
-via `.github/workflows/refresh-metadata.yml`) reads three sources, each authoritative for one part of an
-entry, then writes the table back byte-stably (rerun ⇒ no diff — verified). Commit the result.
+**The catalog depends on NO third-party source — it reads Obsidian's own endpoints.** We publish `metadata.json` as a public runtime feed, so a stalled upstream must not be able to freeze it; it previously tracked `jesse-r-s-hines/wdio-obsidian-service`'s `obsidian-versions.json`, and that dependency has since been removed. `scripts/refresh-metadata.ts` (`npm run refresh:metadata`, daily via `.github/workflows/refresh-metadata.yml`) reads three sources, each authoritative for one part of an entry, then writes the table back byte-stably (rerun ⇒ no diff — verified). Commit the result.
 
-- **`obsidianmd/obsidian-releases` GitHub Releases API → `downloads`.** Two paginated requests cover all
-  172 releases, assets inline. The release's *real* asset list is matched by `src/release-catalog.ts`
-  `selectReleaseDownloads`, which reuses `selectInstallerAssetName` so the dot-vs-hyphen era needs no
-  guessing and the 32-bit / arm64 / AppImage / deb / snap siblings are left behind. Verified to reproduce
-  all 168 previously-catalogued GitHub URLs byte-for-byte. Two tags — `v1.1.8-E21` and `v1.6.3-e30` —
-  publish assets carrying the *base* version (`Obsidian.1.1.8.exe`), so they deliberately match nothing.
-- **`obsidian.md/changelog.xml` → `changelogUrl` and `channel`.** The feed is the authoritative publisher
-  of every changelog page, so each version it knows has its whole `changelogUrl` object rewritten from it.
-- **`desktop-releases.json` → `minRecommendedInstallerVersion`,** captured for the current public and
-  catalyst releases. **Additive only** — the manifest reports only the *latest* release's floor, so this
-  captures each new one as it ships and never overwrites a historical value measured here.
+- **`obsidianmd/obsidian-releases` GitHub Releases API → `downloads`.** Two paginated requests cover all 172 releases, assets inline. The release's *real* asset list is matched by `src/release-catalog.ts` `selectReleaseDownloads`, which reuses `selectInstallerAssetName` so the dot-vs-hyphen era needs no guessing and the 32-bit / arm64 / AppImage / deb / snap siblings are left behind. Verified to reproduce all 168 previously-catalogued GitHub URLs byte-for-byte. Two tags — `v1.1.8-E21` and `v1.6.3-e30` — publish assets carrying the *base* version (`Obsidian.1.1.8.exe`), so they deliberately match nothing.
+- **`obsidian.md/changelog.xml` → `changelogUrl` and `channel`.** The feed is the authoritative publisher of every changelog page, so each version it knows has its whole `changelogUrl` object rewritten from it.
+- **`desktop-releases.json` → `minRecommendedInstallerVersion`,** captured for the current public and catalyst releases. **Additive only** — the manifest reports only the *latest* release's floor, so this captures each new one as it ships and never overwrites a historical value measured here.
 
-**Catalyst asars are probed, and a `200` is not enough.** They are served from `releases.obsidian.md`,
-which publishes no listing, so a feed-known version with no GitHub release gets its URL constructed
-(`buildCatalystAsarUrl`) and probed. For a version it does not host the CDN answers **`200` with
-`content-length: 0`** — measured 2026-08-30 on `0.0.3` / `0.1.0` / `0.3.0` — so the probe requires a
-non-empty body, exactly as `downloadAndDecompressAsar` already rejects an "empty response body". A
-status-only check invents download URLs for versions that have none, and the CDN's intermittent `502`
-(seen on `1.2`) made two consecutive runs disagree. Only versions with no `downloads` are probed, so a
-steady-state run makes no requests.
+**Catalyst asars are probed, and a `200` is not enough.** They are served from `releases.obsidian.md`, which publishes no listing, so a feed-known version with no GitHub release gets its URL constructed (`buildCatalystAsarUrl`) and probed. For a version it does not host the CDN answers **`200` with `content-length: 0`** — measured 2026-08-30 on `0.0.3` / `0.1.0` / `0.3.0` — so the probe requires a non-empty body, exactly as `downloadAndDecompressAsar` already rejects an "empty response body". A status-only check invents download URLs for versions that have none, and the CDN's intermittent `502` (seen on `1.2`) made two consecutive runs disagree. Only versions with no `downloads` are probed, so a steady-state run makes no requests.
 
-**`channel` is derived from PUBLICATION, not from the feed's title marker.** The feed tags each entry
-`(Public)` or `(Early access)`, but through the pre-1.0 era it tagged *everything* early-access — the whole
-app was — so 61 versions that shipped as ordinary GitHub releases carry only a catalyst page. Trusting the
-marker relabels a large slice of public history as catalyst. A GitHub release is unambiguous the other way
-round: catalyst builds are served only from the CDN, never as release assets. So `resolveReleaseChannel`
-reads a GitHub release as public, and records `public+catalyst` only when the feed carries **both** desktop
-pages — the shape all ten pre-existing `public+catalyst` entries have. Against the 325 recorded values this
-rule reproduces every one except **12 genuine drifts** it corrects: eight `public` and three `catalyst`
-entries that carry both pages became `public+catalyst` (incl. `1.13.4` / `1.13.6` / `1.13.7`, stale because
-`channel` was previously written only for *new* versions and never revisited), and `0.12.16` — a GitHub
-release with **zero assets**, `prerelease: true` and no downloads anywhere — became `catalyst`.
+**`channel` is derived from PUBLICATION, not from the feed's title marker.** The feed tags each entry `(Public)` or `(Early access)`, but through the pre-1.0 era it tagged *everything* early-access — the whole app was — so 61 versions that shipped as ordinary GitHub releases carry only a catalyst page. Trusting the marker relabels a large slice of public history as catalyst. A GitHub release is unambiguous the other way round: catalyst builds are served only from the CDN, never as release assets. So `resolveReleaseChannel` reads a GitHub release as public, and records `public+catalyst` only when the feed carries **both** desktop pages — the shape all ten pre-existing `public+catalyst` entries have. Against the 325 recorded values this rule reproduces every one except **12 genuine drifts** it corrects: eight `public` and three `catalyst` entries that carry both pages became `public+catalyst` (incl. `1.13.4` / `1.13.6` / `1.13.7`, stale because `channel` was previously written only for *new* versions and never revisited), and `0.12.16` — a GitHub release with **zero assets**, `prerelease: true` and no downloads anywhere — became `catalyst`.
 
-The download merge is **additive**: it never overwrites our own empirically-measured `min*` /
-`available` / `runtimeVersions` fields. The byte-stable read/write
-(`readMetadataTable` / `writeMetadataTable` / `serializeTable`, sorted via `compareVersions`, 2-space,
-trailing newline) lives in `scripts/helpers/metadata-io.ts`, shared by both catalog scripts so their
-output stays byte-identical.
+The download merge is **additive**: it never overwrites our own empirically-measured `min*` / `available` / `runtimeVersions` fields. The byte-stable read/write (`readMetadataTable` / `writeMetadataTable` / `serializeTable`, sorted via `compareVersions`, 2-space, trailing newline) lives in `scripts/helpers/metadata-io.ts`, shared by both catalog scripts so their output stays byte-identical.
 
-**`runtimeVersions` + `ecmaScriptVersion` — empirically-collected shell runtime (per installer version).**
-Each version carries an optional `runtimeVersions` object — the **entire** `process.versions` its Electron
-shell ships (the four well-known `node` / `chrome` / `v8` / `electron` plus every other key that build
-exposes: `uv` / `zlib` / `brotli` / `openssl` / `icu` / `modules` / `napi` / `llhttp` / … — the exact set
-varies by Electron version) — read from a real `process.versions` by booting that version's own installer,
-plus a derived `ecmaScriptVersion` string (e.g. `'ES2022'`). Unlike `minRecommendedElectronVersion` (the
-app's hardcoded *minimum*, not the bundled version), these are the *actual* bundled versions, so a consumer
-pinning an installer knows offline which ES level a serialized `evalInObsidian` closure may safely use.
-Collected by `scripts/collect-runtime-versions.ts` (`npm run collect:runtime-versions`), which boots each
-version pinning both the asar and the installer to that version (matched pair → clean boot), reads
-`JSON.stringify(process.versions)`, and derives the ES edition from the Chromium major via the pure,
-unit-tested `src/ecmascript-version.ts` `deriveEcmaScriptVersion` (a curated Chromium-major → ES-year
-breakpoint table). It is **incremental** — only versions with no `runtimeVersions` are collected, which in
-steady state is none — and **additive** (never overwrites `channel` / `downloads` / `min*`; writes after
-each version so a long run is resumable). Versions that dead-boot (an installer too old to render) are
-logged and skipped. It runs under jiti, which lacks the `OBSIDIAN_METADATA` `define` global, so the script
-calls the shared `defineObsidianMetadataGlobal()` (the same shim the test runners get via
-`metadata-global-setup.ts`) before dynamically importing `connectToCdp`. `--out` writes a per-platform
-fragment instead of the catalog, and `--disable-sandbox` is what lets it boot on Linux CI.
+**`runtimeVersions` + `ecmaScriptVersion` — empirically-collected shell runtime (per installer version).** Each version carries an optional `runtimeVersions` object — the **entire** `process.versions` its Electron shell ships (the four well-known `node` / `chrome` / `v8` / `electron` plus every other key that build exposes: `uv` / `zlib` / `brotli` / `openssl` / `icu` / `modules` / `napi` / `llhttp` / … — the exact set varies by Electron version) — read from a real `process.versions` by booting that version's own installer, plus a derived `ecmaScriptVersion` string (e.g. `'ES2022'`). Unlike `minRecommendedElectronVersion` (the app's hardcoded *minimum*, not the bundled version), these are the *actual* bundled versions, so a consumer pinning an installer knows offline which ES level a serialized `evalInObsidian` closure may safely use. Collected by `scripts/collect-runtime-versions.ts` (`npm run collect:runtime-versions`), which boots each version pinning both the asar and the installer to that version (matched pair → clean boot), reads `JSON.stringify(process.versions)`, and derives the ES edition from the Chromium major via the pure, unit-tested `src/ecmascript-version.ts` `deriveEcmaScriptVersion` (a curated Chromium-major → ES-year breakpoint table). It is **incremental** — only versions with no `runtimeVersions` are collected, which in steady state is none — and **additive** (never overwrites `channel` / `downloads` / `min*`; writes after each version so a long run is resumable). Versions that dead-boot (an installer too old to render) are logged and skipped. It runs under jiti, which lacks the `OBSIDIAN_METADATA` `define` global, so the script calls the shared `defineObsidianMetadataGlobal()` (the same shim the test runners get via `metadata-global-setup.ts`) before dynamically importing `connectToCdp`. `--out` writes a per-platform fragment instead of the catalog, and `--disable-sandbox` is what lets it boot on Linux CI.
 
-**The field is only ever populated for versions that ship a desktop installer, which is 106 of the 325 —
-not a coverage gap.** A catalyst asar-only release has no Electron shell to boot, so `runtimeVersions` is
-structurally inapplicable to it. Reading "103 of 325" as a broken pipeline is the easy mistake to make
-here; the real gap was three versions.
+**The field is only ever populated for versions that ship a desktop installer, which is 106 of the 325 — not a coverage gap.** A catalyst asar-only release has no Electron shell to boot, so `runtimeVersions` is structurally inapplicable to it. Reading "103 of 325" as a broken pipeline is the easy mistake to make here; the real gap was three versions.
 
-**CORRECTION (2026-08-30): the Electron version is a property of the INSTALLER, not of the release.** This
-section previously claimed "Electron bundles the same Node/V8/Chromium on every OS for a given Electron
-version, so a single-platform run is authoritative for all platforms — no per-OS matrix." The first half is
-true; the conclusion is not, because two installers of the *same* Obsidian version can bundle *different
-Electron builds*: **`1.12.4` shipped Electron `39.6.0` in its `.exe` and `39.7.0` in every other
-installer**, and **`1.8.10` shipped `34.2.0` vs `34.5.2`** (2 of 106). The table keeps **one flat
-`runtimeVersions`**, measured on **Windows (`.exe`)** — the reference platform, because `exe`/`dmg` are
-published for all 106 installer-bearing releases while `tar` covers only 92 (0.6.4–0.8.15 shipped AppImage
-and snap instead), and because all 103 pre-existing values were measured there. So our `1.12.4` reads
-`39.6.0` and deliberately differs from any source that flattens to `39.7.0`.
+**CORRECTION (2026-08-30): the Electron version is a property of the INSTALLER, not of the release.** This section previously claimed "Electron bundles the same Node/V8/Chromium on every OS for a given Electron version, so a single-platform run is authoritative for all platforms — no per-OS matrix." The first half is true; the conclusion is not, because two installers of the *same* Obsidian version can bundle *different Electron builds*: **`1.12.4` shipped Electron `39.6.0` in its `.exe` and `39.7.0` in every other installer**, and **`1.8.10` shipped `34.2.0` vs `34.5.2`** (2 of 106). The table keeps **one flat `runtimeVersions`**, measured on **Windows (`.exe`)** — the reference platform, because `exe`/`dmg` are published for all 106 installer-bearing releases while `tar` covers only 92 (0.6.4–0.8.15 shipped AppImage and snap instead), and because all 103 pre-existing values were measured there. So our `1.12.4` reads `39.6.0` and deliberately differs from any source that flattens to `39.7.0`.
 
-**`.github/workflows/collect-runtime-versions.yml` is what keeps the field current.** Before it, the field
-was only ever filled by someone remembering to run the script by hand on a desktop — which is exactly why
-it stalled three releases behind. The workflow boots each not-yet-collected installer on a runner matrix
-and `scripts/merge-runtime-versions.ts` (`npm run merge:runtime-versions`) folds the per-platform fragments
-into the catalog: the Windows value wins the flat field, and **every cross-platform disagreement is logged
-by version and platform** — that report is the entire reason the matrix boots three platforms rather than
-one, since the flat field cannot represent the divergence. Because divergence is rare, the **daily**
-schedule runs Windows alone and the **full matrix runs weekly** and on `workflow_dispatch`. It reuses the
-setup `validate-installer-boot.yml` already proves works on all three runners (xvfb + `libnss3` /
-`libgbm1` / `libgtk-3-0` on Linux, `GITHUB_TOKEN` against the anonymous release-API 403).
+**`.github/workflows/collect-runtime-versions.yml` is what keeps the field current.** Before it, the field was only ever filled by someone remembering to run the script by hand on a desktop — which is exactly why it stalled three releases behind. The workflow boots each not-yet-collected installer on a runner matrix and `scripts/merge-runtime-versions.ts` (`npm run merge:runtime-versions`) folds the per-platform fragments into the catalog: the Windows value wins the flat field, and **every cross-platform disagreement is logged by version and platform** — that report is the entire reason the matrix boots three platforms rather than one, since the flat field cannot represent the divergence. Because divergence is rare, the **daily** schedule runs Windows alone and the **full matrix runs weekly** and on `workflow_dispatch`. It reuses the setup `validate-installer-boot.yml` already proves works on all three runners (xvfb + `libnss3` / `libgbm1` / `libgtk-3-0` on Linux, `GITHUB_TOKEN` against the anonymous release-API 403).
 
 Two installer-floor fields:
 
-- **`minRunnableInstallerVersion`** — the tier-1 **boot floor**: the oldest installer (Electron shell) on
-  which that app version's asar actually runs (renders a real UI — a loaded vault, or the first-run vault
-  picker when old Obsidian ignores the pre-seeded `obsidian.json` auto-open — now forced open via the
-  dual-marker seed, see L26); below it the renderer
-  dead-boots (see L18) **or silently falls back to the installer's bundled asar** (see the caveat below).
-  It is **empirically measured** (boot the (asar, installer) pairs and detect boot-vs-dead) and is much
-  lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell (Electron 18), far below its
-  recommended `1.6.5`. Distinct floors: `0.6.4` for apps `0.6.4`–`1.2.8`, `0.14.5` for `1.3.0`–`1.5.2`,
-  `1.1.9` for `1.5.3`–`1.12.7` **and** `1.13.1`, but **`1.6.5` for `1.13.0`** (a genuine non-monotonic
-  exception — see the caveat); apps older than `0.6.4` are left unset (no older installer exists to run
-  them — asar-swap is upgrade-only, so an app needs an installer ≤ itself).
-- **`minRecommendedInstallerVersion`** — the tier-2 recommended min (Obsidian's own guidance); equals
-  `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement, checked while that catalog was still
-  a source — see the independence note above). New values now come from `desktop-releases.json`.
+- **`minRunnableInstallerVersion`** — the tier-1 **boot floor**: the oldest installer (Electron shell) on which that app version's asar actually runs (renders a real UI — a loaded vault, or the first-run vault picker when old Obsidian ignores the pre-seeded `obsidian.json` auto-open — now forced open via the dual-marker seed, see L26); below it the renderer dead-boots (see L18) **or silently falls back to the installer's bundled asar** (see the caveat below). It is **empirically measured** (boot the (asar, installer) pairs and detect boot-vs-dead) and is much lower than the recommended min — e.g. `1.13.1` runs on the `1.1.9` shell (Electron 18), far below its recommended `1.6.5`. Distinct floors: `0.6.4` for apps `0.6.4`–`1.2.8`, `0.14.5` for `1.3.0`–`1.5.2`, `1.1.9` for `1.5.3`–`1.12.7` **and** `1.13.1`, but **`1.6.5` for `1.13.0`** (a genuine non-monotonic exception — see the caveat); apps older than `0.6.4` are left unset (no older installer exists to run them — asar-swap is upgrade-only, so an app needs an installer ≤ itself).
+- **`minRecommendedInstallerVersion`** — the tier-2 recommended min (Obsidian's own guidance); equals `wdio-obsidian-service`'s `minInstallerVersion` (52/52 agreement, checked while that catalog was still a source — see the independence note above). New values now come from `desktop-releases.json`.
 
-**Silent-fallback caveat (`1.13.0`; corrected 2026-07-13 via CDP —
-[wdio-obsidian-service#78](https://github.com/jesse-r-s-hines/wdio-obsidian-service/issues/78)).** The
-boot-floor measurement detects only *"a UI rendered"*, **not** *"the requested asar version is running"* —
-and on an installer below the floor, some app versions **silently fall back to the installer's own bundled
-asar** (Obsidian loads the newer asar, it fails to run, and it reverts to the bundled one) instead of
-dead-booting. That renders a healthy UI of the *older* app, which the detector reads as a false-positive
-"runnable". `1.13.0` on installer `1.1.9` does exactly this — verified over CDP that `obsidianModule.apiVersion`
-reports `1.1.9`, not `1.13.0` (whereas on installer `1.6.5` it reports `1.13.0`), so `1.13.0`'s real floor is
-`1.6.5`, not the `1.1.9` first recorded (now fixed in `metadata.json`). `1.13.1` genuinely runs on `1.1.9`
-(`apiVersion` `1.13.1`) — a real non-monotonic breakpoint, which the maintainer's independent bisect also
-found. **Discriminators:** `obsidianModule.apiVersion` = the running asar (app) version;
-`window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the harness to assert the
-running `apiVersion` matches the requested version (so silent fallbacks are caught, not just dead boots) is
-**now done** as a post-boot runtime verify — see **L25** (`resolveAsarFallback` + `SilentAsarFallbackError`).
-This did **not** trigger a boot re-audit of the table: with L25's default-on throw a mis-measured floor now
-fails loudly the moment anyone boots that pair, so the empirically-measured `min*` values stand and the
-catalog keeps flowing via `refresh:metadata`.
+**Silent-fallback caveat (`1.13.0`; corrected 2026-07-13 via CDP — [wdio-obsidian-service#78](https://github.com/jesse-r-s-hines/wdio-obsidian-service/issues/78)).** The boot-floor measurement detects only *"a UI rendered"*, **not** *"the requested asar version is running"* — and on an installer below the floor, some app versions **silently fall back to the installer's own bundled asar** (Obsidian loads the newer asar, it fails to run, and it reverts to the bundled one) instead of dead-booting. That renders a healthy UI of the *older* app, which the detector reads as a false-positive "runnable". `1.13.0` on installer `1.1.9` does exactly this — verified over CDP that `obsidianModule.apiVersion` reports `1.1.9`, not `1.13.0` (whereas on installer `1.6.5` it reports `1.13.0`), so `1.13.0`'s real floor is `1.6.5`, not the `1.1.9` first recorded (now fixed in `metadata.json`). `1.13.1` genuinely runs on `1.1.9` (`apiVersion` `1.13.1`) — a real non-monotonic breakpoint, which the maintainer's independent bisect also found. **Discriminators:** `obsidianModule.apiVersion` = the running asar (app) version; `window.electron.remote.app.getVersion()` = the installer/shell version. Hardening the harness to assert the running `apiVersion` matches the requested version (so silent fallbacks are caught, not just dead boots) is **now done** as a post-boot runtime verify — see **L25** (`resolveAsarFallback` + `SilentAsarFallbackError`). This did **not** trigger a boot re-audit of the table: with L25's default-on throw a mis-measured floor now fails loudly the moment anyone boots that pair, so the empirically-measured `min*` values stand and the catalog keeps flowing via `refresh:metadata`.
 
-Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is
-filled from what `wdio-obsidian-service` recorded, for completeness — it matched our values 52/52). `—` = not
-determined (no asar in the source folder, or not recorded upstream):
+Range summary (per-version data in `metadata.json` is the source of truth; the recommended column is filled from what `wdio-obsidian-service` recorded, for completeness — it matched our values 52/52). `—` = not determined (no asar in the source folder, or not recorded upstream):
 
 | App-version range | `minRunnableInstallerVersion` | `minRecommendedInstallerVersion` |
 | --- | --- | --- |
@@ -891,479 +362,127 @@ determined (no asar in the source folder, or not recorded upstream):
 
 ## L21. Proactive installer↔app compatibility (`IncompatibleInstallerVersionError` + verdict-as-data)
 
-`resolveOwnedInstanceConfig` (`transport-factory.ts`, owned path only) resolves the concrete (app asar,
-installer shell) version pair and runs a **proactive** compatibility check from `metadata.json` (L20)
-*before* any download or launch — an actionable error for an unrunnable pin, a warning for a
-below-recommended one, and a machine-readable verdict on the result. It supersedes L18's reactive
-dead-boot for table-known combos (see the L18 cross-reference).
+`resolveOwnedInstanceConfig` (`transport-factory.ts`, owned path only) resolves the concrete (app asar, installer shell) version pair and runs a **proactive** compatibility check from `metadata.json` (L20) *before* any download or launch — an actionable error for an unrunnable pin, a warning for a below-recommended one, and a machine-readable verdict on the result. It supersedes L18's reactive dead-boot for table-known combos (see the L18 cross-reference).
 
-- **Pure verdict** — `src/installer-compatibility.ts` (unit-tested; mirrors the `renderer-boot-detection`
-  pure/glue split): `resolveInstallerCompatibility({ appVersion, installerVersion, metadata }) →
-  InstallerCompatibility` with `tier: 'ok' | 'nagged' | 'unrunnable' | 'unknown'`. `unrunnable` ⇔ installer
-  `<` `minRunnableInstallerVersion`; `nagged` ⇔ `≥` run floor but `<` `minRecommendedInstallerVersion` (old
-  versions only); `unknown` ⇔ installer version undefined (undetectable Linux shell) or app absent from the
-  table. Pure `x.y.z` compares (reuses `compareVersions`) — no I/O.
-- **Distinct error** — `IncompatibleInstallerVersionError`
-  (`incompatible-installer-version-error.ts`, exported from the barrel) carries `appVersion` /
-  `installerVersion` / `minRunnableInstallerVersion` and a message naming the installer that would work.
-  Thrown from `resolveOwnedInstanceConfig` via the `resolveAndReportCompatibility` helper on `'unrunnable'`;
-  `'nagged'` logs a warning via the warn-don't-throw `log()` channel; `'ok'`/`'unknown'` are silent.
-- **Fail-fast ordering** — the check runs only for the asar-swap-onto-shell case (the only dead-boot risk;
-  the downgrade / own-installer paths run the app's own installer, so they always boot and are not checked).
-  Concrete versions are resolved and the pinned shell's installed-shell detection is **deferred** so an
-  `'unrunnable'` pin throws before `ensureShellCached`/`ensureAsarCached` — no download, no launch (the
-  `installer-compatibility.integration.test.ts` proactive test asserts exactly this, in milliseconds).
-- **Verdict as data** — a non-throwing verdict rides on `OwnedInstanceConfig.compatibility`, surfaced by
-  `DesktopCdpTransport.getCompatibility()` and on `CdpConnection.compatibility` (populated in
-  `connectToCdp`). An `'unrunnable'` verdict never reaches the data surface — it throws first.
-- **Table access** — `src/obsidian-metadata.ts` is the sole reader of `metadata.json` (see L20 for how the
-  `OBSIDIAN_METADATA` global is injected), exposing `getVersionMetadata(version)` / `ObsidianVersionMetadata`.
-- **Deferred (follow-up tasks):** (a) the tier-2 **runtime** nag — reading live `process.versions.electron`
-  post-boot vs `minRecommendedElectronVersion` — **now landed, see L23**; (b) an **option knob** to
-  silence/tune the warnings (and optionally disable the proactive throw, which would let L18's dead-boot path
-  be integration-tested again) — **now landed, see L24**.
+- **Pure verdict** — `src/installer-compatibility.ts` (unit-tested; mirrors the `renderer-boot-detection` pure/glue split): `resolveInstallerCompatibility({ appVersion, installerVersion, metadata }) → InstallerCompatibility` with `tier: 'ok' | 'nagged' | 'unrunnable' | 'unknown'`. `unrunnable` ⇔ installer `<` `minRunnableInstallerVersion`; `nagged` ⇔ `≥` run floor but `<` `minRecommendedInstallerVersion` (old versions only); `unknown` ⇔ installer version undefined (undetectable Linux shell) or app absent from the table. Pure `x.y.z` compares (reuses `compareVersions`) — no I/O.
+- **Distinct error** — `IncompatibleInstallerVersionError` (`incompatible-installer-version-error.ts`, exported from the barrel) carries `appVersion` / `installerVersion` / `minRunnableInstallerVersion` and a message naming the installer that would work. Thrown from `resolveOwnedInstanceConfig` via the `resolveAndReportCompatibility` helper on `'unrunnable'`; `'nagged'` logs a warning via the warn-don't-throw `log()` channel; `'ok'`/`'unknown'` are silent.
+- **Fail-fast ordering** — the check runs only for the asar-swap-onto-shell case (the only dead-boot risk; the downgrade / own-installer paths run the app's own installer, so they always boot and are not checked). Concrete versions are resolved and the pinned shell's installed-shell detection is **deferred** so an `'unrunnable'` pin throws before `ensureShellCached`/`ensureAsarCached` — no download, no launch (the `installer-compatibility.integration.test.ts` proactive test asserts exactly this, in milliseconds).
+- **Verdict as data** — a non-throwing verdict rides on `OwnedInstanceConfig.compatibility`, surfaced by `DesktopCdpTransport.getCompatibility()` and on `CdpConnection.compatibility` (populated in `connectToCdp`). An `'unrunnable'` verdict never reaches the data surface — it throws first.
+- **Table access** — `src/obsidian-metadata.ts` is the sole reader of `metadata.json` (see L20 for how the `OBSIDIAN_METADATA` global is injected), exposing `getVersionMetadata(version)` / `ObsidianVersionMetadata`.
+- **Deferred (follow-up tasks):** (a) the tier-2 **runtime** nag — reading live `process.versions.electron` post-boot vs `minRecommendedElectronVersion` — **now landed, see L23**; (b) an **option knob** to silence/tune the warnings (and optionally disable the proactive throw, which would let L18's dead-boot path be integration-tested again) — **now landed, see L24**.
 
 ## L22. Auto-install Appium dependencies before auto-starting the server
 
-The harness auto-starts the Appium server via `npx --no-install appium` (the `--no-install` pin and the
-server-process observability that surrounds it are **L27**), which assumes both Appium **and** the
-`uiautomator2` driver are already installed — a missing driver was a common first-run failure (the exact
-scenario that motivated this: `npx --no-install appium --version` exits non-zero on a machine with no
-global Appium). `startAppiumAndEmulator` now closes that gap: when it is about to auto-start the server
-(`needsAppiumStart`) **and** `shouldAutoInstallAppiumDependencies` (`@default true`) is set, it runs
-`AppiumTransportFactory.ensureAppiumDependencies` first — check-then-install for each of Appium
-(`npm install -g appium`, global, matching the `npx appium` resolution — see the auto-memory
-`reference_android_appium_cold_cost_breakdown`) and the driver (`appium driver install uiautomator2`).
+The harness auto-starts the Appium server via `npx --no-install appium` (the `--no-install` pin and the server-process observability that surrounds it are **L27**), which assumes both Appium **and** the `uiautomator2` driver are already installed — a missing driver was a common first-run failure (the exact scenario that motivated this: `npx --no-install appium --version` exits non-zero on a machine with no global Appium). `startAppiumAndEmulator` now closes that gap: when it is about to auto-start the server (`needsAppiumStart`) **and** `shouldAutoInstallAppiumDependencies` (`@default true`) is set, it runs `AppiumTransportFactory.ensureAppiumDependencies` first — check-then-install for each of Appium (`npm install -g appium`, global, matching the `npx appium` resolution — see the auto-memory `reference_android_appium_cold_cost_breakdown`) and the driver (`appium driver install uiautomator2`).
 
-- **Gated on auto-start only.** If the server is already reachable, or `shouldAutoStartAppium: false`
-  (user manages their own server), nothing is checked or installed — the machine-mutating global install
-  never fires behind the user's back. `shouldAutoInstallAppiumDependencies: false` is the explicit opt-out
-  even when the harness does auto-start.
-- **Check-then-install, so a provisioned machine pays only two fast probes** — `npx --no-install appium
-  --version` and `npx --no-install appium driver list --installed --json`. `--no-install` prevents the
-  detection probes from themselves triggering an npx download.
-- **Pure/testable split** mirrors `device-readiness.ts` / `appium-session-config.ts`: `src/appium-dependencies.ts`
-  holds `checkIsAppiumDriverInstalled` (parses the `--json` driver list; key-presence ⇔ installed, malformed
-  output ⇒ not-installed so the caller installs) and `willAutoInstallAppiumDependencies`
-  (`@default true`), both unit-tested in `appium-dependencies.test.ts`. The `exec` orchestration stays in the
-  `v8 ignore` factory.
-- **Windows:** the install/probe commands are passed to `exec` as **strings**, not arrays, so `exec` routes
-  them through the shell — required to resolve the `npm`/`npx` `.cmd` shims (the array path spawns without a
-  shell and would `ENOENT`). This differs from the `adb`/`tar` calls, which are real `.exe` on PATH.
-- Supersedes L19 lever #3 ("pre-provision … driver") for the local/first-run case — provisioning it into a
-  CI image is still the faster path when you control the image, but the harness no longer *requires* it.
+- **Gated on auto-start only.** If the server is already reachable, or `shouldAutoStartAppium: false` (user manages their own server), nothing is checked or installed — the machine-mutating global install never fires behind the user's back. `shouldAutoInstallAppiumDependencies: false` is the explicit opt-out even when the harness does auto-start.
+- **Check-then-install, so a provisioned machine pays only two fast probes** — `npx --no-install appium --version` and `npx --no-install appium driver list --installed --json`. `--no-install` prevents the detection probes from themselves triggering an npx download.
+- **Pure/testable split** mirrors `device-readiness.ts` / `appium-session-config.ts`: `src/appium-dependencies.ts` holds `checkIsAppiumDriverInstalled` (parses the `--json` driver list; key-presence ⇔ installed, malformed output ⇒ not-installed so the caller installs) and `willAutoInstallAppiumDependencies` (`@default true`), both unit-tested in `appium-dependencies.test.ts`. The `exec` orchestration stays in the `v8 ignore` factory.
+- **Windows:** the install/probe commands are passed to `exec` as **strings**, not arrays, so `exec` routes them through the shell — required to resolve the `npm`/`npx` `.cmd` shims (the array path spawns without a shell and would `ENOENT`). This differs from the `adb`/`tar` calls, which are real `.exe` on PATH.
+- Supersedes L19 lever #3 ("pre-provision … driver") for the local/first-run case — provisioning it into a CI image is still the faster path when you control the image, but the harness no longer *requires* it.
 
 ## L23. Tier-2 runtime Electron nag (`resolveElectronCompatibility` + verdict-as-data)
 
-The runtime companion to L21's offline installer check — deferred item (a) from that section (the parent task
-that shipped L20/L21). L21 compares the resolved **installer** version against installer-version thresholds
-entirely offline. But the app's real requirement is a **minimum Electron version** hardcoded inside `app.js`
-(e.g. `1.13.1` needs Electron `28.2.3`), and the installer's bundled Electron is not derivable offline (see
-`ObsidianVersionMetadata.minRecommendedElectronVersion`, L20). So this tier reads the **live** Electron the
-owned instance is actually running, post-boot, and warns when it is below the app's recommended minimum. It
-never blocks (an old Electron runs but nags) — there is no error tier here, unlike L21's `'unrunnable'`.
+The runtime companion to L21's offline installer check — deferred item (a) from that section (the parent task that shipped L20/L21). L21 compares the resolved **installer** version against installer-version thresholds entirely offline. But the app's real requirement is a **minimum Electron version** hardcoded inside `app.js` (e.g. `1.13.1` needs Electron `28.2.3`), and the installer's bundled Electron is not derivable offline (see `ObsidianVersionMetadata.minRecommendedElectronVersion`, L20). So this tier reads the **live** Electron the owned instance is actually running, post-boot, and warns when it is below the app's recommended minimum. It never blocks (an old Electron runs but nags) — there is no error tier here, unlike L21's `'unrunnable'`.
 
-- **Pure verdict** — `src/electron-compatibility.ts` (unit-tested; mirrors `installer-compatibility.ts`):
-  `resolveElectronCompatibility({ appVersion, actualElectronVersion, metadata }) → ElectronCompatibility` with
-  `tier: 'nagged' | 'ok' | 'unknown'`. `nagged` ⇔ `actualElectronVersion < minRecommendedElectronVersion`;
-  `unknown` ⇔ the live version was unreadable or the app version carries no recommended Electron in the table.
-  Pure `x.y.z` compares (reuses `compareVersions`) — no I/O. `minRecommendedElectronVersion` is keyed by **app**
-  version and is already fully populated in `metadata.json` (L20); this tier consumes it, nothing new is added.
-- **Post-boot glue** — `DesktopCdpTransport.checkRuntimeElectronCompatibility` runs in the success branch of
-  `waitForOwnedVaultReady` (**owned path only** — attach mode targets the user's own live instance). It reads
-  two values from the booted renderer via raw `evaluate`: the running **app** version from the main process via
-  `window.electron.ipcRenderer.sendSync('version')` (the same IPC channel `namespace-bootstrap`'s `ipcSendSync`
-  uses), and the live Electron via `process.versions.electron`. Both are top-level reads. **Do NOT use
-  `require('obsidian').apiVersion`** (only resolves inside a plugin-load context — needs CodeScript Toolkit)
-  **nor `getObsidianModule()`** (its plugin-load `require('obsidian')` trick returns "Failed to load obsidian
-  module" in a plain owned instance) — both were confirmed to fail there; `ipcRenderer.sendSync('version')`
-  returns the correct app version (and tracks the swapped asar version, not the shell — verified: local asar
-  `1.13.2` on shell `1.12.7` returns `1.13.2`). The read is **best-effort** (own try/catch, warn-don't-throw):
-  a failure logs and leaves the verdict `undefined`, never breaking an otherwise-ready boot. On `'nagged'` it
-  logs via the same `log()` channel as L21's installer nag.
-- **Verdict as data** (mirrors L21 item D) — the verdict rides on `DesktopCdpTransport.getElectronCompatibility()`
-  and `CdpConnection.electronCompatibility` (populated in `connectToCdp`), so a consumer / integration test can
-  assert on it rather than spying on `console.warn` (the repo has no warn-spy precedent). It is a **separate**
-  accessor from L21's `getCompatibility()` because it is only known post-boot, whereas the installer verdict is
-  resolved pre-launch and rides on the immutable `OwnedInstanceConfig`.
-- **Barrel** — `resolveElectronCompatibility` + `CheckElectronCompatibilityParams` / `ElectronCompatibility` /
-  `ElectronCompatibilityTier` are exported from the main entry.
-- **Silencing/tuning is via L24's knob** — `shouldWarnOnCompatibilityIssues: false` suppresses this
-  runtime-Electron nag alongside the installer nag (the verdict still rides on `getElectronCompatibility()`).
-  Landed later (was L21's deferred item (b)); the warning is on by default.
-- **Integration test** — `src/electron-compatibility.integration.test.ts` boots a real nag-band pair
-  (app `1.13.1` on the `1.1.9` installer shell → live Electron 18 `< 28.2.3` → `'nagged'`) and asserts the
-  surfaced `electronCompatibility`. Like the other download-and-boot suites it is opt-in via
-  `OBSIDIAN_TEST_ELECTRON_NAG=1`.
+- **Pure verdict** — `src/electron-compatibility.ts` (unit-tested; mirrors `installer-compatibility.ts`): `resolveElectronCompatibility({ appVersion, actualElectronVersion, metadata }) → ElectronCompatibility` with `tier: 'nagged' | 'ok' | 'unknown'`. `nagged` ⇔ `actualElectronVersion < minRecommendedElectronVersion`; `unknown` ⇔ the live version was unreadable or the app version carries no recommended Electron in the table. Pure `x.y.z` compares (reuses `compareVersions`) — no I/O. `minRecommendedElectronVersion` is keyed by **app** version and is already fully populated in `metadata.json` (L20); this tier consumes it, nothing new is added.
+- **Post-boot glue** — `DesktopCdpTransport.checkRuntimeElectronCompatibility` runs in the success branch of `waitForOwnedVaultReady` (**owned path only** — attach mode targets the user's own live instance). It reads two values from the booted renderer via raw `evaluate`: the running **app** version from the main process via `window.electron.ipcRenderer.sendSync('version')` (the same IPC channel `namespace-bootstrap`'s `ipcSendSync` uses), and the live Electron via `process.versions.electron`. Both are top-level reads. **Do NOT use `require('obsidian').apiVersion`** (only resolves inside a plugin-load context — needs CodeScript Toolkit) **nor `getObsidianModule()`** (its plugin-load `require('obsidian')` trick returns "Failed to load obsidian module" in a plain owned instance) — both were confirmed to fail there; `ipcRenderer.sendSync('version')` returns the correct app version (and tracks the swapped asar version, not the shell — verified: local asar `1.13.2` on shell `1.12.7` returns `1.13.2`). The read is **best-effort** (own try/catch, warn-don't-throw): a failure logs and leaves the verdict `undefined`, never breaking an otherwise-ready boot. On `'nagged'` it logs via the same `log()` channel as L21's installer nag.
+- **Verdict as data** (mirrors L21 item D) — the verdict rides on `DesktopCdpTransport.getElectronCompatibility()` and `CdpConnection.electronCompatibility` (populated in `connectToCdp`), so a consumer / integration test can assert on it rather than spying on `console.warn` (the repo has no warn-spy precedent). It is a **separate** accessor from L21's `getCompatibility()` because it is only known post-boot, whereas the installer verdict is resolved pre-launch and rides on the immutable `OwnedInstanceConfig`.
+- **Barrel** — `resolveElectronCompatibility` + `CheckElectronCompatibilityParams` / `ElectronCompatibility` / `ElectronCompatibilityTier` are exported from the main entry.
+- **Silencing/tuning is via L24's knob** — `shouldWarnOnCompatibilityIssues: false` suppresses this runtime-Electron nag alongside the installer nag (the verdict still rides on `getElectronCompatibility()`). Landed later (was L21's deferred item (b)); the warning is on by default.
+- **Integration test** — `src/electron-compatibility.integration.test.ts` boots a real nag-band pair (app `1.13.1` on the `1.1.9` installer shell → live Electron 18 `< 28.2.3` → `'nagged'`) and asserts the surfaced `electronCompatibility`. Like the other download-and-boot suites it is opt-in via `OBSIDIAN_TEST_ELECTRON_NAG=1`.
 
 ## L24. Compatibility-warning knobs (`shouldWarnOnCompatibilityIssues` / `shouldThrowOnIncompatibleInstaller`)
 
-Two flat, independent booleans on the transport-options channel let a consumer silence/tune the compatibility
-checks of L21 (installer↔app) and L23 (runtime Electron). Deferred item (b) of L21; both default to `true`
-(today's behavior), so existing consumers are unaffected. (A third sibling knob,
-`shouldThrowOnSilentAsarFallback`, was later added by **L25** on the same channel with the same `@default true`,
-and it reuses this section's `shouldWarnOnCompatibilityIssues` for its warn path rather than adding a fourth.) They ride the existing `ObsidianCdpTransportOptions`
-channel (and `ConnectToCdpOptions`), so — like the version/visibility/sandbox knobs (L5) — all three
-consumption paths (Vitest / Jest / Manual, L6) inherit them with **no adapter change**. Owned path only; attach
-mode runs neither check.
+Two flat, independent booleans on the transport-options channel let a consumer silence/tune the compatibility checks of L21 (installer↔app) and L23 (runtime Electron). Deferred item (b) of L21; both default to `true` (today's behavior), so existing consumers are unaffected. (A third sibling knob, `shouldThrowOnSilentAsarFallback`, was later added by **L25** on the same channel with the same `@default true`, and it reuses this section's `shouldWarnOnCompatibilityIssues` for its warn path rather than adding a fourth.) They ride the existing `ObsidianCdpTransportOptions` channel (and `ConnectToCdpOptions`), so — like the version/visibility/sandbox knobs (L5) — all three consumption paths (Vitest / Jest / Manual, L6) inherit them with **no adapter change**. Owned path only; attach mode runs neither check.
 
-- **`shouldWarnOnCompatibilityIssues`** (`@default true`) — when `false`, suppresses **both** nag warnings:
-  the offline installer↔app `'nagged'` warning (L21, logged from `transport-factory`) and the post-boot
-  runtime-Electron `'nagged'` warning (L23, logged from `transport-desktop-cdp`). The verdicts are still
-  computed and surfaced as data (`getCompatibility()` / `getElectronCompatibility()`,
-  `CdpConnection.compatibility` / `.electronCompatibility`) — only the `log()` is gated.
-- **`shouldThrowOnIncompatibleInstaller`** (`@default true`) — when `false`, an `'unrunnable'` installer↔app
-  pair no longer throws `IncompatibleInstallerVersionError` at version-resolution time; it proceeds to launch
-  (a "proceeding to launch" warning is logged unless warnings are also off), where L18's reactive dead-boot
-  fast-fail catches the black-screen boot. Consequently an `'unrunnable'` verdict now **can** reach the data
-  surface (`compatibility.tier === 'unrunnable'`) — the L18/L21/connect-to-cdp TSDoc that said "unrunnable
-  never reaches the data surface, it throws first" is qualified accordingly.
+- **`shouldWarnOnCompatibilityIssues`** (`@default true`) — when `false`, suppresses **both** nag warnings: the offline installer↔app `'nagged'` warning (L21, logged from `transport-factory`) and the post-boot runtime-Electron `'nagged'` warning (L23, logged from `transport-desktop-cdp`). The verdicts are still computed and surfaced as data (`getCompatibility()` / `getElectronCompatibility()`, `CdpConnection.compatibility` / `.electronCompatibility`) — only the `log()` is gated.
+- **`shouldThrowOnIncompatibleInstaller`** (`@default true`) — when `false`, an `'unrunnable'` installer↔app pair no longer throws `IncompatibleInstallerVersionError` at version-resolution time; it proceeds to launch (a "proceeding to launch" warning is logged unless warnings are also off), where L18's reactive dead-boot fast-fail catches the black-screen boot. Consequently an `'unrunnable'` verdict now **can** reach the data surface (`compatibility.tier === 'unrunnable'`) — the L18/L21/connect-to-cdp TSDoc that said "unrunnable never reaches the data surface, it throws first" is qualified accordingly.
 
-- **Pure/testable split** (mirrors `visibility.ts` / `renderer-boot-detection.ts`): `src/compatibility-options.ts`
-  (internal, **not** re-exported) holds `willWarnOnCompatibilityIssues` /
-  `willThrowOnIncompatibleInstaller` (the `@default true` resolvers, G10q-tested) and
-  `resolveInstallerCompatibilityAction({ tier, shouldThrow, shouldWarn }) → 'throw' | 'warn-unrunnable' |
-  'warn-nagged' | 'silent'` — the pure decision the v8-ignored `transport-factory.resolveAndReportCompatibility`
-  glue executes (throw / `log` / return the verdict). All branches are unit-tested in
-  `compatibility-options.test.ts`.
-- **Coverage honesty** — the `log()` suppression itself lives in v8-ignored glue and is not asserted (the repo
-  has no console-warn-spy precedent — L23 asserts on the surfaced *verdict*, not on `console.warn`). The
-  resolver + action unit tests plus the verdict-as-data surface carry the coverage. There is **no cheap
-  integration test for the throw-disable path**: disabling the throw removes the pre-download fast stop, so the
-  only faithful end-to-end proof is the heavy opt-in dead-boot suite L18 now unblocks (tracked as a follow-up,
-  not bundled here).
+- **Pure/testable split** (mirrors `visibility.ts` / `renderer-boot-detection.ts`): `src/compatibility-options.ts` (internal, **not** re-exported) holds `willWarnOnCompatibilityIssues` / `willThrowOnIncompatibleInstaller` (the `@default true` resolvers, G10q-tested) and `resolveInstallerCompatibilityAction({ tier, shouldThrow, shouldWarn }) → 'throw' | 'warn-unrunnable' | 'warn-nagged' | 'silent'` — the pure decision the v8-ignored `transport-factory.resolveAndReportCompatibility` glue executes (throw / `log` / return the verdict). All branches are unit-tested in `compatibility-options.test.ts`.
+- **Coverage honesty** — the `log()` suppression itself lives in v8-ignored glue and is not asserted (the repo has no console-warn-spy precedent — L23 asserts on the surfaced *verdict*, not on `console.warn`). The resolver + action unit tests plus the verdict-as-data surface carry the coverage. There is **no cheap integration test for the throw-disable path**: disabling the throw removes the pre-download fast stop, so the only faithful end-to-end proof is the heavy opt-in dead-boot suite L18 now unblocks (tracked as a follow-up, not bundled here).
 
 ## L25. Post-boot silent-asar-fallback verify (`SilentAsarFallbackError` + verdict-as-data)
 
-`DesktopCdpTransport` verifies, **after every owned boot**, that the app (asar) version actually running
-matches the swapped-in pin — catching a **silent asar fallback**. When an asar is swapped onto an installer
-shell below its real boot floor the renderer does not always dead-boot (the black screen L18 catches); some app
-versions instead **silently revert to the installer's own bundled asar** and render a healthy UI of the *wrong
-(older)* version. L18's dead-boot detector reads that healthy UI as a false-positive "runnable" — exactly how
-`1.13.0` on installer `1.1.9` was first mis-measured (it reports `apiVersion` `1.1.9`, not `1.13.0`; see L20's
-silent-fallback caveat). L25 is the **healthy-UI companion** to L18's black-screen fast-fail: L18 catches an
-empty `<body>`, L25 catches a full UI running the wrong version. It also closes the gap L24 left open — with
-`shouldThrowOnIncompatibleInstaller: false` an `'unrunnable'` pin proceeds to launch, and if it silently falls
-back (rather than dead-boots) L18 never fires; L25 is what catches it.
+`DesktopCdpTransport` verifies, **after every owned boot**, that the app (asar) version actually running matches the swapped-in pin — catching a **silent asar fallback**. When an asar is swapped onto an installer shell below its real boot floor the renderer does not always dead-boot (the black screen L18 catches); some app versions instead **silently revert to the installer's own bundled asar** and render a healthy UI of the *wrong (older)* version. L18's dead-boot detector reads that healthy UI as a false-positive "runnable" — exactly how `1.13.0` on installer `1.1.9` was first mis-measured (it reports `apiVersion` `1.1.9`, not `1.13.0`; see L20's silent-fallback caveat). L25 is the **healthy-UI companion** to L18's black-screen fast-fail: L18 catches an empty `<body>`, L25 catches a full UI running the wrong version. It also closes the gap L24 left open — with `shouldThrowOnIncompatibleInstaller: false` an `'unrunnable'` pin proceeds to launch, and if it silently falls back (rather than dead-boots) L18 never fires; L25 is what catches it.
 
-- **Pure verdict** — `src/asar-fallback-detection.ts` (unit-tested; mirrors the `renderer-boot-detection` /
-  `installer-compatibility` / `electron-compatibility` pure/glue split):
-  `resolveAsarFallback({ requestedVersion, runningApiVersion }) → AsarFallback` with
-  `tier: 'match' | 'fallback' | 'unknown'`. `'match'` ⇔ the running version equals the pin; `'fallback'` ⇔ they
-  differ (the pin was not honored); `'unknown'` ⇔ no asar was swapped (nothing to verify) or the live version
-  was unreadable. Pure `x.y.z` compare (`compareVersions`) — no I/O and **no metadata** (a pin-vs-running
-  comparison, not a table lookup).
-- **Distinct error** — `SilentAsarFallbackError` (`silent-asar-fallback-error.ts`, **exported from the barrel**)
-  carries `requestedVersion` / `runningApiVersion` and names the too-old installer, so callers can
-  `instanceof`-match it (like `RendererFailedToInitializeError`).
-- **Post-boot glue** — `DesktopCdpTransport.checkRuntimeCompatibility` (owned path only) reads the live running
-  app version **once** (`ipcRenderer.sendSync('version')` — the same read L23 uses, truthful even under a silent
-  fallback) and shares it with both the asar-fallback check (`checkRuntimeAsarFallback`, may throw) and L23's
-  runtime-Electron nag (`applyElectronCompatibility`, best-effort). It runs in the ready branch of
-  `waitForOwnedVaultReady`, **outside** the readiness poll's try/catch, so the throw fails fast instead of being
-  swallowed as "not ready yet" and looping until timeout. The requested version is `ownedConfig.asar?.version`
-  — present only for the **asar-swap** case (the sole fallback risk); the downgrade / own-installer paths run
-  the app's own installer, so the running version always matches and the verdict is `'unknown'` (skipped).
-- **Verdict-as-data** — the verdict rides on `DesktopCdpTransport.getAsarFallback()` and
-  `CdpConnection.asarFallback` (populated in `connectToCdp`), so a consumer / integration test asserts on it
-  rather than spying on a throw. A `'fallback'` verdict reaches the data surface only when the throw is disabled
-  (below); with the default throw it fails first (same data-surface caveat L24 records for `'unrunnable'`).
-- **Knob** — `shouldThrowOnSilentAsarFallback` (`@default true`) is the **third** member of the L24
-  compatibility-knob family, on `ObsidianCdpTransportOptions` + `ConnectToCdpOptions`, resolved by the pure,
-  unit-tested `willThrowOnSilentAsarFallback` + `resolveAsarFallbackAction({ tier, shouldThrow,
-  shouldWarn }) → 'throw' | 'warn' | 'silent'` in `compatibility-options.ts`. When `false`, a fallback no longer
-  throws; it warns (gated by the **existing** `shouldWarnOnCompatibilityIssues`, not a new warn knob) and
-  surfaces the verdict as data. Owned path only; it rides the existing options channel, so all three consumption
-  paths (Vitest / Jest / Manual, L6) inherit it with no adapter change (L5).
-- **Integration test** — `src/asar-fallback.integration.test.ts` boots the real fallback pair (`1.13.0` on
-  `1.1.9`, throw disabled → `'fallback'`, running `1.1.9`), asserts the default throw, and a no-false-positive
-  `'match'` pair (`1.13.1` on `1.1.9`, which genuinely runs — its run floor IS `1.1.9`). Opt-in via
-  `OBSIDIAN_TEST_ASAR_FALLBACK=1` (heavy download-and-boot). Because `1.13.0`/`1.1.9` is below the run floor, the
-  boot-based cases also set `shouldThrowOnIncompatibleInstaller: false` to get past L21's proactive throw and
-  reach the boot. CDP-confirmed on Windows (2026-07-17): `1.13.0`/`1.1.9` really runs `apiVersion` `1.1.9`.
-- **Option-bag plumbing uses a local `normalizeOptionalProperties`** — `src/normalize-optional-properties.ts`
-  (ported from `obsidian-dev-utils/object-utils`, **not** depended on — same dependency-hygiene reason as the
-  L17 duplicated helpers; it needs only `type-fest`, already a dep). It replaces the per-key
-  `...(x !== undefined && { k: x })` conditional-spread when building the transport-options / config bags
-  (`connect-to-cdp` `buildCdpTransportOptions`, `transport-factory` `createCdpTransport`). Cast-only (keeps
-  `undefined`-valued keys at runtime), which is safe because every consumer reads each field with a
-  `?? default` / `!== undefined` guard.
-- **`metadata.json` was deliberately NOT re-audited** by a boot campaign (a scoping decision): with the
-  default-on runtime throw a mis-measured floor now fails loudly the moment anyone boots that pair (including the
-  CI boot suites), so the empirically-measured `min*` values stand as-is and the catalog data keeps flowing from
-  `refresh:metadata` (L20). This resolves the "harden the boot-floor measurement"
-  follow-up L20 tracked.
+- **Pure verdict** — `src/asar-fallback-detection.ts` (unit-tested; mirrors the `renderer-boot-detection` / `installer-compatibility` / `electron-compatibility` pure/glue split): `resolveAsarFallback({ requestedVersion, runningApiVersion }) → AsarFallback` with `tier: 'match' | 'fallback' | 'unknown'`. `'match'` ⇔ the running version equals the pin; `'fallback'` ⇔ they differ (the pin was not honored); `'unknown'` ⇔ no asar was swapped (nothing to verify) or the live version was unreadable. Pure `x.y.z` compare (`compareVersions`) — no I/O and **no metadata** (a pin-vs-running comparison, not a table lookup).
+- **Distinct error** — `SilentAsarFallbackError` (`silent-asar-fallback-error.ts`, **exported from the barrel**) carries `requestedVersion` / `runningApiVersion` and names the too-old installer, so callers can `instanceof`-match it (like `RendererFailedToInitializeError`).
+- **Post-boot glue** — `DesktopCdpTransport.checkRuntimeCompatibility` (owned path only) reads the live running app version **once** (`ipcRenderer.sendSync('version')` — the same read L23 uses, truthful even under a silent fallback) and shares it with both the asar-fallback check (`checkRuntimeAsarFallback`, may throw) and L23's runtime-Electron nag (`applyElectronCompatibility`, best-effort). It runs in the ready branch of `waitForOwnedVaultReady`, **outside** the readiness poll's try/catch, so the throw fails fast instead of being swallowed as "not ready yet" and looping until timeout. The requested version is `ownedConfig.asar?.version` — present only for the **asar-swap** case (the sole fallback risk); the downgrade / own-installer paths run the app's own installer, so the running version always matches and the verdict is `'unknown'` (skipped).
+- **Verdict-as-data** — the verdict rides on `DesktopCdpTransport.getAsarFallback()` and `CdpConnection.asarFallback` (populated in `connectToCdp`), so a consumer / integration test asserts on it rather than spying on a throw. A `'fallback'` verdict reaches the data surface only when the throw is disabled (below); with the default throw it fails first (same data-surface caveat L24 records for `'unrunnable'`).
+- **Knob** — `shouldThrowOnSilentAsarFallback` (`@default true`) is the **third** member of the L24 compatibility-knob family, on `ObsidianCdpTransportOptions` + `ConnectToCdpOptions`, resolved by the pure, unit-tested `willThrowOnSilentAsarFallback` + `resolveAsarFallbackAction({ tier, shouldThrow, shouldWarn }) → 'throw' | 'warn' | 'silent'` in `compatibility-options.ts`. When `false`, a fallback no longer throws; it warns (gated by the **existing** `shouldWarnOnCompatibilityIssues`, not a new warn knob) and surfaces the verdict as data. Owned path only; it rides the existing options channel, so all three consumption paths (Vitest / Jest / Manual, L6) inherit it with no adapter change (L5).
+- **Integration test** — `src/asar-fallback.integration.test.ts` boots the real fallback pair (`1.13.0` on `1.1.9`, throw disabled → `'fallback'`, running `1.1.9`), asserts the default throw, and a no-false-positive `'match'` pair (`1.13.1` on `1.1.9`, which genuinely runs — its run floor IS `1.1.9`). Opt-in via `OBSIDIAN_TEST_ASAR_FALLBACK=1` (heavy download-and-boot). Because `1.13.0`/`1.1.9` is below the run floor, the boot-based cases also set `shouldThrowOnIncompatibleInstaller: false` to get past L21's proactive throw and reach the boot. CDP-confirmed on Windows (2026-07-17): `1.13.0`/`1.1.9` really runs `apiVersion` `1.1.9`.
+- **Option-bag plumbing uses a local `normalizeOptionalProperties`** — `src/normalize-optional-properties.ts` (ported from `obsidian-dev-utils/object-utils`, **not** depended on — same dependency-hygiene reason as the L17 duplicated helpers; it needs only `type-fest`, already a dep). It replaces the per-key `...(x !== undefined && { k: x })` conditional-spread when building the transport-options / config bags (`connect-to-cdp` `buildCdpTransportOptions`, `transport-factory` `createCdpTransport`). Cast-only (keeps `undefined`-valued keys at runtime), which is safe because every consumer reads each field with a `?? default` / `!== undefined` guard.
+- **`metadata.json` was deliberately NOT re-audited** by a boot campaign (a scoping decision): with the default-on runtime throw a mis-measured floor now fails loudly the moment anyone boots that pair (including the CI boot suites), so the empirically-measured `min*` values stand as-is and the catalog data keeps flowing from `refresh:metadata` (L20). This resolves the "harden the boot-floor measurement" follow-up L20 tracked.
 
 ## L26. Full usability of old Obsidian versions down to 0.6.4 (auto-open + readiness + closures)
 
-The owned-instance path is usable end-to-end (vault auto-opens, readiness completes, `evalInObsidian`
-runs) on **every installer from 0.6.4 up** — the oldest the harness supports. Getting there took a stack of
-old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-17/18). App-only closures
-(`callback({ app })`) work on the whole range. **`obsidianModule`** resolves wherever the community-plugin registry
-exists (`plugins.manifests` + `loadPlugin`) — the API **first appears at 0.9.7**, so the module resolves on
-**every version from 0.9.7 up** (0.9.7 needs two partial-API workarounds — undefined `configDir` and absent
-`uninstallPlugin` — see the `getObsidianModule` bullet). It is `null` on the **0.6.4–0.9.6** band, which
-has no registry at all (predates community plugins) — a genuine platform limit there, not a harness gap;
-`getObsidianModule` warns once (`console.warn`) on that band so a `null` `obsidianModule` is self-explaining.
+The owned-instance path is usable end-to-end (vault auto-opens, readiness completes, `evalInObsidian` runs) on **every installer from 0.6.4 up** — the oldest the harness supports. Getting there took a stack of old-version compatibility fixes, each CDP-diagnosed against real boots (2026-07-17/18). App-only closures (`callback({ app })`) work on the whole range. **`obsidianModule`** resolves wherever the community-plugin registry exists (`plugins.manifests` + `loadPlugin`) — the API **first appears at 0.9.7**, so the module resolves on **every version from 0.9.7 up** (0.9.7 needs two partial-API workarounds — undefined `configDir` and absent `uninstallPlugin` — see the `getObsidianModule` bullet). It is `null` on the **0.6.4–0.9.6** band, which has no registry at all (predates community plugins) — a genuine platform limit there, not a harness gap; `getObsidianModule` warns once (`console.warn`) on that band so a `null` `obsidianModule` is self-explaining.
 
-The owned instance opens its vault by pre-seeding `obsidian.json` into the temp `--user-data-dir` (no CLI
-arg exists for it). The auto-open marker **changed across Obsidian's history**, and the harness had baked in
-only the modern one — so old versions ignored the seed and stuck on the first-run vault-selector
-(`starter-screen`), and `waitForOwnedVaultReady` burned its full timeout (no matching `getBasePath()`
-target; the selector is not a dead boot, so L18 never fired).
+The owned instance opens its vault by pre-seeding `obsidian.json` into the temp `--user-data-dir` (no CLI arg exists for it). The auto-open marker **changed across Obsidian's history**, and the harness had baked in only the modern one — so old versions ignored the seed and stuck on the first-run vault-selector (`starter-screen`), and `waitForOwnedVaultReady` burned its full timeout (no matching `getBasePath()` target; the selector is not a dead boot, so L18 never fired).
 
-- **Root cause (confirmed by reading old `main.js` + real boots, 2026-07-17).** Old Obsidian's main process
-  auto-opens from a **top-level `settings.last_open`** holding the vault **id**
-  (`if (id && vaults.hasOwnProperty(id)) createWindow(id); else openStarter();`), and stores each vault
-  entry as just `{ path, ts }` — no `open`. Newer versions dropped `last_open` and auto-open from the
-  **per-entry `open: true`** flag. The seed only set `open: true`, never `last_open`, so old versions fell
-  through to `openStarter()`.
-- **Fix — one version-agnostic dual-marker seed, always-on (no knob).** `src/owned-vault-seed.ts`
-  `buildOwnedObsidianJson({ vaultId, vaultPath, ts })` returns `{ last_open: vaultId, updateDisabled: true,
-  vaults: { [vaultId]: { open: true, path, ts } } }` — BOTH markers. Each version reads the one it
-  understands and ignores the other unknown key, so **no per-version branching and no `metadata.json` field**
-  are needed. `DesktopCdpTransport.registerVaultInOwnedInstance` calls it in place of the old inline literal.
-  Confirmed to open the vault directly (no selector) on 0.6.4, 0.9.20, 0.11.13, 0.12.19, 0.13.19, 0.14.5,
-  1.12.7. The marker transition: **≤~0.11 require `last_open`**; **~0.12 reads both**; **≥0.13 uses per-entry
-  `open`** only. The pure builder is unit-tested (`owned-vault-seed.test.ts`).
-The old-version fixes, each CDP-diagnosed:
+- **Root cause (confirmed by reading old `main.js` + real boots, 2026-07-17).** Old Obsidian's main process auto-opens from a **top-level `settings.last_open`** holding the vault **id** (`if (id && vaults.hasOwnProperty(id)) createWindow(id); else openStarter();`), and stores each vault entry as just `{ path, ts }` — no `open`. Newer versions dropped `last_open` and auto-open from the **per-entry `open: true`** flag. The seed only set `open: true`, never `last_open`, so old versions fell through to `openStarter()`.
+- **Fix — one version-agnostic dual-marker seed, always-on (no knob).** `src/owned-vault-seed.ts` `buildOwnedObsidianJson({ vaultId, vaultPath, ts })` returns `{ last_open: vaultId, updateDisabled: true, vaults: { [vaultId]: { open: true, path, ts } } }` — BOTH markers. Each version reads the one it understands and ignores the other unknown key, so **no per-version branching and no `metadata.json` field** are needed. `DesktopCdpTransport.registerVaultInOwnedInstance` calls it in place of the old inline literal. Confirmed to open the vault directly (no selector) on 0.6.4, 0.9.20, 0.11.13, 0.12.19, 0.13.19, 0.14.5, 1.12.7. The marker transition: **≤~0.11 require `last_open`**; **~0.12 reads both**; **≥0.13 uses per-entry `open`** only. The pure builder is unit-tested (`owned-vault-seed.test.ts`). The old-version fixes, each CDP-diagnosed:
 
-- **Readiness — `onLayoutReady` guard (`namespace-bootstrap.ts` `pollVaultBasePath`).** Readiness ran
-  `pollVaultBasePath` → `ensureLayoutReady()` → `Workspace.onLayoutReady(cb)`, a method **absent before
-  ~0.11** — it threw `onLayoutReady is not a function`, the poll swallowed it, and the 30 s timeout burned.
-  Fix: guard the wait behind the long-standing `workspace.layoutReady` flag (already `true` by the time an
-  owned window is up): `if (!this.app.workspace.layoutReady) { await this.ensureLayoutReady(); }`. The guard
-  lives in the **harness-only** `pollVaultBasePath`, deliberately NOT the L17-synced `ensureLayoutReady`, so
-  no `obsidian-dev-utils` mirror is needed.
-- **Bootstrap syntax — `??=` removed (Chromium 80 on 0.6.x).** The serialized `bootstrapNamespace` used the
-  ES2021 logical-assignment `this.contexts[id] ??= {}`; Chromium 80 (Obsidian 0.6.x, Electron 8) cannot
-  parse it → `SyntaxError`, so the namespace never bootstrapped. Rewritten to a plain guard. **Keep the
-  serialized bootstrap ES2020-safe** — no logical-assignment (`??=`/`||=`/`&&=`), `.at()`, `Object.hasOwn`,
-  etc. — so it parses on the oldest supported Chromium.
-- **Base-path — `getBasePath()` → `.basePath` fallback.** `FileSystemAdapter.getBasePath()` is absent on
-  0.6.x (the `.basePath` property holds the path; the method exists from ~0.9.20). Both readers —
-  `pollVaultBasePath` and the transport's `probeVaultPath` — fall back to the property.
-- **Closure path — community-plugin API guards (`evalWrapper` / `getObsidianModule`).** `evalWrapper` called
-  `plugins.isEnabled()` and `getObsidianModule` used the temp-plugin `loadPlugin` + `manifests` trick — all
-  absent or partial on the pre-plugin-API band (0.6.4–0.9.6: `plugins` exists but has no `isEnabled`, and the
-  `loadPlugin` + `manifests` registry is absent or incomplete). Both now probe a local `PluginsLike` optional-member
-  view (casting past `obsidian-typings`' always-present declarations avoids a false `no-unnecessary-condition`)
-  and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `null` (warning
-  once via `console.warn`) only when the registry is absent entirely (`loadPlugin`/`manifests` missing — the
-  **0.6.4–0.9.6** band, which predates community plugins, so there is genuinely no way to resolve the module;
-  `require('obsidian')` fails outside a plugin-load context too). Where the registry exists, it MAKES the trick work (next bullet), so
-  `obsidianModule` resolves **down to 0.9.7** (the first version with the API).
-- **Off-screen hiding — `require('electron').remote` fallback (fixes an Electron-10 boot wedge).**
-  `moveOwnedWindowOffscreen` polled `window.electron.remote` every 250 ms for 20 s; old versions have no
-  `window.electron`, so it hammered the renderer with CDP round-trips through the **whole boot**, which on
-  **Electron-10-era builds (~0.8.0–0.9.19) intermittently prevented the workspace from initializing** →
-  flaky readiness timeouts. Fix: resolve the bridge via `window.electron.remote` OR the built-in
-  `require('electron').remote` (the node-integrated renderer exposes it on the Electron 8-13 shells old
-  Obsidian ships; removed in Electron 14+). The move now **succeeds on the first eval** on old versions too —
-  ending the boot hammering (reliable readiness) AND actually hiding old windows. Modern is unchanged
-  (`window.electron.remote` wins; the `require` fallback is never reached). *(Credit: the `require('electron')`
-  approach was the user's suggestion.)*
-- **Readiness reconnect-on-retry + relaunch-retry.** Old (Electron-10) Obsidian reloads the owned window
-  during boot; the readiness poll `disconnect()`s on each failed attempt so it re-binds to the live
-  post-reload context. On top of that, `registerVaultInOwnedInstance` wraps launch → move-offscreen →
-  readiness in a **relaunch loop** (`OWNED_LAUNCH_MAX_ATTEMPTS = 3`, with a settle between): the Electron-10
-  builds intermittently boot with `window.app` present but the workspace never initializing, so a fresh
-  instance is an independent chance. Deterministic failures (dead boot, silent asar fallback) are re-thrown
-  at once, never retried.
-- **`getObsidianModule` MAKES the temp-plugin trick work on a partial plugin API (does not give up).** The
-  trick resolves `require('obsidian')` — which only works inside a plugin-load context — by writing a temp
-  plugin at `<vault.configDir>/plugins/<id>` and `loadPlugin`-ing it. The API is **partial on the earliest
-  versions that have it**, worked around in two ways. **(1) Undefined `configDir` + missing dir chain** (e.g.
-  **0.9.10**): `manifests`/`loadPlugin` exist but `vault.configDir` is undefined and, on a fresh vault, the
-  `.obsidian/plugins` dir is absent — and `adapter.mkdir` is not recursive, so the original `mkdir` `ENOENT`'d.
-  Fix: default `configDir` to `.obsidian` (via a `VaultLike` cast) AND create the config/plugins dir chain
-  (each guarded by `adapter.exists`) before writing the temp plugin. **(2) Absent `uninstallPlugin`**
-  (**0.9.7**, the FIRST version with `loadPlugin`/`manifests`): the cleanup `uninstallPlugin(id)` does not
-  exist yet and the module is already captured by then, so the unguarded call threw `uninstallPlugin is not a
-  function` and lost the module. Fix: guard it behind a `PluginsLike` optional-member probe — uninstall when
-  present, else let the temp plugin linger harmlessly in the ephemeral owned vault. CDP-confirmed: **0.9.7
-  (asar-swapped onto the 0.9.6 shell), 0.9.10, and 0.9.11 now return an `obsidianModule` object** (previously
-  `undefined` / a crash). The earlier "wrap in try/catch → return `undefined`" was a give-up hack and was
-  replaced. `null` (with a one-time `console.warn`) remains only for the no-registry band (**0.6.4–0.9.6**).
-- **Test** — pure unit test (`owned-vault-seed.test.ts`) for the seed shape; opt-in heavy integration test
-  `src/owned-vault-open.integration.test.ts` (`OBSIDIAN_TEST_OLD_VAULT_OPEN=1`) pins **0.6.4** (the oldest
-  supported installer), which exercises the whole old-version stack at once — auto-open (`last_open`), the
-  `??=` bootstrap, `onLayoutReady`, `getBasePath`, the plugin-API guards, and the `require('electron')` hide —
-  asserting readiness plus an app-only `evalInObsidian` closure sees the seeded vault.
-- **All 103 catalogued installer versions were validated one-by-one** (readiness + app-only closure), and
-  each version's `process.versions` collected into `metadata.json` `runtimeVersions` (+ `ecmaScriptVersion`)
-  in the same pass. **Operational caveat:** the Electron-10 band (0.8.12–0.9.17, cr85) has flaky
-  workspace-init under **rapid** boot/kill churn — a batch of many back-to-back owned boots degrades the
-  host's GPU/compositor state (from force-kills) and starts failing even Electron-11/17 builds; it self-heals
-  after an idle period. When bulk-booting many old versions (e.g. `collect-runtime-versions`), pace them with
-  a cool-down between boots. The relaunch-retry covers ordinary single-use flakiness.
+- **Readiness — `onLayoutReady` guard (`namespace-bootstrap.ts` `pollVaultBasePath`).** Readiness ran `pollVaultBasePath` → `ensureLayoutReady()` → `Workspace.onLayoutReady(cb)`, a method **absent before ~0.11** — it threw `onLayoutReady is not a function`, the poll swallowed it, and the 30 s timeout burned. Fix: guard the wait behind the long-standing `workspace.layoutReady` flag (already `true` by the time an owned window is up): `if (!this.app.workspace.layoutReady) { await this.ensureLayoutReady(); }`. The guard lives in the **harness-only** `pollVaultBasePath`, deliberately NOT the L17-synced `ensureLayoutReady`, so no `obsidian-dev-utils` mirror is needed.
+- **Bootstrap syntax — `??=` removed (Chromium 80 on 0.6.x).** The serialized `bootstrapNamespace` used the ES2021 logical-assignment `this.contexts[id] ??= {}`; Chromium 80 (Obsidian 0.6.x, Electron 8) cannot parse it → `SyntaxError`, so the namespace never bootstrapped. Rewritten to a plain guard. **Keep the serialized bootstrap ES2020-safe** — no logical-assignment (`??=`/`||=`/`&&=`), `.at()`, `Object.hasOwn`, etc. — so it parses on the oldest supported Chromium.
+- **Base-path — `getBasePath()` → `.basePath` fallback.** `FileSystemAdapter.getBasePath()` is absent on 0.6.x (the `.basePath` property holds the path; the method exists from ~0.9.20). Both readers — `pollVaultBasePath` and the transport's `probeVaultPath` — fall back to the property.
+- **Closure path — community-plugin API guards (`evalWrapper` / `getObsidianModule`).** `evalWrapper` called `plugins.isEnabled()` and `getObsidianModule` used the temp-plugin `loadPlugin` + `manifests` trick — all absent or partial on the pre-plugin-API band (0.6.4–0.9.6: `plugins` exists but has no `isEnabled`, and the `loadPlugin` + `manifests` registry is absent or incomplete). Both now probe a local `PluginsLike` optional-member view (casting past `obsidian-typings`' always-present declarations avoids a false `no-unnecessary-condition`) and degrade gracefully: `evalWrapper` skips plugin-enable, and `getObsidianModule` returns `null` (warning once via `console.warn`) only when the registry is absent entirely (`loadPlugin`/`manifests` missing — the **0.6.4–0.9.6** band, which predates community plugins, so there is genuinely no way to resolve the module; `require('obsidian')` fails outside a plugin-load context too). Where the registry exists, it MAKES the trick work (next bullet), so `obsidianModule` resolves **down to 0.9.7** (the first version with the API).
+- **Off-screen hiding — `require('electron').remote` fallback (fixes an Electron-10 boot wedge).** `moveOwnedWindowOffscreen` polled `window.electron.remote` every 250 ms for 20 s; old versions have no `window.electron`, so it hammered the renderer with CDP round-trips through the **whole boot**, which on **Electron-10-era builds (~0.8.0–0.9.19) intermittently prevented the workspace from initializing** → flaky readiness timeouts. Fix: resolve the bridge via `window.electron.remote` OR the built-in `require('electron').remote` (the node-integrated renderer exposes it on the Electron 8-13 shells old Obsidian ships; removed in Electron 14+). The move now **succeeds on the first eval** on old versions too — ending the boot hammering (reliable readiness) AND actually hiding old windows. Modern is unchanged (`window.electron.remote` wins; the `require` fallback is never reached). *(Credit: the `require('electron')` approach was the user's suggestion.)*
+- **Readiness reconnect-on-retry + relaunch-retry.** Old (Electron-10) Obsidian reloads the owned window during boot; the readiness poll `disconnect()`s on each failed attempt so it re-binds to the live post-reload context. On top of that, `registerVaultInOwnedInstance` wraps launch → move-offscreen → readiness in a **relaunch loop** (`OWNED_LAUNCH_MAX_ATTEMPTS = 3`, with a settle between): the Electron-10 builds intermittently boot with `window.app` present but the workspace never initializing, so a fresh instance is an independent chance. Deterministic failures (dead boot, silent asar fallback) are re-thrown at once, never retried.
+- **`getObsidianModule` MAKES the temp-plugin trick work on a partial plugin API (does not give up).** The trick resolves `require('obsidian')` — which only works inside a plugin-load context — by writing a temp plugin at `<vault.configDir>/plugins/<id>` and `loadPlugin`-ing it. The API is **partial on the earliest versions that have it**, worked around in two ways. **(1) Undefined `configDir` + missing dir chain** (e.g. **0.9.10**): `manifests`/`loadPlugin` exist but `vault.configDir` is undefined and, on a fresh vault, the `.obsidian/plugins` dir is absent — and `adapter.mkdir` is not recursive, so the original `mkdir` `ENOENT`'d. Fix: default `configDir` to `.obsidian` (via a `VaultLike` cast) AND create the config/plugins dir chain (each guarded by `adapter.exists`) before writing the temp plugin. **(2) Absent `uninstallPlugin`** (**0.9.7**, the FIRST version with `loadPlugin`/`manifests`): the cleanup `uninstallPlugin(id)` does not exist yet and the module is already captured by then, so the unguarded call threw `uninstallPlugin is not a function` and lost the module. Fix: guard it behind a `PluginsLike` optional-member probe — uninstall when present, else let the temp plugin linger harmlessly in the ephemeral owned vault. CDP-confirmed: **0.9.7 (asar-swapped onto the 0.9.6 shell), 0.9.10, and 0.9.11 now return an `obsidianModule` object** (previously `undefined` / a crash). The earlier "wrap in try/catch → return `undefined`" was a give-up hack and was replaced. `null` (with a one-time `console.warn`) remains only for the no-registry band (**0.6.4–0.9.6**).
+- **Test** — pure unit test (`owned-vault-seed.test.ts`) for the seed shape; opt-in heavy integration test `src/owned-vault-open.integration.test.ts` (`OBSIDIAN_TEST_OLD_VAULT_OPEN=1`) pins **0.6.4** (the oldest supported installer), which exercises the whole old-version stack at once — auto-open (`last_open`), the `??=` bootstrap, `onLayoutReady`, `getBasePath`, the plugin-API guards, and the `require('electron')` hide — asserting readiness plus an app-only `evalInObsidian` closure sees the seeded vault.
+- **All 103 catalogued installer versions were validated one-by-one** (readiness + app-only closure), and each version's `process.versions` collected into `metadata.json` `runtimeVersions` (+ `ecmaScriptVersion`) in the same pass. **Operational caveat:** the Electron-10 band (0.8.12–0.9.17, cr85) has flaky workspace-init under **rapid** boot/kill churn — a batch of many back-to-back owned boots degrades the host's GPU/compositor state (from force-kills) and starts failing even Electron-11/17 builds; it self-heals after an idle period. When bulk-booting many old versions (e.g. `collect-runtime-versions`), pace them with a cool-down between boots. The relaunch-retry covers ordinary single-use flakiness.
 
 ## L27. Fail-fast + observable Android auto-provisioning (Appium server / emulator / AVD)
 
-L22 auto-installs the Appium toolchain, but a first run on a machine with only the Android SDK + `adb`
-(no global Appium, no booted AVD) still **spun the full 180 s `appiumStartTimeout` on "Appium server not
-ready yet"** and then hung on teardown, with **no diagnostics**. Root cause: the
-auto-started Appium server was **fire-and-forget** (`startAppiumServer` spawned `npx appium` with
-`stdio: 'ignore'`, watching neither `exit`/`error` nor output), so `waitForAppiumReady` polled `/status`
-blindly for the whole timeout no matter why the server failed to come up. The emulator path already did
-the right thing (`startEmulator` pipes output, captures a bounded tail, detects early `exit` →
-`buildEmulatorExitMessage`), but had its own two gaps. This section gives the server the same treatment
-and closes the emulator's gaps, so the Android path is either turnkey **or** fails fast with an actionable
-message — never a silent full-timeout spin.
+L22 auto-installs the Appium toolchain, but a first run on a machine with only the Android SDK + `adb` (no global Appium, no booted AVD) still **spun the full 180 s `appiumStartTimeout` on "Appium server not ready yet"** and then hung on teardown, with **no diagnostics**. Root cause: the auto-started Appium server was **fire-and-forget** (`startAppiumServer` spawned `npx appium` with `stdio: 'ignore'`, watching neither `exit`/`error` nor output), so `waitForAppiumReady` polled `/status` blindly for the whole timeout no matter why the server failed to come up. The emulator path already did the right thing (`startEmulator` pipes output, captures a bounded tail, detects early `exit` → `buildEmulatorExitMessage`), but had its own two gaps. This section gives the server the same treatment and closes the emulator's gaps, so the Android path is either turnkey **or** fails fast with an actionable message — never a silent full-timeout spin.
 
-- **Shared exit-message builder** — `src/process-exit-message.ts` (pure, unit-tested;
-  `process-exit-message.test.ts`): `buildProcessExitMessage({ subject, exitInfo, output, outputLabel })`
-  and the `ProcessExitInfo` shape (`code`/`signal`, plus `spawnError` for a process that never started).
-  Replaces the old inline `buildEmulatorExitMessage` (now gone) and is reused by both the emulator and the
-  Appium server. The `ProcessLaunch` interface (in the factory) unifies what `startEmulator` /
-  `startAppiumServer` return.
-- **Appium server is now observed like the emulator.** `startAppiumServer` returns a `ProcessLaunch`:
-  even when the console is hidden it pipes stdout/stderr (`stdio: ['ignore','pipe','pipe']`) so an early
-  failure's output is captured (`windowsHide` still suppresses the window), and it records `exit` **and**
-  a spawn `error` (ENOENT) as a `ProcessExitInfo`. `waitForAppiumReady` takes the launch and, each poll
-  iteration, checks `readExitInfo()` **first** — if the server already died it throws
-  `buildProcessExitMessage(...)` with the captured tail **immediately** instead of polling out the
-  timeout; the timeout path also appends the tail.
-- **`--no-install` on the server spawn.** The spawn is `npx --no-install appium …` (was `npx appium`).
-  Appium is guaranteed present by `ensureAppiumInstalled` before this point, so `--no-install` stops npx
-  from silently attempting a slow/hung fresh **registry download** in a hidden console whenever it can't
-  resolve the global install (e.g. a global prefix not on PATH) — a prime suspect for the original spin.
-- **`ensureAppiumInstalled` re-verifies after `npm install -g appium`.** A global install can land under
-  an npm prefix whose bin dir is not on the spawn PATH (this host's is the scoop/nvm-managed
-  `…\scoop\apps\nvm\current\nodejs\nodejs`), so it re-probes `npx --no-install appium --version` and, if
-  still non-zero, **throws** an actionable error (points at `npm config get prefix` / PATH, and the
-  `shouldAutoInstallAppiumDependencies: false` opt-out) rather than proceeding to a server that can never
-  start.
-- **Emulator gap 1 — spawn `error`.** `startEmulator` now also listens for `error` (previously only
-  `exit`), recording a synthetic `ProcessExitInfo { spawnError }`. A missing/broken emulator binary
-  (ENOENT emits `error`, not `exit`) now fails fast via the existing boot/new-device exit checks instead
-  of spinning the full 120 s boot timeout.
-- **Emulator gap 2 — AVD preflight.** `ensureDeviceConnected` calls `ensureAvdExists(avdName)` before
-  spawning a new emulator (skipped when the AVD is already running): it runs `emulator -list-avds` and, if
-  the requested AVD is absent, throws naming the **available** AVDs. AVD creation is deliberately **not**
-  automated (system-image download + license acceptance + hardware/API-level choices are too opinionated
-  to bake in — hence the fail-fast-only decision). The parse is pure/unit-tested — `src/avd-list.ts`
-  (`checkAvdExists` / `listAvailableAvds`, `avd-list.test.ts`); the `execFile` orchestration stays in the
-  `v8 ignore` factory.
-- **Pure/testable split** mirrors L21–L25: message-building and list-parsing live in unit-tested modules
-  (`process-exit-message.ts`, `avd-list.ts`); only the spawn/`execFile` glue stays in the integration-only
-  factory.
+- **Shared exit-message builder** — `src/process-exit-message.ts` (pure, unit-tested; `process-exit-message.test.ts`): `buildProcessExitMessage({ subject, exitInfo, output, outputLabel })` and the `ProcessExitInfo` shape (`code`/`signal`, plus `spawnError` for a process that never started). Replaces the old inline `buildEmulatorExitMessage` (now gone) and is reused by both the emulator and the Appium server. The `ProcessLaunch` interface (in the factory) unifies what `startEmulator` / `startAppiumServer` return.
+- **Appium server is now observed like the emulator.** `startAppiumServer` returns a `ProcessLaunch`: even when the console is hidden it pipes stdout/stderr (`stdio: ['ignore','pipe','pipe']`) so an early failure's output is captured (`windowsHide` still suppresses the window), and it records `exit` **and** a spawn `error` (ENOENT) as a `ProcessExitInfo`. `waitForAppiumReady` takes the launch and, each poll iteration, checks `readExitInfo()` **first** — if the server already died it throws `buildProcessExitMessage(...)` with the captured tail **immediately** instead of polling out the timeout; the timeout path also appends the tail.
+- **`--no-install` on the server spawn.** The spawn is `npx --no-install appium …` (was `npx appium`). Appium is guaranteed present by `ensureAppiumInstalled` before this point, so `--no-install` stops npx from silently attempting a slow/hung fresh **registry download** in a hidden console whenever it can't resolve the global install (e.g. a global prefix not on PATH) — a prime suspect for the original spin.
+- **`ensureAppiumInstalled` re-verifies after `npm install -g appium`.** A global install can land under an npm prefix whose bin dir is not on the spawn PATH (this host's is the scoop/nvm-managed `…\scoop\apps\nvm\current\nodejs\nodejs`), so it re-probes `npx --no-install appium --version` and, if still non-zero, **throws** an actionable error (points at `npm config get prefix` / PATH, and the `shouldAutoInstallAppiumDependencies: false` opt-out) rather than proceeding to a server that can never start.
+- **Emulator gap 1 — spawn `error`.** `startEmulator` now also listens for `error` (previously only `exit`), recording a synthetic `ProcessExitInfo { spawnError }`. A missing/broken emulator binary (ENOENT emits `error`, not `exit`) now fails fast via the existing boot/new-device exit checks instead of spinning the full 120 s boot timeout.
+- **Emulator gap 2 — AVD preflight.** `ensureDeviceConnected` calls `ensureAvdExists(avdName)` before spawning a new emulator (skipped when the AVD is already running): it runs `emulator -list-avds` and, if the requested AVD is absent, throws naming the **available** AVDs. AVD creation is deliberately **not** automated (system-image download + license acceptance + hardware/API-level choices are too opinionated to bake in — hence the fail-fast-only decision). The parse is pure/unit-tested — `src/avd-list.ts` (`checkAvdExists` / `listAvailableAvds`, `avd-list.test.ts`); the `execFile` orchestration stays in the `v8 ignore` factory.
+- **Pure/testable split** mirrors L21–L25: message-building and list-parsing live in unit-tested modules (`process-exit-message.ts`, `avd-list.ts`); only the spawn/`execFile` glue stays in the integration-only factory.
 
 ## L28. Multi-window CDP routing — match a target by its base path, never by count
 
-The desktop CDP transport routes each `evalInObsidian({ vaultPath })` to the correct Obsidian window by
-its vault base path. **In attach mode a single owned instance can hold several vault windows at once** (the
-global-setup shared vault + any vault a worker registers in-worker), so routing must always be by identity,
-never "there is only one window, use it".
+The desktop CDP transport routes each `evalInObsidian({ vaultPath })` to the correct Obsidian window by its vault base path. **In attach mode a single owned instance can hold several vault windows at once** (the global-setup shared vault + any vault a worker registers in-worker), so routing must always be by identity, never "there is only one window, use it".
 
-- **`findTargetForVault` matches by probed base path only.** It probes every page target's
-  `app.vault.adapter.getBasePath()` and returns the one that matches `vaultPath` via **`areVaultPathsMatching`**
-  (`src/vault-path-match.ts`, pure + unit-tested — normalizes separator flavor and, on a case-insensitive
-  filesystem, case; on Windows `getBasePath()` and the Node `TemporaryVault` path are backslash-identical, so the
-  normalization is defensive). There is **no `targets.length === 1` shortcut** — returning the sole window
-  blindly mis-routes whenever the requested vault's window is not (yet) the one open. A target whose probe
-  *throws* is treated as not-ready and skipped (the caller's readiness poll retries); a target whose probe
-  *succeeds but does not match* is never returned; when nothing matches it throws so the caller keeps polling.
-- **`openVaultInRunningInstance` bootstraps the helper namespace against the EXISTING window.** The
-  `vault-open` IPC is sent through an already-open window (`targets[0]`), so the namespace must be
-  bootstrapped on *that* window — it probes `targets[0]`'s own base path and
-  `ensureNamespaceBootstrapped(this, existingBasePath)`. Bootstrapping against the not-yet-open `vaultPath`
-  (the pre-fix bug) routed through `findTargetForVault(vaultPath)` with only the existing window present and
-  **poisoned the connection cache** (label `vaultPath`, socket → the existing window), so every later
-  `evalInObsidian({ vaultPath })` mis-routed to the shared window (the closure saw the shared vault's name
-  and none of the fresh vault's plugins — the reported symptom).
-- **Why this package's own suites never caught it:** the `integration-tests` project registers **in-worker → owned
-  mode**, where every `register()` relaunches a fresh single-window instance, so a second window never
-  exists. Only attach mode (`integration-tests:owned-attach`, and real consumers like `obsidian-dev-utils`) opens a second
-  window. Regression coverage: the "second registered vault routes to its own window" case in
-  `owned-instance-worker-attach.integration.test.ts` registers a second vault against the shared instance
-  and asserts its evals see the fresh vault, not the shared one.
+- **`findTargetForVault` matches by probed base path only.** It probes every page target's `app.vault.adapter.getBasePath()` and returns the one that matches `vaultPath` via **`areVaultPathsMatching`** (`src/vault-path-match.ts`, pure + unit-tested — normalizes separator flavor and, on a case-insensitive filesystem, case; on Windows `getBasePath()` and the Node `TemporaryVault` path are backslash-identical, so the normalization is defensive). There is **no `targets.length === 1` shortcut** — returning the sole window blindly mis-routes whenever the requested vault's window is not (yet) the one open. A target whose probe *throws* is treated as not-ready and skipped (the caller's readiness poll retries); a target whose probe *succeeds but does not match* is never returned; when nothing matches it throws so the caller keeps polling.
+- **`openVaultInRunningInstance` bootstraps the helper namespace against the EXISTING window.** The `vault-open` IPC is sent through an already-open window (`targets[0]`), so the namespace must be bootstrapped on *that* window — it probes `targets[0]`'s own base path and `ensureNamespaceBootstrapped(this, existingBasePath)`. Bootstrapping against the not-yet-open `vaultPath` (the pre-fix bug) routed through `findTargetForVault(vaultPath)` with only the existing window present and **poisoned the connection cache** (label `vaultPath`, socket → the existing window), so every later `evalInObsidian({ vaultPath })` mis-routed to the shared window (the closure saw the shared vault's name and none of the fresh vault's plugins — the reported symptom).
+- **Why this package's own suites never caught it:** the `integration-tests` project registers **in-worker → owned mode**, where every `register()` relaunches a fresh single-window instance, so a second window never exists. Only attach mode (`integration-tests:owned-attach`, and real consumers like `obsidian-dev-utils`) opens a second window. Regression coverage: the "second registered vault routes to its own window" case in `owned-instance-worker-attach.integration.test.ts` registers a second vault against the shared instance and asserts its evals see the fresh vault, not the shared one.
 
 ## L29. Node-side kick-off + poll (`pollInObsidian`)
 
-A single `evalInObsidian` closure cannot run past the transport's per-eval cap, so a long-running
-in-Obsidian operation (e.g. a whole plugin/vault bootstrap) cannot be awaited inside one closure.
-`pollInObsidian` (`src/poll-in-obsidian.ts`, exported from the barrel) drives it from **Node** instead:
-an optional short `start` closure kicks the work off once, then a short `poll` closure is re-evaluated on
-an interval — each a separate, well-under-30s eval — until the Node-side `until(result)` predicate accepts,
-or a Node-side `timeoutInMilliseconds` (default `120000`) elapses. `input` / `contextId` / `transport` /
-`vaultPath` are forwarded to every underlying `evalInObsidian` (a shared `contextId` lets `start` stash
-non-serializable state that `poll` reads). It replaces the per-test hand-rolled `evalInObsidian` + `sleep`
-loop.
+A single `evalInObsidian` closure cannot run past the transport's per-eval cap, so a long-running in-Obsidian operation (e.g. a whole plugin/vault bootstrap) cannot be awaited inside one closure. `pollInObsidian` (`src/poll-in-obsidian.ts`, exported from the barrel) drives it from **Node** instead: an optional short `start` closure kicks the work off once, then a short `poll` closure is re-evaluated on an interval — each a separate, well-under-30s eval — until the Node-side `until(result)` predicate accepts, or a Node-side `timeoutInMilliseconds` (default `120000`) elapses. `input` / `contextId` / `transport` / `vaultPath` are forwarded to every underlying `evalInObsidian` (a shared `contextId` lets `start` stash non-serializable state that `poll` reads). It replaces the per-test hand-rolled `evalInObsidian` + `sleep` loop.
 
-Pure/testable split (mirrors L18/L21–L27): the timing loop is the pure, unit-tested **`pollUntil`**
-(`src/poll-until.ts`, clock + sleep injected for deterministic tests); `pollInObsidian` is the thin
-integration-only wiring (drives a live Obsidian), `v8 ignore`d and covered by
-`poll-in-obsidian.integration.test.ts`.
+Pure/testable split (mirrors L18/L21–L27): the timing loop is the pure, unit-tested **`pollUntil`** (`src/poll-until.ts`, clock + sleep injected for deterministic tests); `pollInObsidian` is the thin integration-only wiring (drives a live Obsidian), `v8 ignore`d and covered by `poll-in-obsidian.integration.test.ts`.
 
 ### The cap is DECLARED on both transports, and an overrun says so
 
-The 30s was never a law; it was two different defaults that happened to agree, and neither was written
-down where a test author would see it. Desktop enforces `commandTimeoutInMilliseconds`
-(`transport-desktop-cdp.ts`, 30s, settable per transport and via the CLI `--command-timeout`). Android
-enforces `scriptTimeoutInMilliseconds` (`resolveScriptTimeoutInMilliseconds` in
-`appium-session-config.ts`, same 30s default) in `AppiumTransport.evaluate`, **on the Node side**.
+The 30s was never a law; it was two different defaults that happened to agree, and neither was written down where a test author would see it. Desktop enforces `commandTimeoutInMilliseconds` (`transport-desktop-cdp.ts`, 30s, settable per transport and via the CLI `--command-timeout`). Android enforces `scriptTimeoutInMilliseconds` (`resolveScriptTimeoutInMilliseconds` in `appium-session-config.ts`, same 30s default) in `AppiumTransport.evaluate`, **on the Node side**.
 
-**The W3C `timeouts.script` capability is declared and does nothing — do not mistake it for the
-mechanism.** Measured on a live emulator (2026-09-09): it is accepted, and `getTimeouts()` reports
-`{implicit: 0, pageLoad: 300000, script: 30000}` from the WebView context, and nothing ever acts on it.
-Over-cap closures — sleeping and spinning, with and without an explicit `setTimeouts` — ran past a 60s
-ceiling without WebDriver raising `script timeout` once. It stays declared because it is free, it states
-the intended budget honestly, and it would start working on its own if a future driver honoured it.
-`isScriptTimeoutError` is kept for the same reason and is, today, unreachable on this driver.
+**The W3C `timeouts.script` capability is declared and does nothing — do not mistake it for the mechanism.** Measured on a live emulator (2026-09-09): it is accepted, and `getTimeouts()` reports `{implicit: 0, pageLoad: 300000, script: 30000}` from the WebView context, and nothing ever acts on it. Over-cap closures — sleeping and spinning, with and without an explicit `setTimeouts` — ran past a 60s ceiling without WebDriver raising `script timeout` once. It stays declared because it is free, it states the intended budget honestly, and it would start working on its own if a future driver honoured it. `isScriptTimeoutError` is kept for the same reason and is, today, unreachable on this driver.
 
-**What Android actually does past roughly half a minute is hang, not fail.** The closure completes in the
-guest on schedule — timers armed at 30s and 40s fired within ~13ms of nominal, on a page reporting
-`visible`/focused with Obsidian the top-resumed activity — and its Execute Script response never reaches
-the client. The session itself is usually fine: a vault read-back was answered **528ms** after one such
-abandonment. So the failure is in the response path, and a hang is the one failure mode a test author
-cannot act on, which is why the wait is bounded in the transport.
+**What Android actually does past roughly half a minute is hang, not fail.** The closure completes in the guest on schedule — timers armed at 30s and 40s fired within ~13ms of nominal, on a page reporting `visible`/focused with Obsidian the top-resumed activity — and its Execute Script response never reaches the client. The session itself is usually fine: a vault read-back was answered **528ms** after one such abandonment. So the failure is in the response path, and a hang is the one failure mode a test author cannot act on, which is why the wait is bounded in the transport.
 
-**Raising either cap is almost never the answer** — the closure is what should get shorter. The knobs exist
-so the cap is explicit and symmetric, not as an escape hatch.
+**Raising either cap is almost never the answer** — the closure is what should get shorter. The knobs exist so the cap is explicit and symmetric, not as an escape hatch.
 
-What changed the failure mode is the reporting. An overrun used to surface as a silent hang on Android and
-a generic `CDP command timed out … : Runtime.evaluate` on desktop, which reads as a broken device or a
-wedged app. A plugin release was once held for two days by that reading. Both transports now raise
-**`EvalCapExceededError`** (`src/eval-cap-exceeded-error.ts`), one message naming the cap, the transport,
-the option that sets it, and `pollInObsidian`, with the raw transport error kept as `cause`.
+What changed the failure mode is the reporting. An overrun used to surface as a silent hang on Android and a generic `CDP command timed out … : Runtime.evaluate` on desktop, which reads as a broken device or a wedged app. A plugin release was once held for two days by that reading. Both transports now raise **`EvalCapExceededError`** (`src/eval-cap-exceeded-error.ts`), one message naming the cap, the transport, the option that sets it, and `pollInObsidian`, with the raw transport error kept as `cause`.
 
 Four details worth keeping:
 
-- **The eval after an overrun is granted a recovery grace** (`CAP_RECOVERY_GRACE_IN_MILLISECONDS`, the cap
-  again) on top of the cap. Appium serializes commands per session and the abandoned closure keeps running
-  in the guest, so the next command queues behind whatever is left of it: measured, with the cap firing at
-  30s against a 40s closure, the following vault read-back **failed at 30 206ms**, while the same read-back
-  issued after that closure had finished was answered in **528ms**. Waiting on the abandoned request
-  instead is not an option — that promise is precisely the one that never settles — so what the grace waits
-  out is the guest, and it is a ceiling rather than a delay: it costs nothing when the session comes back
-  promptly. A guest still busy afterwards produces another overrun, which is granted the grace in turn, so
-  the session recovers across evals instead of compounding.
-- **A cap overrun does not reset the WebView context flag.** Every other error in `evaluate` may mean the
-  context was lost mid-execution, so the flag is cleared and the next eval re-switches; an overrun means
-  only that the closure outstayed its budget, and clearing it would charge the next eval a ~17s
-  `switchContext` (**L19**) to recover from something that was never lost.
+- **The eval after an overrun is granted a recovery grace** (`CAP_RECOVERY_GRACE_IN_MILLISECONDS`, the cap again) on top of the cap. Appium serializes commands per session and the abandoned closure keeps running in the guest, so the next command queues behind whatever is left of it: measured, with the cap firing at 30s against a 40s closure, the following vault read-back **failed at 30 206ms**, while the same read-back issued after that closure had finished was answered in **528ms**. Waiting on the abandoned request instead is not an option — that promise is precisely the one that never settles — so what the grace waits out is the guest, and it is a ceiling rather than a delay: it costs nothing when the session comes back promptly. A guest still busy afterwards produces another overrun, which is granted the grace in turn, so the session recovers across evals instead of compounding.
+- **A cap overrun does not reset the WebView context flag.** Every other error in `evaluate` may mean the context was lost mid-execution, so the flag is cleared and the next eval re-switches; an overrun means only that the closure outstayed its budget, and clearing it would charge the next eval a ~17s `switchContext` (**L19**) to recover from something that was never lost.
 
-- **Only the eval carrying a caller's closure is re-reported.** The desktop transport raises
-  `CdpCommandTimeoutError` (`src/cdp-command-timeout-error.ts`) for *any* timed-out CDP command, and only
-  `evaluate()` translates it. The harness's own `Runtime.evaluate` calls — trust dialog, parent-liveness
-  watchdog, boot probes — time out for reasons that have nothing to do with a test waiting, and matching
-  on the method name would produce the same misdiagnosis pointing the other way.
-- `appium:newCommandTimeout` is read by Appium in **seconds**, not milliseconds. Its constant was named
-  `COMMAND_TIMEOUT_IN_MILLISECONDS` and is now `NEW_COMMAND_TIMEOUT_IN_SECONDS`; the value (300 = five
-  minutes) was always right and only the unit in the name was wrong. It is unrelated to the per-script
-  cap.
+- **Only the eval carrying a caller's closure is re-reported.** The desktop transport raises `CdpCommandTimeoutError` (`src/cdp-command-timeout-error.ts`) for *any* timed-out CDP command, and only `evaluate()` translates it. The harness's own `Runtime.evaluate` calls — trust dialog, parent-liveness watchdog, boot probes — time out for reasons that have nothing to do with a test waiting, and matching on the method name would produce the same misdiagnosis pointing the other way.
+- `appium:newCommandTimeout` is read by Appium in **seconds**, not milliseconds. Its constant was named `COMMAND_TIMEOUT_IN_MILLISECONDS` and is now `NEW_COMMAND_TIMEOUT_IN_SECONDS`; the value (300 = five minutes) was always right and only the unit in the name was wrong. It is unrelated to the per-script cap.
 
 ## L30. Security overrides (`brace-expansion` GHSA-mh99-v99m-4gvg)
 
-`npm audit` reported 27 high advisories, **all** of them the same root cause: `brace-expansion`
-[GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg) (DoS via unbounded expansion). The
-fix ships **only** on the `5.x` line, and the advisory's vulnerable range is `<= 5.0.7` — which covers every
-`1.x` / `2.x` / `3.x` release, so a backport alone would not clear the audit; the advisory metadata itself has
-to stop covering the legacy lines. Nothing here depends on `brace-expansion` directly: it arrives through
-`minimatch@3` / `@5` / `@9`, which pin the unpatched `1.x` / `2.x` lines. `npm audit fix` cannot resolve it
-(its only offer downgrades unrelated packages), so the `overrides` block carries the fix — the same shape `obsidian-dev-utils`
-uses (see its AGENTS.md "Security overrides"):
+`npm audit` reported 27 high advisories, **all** of them the same root cause: `brace-expansion` [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg) (DoS via unbounded expansion). The fix ships **only** on the `5.x` line, and the advisory's vulnerable range is `<= 5.0.7` — which covers every `1.x` / `2.x` / `3.x` release, so a backport alone would not clear the audit; the advisory metadata itself has to stop covering the legacy lines. Nothing here depends on `brace-expansion` directly: it arrives through `minimatch@3` / `@5` / `@9`, which pin the unpatched `1.x` / `2.x` lines. `npm audit fix` cannot resolve it (its only offer downgrades unrelated packages), so the `overrides` block carries the fix — the same shape `obsidian-dev-utils` uses (see its AGENTS.md "Security overrides"):
 
 | Override | Vulnerable path it closes |
 | --- | --- |
@@ -1371,58 +490,22 @@ uses (see its AGENTS.md "Security overrides"):
 | `test-exclude` → `^8.0.0` | `babel-plugin-istanbul@7` pins `test-exclude@^6`, whose own `minimatch@^3` is unpatched. `test-exclude@8` moved to `minimatch@^10`. |
 | `readdir-glob` → `^3.0.0` | `archiver@7` pins `readdir-glob@^1.1.2` → `minimatch@5`. `readdir-glob@3` is on `minimatch@^10`. |
 
-Result: one deduped `brace-expansion@5.0.8` and one `minimatch@10.2.5` in the whole tree, and a clean
-`npm audit`. Call sites were verified against the new majors rather than assumed — `glob@13` still
-exports the callable `glob()` plus `glob.sync` / `globSync` / `hasMagic` (what the Jest, WDIO and archiver
-packages call), `test-exclude@8`'s default export is still a `new TestExclude(...)` with `shouldInstrument()`,
-and `readdir-glob@3` is still a callable factory emitting `match` / `end`. `glob@13` requires Node
-`18 || 20 || >=22`.
+Result: one deduped `brace-expansion@5.0.8` and one `minimatch@10.2.5` in the whole tree, and a clean `npm audit`. Call sites were verified against the new majors rather than assumed — `glob@13` still exports the callable `glob()` plus `glob.sync` / `globSync` / `hasMagic` (what the Jest, WDIO and archiver packages call), `test-exclude@8`'s default export is still a `new TestExclude(...)` with `shouldInstrument()`, and `readdir-glob@3` is still a callable factory emitting `match` / `end`. `glob@13` requires Node `18 || 20 || >=22`.
 
-**Remove all three** once the advisory stops flagging the legacy lines (test with
-`npm audit --json` after `npm update`, not just `npm view brace-expansion versions --json`: as of 2026-07-29
-the legacy heads are `1.1.17` / `2.1.3` / `3.0.5` and all are still inside the `<= 5.0.7` range, so the
-maintenance releases that already landed changed nothing). These overrides exist purely for the advisory —
-they go as soon as it does.
+**Remove all three** once the advisory stops flagging the legacy lines (test with `npm audit --json` after `npm update`, not just `npm view brace-expansion versions --json`: as of 2026-07-29 the legacy heads are `1.1.17` / `2.1.3` / `3.0.5` and all are still inside the `<= 5.0.7` range, so the maintenance releases that already landed changed nothing). These overrides exist purely for the advisory — they go as soon as it does.
 
 ## L31. Leftover cleanup — sweep at both ends; device unconditional, host age-gated
 
-**A run that dies cannot clean up after itself, and on Android that is the normal case.** Teardown removes
-the vault through the WebView, and a dead WebView is exactly what most Android failures are — the logs say so
-directly: `Vault cleanup error (non-fatal): no such window`. So every failure leaks a `temp-vault-*`
-directory **and leaves it registered**, which is work Obsidian redoes at every startup, inside the same
-WebView-readiness budget the run is already straining. Failures therefore make the next failure likelier,
-which is why six Android runs of one unchanged build gave 2 passes and 4 failures in a single afternoon: every failure landed in global setup or the first test, never in an assertion, wearing four different
-masks (`Plugin … is in the enabled set but not loaded`, `invalid session id`, `no such window`,
-`No WEBVIEW_md.obsidian context found within 60000ms`) that all mean "the WebView never came up". The AVD held
-**103 leftover vaults**; the host held **312** `temp-vault-*` plus **331** owned `userdata-*` profiles. It is
-about Obsidian's startup enumeration cost, not disk space (the 103 vaults were ~108 MB).
+**A run that dies cannot clean up after itself, and on Android that is the normal case.** Teardown removes the vault through the WebView, and a dead WebView is exactly what most Android failures are — the logs say so directly: `Vault cleanup error (non-fatal): no such window`. So every failure leaks a `temp-vault-*` directory **and leaves it registered**, which is work Obsidian redoes at every startup, inside the same WebView-readiness budget the run is already straining. Failures therefore make the next failure likelier, which is why six Android runs of one unchanged build gave 2 passes and 4 failures in a single afternoon: every failure landed in global setup or the first test, never in an assertion, wearing four different masks (`Plugin … is in the enabled set but not loaded`, `invalid session id`, `no such window`, `No WEBVIEW_md.obsidian context found within 60000ms`) that all mean "the WebView never came up". The AVD held **103 leftover vaults**; the host held **312** `temp-vault-*` plus **331** owned `userdata-*` profiles. It is about Obsidian's startup enumeration cost, not disk space (the 103 vaults were ~108 MB).
 
 **The start-of-run sweep is the half that breaks the loop, because it runs before anything that can die.**
 
-- **Device (Android)** — `AppiumTransportFactory.sweepDeviceLeftoverVaults`, called from `createNewSession`
-  after the device is connected and **before `remote()`** (which launches Obsidian via
-  `appium:appPackage`/`appActivity`) — the last point at which nothing has to enumerate vaults yet, and the
-  only sweep that needs no WebView. `adb shell ls -1 <vaultBasePath>` → `filterLeftoverNames` → one
-  `adb shell` recursive delete, with the paths passed as `exec`'s `ExecArg` `batchedArgs` so a device holding
-  a hundred leftovers is split at the platform's real command-line limit rather than a hand-rolled count.
-  Not in `attachToExistingSession` — a worker must never sweep.
+- **Device (Android)** — `AppiumTransportFactory.sweepDeviceLeftoverVaults`, called from `createNewSession` after the device is connected and **before `remote()`** (which launches Obsidian via `appium:appPackage`/`appActivity`) — the last point at which nothing has to enumerate vaults yet, and the only sweep that needs no WebView. `adb shell ls -1 <vaultBasePath>` → `filterLeftoverNames` → one `adb shell` recursive delete, with the paths passed as `exec`'s `ExecArg` `batchedArgs` so a device holding a hundred leftovers is split at the platform's real command-line limit rather than a hand-rolled count. Not in `attachToExistingSession` — a worker must never sweep.
 
-  A `temp-vault-*` **glob** would also work (Windows spawns `adb` with no shell, and on Unix the absolute
-  path cannot match on the host so the literal survives to the device shell). Enumerating is preferred
-  because it yields the removed **count** for the log — the very diagnostic that made this worth fixing — reuses
-  the same unit-tested selection rule as the host sweep, including its `excludedNames` hook, and does not
-  lean on two layers of "unmatched glob stays literal".
-- **Device registry** — `AppiumTransport.registerVault` prunes the **other** `temp-vault-*` entries from
-  `mobile-external-vaults` (and their `enable-plugin-<path>` keys) in the same `browser.execute` that adds its
-  own, since it already holds a healthy WebView there. It is this registry, not the filesystem, that Obsidian
-  enumerates at startup, so sweeping the directories alone would still leave the list long.
-- **Device teardown** — `AppiumTransport.unregisterVault` now removes the vault directory over `adb`
-  **whether or not the `localStorage` step succeeded** (that step is wrapped in `try`/`catch`). Routing the
-  removal through the app is what made every failed run leak its vault.
-- **Host** — `sweepHostLeftovers` (`leftover-cleanup.ts`) removes `temp-vault-*` under `tmpdir()` and
-  `userdata-*` under `<tmpdir>/obsidian-integration-testing`. Wired into `coreSetup` (before the transport is
-  created) and `coreTeardown`, so Vitest / Jest / Manual all inherit it per **L6**, plus `connectToCdp`,
-  which mints the same directories outside the core.
+  A `temp-vault-*` **glob** would also work (Windows spawns `adb` with no shell, and on Unix the absolute path cannot match on the host so the literal survives to the device shell). Enumerating is preferred because it yields the removed **count** for the log — the very diagnostic that made this worth fixing — reuses the same unit-tested selection rule as the host sweep, including its `excludedNames` hook, and does not lean on two layers of "unmatched glob stays literal".
+- **Device registry** — `AppiumTransport.registerVault` prunes the **other** `temp-vault-*` entries from `mobile-external-vaults` (and their `enable-plugin-<path>` keys) in the same `browser.execute` that adds its own, since it already holds a healthy WebView there. It is this registry, not the filesystem, that Obsidian enumerates at startup, so sweeping the directories alone would still leave the list long.
+- **Device teardown** — `AppiumTransport.unregisterVault` now removes the vault directory over `adb` **whether or not the `localStorage` step succeeded** (that step is wrapped in `try`/`catch`). Routing the removal through the app is what made every failed run leak its vault.
+- **Host** — `sweepHostLeftovers` (`leftover-cleanup.ts`) removes `temp-vault-*` under `tmpdir()` and `userdata-*` under `<tmpdir>/obsidian-integration-testing`. Wired into `coreSetup` (before the transport is created) and `coreTeardown`, so Vitest / Jest / Manual all inherit it per **L6**, plus `connectToCdp`, which mints the same directories outside the core.
 
 **The two halves gate differently, and the asymmetry is the point:**
 
@@ -1431,189 +514,59 @@ about Obsidian's startup enumeration cost, not disk space (the 103 vaults were ~
 | **Device** | Unconditional                             | Android runs hold the exclusive `android` setup lock (**L7**), so no concurrent run can own a device vault. An age gate would let a vault leaked ten minutes ago survive into the next run — precisely the loop this exists to break.                                                 |
 | **Host**   | Older than `leftoverMaxAgeInMilliseconds` | Desktop runs are deliberately **not** serialized (**L7** — each owns an isolated instance), and every project on the machine shares one `tmpdir()`. A young directory may belong to a live run of another repo; one was observed being written four minutes before this work started. |
 
-**Knobs** (on **both** transport option interfaces, per **L6**): `shouldSweepLeftovers` (`@default true`)
-and `leftoverMaxAgeInMilliseconds` (`@default 7200000`, `0` disables the host age gate; the device sweep
-ignores it by design). `shouldSweepLeftovers` is threaded into `AppiumTransportConfig` so the
-`localStorage` prune honours it too — but unregistering **this run's own** vault always happens; that is
-teardown, not a sweep.
+**Knobs** (on **both** transport option interfaces, per **L6**): `shouldSweepLeftovers` (`@default true`) and `leftoverMaxAgeInMilliseconds` (`@default 7200000`, `0` disables the host age gate; the device sweep ignores it by design). `shouldSweepLeftovers` is threaded into `AppiumTransportConfig` so the `localStorage` prune honours it too — but unregistering **this run's own** vault always happens; that is teardown, not a sweep.
 
-**`leftover-cleanup.ts` is deliberately NOT `v8 ignore`d.** `filterLeftoverNames` / `checkIsLeftoverStale` /
-the two resolvers are pure, and `sweepHostLeftovers` takes injectable `roots`, so the whole module is
-unit-tested against mocked `node:fs/promises` (unit tests never touch the real filesystem) rather
-than hidden from the 100% gate. It also owns the `TEMP_VAULT_DIR_PREFIX` / `OWNED_USER_DATA_DIR_PREFIX` /
-`HARNESS_TEMP_DIR_NAME` constants that `temporary-vault.ts` and `transport-factory.ts` now build their paths
-from, so the sweeper and the creator can never disagree about what the residue is called.
+**`leftover-cleanup.ts` is deliberately NOT `v8 ignore`d.** `filterLeftoverNames` / `checkIsLeftoverStale` / the two resolvers are pure, and `sweepHostLeftovers` takes injectable `roots`, so the whole module is unit-tested against mocked `node:fs/promises` (unit tests never touch the real filesystem) rather than hidden from the 100% gate. It also owns the `TEMP_VAULT_DIR_PREFIX` / `OWNED_USER_DATA_DIR_PREFIX` / `HARNESS_TEMP_DIR_NAME` constants that `temporary-vault.ts` and `transport-factory.ts` now build their paths from, so the sweeper and the creator can never disagree about what the residue is called.
 
-Everything is best-effort: an unreadable root, an entry that cannot be `stat`ed, and a directory another
-process still holds (Windows `EPERM`) are counted and skipped, never thrown — a sweep must not fail the run
-it is cleaning up for.
+Everything is best-effort: an unreadable root, an entry that cannot be `stat`ed, and a directory another process still holds (Windows `EPERM`) are counted and skipped, never thrown — a sweep must not fail the run it is cleaning up for.
 
-Manual fallback when investigating: a recursive `adb shell` delete of `/sdcard/Documents/temp-vault-*`, with
-`adb shell ls /sdcard/Documents | wc -l` and `adb shell df -h /data` to see the damage.
+Manual fallback when investigating: a recursive `adb shell` delete of `/sdcard/Documents/temp-vault-*`, with `adb shell ls /sdcard/Documents | wc -l` and `adb shell df -h /data` to see the damage.
 
 ## L32. Version matrix — both supported ends by default, de-duped on the **resolved** version
 
-Support is a **range**, `[latest public, latest catalyst]`, with **both ends verified**. The ends move
-independently and periodically **coincide**: when public catches up to catalyst, `public-latest` and
-`catalyst-latest` provision the same build. Before this, every consuming repo discharged the duty by hand
-with two scripts, so the coincidence meant the second run re-ran the first build — while the project still
-reported "green on public AND catalyst", a two-end claim nobody had verified. The Blueprint fork's
-`AGENTS.md` carried exactly that stale claim ("catalyst 1.13.4, public-latest 1.12.7") long after public had
-moved to 1.13.4; the only evidence was the `[version-switch] Using cached asar for 1.13.4.` provisioning line.
+Support is a **range**, `[latest public, latest catalyst]`, with **both ends verified**. The ends move independently and periodically **coincide**: when public catches up to catalyst, `public-latest` and `catalyst-latest` provision the same build. Before this, every consuming repo discharged the duty by hand with two scripts, so the coincidence meant the second run re-ran the first build — while the project still reported "green on public AND catalyst", a two-end claim nobody had verified. The Blueprint fork's `AGENTS.md` carried exactly that stale claim ("catalyst 1.13.4, public-latest 1.12.7") long after public had moved to 1.13.4; the only evidence was the `[version-switch] Using cached asar for 1.13.4.` provisioning line.
 
-The harness resolves both channels before it launches anything, so it decides once instead of making every
-consumer decide.
+The harness resolves both channels before it launches anything, so it decides once instead of making every consumer decide.
 
-- **`runObsidianVersionMatrix({ run, versions })`** (`run-version-matrix.ts`, exported from the barrel) runs a
-  suite once per **distinct** version. `versions` takes an array or a comma-separated string, so
-  `process.env['OBSIDIAN_VERSION']` passes straight through; omitted/empty ⇒
-  `DEFAULT_OBSIDIAN_VERSION_SPECS` = `['public-latest', 'catalyst-latest']`.
-- **De-duplication is keyed on the RESOLVED version, never the specifier string.** `['1.13.4',
-  'catalyst-latest']` collapses when catalyst *is* 1.13.4, exactly as the two aliases do when the channels
-  converge. Keying on the string would only have caught the literal-duplicate case, which is not the one that
-  bites.
-- **The loop lives above the transport, in a runner — deliberately not in a Vitest-config helper.** A test
-  framework's global setup **cannot re-run its own test files**: it launches one instance for one run. A
-  config helper expanding one project into N (`integration-tests:desktop@1.12.7`, `…@1.13.4`) would carry the
-  version in the project name for free, but it is Vitest-only and needs an async manifest fetch at
-  config-load time. The runner takes the suite invocation as a `run` callback instead, so it never launches
-  anything itself and Vitest / Jest / Manual all inherit it per **L6**.
-- **Only the runner's default is both ends.** `obsidianVersion` with no explicit pin still means "whatever
-  your installed Obsidian runs", so `connectToCdp()`, the CLI (**L10**), and suites not using the runner are
-  untouched. The two-end default applies exactly where that duty applies.
-- **Every version runs before anything is reported** (not fail-fast): stopping at the first failure leaves
-  "catalyst broke" and "both ends broke" indistinguishable without a second run. The thrown `AggregateError`
-  names the failed and passed versions and carries each underlying error.
-- **The collapse is always logged, never inferred** — `2 requested specifiers resolve to 1 distinct version:
-  1.13.4 (public-latest, catalyst-latest). Running the suites once.` A reader seeing one run where they
-  expected two must be told the second end was already covered, not left guessing whether it was skipped by
-  accident. That line is the whole point of the change.
-- **Missing-channel degradation.** Making catalyst part of the *default* means a manifest that momentarily
-  ships no `beta` entry would newly break every consumer's gate. So a **default** specifier that cannot
-  resolve is dropped with a logged reason, while an **explicitly requested** one still throws; an empty
-  resolution set always throws rather than silently verifying nothing.
+- **`runObsidianVersionMatrix({ run, versions })`** (`run-version-matrix.ts`, exported from the barrel) runs a suite once per **distinct** version. `versions` takes an array or a comma-separated string, so `process.env['OBSIDIAN_VERSION']` passes straight through; omitted/empty ⇒ `DEFAULT_OBSIDIAN_VERSION_SPECS` = `['public-latest', 'catalyst-latest']`.
+- **De-duplication is keyed on the RESOLVED version, never the specifier string.** `['1.13.4', 'catalyst-latest']` collapses when catalyst *is* 1.13.4, exactly as the two aliases do when the channels converge. Keying on the string would only have caught the literal-duplicate case, which is not the one that bites.
+- **The loop lives above the transport, in a runner — deliberately not in a Vitest-config helper.** A test framework's global setup **cannot re-run its own test files**: it launches one instance for one run. A config helper expanding one project into N (`integration-tests:desktop@1.12.7`, `…@1.13.4`) would carry the version in the project name for free, but it is Vitest-only and needs an async manifest fetch at config-load time. The runner takes the suite invocation as a `run` callback instead, so it never launches anything itself and Vitest / Jest / Manual all inherit it per **L6**.
+- **Only the runner's default is both ends.** `obsidianVersion` with no explicit pin still means "whatever your installed Obsidian runs", so `connectToCdp()`, the CLI (**L10**), and suites not using the runner are untouched. The two-end default applies exactly where that duty applies.
+- **Every version runs before anything is reported** (not fail-fast): stopping at the first failure leaves "catalyst broke" and "both ends broke" indistinguishable without a second run. The thrown `AggregateError` names the failed and passed versions and carries each underlying error.
+- **The collapse is always logged, never inferred** — `2 requested specifiers resolve to 1 distinct version: 1.13.4 (public-latest, catalyst-latest). Running the suites once.` A reader seeing one run where they expected two must be told the second end was already covered, not left guessing whether it was skipped by accident. That line is the whole point of the change.
+- **Missing-channel degradation.** Making catalyst part of the *default* means a manifest that momentarily ships no `beta` entry would newly break every consumer's gate. So a **default** specifier that cannot resolve is dropped with a logged reason, while an **explicitly requested** one still throws; an empty resolution set always throws rather than silently verifying nothing.
 
-**Pure/glue split** (as **L20**/**L18**/**L31**): every decision — normalizing the requested specifiers,
-resolving them against a manifest, de-duplicating, sequencing, and formatting the plan/summary lines — is
-pure and unit-tested in `version-matrix.ts`. Only the single manifest fetch and the `log` calls are
-`v8 ignore`d, in `run-version-matrix.ts`. `version-matrix.integration.test.ts` drives the real manifest with
-a stub `run` callback, so it exercises the live collapse in under a second and launches no Obsidian. It
-asserts **uniqueness**, not a fixed run count — the channels converge and diverge over time, and a test
-pinned to today's count would fail the moment catalyst moves ahead.
+**Pure/glue split** (as **L20**/**L18**/**L31**): every decision — normalizing the requested specifiers, resolving them against a manifest, de-duplicating, sequencing, and formatting the plan/summary lines — is pure and unit-tested in `version-matrix.ts`. Only the single manifest fetch and the `log` calls are `v8 ignore`d, in `run-version-matrix.ts`. `version-matrix.integration.test.ts` drives the real manifest with a stub `run` callback, so it exercises the live collapse in under a second and launches no Obsidian. It asserts **uniqueness**, not a fixed run count — the channels converge and diverge over time, and a test pinned to today's count would fail the moment catalyst moves ahead.
 
-**Not yet adopted by consumers.** Consuming plugin repos still run two desktop scripts; migrating
-them (collapse into one, delete `test-integration-desktop-catalyst.ts`) is follow-up work. Their `run`
-callbacks must keep hand-spawning vitest because `obsidian-dev-utils`' `test()` helper does not propagate
-`OBSIDIAN_VERSION` to the child — teaching it to forward env belongs in `obsidian-dev-utils`. Android is unaffected: the
-Appium transport runs the installed APK and takes no `obsidianVersion`.
+**Not yet adopted by consumers.** Consuming plugin repos still run two desktop scripts; migrating them (collapse into one, delete `test-integration-desktop-catalyst.ts`) is follow-up work. Their `run` callbacks must keep hand-spawning vitest because `obsidian-dev-utils`' `test()` helper does not propagate `OBSIDIAN_VERSION` to the child — teaching it to forward env belongs in `obsidian-dev-utils`. Android is unaffected: the Appium transport runs the installed APK and takes no `obsidianVersion`.
 
 ## L33. Owned instances die with the harness — a socket, not a parent/child link
 
-**Being a child process buys nothing.** The owned instance is already spawned from the harness
-(`obsidian-instance.ts`), but no operating system turns that into a lifetime guarantee. Windows never
-propagates a parent's death to its children — an orphan just keeps running with a stale parent id — and on
-POSIX a `SIGKILL` aimed at one pid never cascades either. The instance is additionally spawned `detached`,
-so it is not even in the harness's process group. Teardown therefore rests entirely on the harness running
-`killProcessTree` from its own `exit`/signal handlers, which is exactly what a `SIGKILL`, a Task Manager
-kill, or an IDE stop button denies it. Each such kill leaked a hidden Obsidian holding a user-data dir and a
-CDP port, and they accumulated silently: the next run picks a fresh temp dir and a free port, so nothing
-collides and nothing complains. **L31 sweeps leaked directories, not leaked processes** — the two are
-complementary, and neither substitutes for the other.
+**Being a child process buys nothing.** The owned instance is already spawned from the harness (`obsidian-instance.ts`), but no operating system turns that into a lifetime guarantee. Windows never propagates a parent's death to its children — an orphan just keeps running with a stale parent id — and on POSIX a `SIGKILL` aimed at one pid never cascades either. The instance is additionally spawned `detached`, so it is not even in the harness's process group. Teardown therefore rests entirely on the harness running `killProcessTree` from its own `exit`/signal handlers, which is exactly what a `SIGKILL`, a Task Manager kill, or an IDE stop button denies it. Each such kill leaked a hidden Obsidian holding a user-data dir and a CDP port, and they accumulated silently: the next run picks a fresh temp dir and a free port, so nothing collides and nothing complains. **L31 sweeps leaked directories, not leaked processes** — the two are complementary, and neither substitutes for the other.
 
-**Why not the real primitive.** The guaranteed fix is a Windows Job Object with
-`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` (the OS kills the job when the last handle closes, `TerminateProcess`
-included), or `prctl(PR_SET_PDEATHSIG)` on Linux. Neither is reachable from Node without a native addon —
-too heavy a dependency for this harness, and it would put a compile step in every consumer's install.
+**Why not the real primitive.** The guaranteed fix is a Windows Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` (the OS kills the job when the last handle closes, `TerminateProcess` included), or `prctl(PR_SET_PDEATHSIG)` on Linux. Neither is reachable from Node without a native addon — too heavy a dependency for this harness, and it would put a compile step in every consumer's install.
 
-**What we use instead.** The one cross-platform resource the kernel reclaims deterministically on process
-death: a socket. `parent-liveness.ts` listens on an ephemeral loopback port **before** the spawn; once the
-vault is ready the transport evaluates `buildParentLivenessWatchdogExpression(port)` in the renderer, which
-`require('node:net')`-connects back. However the harness dies, the kernel closes its end and the renderer
-sees `close`. No polling, no heartbeat interval, no timeout to tune. This is the
-mirror image of `obsidian-dev-utils`' `watchDevInstanceAndStopOnClose`, which stops the dev build when the
-instance is closed; together the two make neither able to outlive the other.
+**What we use instead.** The one cross-platform resource the kernel reclaims deterministically on process death: a socket. `parent-liveness.ts` listens on an ephemeral loopback port **before** the spawn; once the vault is ready the transport evaluates `buildParentLivenessWatchdogExpression(port)` in the renderer, which `require('node:net')`-connects back. However the harness dies, the kernel closes its end and the renderer sees `close`. No polling, no heartbeat interval, no timeout to tune. This is the mirror image of `obsidian-dev-utils`' `watchDevInstanceAndStopOnClose`, which stops the dev build when the instance is closed; together the two make neither able to outlive the other.
 
-**A close is a question, not a verdict — VERIFY BEFORE DESTROYING.** The first version of this watchdog
-destroyed the window straight from the `close` handler, and that cost far more than the leak it prevents: **a
-socket closing is not the same event as a process dying**. Measured in `obsidian-patterns` on 2026-09-05 over
-four instrumented desktop-aggregate runs, a renderer's idle liveness socket sent `FIN` **on its own** — 3 min
-13 s into one run, 11 min 56 s into another — while the harness's server logged `hadError=false`,
-`listening=true` and went on working for another 14 minutes. Every test file scheduled after the destroy then
-failed in ~60–90 ms with `TypeError: fetch failed` wrapping `connect ECONNREFUSED 127.0.0.1:<cdpPort>`; the
-worst run reported **156 failures across 21 files**, not one of them a test result, and the repo's standing
-"two consecutive green aggregates" bar was unreachable while it stood. Nothing was exhausted (working set
-798→920→907 MB, handles 4 895→5 099, threads flat) and traps on `electronWindow.destroy`/`close`,
-`window.close` and `remote.app.quit` caught no other caller. **Why** an idle unref'd loopback socket in an
-Electron renderer sends `FIN` is still not established — and does not need to be: the lifetimes vary run to
-run, so no fixed timeout explains it, and the fix is correct either way.
+**A close is a question, not a verdict — VERIFY BEFORE DESTROYING.** The first version of this watchdog destroyed the window straight from the `close` handler, and that cost far more than the leak it prevents: **a socket closing is not the same event as a process dying**. Measured in `obsidian-patterns` on 2026-09-05 over four instrumented desktop-aggregate runs, a renderer's idle liveness socket sent `FIN` **on its own** — 3 min 13 s into one run, 11 min 56 s into another — while the harness's server logged `hadError=false`, `listening=true` and went on working for another 14 minutes. Every test file scheduled after the destroy then failed in ~60–90 ms with `TypeError: fetch failed` wrapping `connect ECONNREFUSED 127.0.0.1:<cdpPort>`; the worst run reported **156 failures across 21 files**, not one of them a test result, and the repo's standing "two consecutive green aggregates" bar was unreachable while it stood. Nothing was exhausted (working set 798→920→907 MB, handles 4 895→5 099, threads flat) and traps on `electronWindow.destroy`/`close`, `window.close` and `remote.app.quit` caught no other caller. **Why** an idle unref'd loopback socket in an Electron renderer sends `FIN` is still not established — and does not need to be: the lifetimes vary run to run, so no fixed timeout explains it, and the fix is correct either way.
 
-So the `close` handler now **reconnects to the same loopback port** before concluding anything. A live
-harness is still listening, so the probe succeeds and the new socket becomes the liveness token (stored back
-onto `window.__obsidianIntegrationTestingParentLiveness`, which is what the integration suite and the
-idempotency short-circuit read); only when nothing answers after `RECONNECT_ATTEMPT_LIMIT` (3) probes spaced
-`RECONNECT_DELAY_IN_MILLISECONDS` (250) apart — what a dead harness actually looks like — is the window
-destroyed. Measured recovery: **11 ms**. The leak the watchdog exists to prevent is still prevented, within a
-second of the harness dying.
+So the `close` handler now **reconnects to the same loopback port** before concluding anything. A live harness is still listening, so the probe succeeds and the new socket becomes the liveness token (stored back onto `window.__obsidianIntegrationTestingParentLiveness`, which is what the integration suite and the idempotency short-circuit read); only when nothing answers after `RECONNECT_ATTEMPT_LIMIT` (3) probes spaced `RECONNECT_DELAY_IN_MILLISECONDS` (250) apart — what a dead harness actually looks like — is the window destroyed. Measured recovery: **11 ms**. The leak the watchdog exists to prevent is still prevented, within a second of the harness dying.
 
-A reconnect rather than a check on the harness's pid, because it proves the thing the watchdog actually
-depends on — the liveness server still serving — and because it stays correct against a *busy* harness: the
-kernel completes a loopback handshake out of the listen backlog even while Node's event loop is blocked. Its
-one residual ambiguity is accepted knowingly: a successful probe proves *something* is listening on that
-ephemeral port, not that it is ours. The probe follows the close by milliseconds, so another process winning
-that exact port in between is not a risk worth a handshake protocol. Note also that `ParentLivenessServer.close()`
-**keeps** already-accepted connections (Node's `server.close()` only stops listening) — what it guarantees is
-that a probe arriving afterwards is refused, which is the right answer from a torn-down harness.
+A reconnect rather than a check on the harness's pid, because it proves the thing the watchdog actually depends on — the liveness server still serving — and because it stays correct against a *busy* harness: the kernel completes a loopback handshake out of the listen backlog even while Node's event loop is blocked. Its one residual ambiguity is accepted knowingly: a successful probe proves *something* is listening on that ephemeral port, not that it is ours. The probe follows the close by milliseconds, so another process winning that exact port in between is not a risk worth a handshake protocol. Note also that `ParentLivenessServer.close()` **keeps** already-accepted connections (Node's `server.close()` only stops listening) — what it guarantees is that a probe arriving afterwards is refused, which is the right answer from a torn-down harness.
 
-**Fail-open, deliberately.** The renderer arms the destroy path only after the connection is actually
-established, and a renderer without Node access reports `'unavailable'`. A watchdog that cannot reach the
-harness leaves the instance running rather than killing a window a developer is working in; arming failures
-are logged and swallowed, never fatal to a launch. Arming is idempotent — a retried readiness pass finds the
-stored socket and returns `'already-armed'` rather than opening a second connection.
+**Fail-open, deliberately.** The renderer arms the destroy path only after the connection is actually established, and a renderer without Node access reports `'unavailable'`. A watchdog that cannot reach the harness leaves the instance running rather than killing a window a developer is working in; arming failures are logged and swallowed, never fatal to a launch. Arming is idempotent — a retried readiness pass finds the stored socket and returns `'already-armed'` rather than opening a second connection.
 
-**Pure/glue split** (as **L20**/**L18**/**L31**/**L32**): the server and the expression builder live in
-`parent-liveness.ts` and are fully unit-tested — the server against real loopback sockets, the expression by
-evaluating it through `new Function('window', …)` against a stubbed `window` whose `net.connect` hands out a
-fresh recording socket per call, which is what lets the reconnect/adopt/exhaust/fail-open/fallback branches be
-driven without a renderer (fake timers cover the retry delay). Only the wiring in `obsidian-instance.ts`
-and `transport-desktop-cdp.ts` is `v8 ignore`d. The behavior the unit tests cannot reach — the socket actually
-closing under a live app — is covered end to end in `parent-liveness.integration.test.ts`, which destroys the
-renderer's socket and asserts a re-armed socket on the same remote port; the instance answering the eval at
-all is the real assertion. The expression is written in ES5 style (`var`, `function`,
-no optional chaining) for the same reason as `DISMISS_TRUST_DIALOG_EXPR`: it has to parse on the Chromium
-80-era renderers of the oldest supported Obsidian versions (**L26**).
+**Pure/glue split** (as **L20**/**L18**/**L31**/**L32**): the server and the expression builder live in `parent-liveness.ts` and are fully unit-tested — the server against real loopback sockets, the expression by evaluating it through `new Function('window', …)` against a stubbed `window` whose `net.connect` hands out a fresh recording socket per call, which is what lets the reconnect/adopt/exhaust/fail-open/fallback branches be driven without a renderer (fake timers cover the retry delay). Only the wiring in `obsidian-instance.ts` and `transport-desktop-cdp.ts` is `v8 ignore`d. The behavior the unit tests cannot reach — the socket actually closing under a live app — is covered end to end in `parent-liveness.integration.test.ts`, which destroys the renderer's socket and asserts a re-armed socket on the same remote port; the instance answering the eval at all is the real assertion. The expression is written in ES5 style (`var`, `function`, no optional chaining) for the same reason as `DISMISS_TRUST_DIALOG_EXPR`: it has to parse on the Chromium 80-era renderers of the oldest supported Obsidian versions (**L26**).
 
-**The emulator does not use this socket, on purpose.** Its equivalent, **L56**'s emulator reaper, watches
-the `android` setup lock instead. A socket ties a lifetime to the process that opened it. On Android that
-process can be a test worker that Vitest ends during a healthy run, while the lock belongs to the run
-itself.
+**The emulator does not use this socket, on purpose.** Its equivalent, **L56**'s emulator reaper, watches the `android` setup lock instead. A socket ties a lifetime to the process that opened it. On Android that process can be a test worker that Vitest ends during a healthy run, while the lock belongs to the run itself.
 
 ## L34. Lint — `eslint-plugin-unicorn`, ported from `obsidian-dev-utils`
 
-`scripts/eslint-config.ts` is a hand-maintained sibling of `obsidian-dev-utils`' shared config (this repo
-deliberately does **not** depend on `obsidian-dev-utils` — see **L17**), so `obsidian-dev-utils`' new rules are ported here by hand. The
-`unicorn` block mirrors `obsidian-dev-utils`', with three groups of deviations that are this repo's and must not be "synced
-away":
+`scripts/eslint-config.ts` is a hand-maintained sibling of `obsidian-dev-utils`' shared config (this repo deliberately does **not** depend on `obsidian-dev-utils` — see **L17**), so `obsidian-dev-utils`' new rules are ported here by hand. The `unicorn` block mirrors `obsidian-dev-utils`', with three groups of deviations that are this repo's and must not be "synced away":
 
-- **The ES2022 floor is shared, so the same six rules stay off.** `no-array-reverse`, `no-array-sort`,
-  `prefer-array-from-async`, `prefer-iterator-helpers`, `prefer-iterator-to-array`,
-  `prefer-promise-with-resolvers` and `prefer-set-methods` all suggest APIs newer than `lib: ES2022`, which
-  `metadata.json` pins to installer 1.1.9 (**L20**). `prefer-url-can-parse` is off for the matching Node
-  16.16.0 floor. Revisit them together if that floor moves.
-- **Harness-shaped patterns the rule cannot see.** `no-global-object-property-assignment` (installing
-  `__obsidianIntegrationTesting` onto `globalThis`/`window` is what this package *does*),
-  `no-top-level-side-effects` and `no-top-level-assignment-in-function` (the framework setup entry points
-  register their resolvers at import time — **L6** — and the transport cache / cleanup once-guard are module
-  singletons by design), `prefer-await` (fire-and-forget `.catch()` on scheduled work), and
-  `no-nonstandard-builtin-properties` (the rule's `Symbol` table predates `Symbol.asyncDispose`).
-- **Names that are NOT ours to expand.** `unicorn/name-replacements` runs with `checkProperties: true` and NO
-  exemption for this package's own vocabulary — the public surface was renamed to satisfy it rather than
-  configured around (see the breaking renames below). The only escapes are individual sites mirroring a name
-  a *dependency* owns: Obsidian's `PluginManifest.dir` and `Vault.configDir`, Jest's `rootDir`, Vite's
-  `server.deps`, `typescript-eslint`'s `tsconfigRootDir` / `args` / `argsIgnorePattern` / `varsIgnorePattern`.
-  Those carry a scoped disable, because renaming them would simply stop the option being read.
-  `consistent-boolean-name` keeps `check` as a recognized prefix, which validates the `checkIs*` predicate
-  family (`checkIsLockStale`, `checkIsRemovableDirectory`, `checkIsProcessAlive`, ...); the verdict-returning
-  functions that used to collide with it are now `resolve*`.
+- **The ES2022 floor is shared, so the same six rules stay off.** `no-array-reverse`, `no-array-sort`, `prefer-array-from-async`, `prefer-iterator-helpers`, `prefer-iterator-to-array`, `prefer-promise-with-resolvers` and `prefer-set-methods` all suggest APIs newer than `lib: ES2022`, which `metadata.json` pins to installer 1.1.9 (**L20**). `prefer-url-can-parse` is off for the matching Node 16.16.0 floor. Revisit them together if that floor moves.
+- **Harness-shaped patterns the rule cannot see.** `no-global-object-property-assignment` (installing `__obsidianIntegrationTesting` onto `globalThis`/`window` is what this package *does*), `no-top-level-side-effects` and `no-top-level-assignment-in-function` (the framework setup entry points register their resolvers at import time — **L6** — and the transport cache / cleanup once-guard are module singletons by design), `prefer-await` (fire-and-forget `.catch()` on scheduled work), and `no-nonstandard-builtin-properties` (the rule's `Symbol` table predates `Symbol.asyncDispose`).
+- **Names that are NOT ours to expand.** `unicorn/name-replacements` runs with `checkProperties: true` and NO exemption for this package's own vocabulary — the public surface was renamed to satisfy it rather than configured around (see the breaking renames below). The only escapes are individual sites mirroring a name a *dependency* owns: Obsidian's `PluginManifest.dir` and `Vault.configDir`, Jest's `rootDir`, Vite's `server.deps`, `typescript-eslint`'s `tsconfigRootDir` / `args` / `argsIgnorePattern` / `varsIgnorePattern`. Those carry a scoped disable, because renaming them would simply stop the option being read. `consistent-boolean-name` keeps `check` as a recognized prefix, which validates the `checkIs*` predicate family (`checkIsLockStale`, `checkIsRemovableDirectory`, `checkIsProcessAlive`, ...); the verdict-returning functions that used to collide with it are now `resolve*`.
 
 **Breaking public renames this rule forced** (all consumer plugins must follow):
 
@@ -1626,28 +579,11 @@ away":
 | `InjectPluginParams.sourceDir` | `InjectPluginParams.sourceDirectory` |
 | `OwnedInstanceConfig.userDataDir` | `OwnedInstanceConfig.userDataDirectory` |
 
-`fn`/`args` could NOT take the rule's own suggestions: `function` and `arguments` are reserved words and
-cannot be binding names in a module, so the rule falls back to `function_` / `arguments_`. Since consumers
-destructure both inside closures, the names had to be real identifiers — hence `callback` / `input`.
+`fn`/`args` could NOT take the rule's own suggestions: `function` and `arguments` are reserved words and cannot be binding names in a module, so the rule falls back to `function_` / `arguments_`. Since consumers destructure both inside closures, the names had to be real identifiers — hence `callback` / `input`.
 
-Two contracts deliberately did NOT change, and must not be "fixed" to match: the on-disk leftover-sweep
-prefixes (`TEMP_VAULT_DIR_PREFIX = 'temp-vault-'`, **L31**) — renaming them would orphan existing leftover
-directories — and Electron's `--user-data-dir` switch string. Two **wire formats** between Node and the
-renderer did change: `evalWrapper`'s (`{ fn, args }` → `{ callback, input }`) and `ipcSendSync`'s
-(`{ channel, args }` → `{ channel, channelArguments }`). Both are safe only because `getBootstrapVersion()`
-keys off `LIBRARY_VERSION`, so a stale namespace in a running Obsidian is re-bootstrapped on the version bump
-that ships this. Neither belongs in the table above: the namespace payload types are closure-local to
-`namespace-bootstrap.ts` (`EvalWrapperParams`, `IpcSendSyncParams`) and the payloads themselves are JSON
-literals `transport-desktop-cdp.ts` writes, so no consumer can name either — nothing to follow. The table
-did carry an `IpcSendSyncNamespaceParams` row, naming a type in `src/obsidian-namespace.ts` that
-was never once re-exported; that file is gone (**L2**).
+Two contracts deliberately did NOT change, and must not be "fixed" to match: the on-disk leftover-sweep prefixes (`TEMP_VAULT_DIR_PREFIX = 'temp-vault-'`, **L31**) — renaming them would orphan existing leftover directories — and Electron's `--user-data-dir` switch string. Two **wire formats** between Node and the renderer did change: `evalWrapper`'s (`{ fn, args }` → `{ callback, input }`) and `ipcSendSync`'s (`{ channel, args }` → `{ channel, channelArguments }`). Both are safe only because `getBootstrapVersion()` keys off `LIBRARY_VERSION`, so a stale namespace in a running Obsidian is re-bootstrapped on the version bump that ships this. Neither belongs in the table above: the namespace payload types are closure-local to `namespace-bootstrap.ts` (`EvalWrapperParams`, `IpcSendSyncParams`) and the payloads themselves are JSON literals `transport-desktop-cdp.ts` writes, so no consumer can name either — nothing to follow. The table did carry an `IpcSendSyncNamespaceParams` row, naming a type in `src/obsidian-namespace.ts` that was never once re-exported; that file is gone (**L2**).
 
-**Never run `--fix` over `unicorn/name-replacements`** without `tsc` + the full suite behind it: its fixer is
-not reference-aware for enum members, interface members, and parameter properties, and object-literal keys in
-loosely typed positions are not contextually typed, so a rename can leave a dangling reference the compiler
-never sees. The vendored ambient declarations under `scripts/helpers/@types/` are exempt from it (and from
-`prefer-type-literal-last`, which fights `perfectionist/sort-union-types` there in a non-converging fix loop)
-because their names come from a dependency's published schema.
+**Never run `--fix` over `unicorn/name-replacements`** without `tsc` + the full suite behind it: its fixer is not reference-aware for enum members, interface members, and parameter properties, and object-literal keys in loosely typed positions are not contextually typed, so a rename can leave a dangling reference the compiler never sees. The vendored ambient declarations under `scripts/helpers/@types/` are exempt from it (and from `prefer-type-literal-last`, which fights `perfectionist/sort-union-types` there in a non-converging fix loop) because their names come from a dependency's published schema.
 
 ### The custom rule sources are shared byte-for-byte with four sibling repos
 
@@ -1665,751 +601,277 @@ because their names come from a dependency's published schema.
 
 ## L35. Documentation site (`docs/`) — an Astro + Starlight copy-sync of `obsidian-dev-utils`
 
-The user-facing docs are an Astro + Starlight site under `docs/`, served at
-`https://mnaoumov.dev/obsidian-integration-testing/`. `README.md` is now only an overview plus links into
-it (the "split when too big" convention; this repo is tooling, not a plugin, so `docs/` is the right destination).
+The user-facing docs are an Astro + Starlight site under `docs/`, served at `https://mnaoumov.dev/obsidian-integration-testing/`. `README.md` is now only an overview plus links into it (the "split when too big" convention; this repo is tooling, not a plugin, so `docs/` is the right destination).
 
-- `npm run docs:build` — generate the API reference, generate the OG cards, `astro build`, then the link
-  check. `docs:dev` runs the generator plus a foreground dev server; `docs:preview` serves the last build.
-- `.github/workflows/build-pages.yml` deploys it: a published **release** dispatches the workflow again on
-  `main` (the `github-pages` environment refuses a deploy from a tag), which builds and deploys. It caches
-  the two slow artifacts (the ts-morph markdown, the satori PNGs) keyed by the sources that determine them.
-- **Generated, gitignored, never edited by hand:** `docs/src/content/docs/api/`,
-  `docs/src/generated-sidebar.json`, `docs/public/og/`, `docs/dist/`, `.astro/`.
-- `scripts/docs-gen/**` is excluded from the root `tsconfig.json` (it has its own, bundler-resolved) and
-  from dprint + cspell, so the vendored copy stays byte-comparable with `obsidian-dev-utils`'. It IS linted, and its unit
-  tests run in the `unit-tests:scripts` Vitest project (`npm test` runs it alongside `unit-tests`).
+- `npm run docs:build` — generate the API reference, generate the OG cards, `astro build`, then the link check. `docs:dev` runs the generator plus a foreground dev server; `docs:preview` serves the last build.
+- `.github/workflows/build-pages.yml` deploys it: a published **release** dispatches the workflow again on `main` (the `github-pages` environment refuses a deploy from a tag), which builds and deploys. It caches the two slow artifacts (the ts-morph markdown, the satori PNGs) keyed by the sources that determine them.
+- **Generated, gitignored, never edited by hand:** `docs/src/content/docs/api/`, `docs/src/generated-sidebar.json`, `docs/public/og/`, `docs/dist/`, `.astro/`.
+- `scripts/docs-gen/**` is excluded from the root `tsconfig.json` (it has its own, bundler-resolved) and from dprint + cspell, so the vendored copy stays byte-comparable with `obsidian-dev-utils`'. It IS linted, and its unit tests run in the `unit-tests:scripts` Vitest project (`npm test` runs it alongside `unit-tests`).
 
 ### The copy is a sync, not a fork — four deliberate divergences
 
-`scripts/docs-gen/**`, `astro.config.ts`, the `docs-*.ts` scripts and `docs/src/{components,styles,
-content.config.ts,route-data.ts}` are copied from `obsidian-dev-utils` (same hand-sync discipline as
-**L17**; this repo must not depend on `obsidian-dev-utils`, and `obsidian-dev-utils` depends on *this* package, so the edge would be a
-cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that way. What differs:
+`scripts/docs-gen/**`, `astro.config.ts`, the `docs-*.ts` scripts and `docs/src/{components,styles, content.config.ts,route-data.ts}` are copied from `obsidian-dev-utils` (same hand-sync discipline as **L17**; this repo must not depend on `obsidian-dev-utils`, and `obsidian-dev-utils` depends on *this* package, so the edge would be a cycle). `link-check.ts` and `api-doc-jsdoc.ts` are byte-identical; keep it that way. What differs:
 
-1. **`api-doc-constants.ts`** — `BASE_PATH`, the new `PACKAGE_NAME` / `PUBLIC_API_ENTRY_FILE`, a pruned
-   `GENERIC_TYPE_PARAMS`, and a `TS_GLOBAL_TYPES` map scoped to what this package's signatures actually
-   mention (Node built-ins, WebdriverIO's `Browser`, Puppeteer's `CDPSession`) instead of `obsidian-dev-utils`' CodeMirror
-   and Obsidian-UI entries.
-2. **`api-doc-source-processing.ts` — entry discovery follows the barrel, not the file tree.** `obsidian-dev-utils` exports
-   one subpath per module, so it walks `src`. Here `src/` also holds the co-located `*.test.ts` suites and
-   modules that exist only for the runner adapters, and only `src/index.ts` is public — so
-   `findEntryFiles` / `findPublicApiNames` parse that barrel's re-exports, and `computeCacheHash` hashes it
-   (a re-export added there changes the output with no entry file touched).
-3. **`generate-api-docs.ts`** — filters the collected types down to the barrel's names, *after*
-   `resolveInheritedMembers`, so a public class still inherits from an internal base class.
-4. **`getImportStatement()`** — every documented name is imported from the package root; the namespace only
-   groups the reference by source module, it is not an import subpath.
+1. **`api-doc-constants.ts`** — `BASE_PATH`, the new `PACKAGE_NAME` / `PUBLIC_API_ENTRY_FILE`, a pruned `GENERIC_TYPE_PARAMS`, and a `TS_GLOBAL_TYPES` map scoped to what this package's signatures actually mention (Node built-ins, WebdriverIO's `Browser`, Puppeteer's `CDPSession`) instead of `obsidian-dev-utils`' CodeMirror and Obsidian-UI entries.
+2. **`api-doc-source-processing.ts` — entry discovery follows the barrel, not the file tree.** `obsidian-dev-utils` exports one subpath per module, so it walks `src`. Here `src/` also holds the co-located `*.test.ts` suites and modules that exist only for the runner adapters, and only `src/index.ts` is public — so `findEntryFiles` / `findPublicApiNames` parse that barrel's re-exports, and `computeCacheHash` hashes it (a re-export added there changes the output with no entry file touched).
+3. **`generate-api-docs.ts`** — filters the collected types down to the barrel's names, *after* `resolveInheritedMembers`, so a public class still inherits from an internal base class.
+4. **`getImportStatement()`** — every documented name is imported from the package root; the namespace only groups the reference by source module, it is not an import subpath.
 
 ### Incidental fixes the port forced
 
-- **`js-yaml` override `^5.2.3` → `4.3.1`** (since moved to `4.3.2` by an advisory, see **L55**) — js-yaml 5 is ESM-only with no default export, so `astro build`
-  died on import. The `^5.2.3` came from an update sweep, not a requirement; `obsidian-dev-utils` pins the same `4.3.1`.
-- **`scripts/helpers/exec.ts` gained an `env` option** — `docs:dev` needs `ASTRO_DEV_BACKGROUND=1`, and
-  `CHILD_ENV` snapshots `process.env` at module load, so setting it in the script would not have reached
-  the child.
-  That option only reached the child on one of the two spawn paths, though: `spawnViaShell`'s shell branch
-  passed the module-load snapshot `CHILD_ENV` rather than the merged object, so `docs:dev` — an array
-  command with no newline in it, which takes exactly that branch — never saw
-  `ASTRO_DEV_BACKGROUND=1` at all. Fixed when the shared `scripts/helpers/` copies were reconciled across
-  the sibling projects; both branches now pass the merged environment.
+- **`js-yaml` override `^5.2.3` → `4.3.1`** (since moved to `4.3.2` by an advisory, see **L55**) — js-yaml 5 is ESM-only with no default export, so `astro build` died on import. The `^5.2.3` came from an update sweep, not a requirement; `obsidian-dev-utils` pins the same `4.3.1`.
+- **`scripts/helpers/exec.ts` gained an `env` option** — `docs:dev` needs `ASTRO_DEV_BACKGROUND=1`, and `CHILD_ENV` snapshots `process.env` at module load, so setting it in the script would not have reached the child. That option only reached the child on one of the two spawn paths, though: `spawnViaShell`'s shell branch passed the module-load snapshot `CHILD_ENV` rather than the merged object, so `docs:dev` — an array command with no newline in it, which takes exactly that branch — never saw `ASTRO_DEV_BACKGROUND=1` at all. Fixed when the shared `scripts/helpers/` copies were reconciled across the sibling projects; both branches now pass the merged environment.
 - **`src/type-guards.ts` gained `assertNever`** — the vendored `link-check.ts` imports `obsidian-dev-utils`'.
-- **`docs-link-check.ts` rewrites `npmjs.com/package/x` → `registry.npmjs.org/x`** before fetching; npmjs
-  answers an unattended `fetch` with 403. Same rewrite `scripts/helpers/markdownlint.ts` gives linkinator.
-- **linkinator skips `docs/**`** — in-site links are base-absolute (`/obsidian-integration-testing/...`) and
-  only resolve once Astro has built them; `docs-link-check.ts` validates those against the built output.
+- **`docs-link-check.ts` rewrites `npmjs.com/package/x` → `registry.npmjs.org/x`** before fetching; npmjs answers an unattended `fetch` with 403. Same rewrite `scripts/helpers/markdownlint.ts` gives linkinator.
+- **linkinator skips `docs/**`** — in-site links are base-absolute (`/obsidian-integration-testing/...`) and only resolve once Astro has built them; `docs-link-check.ts` validates those against the built output.
 
 ## L36. Security overrides (`extract-zip` GHSA-jmr9-qjv8-65gv)
 
-`extract-zip` is vulnerable at **every** published version — the advisory range is `*` and `2.0.1` is the
-newest release — so there is nothing to override it *to*. It arrives through this package's own
-`webdriverio` dependency:
+`extract-zip` is vulnerable at **every** published version — the advisory range is `*` and `2.0.1` is the newest release — so there is nothing to override it *to*. It arrives through this package's own `webdriverio` dependency:
 
 ```text
 webdriverio → @wdio/utils → @puppeteer/browsers@2.x → extract-zip
 ```
 
-Lifting the exact `webdriverio` pin would not help either: the newest `@wdio/utils` (`9.30.1`) still
-declares `@puppeteer/browsers: ^2.2.0`. So the fix goes one level up — `overrides.@puppeteer/browsers` →
-`^3.2.0`, whose `3.x` line replaced `extract-zip` with `modern-tar`. That drops the vulnerable subtree
-entirely and **dedupes**: `puppeteer-core` already pulls `3.2.0` here. Verified rather than assumed —
-`@wdio/utils` imports exactly `install`, `canDownload`, `resolveBuildId`, `detectBrowserPlatform`,
-`Browser`, `ChromeReleaseChannel` and `computeExecutablePath`, all still exported by the installed `3.2.0`,
-and both packages are ESM-only.
+Lifting the exact `webdriverio` pin would not help either: the newest `@wdio/utils` (`9.30.1`) still declares `@puppeteer/browsers: ^2.2.0`. So the fix goes one level up — `overrides.@puppeteer/browsers` → `^3.2.0`, whose `3.x` line replaced `extract-zip` with `modern-tar`. That drops the vulnerable subtree entirely and **dedupes**: `puppeteer-core` already pulls `3.2.0` here. Verified rather than assumed — `@wdio/utils` imports exactly `install`, `canDownload`, `resolveBuildId`, `detectBrowserPlatform`, `Browser`, `ChromeReleaseChannel` and `computeExecutablePath`, all still exported by the installed `3.2.0`, and both packages are ESM-only.
 
-**Never take `npm audit fix --force` here** — its remedy downgrades `webdriverio` past the version this
-harness drives. **Remove the override** when `@wdio/utils` moves to `@puppeteer/browsers@^3` itself;
-the `check` in [`pinned-versions.json`](pinned-versions.json) watches exactly that. Same override and same
-reasoning as `obsidian-dev-utils`' "Security overrides (`extract-zip` …)"; keep the two in step.
+**Never take `npm audit fix --force` here** — its remedy downgrades `webdriverio` past the version this harness drives. **Remove the override** when `@wdio/utils` moves to `@puppeteer/browsers@^3` itself; the `check` in [`pinned-versions.json`](pinned-versions.json) watches exactly that. Same override and same reasoning as `obsidian-dev-utils`' "Security overrides (`extract-zip` …)"; keep the two in step.
 
 ## L37. Release — npm publishes from CI through a Trusted Publisher, not from a token
 
-`npm run version <major|minor|patch|premajor|preminor|prepatch|prerelease|x.y.z>` still drives the release
-from the developer machine: it runs the full gate (`format:check`, `spellcheck`, `lint:md`, `build`, `lint`,
-`test:coverage`), bumps `package.json` + `package-lock.json`, rewrites `CHANGELOG.md`, commits, tags, pushes,
-and creates the GitHub release with the `npm pack` tarball attached.
+`npm run version <major|minor|patch|premajor|preminor|prepatch|prerelease|x.y.z>` still drives the release from the developer machine: it runs the full gate (`format:check`, `spellcheck`, `lint:md`, `build`, `lint`, `test:coverage`), bumps `package.json` + `package-lock.json`, rewrites `CHANGELOG.md`, commits, tags, pushes, and creates the GitHub release with the `npm pack` tarball attached.
 
-What it no longer does is publish. It used to read `NPM_TOKEN` out of the gitignored `.env`, write it into
-the user npmrc via `npm config set //registry.npmjs.org/:_authToken=…`, and run `npm publish --tag …`. That
-long-lived token is replaced by a **Trusted Publisher** (OIDC): npm exchanges the workflow's short-lived
-`id-token` for a package-scoped publish credential, so **there is no token to hold and publishing is only
-possible from CI** — no local fallback exists, by design.
+What it no longer does is publish. It used to read `NPM_TOKEN` out of the gitignored `.env`, write it into the user npmrc via `npm config set //registry.npmjs.org/:_authToken=…`, and run `npm publish --tag …`. That long-lived token is replaced by a **Trusted Publisher** (OIDC): npm exchanges the workflow's short-lived `id-token` for a package-scoped publish credential, so **there is no token to hold and publishing is only possible from CI** — no local fallback exists, by design.
 
-`.github/workflows/publish-npm.yml` does it, on `release: published`. It checks out the release tag,
-installs, **rebuilds** (`dist/` is gitignored, and rebuilding is what makes the provenance attestation
-honest — it attests what the workflow built from that commit), derives the dist-tag the way the script used
-to (`beta` for an `x.y.z-…` prerelease, else `latest`), and publishes with `--provenance`. Two things are
-load-bearing:
+`.github/workflows/publish-npm.yml` does it, on `release: published`. It checks out the release tag, installs, **rebuilds** (`dist/` is gitignored, and rebuilding is what makes the provenance attestation honest — it attests what the workflow built from that commit), derives the dist-tag the way the script used to (`beta` for an `x.y.z-…` prerelease, else `latest`), and publishes with `--provenance`. Two things are load-bearing:
 
-- `permissions: id-token: write` on the job — without it npm has no OIDC token to exchange and falls back to
-  looking for a credential it will not find.
-- **The workflow's filename.** npm authorizes the publisher by *file name*, not path
-  (`obsidian-integration-testing` → Settings → Trusted Publisher → workflow `publish-npm.yml`), and
-  `scripts/version.ts` polls `gh run list --workflow publish-npm.yml` for the run to watch. Renaming the file
-  breaks publishing in both places; `PUBLISH_WORKFLOW_FILE_NAME` is the script's half of that contract.
+- `permissions: id-token: write` on the job — without it npm has no OIDC token to exchange and falls back to looking for a credential it will not find.
+- **The workflow's filename.** npm authorizes the publisher by *file name*, not path (`obsidian-integration-testing` → Settings → Trusted Publisher → workflow `publish-npm.yml`), and `scripts/version.ts` polls `gh run list --workflow publish-npm.yml` for the run to watch. Renaming the file breaks publishing in both places; `PUBLISH_WORKFLOW_FILE_NAME` is the script's half of that contract.
 
-The script does not fire-and-forget: `watchNpmPublishWorkflow` finds the run by the **commit the tag points
-at** (a `release`-triggered run reports the tag rather than `main`, and a re-run keeps the head SHA), then
-`gh run watch --exit-status` follows it, so a failed publish fails `npm run version` instead of leaving a
-tagged release that silently never reached npm. If the run cannot be found within two minutes it warns with
-the Actions URL rather than failing — the release itself is already good, and the workflow can be re-run or
-dispatched with the tag as input.
+The script does not fire-and-forget: `watchNpmPublishWorkflow` finds the run by the **commit the tag points at** (a `release`-triggered run reports the tag rather than `main`, and a re-run keeps the head SHA), then `gh run watch --exit-status` follows it, so a failed publish fails `npm run version` instead of leaving a tagged release that silently never reached npm. If the run cannot be found within two minutes it warns with the Actions URL rather than failing — the release itself is already good, and the workflow can be re-run or dispatched with the tag as input.
 
-The two sibling repos publish the same way now, so no `NPM_TOKEN` is left in any of them to fall back to.
-This repo went first, on 2026-08-22, and both followed the same afternoon: `obsidian-test-mocks` from its
-own OIDC workflow, and `obsidian-dev-utils`' shared `src/script-utils/npm-publish.ts` by dropping
-authentication out of the helper entirely, so `publish()` runs a bare `npm publish --tag` and reads no
-credential.
+The two sibling repos publish the same way now, so no `NPM_TOKEN` is left in any of them to fall back to. This repo went first, on 2026-08-22, and both followed the same afternoon: `obsidian-test-mocks` from its own OIDC workflow, and `obsidian-dev-utils`' shared `src/script-utils/npm-publish.ts` by dropping authentication out of the helper entirely, so `publish()` runs a bare `npm publish --tag` and reads no credential.
 
 ### `npm pack --json` changed shape in npm 12 — parse it, never cast it
 
-npm ≤ 11 emitted an **array** of pack results; **npm 12 emits an object keyed by package name**. Both are
-valid JSON, so `JSON.parse(output) as [NpmPackResult]` kept parsing happily and then read `filename` off
-`undefined`. That is a `TypeError` at `publishGitHubRelease` — the **second-to-last** step of
-`updateVersion`, so it fires *after* the gate, the bump, the changelog, the commit, the tag and
-`git push --follow-tags` have all already landed on the remote. Cutting 12.0.0 left exactly that: `298fffa`
-and a public `12.0.0` tag with **no GitHub release**, so `publish-npm.yml` never fired and nothing reached
-npm. There is no re-run from that state — `assertGitRepoClean` passes but `getNewVersion` would bump to
-13.0.0.
+npm ≤ 11 emitted an **array** of pack results; **npm 12 emits an object keyed by package name**. Both are valid JSON, so `JSON.parse(output) as [NpmPackResult]` kept parsing happily and then read `filename` off `undefined`. That is a `TypeError` at `publishGitHubRelease` — the **second-to-last** step of `updateVersion`, so it fires *after* the gate, the bump, the changelog, the commit, the tag and `git push --follow-tags` have all already landed on the remote. Cutting 12.0.0 left exactly that: `298fffa` and a public `12.0.0` tag with **no GitHub release**, so `publish-npm.yml` never fired and nothing reached npm. There is no re-run from that state — `assertGitRepoClean` passes but `getNewVersion` would bump to 13.0.0.
 
-`scripts/helpers/npm-pack.ts` now owns the read: `parseNpmPackFilename` accepts both shapes, **validates**
-rather than asserts, and every failure names the raw output, so the next npm shape change is diagnosable
-from the release log instead of from a stack trace. `scripts/helpers/npm-pack.test.ts` pins both
-generations against a payload captured from real npm 12 output.
+`scripts/helpers/npm-pack.ts` now owns the read: `parseNpmPackFilename` accepts both shapes, **validates** rather than asserts, and every failure names the raw output, so the next npm shape change is diagnosable from the release log instead of from a stack trace. `scripts/helpers/npm-pack.test.ts` pins both generations against a payload captured from real npm 12 output.
 
 Two notes for anyone syncing this against `obsidian-dev-utils`' copy, which carries the same defect:
 
-- **This repo needs no stdout noise-stripping.** `obsidian-dev-utils` guards with `indexOf('[\n  {')` because its exec helper
-  merges the streams. `execString` (`scripts/helpers/exec.ts`) accumulates `stdout` and `stderr`
-  **separately** and `execFromRoot(…, { isQuiet: true })` returns `stdout` alone, and npm writes its
-  `npm notice run … prepare` lines to `stderr` — so the string reaching the parser is pure JSON. The shape
-  was the whole defect here.
-- **The two copies are independent by design.** `scripts/version.ts` is not in the **L17** hand-synced set,
-  and this repo must never depend on `obsidian-dev-utils`, so fixing one does nothing for the other. Both needed it.
+- **This repo needs no stdout noise-stripping.** `obsidian-dev-utils` guards with `indexOf('[\n  {')` because its exec helper merges the streams. `execString` (`scripts/helpers/exec.ts`) accumulates `stdout` and `stderr` **separately** and `execFromRoot(…, { isQuiet: true })` returns `stdout` alone, and npm writes its `npm notice run … prepare` lines to `stderr` — so the string reaching the parser is pure JSON. The shape was the whole defect here.
+- **The two copies are independent by design.** `scripts/version.ts` is not in the **L17** hand-synced set, and this repo must never depend on `obsidian-dev-utils`, so fixing one does nothing for the other. Both needed it.
 
-**If a release ever half-fails here again**, `npm pack` has already written the tarball, so recovery needs
-no rebuild: `gh release create <version> dist/<tarball> --title v<version> --notes-file <notes>`, the notes
-being the `CHANGELOG.md` section for that version plus the
-`**Full Changelog**: <repo>/compare/<prev>...<new>` line `getReleaseNotes` would have produced.
-`publish-npm.yml` fires on a manually-created release exactly as it would on a scripted one.
+**If a release ever half-fails here again**, `npm pack` has already written the tarball, so recovery needs no rebuild: `gh release create <version> dist/<tarball> --title v<version> --notes-file <notes>`, the notes being the `CHANGELOG.md` section for that version plus the `**Full Changelog**: <repo>/compare/<prev>...<new>` line `getReleaseNotes` would have produced. `publish-npm.yml` fires on a manually-created release exactly as it would on a scripted one.
 
 ## L38. Settings modal — the popout is the cause; the pre-attach is only a floor (`openSettingsTab`)
 
-`app.setting.open()` on its own does **nothing observable** from a test. `obsidian-backlink-full-path`
-concluded from exactly this that the settings tab **cannot** be captured and wrote the impossibility down;
-the diagnosis was right and the conclusion was not. `obsidian-frontmatter-markdown-links` skipped the
-settings shot too but recorded no reason for it — which is why that shot went just as long without a retry,
-and is not the same thing as writing an impossibility down.
+`app.setting.open()` on its own does **nothing observable** from a test. `obsidian-backlink-full-path` concluded from exactly this that the settings tab **cannot** be captured and wrote the impossibility down; the diagnosis was right and the conclusion was not. `obsidian-frontmatter-markdown-links` skipped the settings shot too but recorded no reason for it — which is why that shot went just as long without a retry, and is not the same thing as writing an impossibility down.
 
-**This section used to say the cause was a detached `containerEl` that `open()` never attaches. That was
-wrong** — a misdiagnosis of the popout, corrected on 2026-09-05 after a probe against a live Obsidian
-1.14.0 measured what actually happens on 2026-09-03. The real
-mechanism is **L48**: `app.setting` is popout-capable, Obsidian ships `settingsPopoutWindow` as `true`, and
-on desktop `open()` therefore builds the modal in a **second Electron window**. Turn that key off and
-`open()` attaches `containerEl` to the driven document *itself* — measured in
-`owned-instance-worker-attach.integration.test.ts`, which asserts exactly that against a live instance.
+**This section used to say the cause was a detached `containerEl` that `open()` never attaches. That was wrong** — a misdiagnosis of the popout, corrected on 2026-09-05 after a probe against a live Obsidian 1.14.0 measured what actually happens on 2026-09-03. The real mechanism is **L48**: `app.setting` is popout-capable, Obsidian ships `settingsPopoutWindow` as `true`, and on desktop `open()` therefore builds the modal in a **second Electron window**. Turn that key off and `open()` attaches `containerEl` to the driven document *itself* — measured in `owned-instance-worker-attach.integration.test.ts`, which asserts exactly that against a live instance.
 
 So the two layers are:
 
-- **The fix is the vault-level default** (**L48**). Every vault the global setup provisions carries
-  `settingsPopoutWindow: false`, so a consumer suite — which reaches that vault through
-  `getTemporaryVault()` — needs nothing. The exception is a suite whose *subject* is that second window;
-  it opts back in per test through `withAppConfig` (**L48**), which restores the key afterwards, rather
-  than setting it inline and leaving it on for the rest of the run.
-- **The pre-attach is a fallback, not the fix.** `openSettingsTab` still appends `containerEl` to
-  `document.body` before `open()`, and **its order is still load-bearing** (attaching afterwards is too
-  late; whatever the modal rendered has already gone where it went). It matters only for a vault that does
-  *not* carry the default — one built in-worker with `new TemporaryVault()`, or a caller-supplied vault
-  handed to `connectToCdp`. Proof it is not redundant: disabling the append makes
-  `eval-in-obsidian.integration.test.ts`'s two attach assertions fail, on exactly such a vault, while the
-  row reads keep passing — the popout signature. Proof it is not sufficient either: it keeps `containerEl`
-  reachable as an object, but a **screenshot** frames this window, and a popout leaves this window empty.
+- **The fix is the vault-level default** (**L48**). Every vault the global setup provisions carries `settingsPopoutWindow: false`, so a consumer suite — which reaches that vault through `getTemporaryVault()` — needs nothing. The exception is a suite whose *subject* is that second window; it opts back in per test through `withAppConfig` (**L48**), which restores the key afterwards, rather than setting it inline and leaving it on for the rest of the run.
+- **The pre-attach is a fallback, not the fix.** `openSettingsTab` still appends `containerEl` to `document.body` before `open()`, and **its order is still load-bearing** (attaching afterwards is too late; whatever the modal rendered has already gone where it went). It matters only for a vault that does *not* carry the default — one built in-worker with `new TemporaryVault()`, or a caller-supplied vault handed to `connectToCdp`. Proof it is not redundant: disabling the append makes `eval-in-obsidian.integration.test.ts`'s two attach assertions fail, on exactly such a vault, while the row reads keep passing — the popout signature. Proof it is not sufficient either: it keeps `containerEl` reachable as an object, but a **screenshot** frames this window, and a popout leaves this window empty.
 
 The harness owns both so no plugin has to copy either.
 
 Two layers, the same split as `captureObsidianScreenshot` (Node-side) over the renderer-side `lib` bag:
 
-- **`lib.openSettingsTab({ tabId, timeoutInMilliseconds? })`** — a **base** `lib` member
-  (`namespace-bootstrap.ts`, typed on `Lib` in `src/eval-in-obsidian.ts`; see **L16**), for a callback that
-  also probes the rendered DOM.
-- **`openObsidianSettingsTab({ tabId, timeoutInMilliseconds?, transport?, vaultPath? })`**
-  (`src/open-obsidian-settings-tab.ts`) — the context-resolving Node-side entry point a screenshot suite
-  calls before `captureObsidianScreenshot`.
+- **`lib.openSettingsTab({ tabId, timeoutInMilliseconds? })`** — a **base** `lib` member (`namespace-bootstrap.ts`, typed on `Lib` in `src/eval-in-obsidian.ts`; see **L16**), for a callback that also probes the rendered DOM.
+- **`openObsidianSettingsTab({ tabId, timeoutInMilliseconds?, transport?, vaultPath? })`** (`src/open-obsidian-settings-tab.ts`) — the context-resolving Node-side entry point a screenshot suite calls before `captureObsidianScreenshot`.
 
-Both resolve to the `.setting-item-name` texts the tab rendered — the proof it rendered, and what a caller
-asserts on. A tab that legitimately renders no such rows (Hotkeys) gives an empty array.
+Both resolve to the `.setting-item-name` texts the tab rendered — the proof it rendered, and what a caller asserts on. A tab that legitimately renders no such rows (Hotkeys) gives an empty array.
 
 Three behaviors worth knowing, all measured against a live instance rather than assumed:
 
-- **`tabId` is REQUIRED, not optional.** `open()` alone leaves `activeTab === null` and draws **zero** rows
-  on a harness-owned instance: the modal restores the profile's last tab, and an isolated profile has never
-  opened one. An optional `tabId` would therefore hand back an empty modal — the very symptom being ruled
-  out — so the API refuses to express it.
-- **An unknown id fails fast, listing the ids that exist**, instead of spending the whole timeout looking
-  identical to the does-not-render symptom. Both `settingTabs` (core) and `pluginTabs` (plugins) are
-  searched — a plugin's tab is **not** in `settingTabs`.
-- **Readiness is polled, never slept.** The recipe was found with a blind `sleep(500)`; the modal's own
-  `activeTab.id` + `activeTab.containerEl.childElementCount` are real signals, so the helper waits on those.
+- **`tabId` is REQUIRED, not optional.** `open()` alone leaves `activeTab === null` and draws **zero** rows on a harness-owned instance: the modal restores the profile's last tab, and an isolated profile has never opened one. An optional `tabId` would therefore hand back an empty modal — the very symptom being ruled out — so the API refuses to express it.
+- **An unknown id fails fast, listing the ids that exist**, instead of spending the whole timeout looking identical to the does-not-render symptom. Both `settingTabs` (core) and `pluginTabs` (plugins) are searched — a plugin's tab is **not** in `settingTabs`.
+- **Readiness is polled, never slept.** The recipe was found with a blind `sleep(500)`; the modal's own `activeTab.id` + `activeTab.containerEl.childElementCount` are real signals, so the helper waits on those.
 
-**Verified on both transports.** All of the above was first proven against a live desktop instance over
-CDP. `obsidian-frontmatter-markdown-links` then ran `openObsidianSettingsTab` unchanged over the **Appium**
-transport (2026-08-30): its android capture leg went 3/3 green on a cold AVD, with the plugin's settings tab
-rendered and its rows returned. Nothing in the helper is desktop-specific, but that is now measured rather
-than assumed.
+**Verified on both transports.** All of the above was first proven against a live desktop instance over CDP. `obsidian-frontmatter-markdown-links` then ran `openObsidianSettingsTab` unchanged over the **Appium** transport (2026-08-30): its android capture leg went 3/3 green on a cold AVD, with the plugin's settings tab rendered and its rows returned. Nothing in the helper is desktop-specific, but that is now measured rather than assumed.
 
-`app.setting.close()` is the counterpart. Obsidian leaves the container attached on close, and the attach is
-a `contains` check, so re-opening simply works.
+`app.setting.close()` is the counterpart. Obsidian leaves the container attached on close, and the attach is a `contains` check, so re-opening simply works.
 
 ## L39. Trusted input on mobile — a CDP channel to the WebView, not Appium actions
 
-The trusted-input helpers of **L8** / **L11** / **L14** work on Android too. This section is the *why* of
-the mechanism; the helper semantics live with each helper.
+The trusted-input helpers of **L8** / **L11** / **L14** work on Android too. This section is the *why* of the mechanism; the helper semantics live with each helper.
 
 ### Why the obvious route does not work
 
-Every helper runs **in the renderer**, inside the `lib` bag `evalWrapper` builds. On desktop that is fine:
-`electron.remote` bridges into the main process in-band, so `sendInputEvent` is one synchronous call away.
-On Android there is **no in-page route to a trusted event at all** — `dispatchEvent` and `element.click()`
-are `isTrusted === false` by spec — so the injection has to happen on the **Node** side, and the renderer
-has to reach it *mid-closure*.
+Every helper runs **in the renderer**, inside the `lib` bag `evalWrapper` builds. On desktop that is fine: `electron.remote` bridges into the main process in-band, so `sendInputEvent` is one synchronous call away. On Android there is **no in-page route to a trusted event at all** — `dispatchEvent` and `element.click()` are `isTrusted === false` by spec — so the injection has to happen on the **Node** side, and the renderer has to reach it *mid-closure*.
 
-That rules out Appium's own W3C actions, which is not a preference but a measured constraint:
-`AppiumTransport.evaluate` runs the whole closure inside one W3C **Execute Script**, and Execute Script
-awaits the promise it returns. While a closure sits waiting on `lib.clickElement(...)`, the WebDriver
-session is **busy** and cannot be asked to do anything else. Native injection is also slow
-(`switchContext` ~17s, **L19**) and would need a CSS-px → device-px mapping — `devicePixelRatio` plus the
-WebView's offset under the status bar — that nothing here computes.
+That rules out Appium's own W3C actions, which is not a preference but a measured constraint: `AppiumTransport.evaluate` runs the whole closure inside one W3C **Execute Script**, and Execute Script awaits the promise it returns. While a closure sits waiting on `lib.clickElement(...)`, the WebDriver session is **busy** and cannot be asked to do anything else. Native injection is also slow (`switchContext` ~17s, **L19**) and would need a CSS-px → device-px mapping — `devicePixelRatio` plus the WebView's offset under the status bar — that nothing here computes.
 
 ### What it does instead
 
-`AppiumTransport` opens its **own** CDP connection to the WebView (`src/webview-cdp.ts`), independent of
-the Appium session:
+`AppiumTransport` opens its **own** CDP connection to the WebView (`src/webview-cdp.ts`), independent of the Appium session:
 
-1. `adb forward` a free port to the app's `localabstract:webview_devtools_remote_<pid>` socket, then the
-   usual `/json` endpoint lists the page targets. The WebView's debugger is provably enabled — the
-   existing `switchContext('WEBVIEW_md.obsidian')` already depends on it.
-2. `Runtime.addBinding` installs a function on the page. The renderer computes the target rect, calls it
-   with a JSON request, and awaits.
-3. `Runtime.bindingCalled` arrives on **our** socket while chromedriver's Execute Script is still pending
-   on **its** socket, so there is no contention. The host first **claims** the request in the page
-   (`claimInput`, the exactly-once bullet below), then injects `Input.dispatchTouchEvent` /
-   `dispatchKeyEvent` / `synthesizeTapGesture` (which command realizes which gesture is the long-press
-   bullet below), then resolves the renderer's promise with a concurrent `Runtime.evaluate`.
+1. `adb forward` a free port to the app's `localabstract:webview_devtools_remote_<pid>` socket, then the usual `/json` endpoint lists the page targets. The WebView's debugger is provably enabled — the existing `switchContext('WEBVIEW_md.obsidian')` already depends on it.
+2. `Runtime.addBinding` installs a function on the page. The renderer computes the target rect, calls it with a JSON request, and awaits.
+3. `Runtime.bindingCalled` arrives on **our** socket while chromedriver's Execute Script is still pending on **its** socket, so there is no contention. The host first **claims** the request in the page (`claimInput`, the exactly-once bullet below), then injects `Input.dispatchTouchEvent` / `dispatchKeyEvent` / `synthesizeTapGesture` (which command realizes which gesture is the long-press bullet below), then resolves the renderer's promise with a concurrent `Runtime.evaluate`.
 
-**CDP takes CSS pixels in the page's own viewport**, so the device-pixel mapping never has to be written —
-the single biggest reason this route is cheaper than the native one.
+**CDP takes CSS pixels in the page's own viewport**, so the device-pixel mapping never has to be written — the single biggest reason this route is cheaper than the native one.
 
-Measured on a live emulator (2026-08-30) before any of it was built: a CDP touch pair produces
-`pointerdown` / `touchstart` / `pointerup` / `touchend` / `click`, **every one `isTrusted: true`**;
-`bindingCalled` does fire while an awaited evaluate is pending; and a second CDP client attaches happily
-alongside a live Appium session. `src/mobile-trusted-input.android.integration.test.ts` re-asserts the
-`isTrusted` half on every run, because that property is the entire point and no weaker observation implies
-it — and asserts the exact per-type event **counts** of a tap, for the reason in the next section.
+Measured on a live emulator (2026-08-30) before any of it was built: a CDP touch pair produces `pointerdown` / `touchstart` / `pointerup` / `touchend` / `click`, **every one `isTrusted: true`**; `bindingCalled` does fire while an awaited evaluate is pending; and a second CDP client attaches happily alongside a live Appium session. `src/mobile-trusted-input.android.integration.test.ts` re-asserts the `isTrusted` half on every run, because that property is the entire point and no weaker observation implies it — and asserts the exact per-type event **counts** of a tap, for the reason in the next section.
 
 ### Consequences worth knowing
 
-- **Every attached host receives every `bindingCalled`, so injection is claimed exactly once, in the
-  page.** CDP broadcasts the event to **every** session attached to the WebView, and a consumer's Vitest
-  run holds two input channels to it — the main process and its worker. Until 12.1.2 each one injected
-  the gesture: measured on a device, two pids serviced request `id=1` in the same millisecond, and one
-  `clickElement` reached the page as `pointerdown, touchstart, pointerdown, touchstart, pointerup,
-  touchend, click`. A key press doubled the same way, and two overlapping `synthesizeTapGesture` calls
-  produced **no** events at all. Downstream that looked like unrelated plugin bugs — a panel toggling open
-  and straight back shut, an Escape closing a menu and then the drawer behind it, a long press raising no
-  menu. It never showed here because this repo's own suite runs **one** process, and because its
-  assertions were `toContain('touchstart')`, which two satisfy as happily as one. Now the host evaluates
-  `claimInput(id)` first — the page is the only thing every host shares, and it runs the racing evaluates
-  one after another — and a host that gets `false` returns without injecting **or answering**, leaving
-  the winner to do both. `checkInputClaimGranted` **fails open**: only a literal `false` suppresses
-  injection, because a page that has dropped the namespace should get a doubled tap rather than a gesture
-  nobody sends. Both trusted-input suites assert **counts**, not presence; do not relax that back to
-  `toContain`, which is the assertion shape that let this ship.
+- **Every attached host receives every `bindingCalled`, so injection is claimed exactly once, in the page.** CDP broadcasts the event to **every** session attached to the WebView, and a consumer's Vitest run holds two input channels to it — the main process and its worker. Until 12.1.2 each one injected the gesture: measured on a device, two pids serviced request `id=1` in the same millisecond, and one `clickElement` reached the page as `pointerdown, touchstart, pointerdown, touchstart, pointerup, touchend, click`. A key press doubled the same way, and two overlapping `synthesizeTapGesture` calls produced **no** events at all. Downstream that looked like unrelated plugin bugs — a panel toggling open and straight back shut, an Escape closing a menu and then the drawer behind it, a long press raising no menu. It never showed here because this repo's own suite runs **one** process, and because its assertions were `toContain('touchstart')`, which two satisfy as happily as one. Now the host evaluates `claimInput(id)` first — the page is the only thing every host shares, and it runs the racing evaluates one after another — and a host that gets `false` returns without injecting **or answering**, leaving the winner to do both. `checkInputClaimGranted` **fails open**: only a literal `false` suppresses injection, because a page that has dropped the namespace should get a doubled tap rather than a gesture nobody sends. Both trusted-input suites assert **counts**, not presence; do not relax that back to `toContain`, which is the assertion shape that let this ship.
 
-- **The helpers are `Promise<void>`, and the `await` is load-bearing.** `pressKey` / `moveMouse` /
-  `clickMouse` / `clickElement` stopped being synchronous when the mobile round-trip was added; the
-  declared `Lib` type says so, so `no-floating-promises` forces the `await` rather than letting a missing
-  one race the assertion. This supersedes **L17**'s former "must stay synchronous (`void`)" note.
-- **The channel is BEST-EFFORT and its absence is not fatal.** It exists only over local `adb`, so there is
-  none on iOS or against a remote hub (BrowserStack). `ensureInputChannel` logs and gives up rather than
-  failing a run that never drives input; a run that *does* gets a legible error from the renderer's own
-  guard, naming the missing channel. A run must never fail because of infrastructure it did not use.
-- **The wire format is declared twice on purpose.** `MobileInputRequest` lives in `src/mobile-input.ts` and
-  is redeclared inside the bootstrap closure, which is serialized via `toString()` and may not reference
-  outer scope (**L15**). The binding name and the request timeout are instead passed *into* the closure as
-  bootstrap params, so those two stay single-sourced. Change the redeclared types together.
-- **`middle` clicks and hovers throw on mobile, deliberately.** Touch has no middle button and no hover
-  state. A silent no-op would leave a test asserting against something that never happened — the exact
-  false-confidence failure trusted input exists to end — so the helper says so instead.
-- **Long-press is Android's gesture, not Obsidian's — and it needs a different CDP command than a tap.**
-  A tap is `Input.dispatchTouchEvent`; a long-press is a single `Input.synthesizeTapGesture` with a
-  `duration` past Android's 500ms recognition threshold. The two routes differ because
-  `dispatchTouchEvent` injects a `WebTouchEvent` **past** the platform's gesture recognizer: nothing sees
-  the hold, so no long press is ever recognized and the pair is classified as a tap however long the host
-  waits between the two halves. `synthesizeTapGesture` goes through Chromium's synthetic-gesture
-  controller, which builds real `MotionEvent`s and feeds them to that recognizer.
+- **The helpers are `Promise<void>`, and the `await` is load-bearing.** `pressKey` / `moveMouse` / `clickMouse` / `clickElement` stopped being synchronous when the mobile round-trip was added; the declared `Lib` type says so, so `no-floating-promises` forces the `await` rather than letting a missing one race the assertion. This supersedes **L17**'s former "must stay synchronous (`void`)" note.
+- **The channel is BEST-EFFORT and its absence is not fatal.** It exists only over local `adb`, so there is none on iOS or against a remote hub (BrowserStack). `ensureInputChannel` logs and gives up rather than failing a run that never drives input; a run that *does* gets a legible error from the renderer's own guard, naming the missing channel. A run must never fail because of infrastructure it did not use.
+- **The wire format is declared twice on purpose.** `MobileInputRequest` lives in `src/mobile-input.ts` and is redeclared inside the bootstrap closure, which is serialized via `toString()` and may not reference outer scope (**L15**). The binding name and the request timeout are instead passed *into* the closure as bootstrap params, so those two stay single-sourced. Change the redeclared types together.
+- **`middle` clicks and hovers throw on mobile, deliberately.** Touch has no middle button and no hover state. A silent no-op would leave a test asserting against something that never happened — the exact false-confidence failure trusted input exists to end — so the helper says so instead.
+- **Long-press is Android's gesture, not Obsidian's — and it needs a different CDP command than a tap.** A tap is `Input.dispatchTouchEvent`; a long-press is a single `Input.synthesizeTapGesture` with a `duration` past Android's 500ms recognition threshold. The two routes differ because `dispatchTouchEvent` injects a `WebTouchEvent` **past** the platform's gesture recognizer: nothing sees the hold, so no long press is ever recognized and the pair is classified as a tap however long the host waits between the two halves. `synthesizeTapGesture` goes through Chromium's synthetic-gesture controller, which builds real `MotionEvent`s and feeds them to that recognizer.
 
-  **This corrects the former reading**, which was that Obsidian Mobile implements long-press itself on a
-  JavaScript `touchstart` timer, so the dwell only had to clear *its* threshold — and that a probe `div`
-  therefore could not show a `contextmenu` even from a working gesture. Measured on a live emulator
-  (2026-09-08) with the dwell route, against a **real** `.nav-file-title` in the file explorer: the press
-  produced `pointerdown` / `touchstart` / `touchend` / `click` and **opened the note**. No `contextmenu`,
-  no menu. With the gesture route, the same press emits a trusted `contextmenu` and Obsidian's own file
-  menu opens. The old reading was not merely incomplete — it explained the symptom away, and three
-  consumer suites were filed as plugin defects on the strength of it.
+  **This corrects the former reading**, which was that Obsidian Mobile implements long-press itself on a JavaScript `touchstart` timer, so the dwell only had to clear *its* threshold — and that a probe `div` therefore could not show a `contextmenu` even from a working gesture. Measured on a live emulator (2026-09-08) with the dwell route, against a **real** `.nav-file-title` in the file explorer: the press produced `pointerdown` / `touchstart` / `touchend` / `click` and **opened the note**. No `contextmenu`, no menu. With the gesture route, the same press emits a trusted `contextmenu` and Obsidian's own file menu opens. The old reading was not merely incomplete — it explained the symptom away, and three consumer suites were filed as plugin defects on the strength of it.
 
-  **Press a real Obsidian element, not a probe `div`** — the advice survives its old justification, for a
-  better reason: a `div` shows only that the event arrived, never that a consumer's menu opens from it.
-  `mobile-trusted-input.android.integration.test.ts` now asserts both halves, so the claim in this bullet
-  is enforced rather than remembered.
-- **A long-press aimed off the viewport now THROWS, where the old dwell silently did nothing.**
-  `synthesizeTapGesture` validates its point and answers `Position out of bounds`, which is the better
-  failure — a gesture that pressed nothing used to leave the test asserting against an event that never
-  happened. It does mean an element that is laid out but not yet **on screen** is a real error: a sidebar
-  mid-animation already has its full width at a negative `left`, so wait on the element's **centre point
-  being inside the viewport**, not on its width.
-- **`obsidian-dev-utils` reaches this mechanism through `ns.trustedInput`, and only through it** (added
-  2026-08-31). Everything above happens inside the renderer closure, so a caller outside the
-  harness has no way in — and `obsidian-dev-utils` must never import this package at runtime (its own peer-dependency rule), which rules out
-  the direct route. `ns.trustedInput` (`namespace-bootstrap.ts`, **L17**) publishes the seven helpers on
-  the namespace object; `obsidian-dev-utils`' mobile mirror reads them off `window.__obsidianIntegrationTesting`. Two
-  alternatives were rejected: `obsidian-dev-utils` re-implementing the wire format on top of `resolveInput` (the library
-  monkey-patching the harness inverts that dependency direction), and shipping a throwing stub in `obsidian-dev-utils` (no
-  working mobile path at all). Note the seam publishes the helpers, **not** the channel: `resolveInput`
-  and the `Runtime.addBinding` half stay harness-internal.
+  **Press a real Obsidian element, not a probe `div`** — the advice survives its old justification, for a better reason: a `div` shows only that the event arrived, never that a consumer's menu opens from it. `mobile-trusted-input.android.integration.test.ts` now asserts both halves, so the claim in this bullet is enforced rather than remembered.
+- **A long-press aimed off the viewport now THROWS, where the old dwell silently did nothing.** `synthesizeTapGesture` validates its point and answers `Position out of bounds`, which is the better failure — a gesture that pressed nothing used to leave the test asserting against an event that never happened. It does mean an element that is laid out but not yet **on screen** is a real error: a sidebar mid-animation already has its full width at a negative `left`, so wait on the element's **centre point being inside the viewport**, not on its width.
+- **`obsidian-dev-utils` reaches this mechanism through `ns.trustedInput`, and only through it** (added 2026-08-31). Everything above happens inside the renderer closure, so a caller outside the harness has no way in — and `obsidian-dev-utils` must never import this package at runtime (its own peer-dependency rule), which rules out the direct route. `ns.trustedInput` (`namespace-bootstrap.ts`, **L17**) publishes the seven helpers on the namespace object; `obsidian-dev-utils`' mobile mirror reads them off `window.__obsidianIntegrationTesting`. Two alternatives were rejected: `obsidian-dev-utils` re-implementing the wire format on top of `resolveInput` (the library monkey-patching the harness inverts that dependency direction), and shipping a throwing stub in `obsidian-dev-utils` (no working mobile path at all). Note the seam publishes the helpers, **not** the channel: `resolveInput` and the `Runtime.addBinding` half stay harness-internal.
 
 ## L40. Adopting an Appium server is not the same as trusting it (marker + wedged-server recovery)
 
-**L27** made *provisioning* fail fast. This section covers the opposite case: a server that is already
-there. The preflight adopts whatever answers `/status` on the port — the right default, since a second
-server cannot bind an occupied port — but adoption was unconditional, and **liveness is not readiness**.
+**L27** made *provisioning* fail fast. This section covers the opposite case: a server that is already there. The preflight adopts whatever answers `/status` on the port — the right default, since a second server cannot bind an occupied port — but adoption was unconditional, and **liveness is not readiness**.
 
-The failure that motivated this: a server auto-started by a run ~1h earlier was still listening and
-still answering `/status` with `ready: true`, but its `appium-adb` could no longer enumerate devices. Every
-session creation then died with `Could not find a connected Android device in 20000ms` while `adb devices`
-from the shell listed `emulator-5554` instantly. The error names the wrong subject — it blames a device
-that is demonstrably present — so the obvious next diagnostic is the one that misleads. Killing that
-server and starting a fresh one fixed the suite with no other change.
+The failure that motivated this: a server auto-started by a run ~1h earlier was still listening and still answering `/status` with `ready: true`, but its `appium-adb` could no longer enumerate devices. Every session creation then died with `Could not find a connected Android device in 20000ms` while `adb devices` from the shell listed `emulator-5554` instantly. The error names the wrong subject — it blames a device that is demonstrably present — so the obvious next diagnostic is the one that misleads. Killing that server and starting a fresh one fixed the suite with no other change.
 
-- **Provenance is recorded, so it can be reported.** `src/appium-server-marker.ts` writes a per-port JSON
-  sentinel (`<tmpdir>/obsidian-integration-testing/<port>.appium-server.json`: `pid`, `port`,
-  `startedAtInMilliseconds`) whenever the harness auto-starts a server, and clears it when that server is
-  stopped. The preflight log now says which kind of server it adopted — *"started by an earlier run of this
-  harness, pid N, up for Ns"* vs *"not started by this harness"* — on **every** run, including ones that go
-  on to succeed. A long-lived leftover is therefore visible in the transcript, not only in an error.
-- **No preflight can catch the wedge; it is recognized from the failed session.** A wedged server answers
-  `/status` normally, so no probe short of creating a session distinguishes it. `src/wedged-appium-server.ts`
-  (pure, unit-tested) classifies the failure instead: `checkIsAppiumDeviceNotFoundError` matches
-  `appium-adb`'s message through the whole `cause` chain, and `resolveWedgedAppiumServerRemedy` convicts the
-  server only when the **host's own adb still lists the device**. If the host cannot see it either, the
-  original error was honest and is rethrown untouched.
-- **Only a server this harness started is restarted.** `restart` requires: the device-not-found error, the
-  host's adb sees the device, the server was *adopted* (not started by this run), auto-start is not disabled,
-  and the marker's PID is alive. Then the marked process tree is killed, the port is waited out
-  (`waitForAppiumStopped` — a lingering socket would let the readiness poll pass on the dying server), a
-  replacement is started, and the session is retried **once**; the replacement is owned by this run and torn
-  down with it. Everything else — a foreign/user-managed server, `shouldAutoStartAppium: false`, a server
-  this run started itself — is **reported, never killed**. Terminating a process the run does not own is not
-  its call to make.
-- **The error names the server.** `buildWedgedAppiumServerMessage` replaces the device-not-found text with
-  the server's origin, the device the host can see, an explicit warning that `adb devices` will list the
-  device and mislead you, and reason-specific advice (foreign server / auto-start disabled / freshly started
-  / restart did not help), plus the marker's pid and age when known. The original error is kept as the
-  `cause`.
-- **`/status` is also read, not just counted.** `checkAppiumReachable` now requires a 2xx and an Appium
-  status body that does not report `ready: false` (Appium sets that while shutting down), so a server on its
-  way down is no longer adopted as healthy. The parse is deliberately tolerant — a malformed or
-  flag-less body reads as ready, since an unrecognized shape must not make a healthy server look
-  unreachable. This does **not** catch the wedge, which is why the session-side recognition above exists.
-- **Pure/testable split** mirrors L27: classification, remedy and message live in unit-tested modules
-  (`wedged-appium-server.ts`, `appium-server-marker.ts`); the spawn/kill/HTTP glue stays in the `v8 ignore`
-  factory. `killProcessTreeByPid` was split out of `kill-process-tree.ts` because a marker yields a PID, not
-  a `ChildProcess`.
+- **Provenance is recorded, so it can be reported.** `src/appium-server-marker.ts` writes a per-port JSON sentinel (`<tmpdir>/obsidian-integration-testing/<port>.appium-server.json`: `pid`, `port`, `startedAtInMilliseconds`) whenever the harness auto-starts a server, and clears it when that server is stopped. The preflight log now says which kind of server it adopted — *"started by an earlier run of this harness, pid N, up for Ns"* vs *"not started by this harness"* — on **every** run, including ones that go on to succeed. A long-lived leftover is therefore visible in the transcript, not only in an error.
+- **No preflight can catch the wedge; it is recognized from the failed session.** A wedged server answers `/status` normally, so no probe short of creating a session distinguishes it. `src/wedged-appium-server.ts` (pure, unit-tested) classifies the failure instead: `checkIsAppiumDeviceNotFoundError` matches `appium-adb`'s message through the whole `cause` chain, and `resolveWedgedAppiumServerRemedy` convicts the server only when the **host's own adb still lists the device**. If the host cannot see it either, the original error was honest and is rethrown untouched.
+- **Only a server this harness started is restarted.** `restart` requires: the device-not-found error, the host's adb sees the device, the server was *adopted* (not started by this run), auto-start is not disabled, and the marker's PID is alive. Then the marked process tree is killed, the port is waited out (`waitForAppiumStopped` — a lingering socket would let the readiness poll pass on the dying server), a replacement is started, and the session is retried **once**; the replacement is owned by this run and torn down with it. Everything else — a foreign/user-managed server, `shouldAutoStartAppium: false`, a server this run started itself — is **reported, never killed**. Terminating a process the run does not own is not its call to make.
+- **The error names the server.** `buildWedgedAppiumServerMessage` replaces the device-not-found text with the server's origin, the device the host can see, an explicit warning that `adb devices` will list the device and mislead you, and reason-specific advice (foreign server / auto-start disabled / freshly started / restart did not help), plus the marker's pid and age when known. The original error is kept as the `cause`.
+- **`/status` is also read, not just counted.** `checkAppiumReachable` now requires a 2xx and an Appium status body that does not report `ready: false` (Appium sets that while shutting down), so a server on its way down is no longer adopted as healthy. The parse is deliberately tolerant — a malformed or flag-less body reads as ready, since an unrecognized shape must not make a healthy server look unreachable. This does **not** catch the wedge, which is why the session-side recognition above exists.
+- **Pure/testable split** mirrors L27: classification, remedy and message live in unit-tested modules (`wedged-appium-server.ts`, `appium-server-marker.ts`); the spawn/kill/HTTP glue stays in the `v8 ignore` factory. `killProcessTreeByPid` was split out of `kill-process-tree.ts` because a marker yields a PID, not a `ChildProcess`.
 
 ## L41. Headless demo-vault bootstrap — the injected plugins install themselves
 
-- **The problem was a GUI step in the only documented remedy.** `buildDemoVaultPopulate` requires each
-  injected community plugin's `main.js` / `manifest.json` to be on disk and throws when they are not — the
-  throw itself is deliberate and unchanged. Its message used to name exactly one fix: *open
-  `demo-vault/` in Obsidian once so `demo-vault-helper` installs it*. But `.obsidian/plugins/*` is gitignored
-  in a plugin repo, so that state lives on the one machine that did it and is invisible to a fresh
-  clone, a new machine, or CI — and since a plugin repo's `npm run version` preflight runs
-  `test:integration`, **a clean clone could not cut a release** until a human opened a GUI. It surfaced ~7
-  minutes into the App Update Notifier 1.0.0 preflight.
-- **Downloading the release assets is the exact equivalent.** A plugin's published `main.js` /
-  `manifest.json` / `styles.css` are what Obsidian's own community browser installs, so writing them into
-  `demo-vault/.obsidian/plugins/<id>/` produces the same folder — and therefore the same standard
-  `*-demo-vault.zip`, which unzips into a single `*-demo-vault-<version>` folder and is supposed to
-  carry `fix-require-modules` anyway.
-- **The id → repo mapping is not hardcoded; it comes from Obsidian.**
-  `community-plugin-registry.ts` (pure, unit-tested) holds the registry URL —
-  `obsidianmd/obsidian-releases`' `community-plugins.json`, the same table the in-app browser installs from —
-  the `selectPluginRepo` lookup, and the `buildPluginAssetUrl` shapes for a pinned tag vs the moving latest
-  release. `InjectPluginParams.repo` overrides the lookup (and is the only way to bootstrap an unlisted
-  plugin); `InjectPluginParams.version` pins a tag.
-- **Sync stays sync — that is why there are two entry points, not one.** `fetch` has no synchronous form and
-  `buildDemoVaultPopulate` is synchronous, so auto-healing cannot go inside `seedPlugin`. It lives on
-  `buildDemoVaultPopulateAsync` (`demo-vault-bootstrap.ts`), reachable because the Vitest **and** Jest
-  `populate` thunks now return `PopulateFilesParams | Promise<PopulateFilesParams>` — a widening, so every
-  existing synchronous thunk still typechecks and `CoreSetupParams.populate` is untouched (the adapters
-  `await` it). The `bootstrap-demo-vault` CLI subcommand is the same installer for a one-off repair.
-- **One definition of "missing".** `resolveMissingInjectedPlugins` is exported from `demo-vault-populate.ts`
-  and used by both the throw path and the bootstrap, so the two cannot drift. It also owns the opt-out: a
-  plugin with an explicit `sourceDirectory` names a **local build output**, never somewhere to download a
-  published release into, so it is excluded even under `--force` and gets its own error message.
-- **Module direction avoids a cycle.** `demo-vault-bootstrap.ts` imports from `demo-vault-populate.ts`, never
-  the reverse — which is why `buildDemoVaultPopulateAsync` lives in the bootstrap module rather than next to
-  its synchronous sibling.
-- **Pure/testable split** as L27/L39: the registry lookup, URL building and missing-detection are unit-tested;
-  only the `fetch`/write glue sits in the `v8 ignore` band, and the unit tests deliberately cover the
-  no-download paths so the suite never touches the network.
+- **The problem was a GUI step in the only documented remedy.** `buildDemoVaultPopulate` requires each injected community plugin's `main.js` / `manifest.json` to be on disk and throws when they are not — the throw itself is deliberate and unchanged. Its message used to name exactly one fix: *open `demo-vault/` in Obsidian once so `demo-vault-helper` installs it*. But `.obsidian/plugins/*` is gitignored in a plugin repo, so that state lives on the one machine that did it and is invisible to a fresh clone, a new machine, or CI — and since a plugin repo's `npm run version` preflight runs `test:integration`, **a clean clone could not cut a release** until a human opened a GUI. It surfaced ~7 minutes into the App Update Notifier 1.0.0 preflight.
+- **Downloading the release assets is the exact equivalent.** A plugin's published `main.js` / `manifest.json` / `styles.css` are what Obsidian's own community browser installs, so writing them into `demo-vault/.obsidian/plugins/<id>/` produces the same folder — and therefore the same standard `*-demo-vault.zip`, which unzips into a single `*-demo-vault-<version>` folder and is supposed to carry `fix-require-modules` anyway.
+- **The id → repo mapping is not hardcoded; it comes from Obsidian.** `community-plugin-registry.ts` (pure, unit-tested) holds the registry URL — `obsidianmd/obsidian-releases`' `community-plugins.json`, the same table the in-app browser installs from — the `selectPluginRepo` lookup, and the `buildPluginAssetUrl` shapes for a pinned tag vs the moving latest release. `InjectPluginParams.repo` overrides the lookup (and is the only way to bootstrap an unlisted plugin); `InjectPluginParams.version` pins a tag.
+- **Sync stays sync — that is why there are two entry points, not one.** `fetch` has no synchronous form and `buildDemoVaultPopulate` is synchronous, so auto-healing cannot go inside `seedPlugin`. It lives on `buildDemoVaultPopulateAsync` (`demo-vault-bootstrap.ts`), reachable because the Vitest **and** Jest `populate` thunks now return `PopulateFilesParams | Promise<PopulateFilesParams>` — a widening, so every existing synchronous thunk still typechecks and `CoreSetupParams.populate` is untouched (the adapters `await` it). The `bootstrap-demo-vault` CLI subcommand is the same installer for a one-off repair.
+- **One definition of "missing".** `resolveMissingInjectedPlugins` is exported from `demo-vault-populate.ts` and used by both the throw path and the bootstrap, so the two cannot drift. It also owns the opt-out: a plugin with an explicit `sourceDirectory` names a **local build output**, never somewhere to download a published release into, so it is excluded even under `--force` and gets its own error message.
+- **Module direction avoids a cycle.** `demo-vault-bootstrap.ts` imports from `demo-vault-populate.ts`, never the reverse — which is why `buildDemoVaultPopulateAsync` lives in the bootstrap module rather than next to its synchronous sibling.
+- **Pure/testable split** as L27/L39: the registry lookup, URL building and missing-detection are unit-tested; only the `fetch`/write glue sits in the `v8 ignore` band, and the unit tests deliberately cover the no-download paths so the suite never touches the network.
 
 ## L42. `webdriverio` is Appium-only — it must stay behind a lazy import
 
-`src/transport-factory.ts` calls exactly two `webdriverio` entry points, both inside
-`AppiumTransportFactory`: `attach` (reattaching to an existing session) and `remote` (creating one).
-Nothing on the desktop CDP path touches the module. It is therefore loaded through the module-local
-`importWebdriverio()` — the same shape as `src/sharp-loader.ts`, `no-restricted-syntax` disable and
-justification included — and imported statically **only** as `import type { attach, remote }`, which
-erases.
+`src/transport-factory.ts` calls exactly two `webdriverio` entry points, both inside `AppiumTransportFactory`: `attach` (reattaching to an existing session) and `remote` (creating one). Nothing on the desktop CDP path touches the module. It is therefore loaded through the module-local `importWebdriverio()` — the same shape as `src/sharp-loader.ts`, `no-restricted-syntax` disable and justification included — and imported statically **only** as `import type { attach, remote }`, which erases.
 
 **Two reasons it must not go back to a static import.**
 
-- **Weight.** `src/index.ts` re-exports `evalInObsidian`, which imports this module, so an eager
-  `webdriverio` puts the whole WebDriver stack — `@wdio/*`, `archiver`, `cheerio`, `jszip` — in the graph
-  of every consumer of the package index, including the desktop-only ones who never start a session.
-- **It breaks Jest outright.** `@wdio/logger` imports `chalk@5`, which reads its own
-  `#supports-color` internal subpath import at module scope. Jest's `--experimental-vm-modules` linker
-  does not link `#`-prefixed internal imports before the body runs, so the binding is still in its TDZ:
-  every Jest ESM suite whose graph reaches this module dies at import with
-  `ReferenceError: Cannot access 'supportsColor' before initialization`, before a single test runs — the
-  same silent shape as a missing `OBSIDIAN_METADATA` global (**L6**). That is what kept `npm run test:jest` at "1 suite, 0 tests". **There is no
-  config-level escape**: `moduleNameMapper` is bypassed for `#` specifiers (mapping
-  `^#supports-color$` to a path that does not even exist changes nothing), and Jest cannot drop ESM mode
-  here because `scripts/jest-config.ts` and `scripts/helpers/metadata-global.ts` use
-  `import.meta.dirname`. Removing the edge is the fix; masking `chalk` would only have covered this
-  repo's own suite and left every Jest consumer of the barrel broken.
+- **Weight.** `src/index.ts` re-exports `evalInObsidian`, which imports this module, so an eager `webdriverio` puts the whole WebDriver stack — `@wdio/*`, `archiver`, `cheerio`, `jszip` — in the graph of every consumer of the package index, including the desktop-only ones who never start a session.
+- **It breaks Jest outright.** `@wdio/logger` imports `chalk@5`, which reads its own `#supports-color` internal subpath import at module scope. Jest's `--experimental-vm-modules` linker does not link `#`-prefixed internal imports before the body runs, so the binding is still in its TDZ: every Jest ESM suite whose graph reaches this module dies at import with `ReferenceError: Cannot access 'supportsColor' before initialization`, before a single test runs — the same silent shape as a missing `OBSIDIAN_METADATA` global (**L6**). That is what kept `npm run test:jest` at "1 suite, 0 tests". **There is no config-level escape**: `moduleNameMapper` is bypassed for `#` specifiers (mapping `^#supports-color$` to a path that does not even exist changes nothing), and Jest cannot drop ESM mode here because `scripts/jest-config.ts` and `scripts/helpers/metadata-global.ts` use `import.meta.dirname`. Removing the edge is the fix; masking `chalk` would only have covered this repo's own suite and left every Jest consumer of the barrel broken.
 
-Per **L6** this reaches Vitest / Jest / Manual alike — the lazy load lives in the shared factory, so no
-adapter changes. One deliberate consequence in the built output: the CJS bundle now emits
-`await import("webdriverio")` rather than `require("webdriverio")`, so Node resolves the package's
-`import` condition (`build/node.js`) instead of its `require` one (`build/index.cjs`). Both are supported
-entry points and only the Appium path reaches them.
+Per **L6** this reaches Vitest / Jest / Manual alike — the lazy load lives in the shared factory, so no adapter changes. One deliberate consequence in the built output: the CJS bundle now emits `await import("webdriverio")` rather than `require("webdriverio")`, so Node resolves the package's `import` condition (`build/node.js`) instead of its `require` one (`build/index.cjs`). Both are supported entry points and only the Appium path reaches them.
 
 ## L43. Android startup is two budgets, and a reused device gets the same settle gate as a started one
 
-A release preflight on 2026-08-31 failed Android setup with
-`Obsidian layout did not become ready within 90000ms` while `adb devices` reported
-`emulator-5554 device` throughout. This is the real failing trace **L19**'s "Honest limit" asked for,
-and it says the 90 s was never spent on Obsidian: L19 measured `waitForLayoutReady` at ~1 s, and ≤8.4 s
-under 12-core + disk + memory stress. It was spent on ~2–4 `browser.execute` round-trips against a guest
-that was still churning — the 25–50× round-trip inflation L19 measured directly.
+A release preflight on 2026-08-31 failed Android setup with `Obsidian layout did not become ready within 90000ms` while `adb devices` reported `emulator-5554 device` throughout. This is the real failing trace **L19**'s "Honest limit" asked for, and it says the 90 s was never spent on Obsidian: L19 measured `waitForLayoutReady` at ~1 s, and ≤8.4 s under 12-core + disk + memory stress. It was spent on ~2–4 `browser.execute` round-trips against a guest that was still churning — the 25–50× round-trip inflation L19 measured directly.
 
 ### The hole: `ensureDeviceConnected`'s reuse branch skipped the gate
 
-`ensureDeviceConnected` has two branches. The start-a-new-emulator branch runs `waitForBoot` →
-`waitForDeviceIdle` → `wakeScreen`. The **reuse-an-already-running-device branch returned immediately**,
-doing only `suppressErrorDialogs` — and `transport-options.ts` documented that as intended ("Only applies
-to a harness-started emulator, not a reused one"). Appearing in `adb devices` says only that `adbd`
-answers; the guest can still be running the boot animation or `dex2oat`. So the one shape that most needs
-the gate — an emulator booted moments earlier, by hand or by a previous run — was the one shape that
-never got it, and the cost landed on whatever polled the WebView next.
+`ensureDeviceConnected` has two branches. The start-a-new-emulator branch runs `waitForBoot` → `waitForDeviceIdle` → `wakeScreen`. The **reuse-an-already-running-device branch returned immediately**, doing only `suppressErrorDialogs` — and `transport-options.ts` documented that as intended ("Only applies to a harness-started emulator, not a reused one"). Appearing in `adb devices` says only that `adbd` answers; the guest can still be running the boot animation or `dex2oat`. So the one shape that most needs the gate — an emulator booted moments earlier, by hand or by a previous run — was the one shape that never got it, and the cost landed on whatever polled the WebView next.
 
-The reuse branch now runs the same three steps, so `deviceIdleTimeoutInMilliseconds` governs both paths
-(`0` still skips; the wait is still best-effort — it warns and proceeds). `waitForBoot`'s `emulator`
-parameter became `ProcessLaunch | undefined`: a reused device was not launched by this run, so there is
-no exit info to fail fast on. `ensureAvdExists` deliberately stays where it is — **L27**'s reasoning for
-skipping the AVD preflight on a running AVD is untouched.
+The reuse branch now runs the same three steps, so `deviceIdleTimeoutInMilliseconds` governs both paths (`0` still skips; the wait is still best-effort — it warns and proceeds). `waitForBoot`'s `emulator` parameter became `ProcessLaunch | undefined`: a reused device was not launched by this run, so there is no exit info to fail fast on. `ensureAvdExists` deliberately stays where it is — **L27**'s reasoning for skipping the AVD preflight on a running AVD is untouched.
 
 ### The budget: one wall clock became two phases
 
-`registerVault` waited out `location.reload()` on a single 90 s clock started at the reload, so it paid
-for the app's cold start *and* Obsidian's own work out of one budget sized for the latter. That is why a
-first run after a machine restart failed once by design. It is now two phases, each with its own budget:
+`registerVault` waited out `location.reload()` on a single 90 s clock started at the reload, so it paid for the app's cold start *and* Obsidian's own work out of one budget sized for the latter. That is why a first run after a machine restart failed once by design. It is now two phases, each with its own budget:
 
-- **`appStartTimeoutInMilliseconds` (`@default 180000`)** — until `globalThis.app` exists. Everything
-  here is outside Obsidian's control (the WebView reloading, a guest still optimizing packages), so it
-  sits in the same generous tier as `appiumStartTimeoutInMilliseconds` /
-  `sessionConnectionRetryTimeoutInMilliseconds`.
-- **`layoutReadyTimeoutInMilliseconds` (`@default 90000`)** — until `app.workspace.layoutReady`, its
-  clock starting **only when phase 1 completes**. It now covers Obsidian's work alone, which is why it
-  can stay tight.
+- **`appStartTimeoutInMilliseconds` (`@default 180000`)** — until `globalThis.app` exists. Everything here is outside Obsidian's control (the WebView reloading, a guest still optimizing packages), so it sits in the same generous tier as `appiumStartTimeoutInMilliseconds` / `sessionConnectionRetryTimeoutInMilliseconds`.
+- **`layoutReadyTimeoutInMilliseconds` (`@default 90000`)** — until `app.workspace.layoutReady`, its clock starting **only when phase 1 completes**. It now covers Obsidian's work alone, which is why it can stay tight.
 
-Progress is read as a **milestone ladder** rather than a boolean —
-`no-webview` → `no-app` → `no-workspace` → `workspace-not-ready` → `layout-ready` — from one probe per
-poll. Deliberately **one `browser.execute` round-trip and no `ensureWebViewContext`**: that call's
-`getContexts()` runs `adb shell cat /proc/net/unix`, measured at ~17 s (L19), which is the very cost
-being budgeted. A probe that throws is `no-webview`, not an error — the page is mid-reload for most of
-phase 1, so a WebView that cannot answer is the expected reading there.
+Progress is read as a **milestone ladder** rather than a boolean — `no-webview` → `no-app` → `no-workspace` → `workspace-not-ready` → `layout-ready` — from one probe per poll. Deliberately **one `browser.execute` round-trip and no `ensureWebViewContext`**: that call's `getContexts()` runs `adb shell cat /proc/net/unix`, measured at ~17 s (L19), which is the very cost being budgeted. A probe that throws is `no-webview`, not an error — the page is mid-reload for most of phase 1, so a WebView that cannot answer is the expected reading there.
 
 ### The timeout message now discriminates, which is the L19 ask
 
-The failure reports the furthest milestone reached, the probe count, and the slowest round-trip. **Many
-fast probes stalled at one milestone** = Obsidian genuinely slow, and the phase's budget is the right
-knob. **A handful of probes each taking tens of seconds** = a contended guest, and the knob is
-`deviceIdleTimeoutInMilliseconds`, not a bigger budget. Before this, both read as the same sentence.
+The failure reports the furthest milestone reached, the probe count, and the slowest round-trip. **Many fast probes stalled at one milestone** = Obsidian genuinely slow, and the phase's budget is the right knob. **A handful of probes each taking tens of seconds** = a contended guest, and the knob is `deviceIdleTimeoutInMilliseconds`, not a bigger budget. Before this, both read as the same sentence.
 
 ### Where the code lives
 
-Per **L27**'s pure/testable split: `src/app-startup-progress.ts` (`classifyAppStartupProbe`,
-`checkAppStarted`, `checkLayoutReady`, `compareAppStartupMilestones`, `buildStartupTimeoutMessage`) is
-pure and unit-tested; `transport-appium.ts` keeps only the polling orchestration, and `transport-factory.ts`
-only the `adb` glue — both stay `/* v8 ignore */` under the 100 % gate.
+Per **L27**'s pure/testable split: `src/app-startup-progress.ts` (`classifyAppStartupProbe`, `checkAppStarted`, `checkLayoutReady`, `compareAppStartupMilestones`, `buildStartupTimeoutMessage`) is pure and unit-tested; `transport-appium.ts` keeps only the polling orchestration, and `transport-factory.ts` only the `adb` glue — both stay `/* v8 ignore */` under the 100 % gate.
 
 ## L44. Security overrides (`fflate` GHSA-px8p-9vwx-vf98)
 
-`fflate` `0.7.0 – 0.7.4` can enter an infinite loop in `unzipSync` on a malformed ZIP64 archive; `0.7.5` is
-the fix. Two packages in this tree reach it, and only one of them is vulnerable:
+`fflate` `0.7.0 – 0.7.4` can enter an infinite loop in `unzipSync` on a malformed ZIP64 archive; `0.7.5` is the fix. Two packages in this tree reach it, and only one of them is vulnerable:
 
 ```text
 @shuding/opentype.js → fflate@^0.7.3   ← already resolves 0.7.5 on its own, fine
 satori               → fflate@0.7.3    ← an EXACT pin, so it keeps a second, vulnerable copy nested
 ```
 
-Both arrive through the docs-site OG-image path (`satori` + `@resvg/resvg-js`). No direct bump reaches the
-vulnerable copy: `satori@0.33.4` is the newest release and still declares the exact `0.7.3`. So the fix is
-`overrides.fflate` → `^0.7.5`, which also **dedupes** the two copies into one — the install
-that applied it reported `removed 1 package`.
+Both arrive through the docs-site OG-image path (`satori` + `@resvg/resvg-js`). No direct bump reaches the vulnerable copy: `satori@0.33.4` is the newest release and still declares the exact `0.7.3`. So the fix is `overrides.fflate` → `^0.7.5`, which also **dedupes** the two copies into one — the install that applied it reported `removed 1 package`.
 
-**Never take `npm audit fix --force` here** — its remedy is `satori@0.32.0`, a downgrade. **Remove the
-override** when `satori` declares a range that admits `0.7.5` or later; the `check` in
-[`pinned-versions.json`](pinned-versions.json) reads that declared range and watches exactly that.
+**Never take `npm audit fix --force` here** — its remedy is `satori@0.32.0`, a downgrade. **Remove the override** when `satori` declares a range that admits `0.7.5` or later; the `check` in [`pinned-versions.json`](pinned-versions.json) reads that declared range and watches exactly that.
 
-The override is kept **caret-ranged** so `update-npm-deps.ps1` carries it forward, and it is listed in
-`pinned-versions.json` anyway — the sweep keeps a caret override *current*, but it never reports that the
-advisory the override answers has gone away, and the override with it. Same arrangement as
-`brace-expansion` in **L30**.
+The override is kept **caret-ranged** so `update-npm-deps.ps1` carries it forward, and it is listed in `pinned-versions.json` anyway — the sweep keeps a caret override *current*, but it never reports that the advisory the override answers has gone away, and the override with it. Same arrangement as `brace-expansion` in **L30**.
 
 ## L45. An idle device is not a connected one — gate the session on a validated network too
 
-`sys.boot_completed`, a stopped boot animation and a serving package manager all say the guest is **busy
-enough to be useful**. None of them says it can reach anything. Measured on two AVDs from a cold boot:
+`sys.boot_completed`, a stopped boot animation and a serving package manager all say the guest is **busy enough to be useful**. None of them says it can reach anything. Measured on two AVDs from a cold boot:
 
 ```text
 obsidian_test        created 70635 firstValidated 72681 lastValidated 72681
 obsidian_screenshots created 66870 firstValidated 79870
 ```
 
-Roughly **70–80 seconds of guest uptime before the network is usable**, against an idle gate (**L43**) that
-clears well ahead of it. On `obsidian_screenshots` at 85s uptime the default network already existed but scored
-`EVER_EVALUATED&IS_UNMETERED` — no `IS_VALIDATED`, no `firstValidated` field at all — so "a default network
-exists" is not the signal either; validation is.
+Roughly **70–80 seconds of guest uptime before the network is usable**, against an idle gate (**L43**) that clears well ahead of it. On `obsidian_screenshots` at 85s uptime the default network already existed but scored `EVER_EVALUATED&IS_UNMETERED` — no `IS_VALIDATED`, no `firstValidated` field at all — so "a default network exists" is not the signal either; validation is.
 
-Re-measured end to end while implementing the gate (`obsidian_test`, `-no-snapshot`, headless): the guest
-reported `sys.boot_completed` and a **stopped** boot animation at **+56s**, and at that moment
-`dumpsys connectivity` said `Active default network: none` with **zero** `NetworkAgentInfo` entries. The
-network appeared and validated at **+85s** — `Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED&
-EVER_VALIDATED&IS_VALIDATED)` with `created 73314 firstValidated 76174 lastValidated 76174`. So the new
-phase costs about **30s past the idle gate** on a cold boot here, and the validated entry carries *both*
-signals the predicate accepts. Note `none`, not `null`, is the real empty sentinel.
+Re-measured end to end while implementing the gate (`obsidian_test`, `-no-snapshot`, headless): the guest reported `sys.boot_completed` and a **stopped** boot animation at **+56s**, and at that moment `dumpsys connectivity` said `Active default network: none` with **zero** `NetworkAgentInfo` entries. The network appeared and validated at **+85s** — `Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED& EVER_VALIDATED&IS_VALIDATED)` with `created 73314 firstValidated 76174 lastValidated 76174`. So the new phase costs about **30s past the idle gate** on a cold boot here, and the validated entry carries *both* signals the predicate accepts. Note `none`, not `null`, is the real empty sentinel.
 
-A **snapshot-restored** guest is the interesting counter-case: its dump showed the default network back
-with `Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED)` and no validation fields at all, i.e. correctly
-not-ready. Anything relying on a warm boot should expect to wait for re-validation, not to skip it.
+A **snapshot-restored** guest is the interesting counter-case: its dump showed the default network back with `Score(Policies : TRANSPORT_PRIMARY&EVER_EVALUATED)` and no validation fields at all, i.e. correctly not-ready. Anything relying on a warm boot should expect to wait for re-validation, not to skip it.
 
-**Why this is a correctness bug and not a slowness one.** It broke a downstream plugin's Android capture suite on the
-harness's own auto-started emulator: `expected [] to include 'App'`, because the details panel opened with
-no streams — the check behind it had no network. The same suite against the same AVD after validation
-passes 2/2. The failure mode is not a timeout but a **test that ran to completion against a silently empty
-result**, and no assertion inside a suite can tell that apart from a genuinely empty response. A readiness
-gate is the only place that can. When it *does* surface as a timeout it surfaces as a bare
-`WebDriverError: script timeout` naming only `AppiumTransport.evaluate` — an error pointing at the harness
-rather than at the missing network, which is what sent that investigation a full day down the wrong path.
+**Why this is a correctness bug and not a slowness one.** It broke a downstream plugin's Android capture suite on the harness's own auto-started emulator: `expected [] to include 'App'`, because the details panel opened with no streams — the check behind it had no network. The same suite against the same AVD after validation passes 2/2. The failure mode is not a timeout but a **test that ran to completion against a silently empty result**, and no assertion inside a suite can tell that apart from a genuinely empty response. A readiness gate is the only place that can. When it *does* surface as a timeout it surfaces as a bare `WebDriverError: script timeout` naming only `AppiumTransport.evaluate` — an error pointing at the harness rather than at the missing network, which is what sent that investigation a full day down the wrong path.
 
-**The probe is `dumpsys connectivity`, and the three that look better are all wrong** — each of them was
-believed during that day:
+**The probe is `dumpsys connectivity`, and the three that look better are all wrong** — each of them was believed during that day:
 
-- `ip route` shows **no** default route on a healthy device: Android uses per-network policy routing, and
-  the route lives in table 1015, not `main`.
+- `ip route` shows **no** default route on a healthy device: Android uses per-network policy routing, and the route lives in table 1015, not `main`.
 - `ping` fails on a healthy device: QEMU user-mode NAT does not forward ICMP on Windows hosts.
 - `getprop net.dns1` is empty on every modern Android: DNS went per-network in 8/9.
 
 An AVD was diagnosed as having no default route on the strength of the first of these. It had one.
 
-**The shape.** `checkNetworkValidated` in [`src/device-readiness.ts`](src/device-readiness.ts) is a pure
-predicate over raw probe output, like `checkDeviceIdle` beside it: ready ⇔ the dump names an **active
-default network** *and* that network's own `NetworkAgentInfo` entry reports validation (an `IS_VALIDATED`
-score policy, or a non-zero `firstValidated`). Both halves are load-bearing — a validated entry for some
-*other* network id must not satisfy an unvalidated default.
+**The shape.** `checkNetworkValidated` in [`src/device-readiness.ts`](src/device-readiness.ts) is a pure predicate over raw probe output, like `checkDeviceIdle` beside it: ready ⇔ the dump names an **active default network** *and* that network's own `NetworkAgentInfo` entry reports validation (an `IS_VALIDATED` score policy, or a non-zero `firstValidated`). Both halves are load-bearing — a validated entry for some *other* network id must not satisfy an unvalidated default.
 
-**Read the agent's own LINE and nothing past it.** A real 75 KB dump lists the active network's agent under
-`Current Networks:` and then, ~190 lines later, one `NetworkOffer` per provider — and **every offer
-advertises `IS_VALIDATED` in its score policies regardless of what the live network is doing**. The dump
-sampled here carried seven of them while its default network scored only `TRANSPORT_PRIMARY&EVER_EVALUATED`.
-A parser that slices from the agent marker to the next one (or to end of dump, when the agent is the only
-one) therefore reports **every** dump as validated. The first cut of this code did exactly that and was
-caught only by running it over the captured bytes — the unit fixtures, invented from the excerpt in the
-task file, all passed. One entry is one line in the observed output, so the slice is bounded to that line;
-an entry that ever wraps reads as not-ready, which is the safe direction to be wrong in. Every fixture in
-[`src/device-readiness.test.ts`](src/device-readiness.test.ts) now carries an offer line for that reason.
+**Read the agent's own LINE and nothing past it.** A real 75 KB dump lists the active network's agent under `Current Networks:` and then, ~190 lines later, one `NetworkOffer` per provider — and **every offer advertises `IS_VALIDATED` in its score policies regardless of what the live network is doing**. The dump sampled here carried seven of them while its default network scored only `TRANSPORT_PRIMARY&EVER_EVALUATED`. A parser that slices from the agent marker to the next one (or to end of dump, when the agent is the only one) therefore reports **every** dump as validated. The first cut of this code did exactly that and was caught only by running it over the captured bytes — the unit fixtures, invented from the excerpt in the task file, all passed. One entry is one line in the observed output, so the slice is bounded to that line; an entry that ever wraps reads as not-ready, which is the safe direction to be wrong in. Every fixture in [`src/device-readiness.test.ts`](src/device-readiness.test.ts) now carries an offer line for that reason.
 
-The factory polls it in `waitForNetworkValidated` under `networkReadyTimeoutInMilliseconds`
-(`@default 120000`; `0` skips). The budget starts *after* `sys.boot_completed`, where the measured wait on
-this WHPX host is ~30s — 120s is headroom for the starved/CI regime the other Android budgets are already
-sized for, not the expected cost.
+The factory polls it in `waitForNetworkValidated` under `networkReadyTimeoutInMilliseconds` (`@default 120000`; `0` skips). The budget starts *after* `sys.boot_completed`, where the measured wait on this WHPX host is ~30s — 120s is headroom for the starved/CI regime the other Android budgets are already sized for, not the expected cost.
 
-**The connectivity probe needs a budget of its own, and getting that wrong disables the gate silently
-while it reports the opposite.** The first cut reused `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS` (5s), the
-budget shared by `getprop` and `cmd package list packages`. In the first end-to-end run the polls came back
-**7.06s apart against a 2s interval** — 5s of timeout plus the interval — so *every* dump overran, resolved
-to the failed value, and the gate spent its whole 120s reporting "no validated network" without ever having
-parsed one. The idle gate on the same device had cleared in **226ms**.
+**The connectivity probe needs a budget of its own, and getting that wrong disables the gate silently while it reports the opposite.** The first cut reused `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS` (5s), the budget shared by `getprop` and `cmd package list packages`. In the first end-to-end run the polls came back **7.06s apart against a 2s interval** — 5s of timeout plus the interval — so *every* dump overran, resolved to the failed value, and the gate spent its whole 120s reporting "no validated network" without ever having parsed one. The idle gate on the same device had cleared in **226ms**.
 
-The cause is **contention, not size**: timed on a responsive guest, `dumpsys connectivity` costs
-**0.9–2.4s** returning 33–39 KB, right alongside `getprop`'s 0.7–2.1s. But this phase runs in exactly the
-window where residual post-boot churn still inflates every `adb` round-trip **25–50×** (**L19**) — the same
-inflation the idle gate exists to duck, arriving one step later. `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` is
-30s, ~15× the idle cost, which is that inflation with room. Do not "optimize" it back down to the shared
-5s: idle timings are exactly the measurement that makes 5s look sufficient.
+The cause is **contention, not size**: timed on a responsive guest, `dumpsys connectivity` costs **0.9–2.4s** returning 33–39 KB, right alongside `getprop`'s 0.7–2.1s. But this phase runs in exactly the window where residual post-boot churn still inflates every `adb` round-trip **25–50×** (**L19**) — the same inflation the idle gate exists to duck, arriving one step later. `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` is 30s, ~15× the idle cost, which is that inflation with room. Do not "optimize" it back down to the shared 5s: idle timings are exactly the measurement that makes 5s look sufficient.
 
-The second change matters more than the number. `dumpConnectivity` returns a `ConnectivityProbeResult`
-carrying **the failure's reason rather than an empty string**, so `waitForNetworkValidated` can log — and
-name in its final warning — the difference between *a guest that answered and has no network*, *one that
-went quiet* (`no answer within 30000ms`) and *one that is simply gone*
-(`adb.exe: device 'emulator-5554' not found`). The other probes may collapse failure into empty output
-because there every reading means not-idle; here they mean different things, and a dead guest misreported
-as an offline one is the same class of misleading signal this whole phase exists to remove. That
-distinction earned itself immediately: it is what identified the emulator deaths below, which a bare
-"no validated network" would have blamed on the network. `dumpConnectivity` also raises `maxBuffer` —
-Node's default 1 MiB would fail the call on a large dump rather than truncate it, which reads as "not
-ready" forever.
+The second change matters more than the number. `dumpConnectivity` returns a `ConnectivityProbeResult` carrying **the failure's reason rather than an empty string**, so `waitForNetworkValidated` can log — and name in its final warning — the difference between *a guest that answered and has no network*, *one that went quiet* (`no answer within 30000ms`) and *one that is simply gone* (`adb.exe: device 'emulator-5554' not found`). The other probes may collapse failure into empty output because there every reading means not-idle; here they mean different things, and a dead guest misreported as an offline one is the same class of misleading signal this whole phase exists to remove. That distinction earned itself immediately: it is what identified the emulator deaths below, which a bare "no validated network" would have blamed on the network. `dumpConnectivity` also raises `maxBuffer` — Node's default 1 MiB would fail the call on a large dump rather than truncate it, which reads as "not ready" forever.
 
-**This gate is NOT what kills the emulator, and that was A/B-tested rather than assumed.** Every end-to-end
-attempt on this host lost its guest 30–70s after `boot_completed` — `device offline`, then
-`device 'emulator-5554' not found` — which looks damning for a phase that polls `adb` every 2s in exactly
-that window. It is not: a control run with `networkReadyTimeoutInMilliseconds: 0` (the log confirms
-`Skipping network-ready wait … (timeout is 0)`) lost the guest the same way, that time inside Appium's own
-`adbExec`, failing with `Could not find a connected Android device`. Cold-booting with the AVD's saved
-snapshot moved aside changed nothing either, so it is not snapshot restore. The instability is
-pre-existing — the wedged-emulator family (**L49**) — and it is why the gate's **success** path has no end-to-end
-run behind it on this machine: `checkNetworkValidated` is verified against captured real dumps, and the
-phase is verified running, polling, warning and proceeding inside the harness, but no harness run has yet
-survived long enough to watch it clear.
+**This gate is NOT what kills the emulator, and that was A/B-tested rather than assumed.** Every end-to-end attempt on this host lost its guest 30–70s after `boot_completed` — `device offline`, then `device 'emulator-5554' not found` — which looks damning for a phase that polls `adb` every 2s in exactly that window. It is not: a control run with `networkReadyTimeoutInMilliseconds: 0` (the log confirms `Skipping network-ready wait … (timeout is 0)`) lost the guest the same way, that time inside Appium's own `adbExec`, failing with `Could not find a connected Android device`. Cold-booting with the AVD's saved snapshot moved aside changed nothing either, so it is not snapshot restore. The instability is pre-existing — the wedged-emulator family (**L49**) — and it is why the gate's **success** path has no end-to-end run behind it on this machine: `checkNetworkValidated` is verified against captured real dumps, and the phase is verified running, polling, warning and proceeding inside the harness, but no harness run has yet survived long enough to watch it clear.
 
-**Best-effort, deliberately**: a timeout logs a warning and proceeds, because an offline AVD
-is still a usable one for suites that never touch the network. The warning is the deliverable — it names
-the missing network and says the run may now return **empty results rather than fail**, so the next reader
-of an empty-looking assertion starts where that suite finished.
+**Best-effort, deliberately**: a timeout logs a warning and proceeds, because an offline AVD is still a usable one for suites that never touch the network. The warning is the deliverable — it names the missing network and says the run may now return **empty results rather than fail**, so the next reader of an empty-looking assertion starts where that suite finished.
 
-**The Android suite's clocks rose by exactly this phase's cost, rather than the default falling to fit
-them.** On a guest that never validates, the gate spends its full 120s inside `beforeAll`, and the
-registration hook's 240s and the project's 300s `hookTimeout`/`testTimeout` were both sized before this
-phase existed — 240s was already a practical figure rather than a sum, since Appium start and session
-connection budget 180s *each*. So `REGISTRATION_TIMEOUT_IN_MILLISECONDS` is 360s and
-`ANDROID_TIMEOUT_IN_MILLISECONDS` 420s, each +120s. The project constant matters as much as the hook
-argument: `afterAll`'s `dispose` builds a transport of its own and so pays the gate again. Shrinking the
-120s default to fit a test clock would have traded a correctness gate for a number.
+**The Android suite's clocks rose by exactly this phase's cost, rather than the default falling to fit them.** On a guest that never validates, the gate spends its full 120s inside `beforeAll`, and the registration hook's 240s and the project's 300s `hookTimeout`/`testTimeout` were both sized before this phase existed — 240s was already a practical figure rather than a sum, since Appium start and session connection budget 180s *each*. So `REGISTRATION_TIMEOUT_IN_MILLISECONDS` is 360s and `ANDROID_TIMEOUT_IN_MILLISECONDS` 420s, each +120s. The project constant matters as much as the hook argument: `afterAll`'s `dispose` builds a transport of its own and so pays the gate again. Shrinking the 120s default to fit a test clock would have traded a correctness gate for a number.
 
-**Both branches go through one door.** `waitForDeviceReady` owns "which gates a device passes", and the
-reused-device and started-device branches both call it. That is not tidiness: the reused branch skipping a
-gate outright is exactly the hole a reused device fell into (**L43**), and two call sites listing gates by hand is how
-that happens again.
+**Both branches go through one door.** `waitForDeviceReady` owns "which gates a device passes", and the reused-device and started-device branches both call it. That is not tidiness: the reused branch skipping a gate outright is exactly the hole a reused device fell into (**L43**), and two call sites listing gates by hand is how that happens again.
 
 ## L46. A teardown is verified, not announced — and the emulator's real process is not the one we spawned
 
-The teardown printed `Auto-started Appium server stopped.` and `Auto-started emulator stopped.` on the
-**attempt**: `killAutoStartedProcesses` issued `killProcessTree` and logged, unconditionally, with nothing
-asserting either process had exited. On 2026-09-02 both were still serving **ten minutes** after those lines
-were written. The next run found them, adopted them — correctly, by every check the preflight had —
-established a session, found the WebView, and died two seconds in with `UND_ERR_SOCKET` then `ECONNREFUSED`
-on every call including its own `DELETE /session`, as the leftovers finally finished dying. What the test
-reported was `IntegrationSetupFailedError … cannot get temp vault`, which reads as a device or a network
-fault; re-running once the zombies had died passed, and taught nobody anything. **A log that says the machine
-is clean when it is not is worse than no log**: it sends the next reader away from the cause.
+The teardown printed `Auto-started Appium server stopped.` and `Auto-started emulator stopped.` on the **attempt**: `killAutoStartedProcesses` issued `killProcessTree` and logged, unconditionally, with nothing asserting either process had exited. On 2026-09-02 both were still serving **ten minutes** after those lines were written. The next run found them, adopted them — correctly, by every check the preflight had — established a session, found the WebView, and died two seconds in with `UND_ERR_SOCKET` then `ECONNREFUSED` on every call including its own `DELETE /session`, as the leftovers finally finished dying. What the test reported was `IntegrationSetupFailedError … cannot get temp vault`, which reads as a device or a network fault; re-running once the zombies had died passed, and taught nobody anything. **A log that says the machine is clean when it is not is worse than no log**: it sends the next reader away from the cause.
 
-**Why the kill missed.** Under `-no-window` the process that holds the AVD is
-`qemu-system-x86_64-headless.exe`, forked by the `emulator.exe` launcher whose PID the harness holds.
-`taskkill /F /T` against the launcher reports success and the backend keeps TCP 5554/5555 and the
-AVD's `multiinstance.lock`, so the *next* run hits
-`FATAL | Running multiple emulators with the same AVD is an experimental feature` — which the emulator
-writes to its own stdout, where nobody sees it. It is self-perpetuating: each failed run force-kills the
-launcher again and leaves another backend. Note that the obvious diagnostic filter,
-`Get-Process -Name qemu-system-x86_64`, does **not** match the `-headless` name — which is how one zombie
-stayed invisible through several rounds of "no emulator is running".
+**Why the kill missed.** Under `-no-window` the process that holds the AVD is `qemu-system-x86_64-headless.exe`, forked by the `emulator.exe` launcher whose PID the harness holds. `taskkill /F /T` against the launcher reports success and the backend keeps TCP 5554/5555 and the AVD's `multiinstance.lock`, so the *next* run hits `FATAL | Running multiple emulators with the same AVD is an experimental feature` — which the emulator writes to its own stdout, where nobody sees it. It is self-perpetuating: each failed run force-kills the launcher again and leaves another backend. Note that the obvious diagnostic filter, `Get-Process -Name qemu-system-x86_64`, does **not** match the `-headless` name — which is how one zombie stayed invisible through several rounds of "no emulator is running".
 
-- **Only a verified stop may say `stopped`.** `teardown-verdict.ts` (pure, unit-tested) owns the three
-  outcomes — `stopped`, `stopped-after-escalation`, `still-running` — and the lines for them. The failure
-  line names the budget, the evidence and the consequence:
-  *`WARNING: Auto-started emulator did not exit within 20000ms and still holds AVD "obsidian_test" on device
-  emulator-5554; a later run may adopt it. Kill it before the next Android run.`*
-- **The Appium verdict is the port; the emulator's is two independent proofs.** The server reuses
-  `waitForAppiumStopped` — which already existed for the wedged-server restart (**L40**) and was simply
-  never wired into teardown — and escalates by **port ownership** (`port-owner.ts`: `netstat -ano` /
-  `lsof -ti`), the only escalation that means anything, since the PID the harness holds is the `shell: true`
-  wrapper and re-killing it just repeats the kill that failed. The emulator must satisfy *both* that none of
-  the PIDs this run owns is alive **and** that the device is gone from `adb devices` **in any state** —
-  `adb-device-list.ts` exists for that distinction, because a dying emulator answers `offline` while it
-  still holds the AVD, and the pre-existing `getConnectedDeviceIds` filter (`\tdevice`) reads `offline` as
-  absent. Teardown asks "is it listed?", the preflight keeps asking "is it usable?"; both now come from one
-  parser.
-- **Ownership is a pre-launch snapshot, never a `qemu*` sweep.** `ensureDeviceConnected` lists the emulator
-  backends before spawning and again after the device connects (`emulator-backend.ts`), and the difference
-  is `ownedEmulatorPids` — the launcher plus the backend it forked. Sweeping every `qemu*` at teardown is
-  the *manual* recovery for this does; the harness must not, because another AVD (`obsidian_screenshots`)
-  or one the user booted by hand would go with it. Killing a process the run does not own is not its call to
-  make — the same principle **L40** applies to a foreign Appium server.
-- **The console shutdown goes first.** `adb -s <device> emu kill` is the only path that releases
-  `multiinstance.lock`; `taskkill` leaves it behind, and the stale lock is the whole of the next run's
-  failure. It is best-effort and the kill follows regardless — `adb emu kill` alone was measured leaving
-  four processes behind across one night.
-- **The sync path is honest instead of thorough.** `disposeSync` runs inside `process.on('exit')` and cannot
-  await, so it kills, looks **once** for a survivor holding the port or a still-live owned PID, kills those
-  too, and logs *"stop requested … — sync teardown cannot wait to confirm"*. It never prints a bare
-  `stopped.` and never blocks process exit on a poll (the owner's call). Its one blocking call — the
-  port query — takes `SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS` (5s), **not** the async path's 30s:
-  this one blocks the exit handler itself, so losing the escalation beats holding the process for half a
-  minute, and the line it prints never claimed a verified stop anyway. Note the caveat
-  `android-global-setup.ts` already records: Vitest terminates workers abruptly, so **neither**
-  teardown path is guaranteed a turn — which is why the *next* run's preflight is the second line of defence.
-- **A failed stop keeps its marker, stamped.** The old code cleared the marker on every teardown, so a
-  server we could not kill read as a **foreign, user-managed** server to the next run — the one kind
-  **L40** forbids touching, and precisely the server this harness is most entitled to replace.
-  `recordAppiumServerStopAttempt` writes `stopAttemptedAtInMilliseconds` instead of clearing (only when the
-  stop is unverified, so an abrupt exit that did kill the server still clears it). The preflight then
-  **refuses to adopt** a server carrying that stamp: it kills the port's owners, waits, and starts a fresh
-  one. That is the direct fix for the failing run above — the wedged-server recovery in **L40** could not have
-  helped, because it is recognized from a *device-not-found* session error, and a server dying mid-flight
-  gives socket errors instead.
+- **Only a verified stop may say `stopped`.** `teardown-verdict.ts` (pure, unit-tested) owns the three outcomes — `stopped`, `stopped-after-escalation`, `still-running` — and the lines for them. The failure line names the budget, the evidence and the consequence: *`WARNING: Auto-started emulator did not exit within 20000ms and still holds AVD "obsidian_test" on device emulator-5554; a later run may adopt it. Kill it before the next Android run.`*
+- **The Appium verdict is the port; the emulator's is two independent proofs.** The server reuses `waitForAppiumStopped` — which already existed for the wedged-server restart (**L40**) and was simply never wired into teardown — and escalates by **port ownership** (`port-owner.ts`: `netstat -ano` / `lsof -ti`), the only escalation that means anything, since the PID the harness holds is the `shell: true` wrapper and re-killing it just repeats the kill that failed. The emulator must satisfy *both* that none of the PIDs this run owns is alive **and** that the device is gone from `adb devices` **in any state** — `adb-device-list.ts` exists for that distinction, because a dying emulator answers `offline` while it still holds the AVD, and the pre-existing `getConnectedDeviceIds` filter (`\tdevice`) reads `offline` as absent. Teardown asks "is it listed?", the preflight keeps asking "is it usable?"; both now come from one parser.
+- **Ownership is a pre-launch snapshot, never a `qemu*` sweep.** `ensureDeviceConnected` lists the emulator backends before spawning and again after the device connects (`emulator-backend.ts`), and the difference is `ownedEmulatorPids` — the launcher plus the backend it forked. Sweeping every `qemu*` at teardown is the *manual* recovery for this does; the harness must not, because another AVD (`obsidian_screenshots`) or one the user booted by hand would go with it. Killing a process the run does not own is not its call to make — the same principle **L40** applies to a foreign Appium server.
+- **The console shutdown goes first.** `adb -s <device> emu kill` is the only path that releases `multiinstance.lock`; `taskkill` leaves it behind, and the stale lock is the whole of the next run's failure. It is best-effort and the kill follows regardless — `adb emu kill` alone was measured leaving four processes behind across one night.
+- **The sync path is honest instead of thorough.** `disposeSync` runs inside `process.on('exit')` and cannot await, so it kills, looks **once** for a survivor holding the port or a still-live owned PID, kills those too, and logs *"stop requested … — sync teardown cannot wait to confirm"*. It never prints a bare `stopped.` and never blocks process exit on a poll (the owner's call). Its one blocking call — the port query — takes `SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS` (5s), **not** the async path's 30s: this one blocks the exit handler itself, so losing the escalation beats holding the process for half a minute, and the line it prints never claimed a verified stop anyway. Note the caveat `android-global-setup.ts` already records: Vitest terminates workers abruptly, so **neither** teardown path is guaranteed a turn — which is why the *next* run's preflight is the second line of defence.
+- **A failed stop keeps its marker, stamped.** The old code cleared the marker on every teardown, so a server we could not kill read as a **foreign, user-managed** server to the next run — the one kind **L40** forbids touching, and precisely the server this harness is most entitled to replace. `recordAppiumServerStopAttempt` writes `stopAttemptedAtInMilliseconds` instead of clearing (only when the stop is unverified, so an abrupt exit that did kill the server still clears it). The preflight then **refuses to adopt** a server carrying that stamp: it kills the port's owners, waits, and starts a fresh one. That is the direct fix for the failing run above — the wedged-server recovery in **L40** could not have helped, because it is recognized from a *device-not-found* session error, and a server dying mid-flight gives socket errors instead.
 
-**Pure/testable split**, as **L27**/**L40**: `adb-device-list.ts`, `emulator-backend.ts`, `port-owner.ts`,
-`process-liveness.ts` and `teardown-verdict.ts` are unit-tested and deliberately not `v8 ignore`d; only the
-`execFile`/`kill` glue stays in the integration-only factory. `process-liveness.ts` was split out of
-`appium-server-marker.ts`, whose `checkIsHarnessOwnedAppiumServer` had the signal-0 probe inlined and now
-shares it with the emulator's PID checks.
+**Pure/testable split**, as **L27**/**L40**: `adb-device-list.ts`, `emulator-backend.ts`, `port-owner.ts`, `process-liveness.ts` and `teardown-verdict.ts` are unit-tested and deliberately not `v8 ignore`d; only the `execFile`/`kill` glue stays in the integration-only factory. `process-liveness.ts` was split out of `appium-server-marker.ts`, whose `checkIsHarnessOwnedAppiumServer` had the signal-0 probe inlined and now shares it with the emulator's PID checks.
 
-**The process query needs a budget sized for the contended window, and getting it wrong disarms the
-escalation silently.** The first end-to-end run of this code logged `owned emulator PIDs: []` for a launch
-whose backend was demonstrably running: `tasklist` overran a 10s budget on a host the wedged emulator had
-already slowed to where every `adb` call was timing out too — the same contention **L45** sizes
-`ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` for. `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` is therefore 30s,
-not the ~1s the query costs idle. The budget is only half the fix: an empty PID set that means *"no backend
-to own"* and one that means *"the query failed"* are the same log line, so `listEmulatorBackendPids` now
-**reports both failure shapes** — a non-zero exit, and a listing that parses to **zero rows**, which on a
-real host can only be a failed query however it exited. Teardown then falls back to the `adb devices` proof
-alone, and says so, rather than quietly having nothing to escalate to.
+**The process query needs a budget sized for the contended window, and getting it wrong disarms the escalation silently.** The first end-to-end run of this code logged `owned emulator PIDs: []` for a launch whose backend was demonstrably running: `tasklist` overran a 10s budget on a host the wedged emulator had already slowed to where every `adb` call was timing out too — the same contention **L45** sizes `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` for. `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` is therefore 30s, not the ~1s the query costs idle. The budget is only half the fix: an empty PID set that means *"no backend to own"* and one that means *"the query failed"* are the same log line, so `listEmulatorBackendPids` now **reports both failure shapes** — a non-zero exit, and a listing that parses to **zero rows**, which on a real host can only be a failed query however it exited. Teardown then falls back to the `adb devices` proof alone, and says so, rather than quietly having nothing to escalate to.
 
-**End-to-end evidence (2026-09-05, this host).** Two full provisioning attempts in one run, both of which
-failed to establish a session on this host's pre-existing emulator instability — so both exercised the
-failure teardown:
+**End-to-end evidence (2026-09-05, this host).** Two full provisioning attempts in one run, both of which failed to establish a session on this host's pre-existing emulator instability — so both exercised the failure teardown:
 
 ```text
 Emulator "obsidian_test" started, device emulator-5554 is connected (owned emulator PIDs: [50560, 42464])
@@ -2418,46 +880,21 @@ Emulator console shutdown for emulator-5554 did not answer: Command failed: adb 
 Auto-started emulator stopped (verified: AVD "obsidian_test" on device emulator-5554 released).
 ```
 
-`[50560, 42464]` is the launcher **and** the `qemu-system-x86_64-headless` backend — the snapshot diff
-catching exactly the process the old teardown left behind. The console shutdown failing and the run
-continuing to the kill is the best-effort path working as intended. Afterwards `adb devices`, `Get-Process
-qemu*` and `netstat :4723/:5554` were all clean, and the run's own **next** attempt found
-`connected: []` and `Appium not reachable` — i.e. it started fresh instead of adopting, which is precisely
-the sequence the old teardown could not manage. Independently confirmed on the same host: the process listening on 4723
-is the `node` server (pid 41928), **not** the `cmd.exe` wrapper the harness holds a `ChildProcess` for, and
-the pid holding console port 5554 is the `-headless` backend — which is why both escalations go by
-port/snapshot ownership rather than by re-killing the PID we already killed.
+`[50560, 42464]` is the launcher **and** the `qemu-system-x86_64-headless` backend — the snapshot diff catching exactly the process the old teardown left behind. The console shutdown failing and the run continuing to the kill is the best-effort path working as intended. Afterwards `adb devices`, `Get-Process qemu*` and `netstat :4723/:5554` were all clean, and the run's own **next** attempt found `connected: []` and `Appium not reachable` — i.e. it started fresh instead of adopting, which is precisely the sequence the old teardown could not manage. Independently confirmed on the same host: the process listening on 4723 is the `node` server (pid 41928), **not** the `cmd.exe` wrapper the harness holds a `ChildProcess` for, and the pid holding console port 5554 is the `-headless` backend — which is why both escalations go by port/snapshot ownership rather than by re-killing the PID we already killed.
 
-**The abrupt-kill case, observed by accident and worth more than the planned test.** A second end-to-end
-run was killed mid-flight (SIGKILL to the runner, no orderly teardown — the case this section's sync bullet
-says neither path is guaranteed to cover). It left precisely the leftover described above: an Appium server
-still LISTENING on 4723, `adb devices` reporting `emulator-5554 **offline**`, and the launcher **dead** with
-`qemu-system-x86_64-headless` still alive — the zombie shape, reproduced without trying. The sync
-teardown did get a turn, could not confirm the stop, and **stamped the marker** rather than clearing it:
+**The abrupt-kill case, observed by accident and worth more than the planned test.** A second end-to-end run was killed mid-flight (SIGKILL to the runner, no orderly teardown — the case this section's sync bullet says neither path is guaranteed to cover). It left precisely the leftover described above: an Appium server still LISTENING on 4723, `adb devices` reporting `emulator-5554 **offline**`, and the launcher **dead** with `qemu-system-x86_64-headless` still alive — the zombie shape, reproduced without trying. The sync teardown did get a turn, could not confirm the stop, and **stamped the marker** rather than clearing it:
 
 ```json
 {"pid":21944,"port":4723,"startedAtInMilliseconds":1788638781534,"stopAttemptedAtInMilliseconds":1788638815537}
 ```
 
-The decisive detail is that marker PID **21944 was dead while the server was alive** — 21944 is the
-`cmd.exe` wrapper; the live listener was node 34772. So `checkIsHarnessOwnedAppiumServer(marker)` returned
-**`false`** for a leftover that was unambiguously ours, and an adopt-refusal gated on marker-PID liveness
-would have waved this exact server through. That is why `reclaimUnstoppedAppiumServer` gates on the
-**stamp** alone, and why every escalation goes by port ownership rather than by the PID we hold. Replaying
-the reclaim ingredients against that live leftover: owners of 4723 `[34772]` → killed → `[]`; emulator
-backends `[24340]` → `adb emu kill` timed out against the offline device (best-effort, as designed) → killed
-→ none alive → `adb devices` empty and `checkIsDeviceListed('emulator-5554')` `false`.
+The decisive detail is that marker PID **21944 was dead while the server was alive** — 21944 is the `cmd.exe` wrapper; the live listener was node 34772. So `checkIsHarnessOwnedAppiumServer(marker)` returned **`false`** for a leftover that was unambiguously ours, and an adopt-refusal gated on marker-PID liveness would have waved this exact server through. That is why `reclaimUnstoppedAppiumServer` gates on the **stamp** alone, and why every escalation goes by port ownership rather than by the PID we hold. Replaying the reclaim ingredients against that live leftover: owners of 4723 `[34772]` → killed → `[]`; emulator backends `[24340]` → `adb emu kill` timed out against the offline device (best-effort, as designed) → killed → none alive → `adb devices` empty and `checkIsDeviceListed('emulator-5554')` `false`.
 
-**The preflight half of the same story is L47.** A verified teardown is only one of the two lines of
-defence, and the abrupt-kill case above is exactly when the other one matters: the *next* run's adoption
-check has to recognize the leftover rather than launch beside it.
+**The preflight half of the same story is L47.** A verified teardown is only one of the two lines of defence, and the abrupt-kill case above is exactly when the other one matters: the *next* run's adoption check has to recognize the leftover rather than launch beside it.
 
 ## L47. A probe that did not answer is not an answer — and the snapshot is owned or not loaded
 
-**L46** made the teardown prove its claims. This is the same discipline applied to the *preflight*: three
-places where the harness treated an absence of evidence as evidence, or threw away evidence it already
-held. All three were found in one night of Android failures (2026-09-03) that looked like four unrelated
-faults and were not.
+**L46** made the teardown prove its claims. This is the same discipline applied to the *preflight*: three places where the harness treated an absence of evidence as evidence, or threw away evidence it already held. All three were found in one night of Android failures (2026-09-03) that looked like four unrelated faults and were not.
 
 ### The adoption probe read a timeout as "some other AVD"
 
@@ -2468,233 +905,101 @@ execFile('adb', ['-s', deviceId, 'emu', 'avd', 'name'], { timeout: ADB_DEVICE_CH
   (_error, stdout) => { resolve(stdout.split('\n', 1)[0]?.trim() ?? ''); });
 ```
 
-`_error` discarded, so a timeout yielded `''`, `'' !== avdName`, and the loop fell through to *"start a new
-emulator"* — **beside the emulator already serving that AVD**. Caught live:
+`_error` discarded, so a timeout yielded `''`, `'' !== avdName`, and the loop fell through to *"start a new emulator"* — **beside the emulator already serving that AVD**. Caught live:
 
 ```text
 14:27:52.114  Checking existing devices for AVD "obsidian_test"... (connected: [emulator-5554])
 14:27:57.170  AVD "obsidian_test" not found on any existing device, starting a new emulator...
 ```
 
-5.056s apart — exactly `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS`. The launch that followed hit
-`FATAL | Running multiple emulators with the same AVD is an experimental feature`.
+5.056s apart — exactly `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS`. The launch that followed hit `FATAL | Running multiple emulators with the same AVD is an experimental feature`.
 
-Note **why** the probe timed out: the guest was already wedged (Appium's own
-`adb shell getprop ro.build.version.sdk` was timing out at 20s against the same device in the same window).
-The check is asked its question precisely when it is least able to answer — which is the condition under
-which it then does the most damage. Same shape as the connectivity-probe lesson in **L45** and the `adb
-devices` `offline` distinction in **L46**: *the failure of a probe is a fact about the probe, not about
-the thing probed.*
+Note **why** the probe timed out: the guest was already wedged (Appium's own `adb shell getprop ro.build.version.sdk` was timing out at 20s against the same device in the same window). The check is asked its question precisely when it is least able to answer — which is the condition under which it then does the most damage. Same shape as the connectivity-probe lesson in **L45** and the `adb devices` `offline` distinction in **L46**: *the failure of a probe is a fact about the probe, not about the thing probed.*
 
-- **`avd-probe-verdict.ts` (pure, unit-tested)** owns four outcomes — `match`, `other-avd`,
-  `not-an-emulator`, `no-answer` — and the verdict over them: `reuse` / `start-new` / `refuse`. Only
-  `no-answer` is silence, and only silence refuses.
-- **A match beats an unreadable sibling.** Once the wanted AVD is found, an unrelated wedged device is
-  somebody else's problem; blocking there would be the same overreach **L46** refuses when it declines to
-  sweep `qemu*`. Silence is decisive *only* when the run would otherwise go on to launch.
-- **A non-emulator is never probed at all.** `adb … emu avd name` errors against a physical handset or a
-  TCP-attached device however healthy it is, so treating that as silence would refuse every run on a host
-  with a phone plugged in — a worse defect than the one being fixed. Only an `emulator-<port>` device can
-  collide with `emulator -avd`, so only that device's silence counts (`checkIsEmulatorDeviceId`).
-- **One retry, then refuse.** The probe's budget is 5s; a second look is far cheaper than either a false
-  refusal or a colliding launch. The refusal names the device, the command, the budget, the collision and
-  the recovery — a message that stops a run must leave the reader able to unblock it.
-- **The evidence is logged next to the conclusion.** `AVD probe: emulator-5554=no-answer, …` — the old log
-  printed only the conclusion, which is exactly the line that was wrong.
+- **`avd-probe-verdict.ts` (pure, unit-tested)** owns four outcomes — `match`, `other-avd`, `not-an-emulator`, `no-answer` — and the verdict over them: `reuse` / `start-new` / `refuse`. Only `no-answer` is silence, and only silence refuses.
+- **A match beats an unreadable sibling.** Once the wanted AVD is found, an unrelated wedged device is somebody else's problem; blocking there would be the same overreach **L46** refuses when it declines to sweep `qemu*`. Silence is decisive *only* when the run would otherwise go on to launch.
+- **A non-emulator is never probed at all.** `adb … emu avd name` errors against a physical handset or a TCP-attached device however healthy it is, so treating that as silence would refuse every run on a host with a phone plugged in — a worse defect than the one being fixed. Only an `emulator-<port>` device can collide with `emulator -avd`, so only that device's silence counts (`checkIsEmulatorDeviceId`).
+- **One retry, then refuse.** The probe's budget is 5s; a second look is far cheaper than either a false refusal or a colliding launch. The refusal names the device, the command, the budget, the collision and the recovery — a message that stops a run must leave the reader able to unblock it.
+- **The evidence is logged next to the conclusion.** `AVD probe: emulator-5554=no-answer, …` — the old log printed only the conclusion, which is exactly the line that was wrong.
 
 ### The snapshot was loaded but never saved
 
-`emulator-arguments.ts` passed `-no-snapshot-save` **without** `-no-snapshot-load`. So the harness never
-wrote `default_boot` and resumed it every run: the guest each run started from was state nothing had
-validated since a human last saved it — **neither hermetic nor warm, the one combination that is never
-correct**. Measured 2026-09-03, same AVD back to back:
+`emulator-arguments.ts` passed `-no-snapshot-save` **without** `-no-snapshot-load`. So the harness never wrote `default_boot` and resumed it every run: the guest each run started from was state nothing had validated since a human last saved it — **neither hermetic nor warm, the one combination that is never correct**. Measured 2026-09-03, same AVD back to back:
 
 | Launch | Result |
 | --- | --- |
 | snapshot resumed (the old flags) | guest dies ~90s in, every time |
 | `-no-snapshot-load` (cold) | booted in 50s, `alive=True shell=[1]` at 60/120/180/240s |
 
-`obsidian_screenshots` was unaffected all night — a different snapshot, not a different SDK. The failure a
-rotten snapshot produces (serves adb, accepts a uiautomator2 session, drops `offline` ~33s later) is
-indistinguishable from a code regression, and *which call happened to be in flight when it went* is what
-made the error message differ every time.
+`obsidian_screenshots` was unaffected all night — a different snapshot, not a different SDK. The failure a rotten snapshot produces (serves adb, accepts a uiautomator2 session, drops `offline` ~33s later) is indistinguishable from a code regression, and *which call happened to be in flight when it went* is what made the error message differ every time.
 
-**The rule: the harness owns the snapshot it loads, or it loads none.** `shouldReuseEmulatorSnapshot`
-(`@default false`) toggles **both** flags together — cold-boots hermetically by default, or loads *and*
-saves for a persistent runner that wants the ~112s back (**L19** lever 1, now shipped). The opt-in path
-also logs which snapshot it is resuming and when it was saved (`emulator-snapshot.ts`), so a trade the
-caller made deliberately stays visible in the transcript.
+**The rule: the harness owns the snapshot it loads, or it loads none.** `shouldReuseEmulatorSnapshot` (`@default false`) toggles **both** flags together — cold-boots hermetically by default, or loads *and* saves for a persistent runner that wants the ~112s back (**L19** lever 1, now shipped). The opt-in path also logs which snapshot it is resuming and when it was saved (`emulator-snapshot.ts`), so a trade the caller made deliberately stays visible in the transcript.
 
 ### A timeout threw away the output the emulator had already written
 
-`57b92f8` pipes and captures the emulator's stdout/stderr, and `buildProcessExitMessage` attaches the tail
-when the process **exits**. But a startup fails two ways, and the *timeout* throws attached nothing — so an
-emulator that printed the `FATAL` above and then lingered produced `No new emulator device appeared within
-300000ms.` and nothing else, with the explanation captured in memory and discarded. `appendProcessOutputTail`
-is split out of the exit builder and used by both timeout paths (`waitForNewDevice`, `waitForBoot`).
+`57b92f8` pipes and captures the emulator's stdout/stderr, and `buildProcessExitMessage` attaches the tail when the process **exits**. But a startup fails two ways, and the *timeout* throws attached nothing — so an emulator that printed the `FATAL` above and then lingered produced `No new emulator device appeared within 300000ms.` and nothing else, with the explanation captured in memory and discarded. `appendProcessOutputTail` is split out of the exit builder and used by both timeout paths (`waitForNewDevice`, `waitForBoot`).
 
 ### What this does not cover
 
-The pre-booted-AVD adoption path is now *safe* (it refuses instead of colliding) but not yet *useful*: a
-hand-booted healthy AVD is still only adopted when its probe answers. And as **L46**'s caveat already
-records, Vitest kills workers at the hook timeout, so no teardown gets a turn and the next run's preflight
-remains the second line of defence — which is precisely why that preflight must not be the thing that
-launches a colliding emulator. **L56** gives that preflight the record it lacked: an emulator marker, which
-turns an adopted leftover this harness started into one the adopting run owns and stops.
+The pre-booted-AVD adoption path is now *safe* (it refuses instead of colliding) but not yet *useful*: a hand-booted healthy AVD is still only adopted when its probe answers. And as **L46**'s caveat already records, Vitest kills workers at the hook timeout, so no teardown gets a turn and the next run's preflight remains the second line of defence — which is precisely why that preflight must not be the thing that launches a colliding emulator. **L56** gives that preflight the record it lacked: an emulator marker, which turns an adopted leftover this harness started into one the adopting run owns and stops.
 
 ## L48. Headless vault defaults — two `app.json` keys the harness writes, and where the write has to land
 
-A vault the harness owns is opened with no user in front of it, and two of Obsidian's shipped defaults are
-wrong for that. Both are written into `<vault>/<configDir>/app.json` **before the vault is ever opened**, by
-`ensureHeadlessVaultConfig` (`src/headless-vault-config.ts`). Neither is a knob: a consumer that had to
-know they existed would be a consumer copying the harness's job.
+A vault the harness owns is opened with no user in front of it, and two of Obsidian's shipped defaults are wrong for that. Both are written into `<vault>/<configDir>/app.json` **before the vault is ever opened**, by `ensureHeadlessVaultConfig` (`src/headless-vault-config.ts`). Neither is a knob: a consumer that had to know they existed would be a consumer copying the harness's job.
 
-- **`alwaysUpdateLinks: true`.** Without it any rename or move that touches links pops an interactive
-  *"Update links?"* modal — Obsidian skips it only when this is on. Headless nobody answers, so the Promise
-  never settles: the rename's `FileManager.updateQueue` task hangs forever, and because that queue is a
-  **singleton**, every later `renameFile` in the same instance hangs behind it. That is the long-observed
-  "rename wall".
-- **`settingsPopoutWindow: false`.** Obsidian ships this **`true`** — verified in the shipped bundles of
-  both 1.13.7 and the 1.14.0 asar the harness provisions, so it is a long-standing default and not a 1.14
-  regression. `app.setting.shouldUsePopout()` returns it directly, and the popout branch is taken whenever
-  `Platform.canPopoutWindow` (`isDesktopApp && isDesktop`) — every desktop run, no mobile one. It creates a
-  real second Electron window, reassigns the `activeWindow` / `activeDocument` globals to it, and
-  `Modal.open()` appends `getRootEl()` (`modalEl`, for a popout) into **that** window's document. A suite
-  that only asserts can still read `settingTab.containerEl` — an object reference, wherever it lives — which
-  is why this went unnoticed for so long. A **screenshot** cannot: `captureObsidianScreenshot` frames the
-  window the harness drives, so a settings shot comes back with no settings in it and **no error to say
-  so**. Found on 2026-09-03 by a plugin whose settings screenshot came back with no settings in it, hit
-  again by a second plugin's capture suite the same week, and fixed here on 2026-09-05.
+- **`alwaysUpdateLinks: true`.** Without it any rename or move that touches links pops an interactive *"Update links?"* modal — Obsidian skips it only when this is on. Headless nobody answers, so the Promise never settles: the rename's `FileManager.updateQueue` task hangs forever, and because that queue is a **singleton**, every later `renameFile` in the same instance hangs behind it. That is the long-observed "rename wall".
+- **`settingsPopoutWindow: false`.** Obsidian ships this **`true`** — verified in the shipped bundles of both 1.13.7 and the 1.14.0 asar the harness provisions, so it is a long-standing default and not a 1.14 regression. `app.setting.shouldUsePopout()` returns it directly, and the popout branch is taken whenever `Platform.canPopoutWindow` (`isDesktopApp && isDesktop`) — every desktop run, no mobile one. It creates a real second Electron window, reassigns the `activeWindow` / `activeDocument` globals to it, and `Modal.open()` appends `getRootEl()` (`modalEl`, for a popout) into **that** window's document. A suite that only asserts can still read `settingTab.containerEl` — an object reference, wherever it lives — which is why this went unnoticed for so long. A **screenshot** cannot: `captureObsidianScreenshot` frames the window the harness drives, so a settings shot comes back with no settings in it and **no error to say so**. Found on 2026-09-03 by a plugin whose settings screenshot came back with no settings in it, hit again by a second plugin's capture suite the same week, and fixed here on 2026-09-05.
 
 ### The write has to go where the vault will look, and only into a vault we made
 
 Two constraints shape the call sites, and both were bugs until 2026-09-05:
 
-- **After `populate`, before `register`.** `coreSetup` calls it in that gap deliberately: after
-  `populate` so an `app.json` a consumer carries in cannot win over the harness default, and before
-  `register` so the file reaches an Android device with the rest of the vault. The deadline used to be
-  the separate `syncToDevice` call that sat between the two; `register` now owns that push (**L53**), so
-  the gap is one call narrower but the constraint is unchanged — every pre-open write has to be on the
-  host before `register` carries the directory across.
-- **The `configDirectory` override has to reach it — and reach every OTHER pre-open write too.** The old
-  `ensureAlwaysUpdateLinks` hardcoded `.obsidian` while the harness supports opening a vault whose settings
-  live elsewhere (**L5**). Under an override it wrote to a folder the vault never reads and **both** defaults
-  vanished silently. `resolveOwnedConfigDirectory` (`src/transport-options.ts`) answers the question once:
-  the override only when the transport is CDP **and** owned, `undefined` in attach mode (where the user's
-  Obsidian opens the vault under its own config, as that option's own docs say) and on Android (no override
-  exists). `coreSetup` resolves it into a single local and feeds every writer from it — see the next section
-  for who those are.
-- **Never a caller-supplied vault.** `connectToCdp` provisions a vault too and called neither helper before
-  2026-09-05, so it lacked both defaults. It now writes them — but only when it made the directory itself
-  (`options.vault === undefined`, the same discriminator that already decides whether disposal deletes it).
-  A vault the caller named is a real one they keep, and a debugging session has no business rewriting its
-  settings.
+- **After `populate`, before `register`.** `coreSetup` calls it in that gap deliberately: after `populate` so an `app.json` a consumer carries in cannot win over the harness default, and before `register` so the file reaches an Android device with the rest of the vault. The deadline used to be the separate `syncToDevice` call that sat between the two; `register` now owns that push (**L53**), so the gap is one call narrower but the constraint is unchanged — every pre-open write has to be on the host before `register` carries the directory across.
+- **The `configDirectory` override has to reach it — and reach every OTHER pre-open write too.** The old `ensureAlwaysUpdateLinks` hardcoded `.obsidian` while the harness supports opening a vault whose settings live elsewhere (**L5**). Under an override it wrote to a folder the vault never reads and **both** defaults vanished silently. `resolveOwnedConfigDirectory` (`src/transport-options.ts`) answers the question once: the override only when the transport is CDP **and** owned, `undefined` in attach mode (where the user's Obsidian opens the vault under its own config, as that option's own docs say) and on Android (no override exists). `coreSetup` resolves it into a single local and feeds every writer from it — see the next section for who those are.
+- **Never a caller-supplied vault.** `connectToCdp` provisions a vault too and called neither helper before 2026-09-05, so it lacked both defaults. It now writes them — but only when it made the directory itself (`options.vault === undefined`, the same discriminator that already decides whether disposal deletes it). A vault the caller named is a real one they keep, and a debugging session has no business rewriting its settings.
 
 ### Every pre-open write, not just `app.json`
 
-The 2026-09-05 fix threaded the override into `ensureHeadlessVaultConfig` and stopped there, leaving the
-other two writers hardcoding `.obsidian`. Under an override they wrote into a folder nothing opens, and the
-enable that followed reported only `Plugin "…" is in the enabled set but not loaded` — naming nothing about
-a config folder, which is why it survived by reading rather than by failing. `coreSetup` now resolves the
-folder once and hands it to all three:
+The 2026-09-05 fix threaded the override into `ensureHeadlessVaultConfig` and stopped there, leaving the other two writers hardcoding `.obsidian`. Under an override they wrote into a folder nothing opens, and the enable that followed reported only `Plugin "…" is in the enabled set but not loaded` — naming nothing about a config folder, which is why it survived by reading rather than by failing. `coreSetup` now resolves the folder once and hands it to all three:
 
 - **`ensureHeadlessVaultConfig`** — `<configDirectory>/app.json`.
-- **`installPluginIntoVault`** (`src/vault-plugin-install.ts`) — the plugin-under-test's build into
-  `<configDirectory>/plugins/<id>/`, plus the `<configDirectory>/community-plugins.json` enable list. Carved
-  out of `copyPluginIntoVault` for the same reason the config write was carved out: `copyPluginIntoVault` is
-  private and also resolves `dist/`, reads the manifest and refuses a desktop-only plugin on mobile, so the
-  override path was not reachable from a unit test until the write had its own module.
-- **`remapConfigDirectoryKeys`** (`src/global-setup-core.ts`) — the **populate map's** config-folder keys.
-  A populate map names destinations vault-relative and everything that builds one, `buildDemoVaultPopulate`
-  included, writes them under a literal `.obsidian/`, because that is the only folder a map can know about.
-  Rewriting the key in `coreSetup` fixes every consumer at once — a hand-written map as much as a demo
-  vault's — with no second copy of the override for a caller to keep in sync. Safe rather than magic: the
-  vault is one the harness made for this run and has exactly one config folder, so under an override a
-  `.obsidian/` entry is dead weight nothing reads. Only a leading `.obsidian` path **segment** moves.
+- **`installPluginIntoVault`** (`src/vault-plugin-install.ts`) — the plugin-under-test's build into `<configDirectory>/plugins/<id>/`, plus the `<configDirectory>/community-plugins.json` enable list. Carved out of `copyPluginIntoVault` for the same reason the config write was carved out: `copyPluginIntoVault` is private and also resolves `dist/`, reads the manifest and refuses a desktop-only plugin on mobile, so the override path was not reachable from a unit test until the write had its own module.
+- **`remapConfigDirectoryKeys`** (`src/global-setup-core.ts`) — the **populate map's** config-folder keys. A populate map names destinations vault-relative and everything that builds one, `buildDemoVaultPopulate` included, writes them under a literal `.obsidian/`, because that is the only folder a map can know about. Rewriting the key in `coreSetup` fixes every consumer at once — a hand-written map as much as a demo vault's — with no second copy of the override for a caller to keep in sync. Safe rather than magic: the vault is one the harness made for this run and has exactly one config folder, so under an override a `.obsidian/` entry is dead weight nothing reads. Only a leading `.obsidian` path **segment** moves.
 
-**`enablePluginInVault` is deliberately exempt.** It evals `app.plugins.enablePlugin` inside Obsidian, which
-resolves paths through the running app's own `configDir` — it touches no filesystem path, so there is
-nothing to thread. Likewise `transport-appium`'s `.obsidian/app.json` marker push: `resolveOwnedConfigDirectory`
-returns `undefined` on Android, so no override exists there. And `cli.ts` / `demo-vault-tree.ts` /
-`buildDemoVaultPopulate`'s **reads** stay `.obsidian`: those name the plugin repo's own committed
-`demo-vault/.obsidian`, a source folder the run's override has no bearing on.
+**`enablePluginInVault` is deliberately exempt.** It evals `app.plugins.enablePlugin` inside Obsidian, which resolves paths through the running app's own `configDir` — it touches no filesystem path, so there is nothing to thread. Likewise `transport-appium`'s `.obsidian/app.json` marker push: `resolveOwnedConfigDirectory` returns `undefined` on Android, so no override exists there. And `cli.ts` / `demo-vault-tree.ts` / `buildDemoVaultPopulate`'s **reads** stay `.obsidian`: those name the plugin repo's own committed `demo-vault/.obsidian`, a source folder the run's override has no bearing on.
 
-**Coverage:** `src/vault-plugin-install.test.ts` and the `remapConfigDirectoryKeys` block in
-`src/global-setup-core.test.ts` for the units; `integration-tests:config-directory-override` (**L3**) for the
-end-to-end. The install path itself cannot be driven end-to-end from this repo — `coreSetup` takes its
-project root from `findProjectRoot()` rather than a parameter and the harness ships no plugin `dist` — so
-that project forces `installPlugin: false` and proves the other half: a real Obsidian, opened under an
-override, finds what the harness wrote for it.
+**Coverage:** `src/vault-plugin-install.test.ts` and the `remapConfigDirectoryKeys` block in `src/global-setup-core.test.ts` for the units; `integration-tests:config-directory-override` (**L3**) for the end-to-end. The install path itself cannot be driven end-to-end from this repo — `coreSetup` takes its project root from `findProjectRoot()` rather than a parameter and the harness ships no plugin `dist` — so that project forces `installPlugin: false` and proves the other half: a real Obsidian, opened under an override, finds what the harness wrote for it.
 
 ### A test whose subject IS the popout opts back in through a seam, not by hand
 
-The two defaults stay unconditional, and there is deliberately **no provisioning knob** for either. Adding
-one would not even have helped the case that asked for it: a parameter on the provisioning write is
-per-**vault**, and in `obsidian-dev-utils` the three tests that need the popout share one vault with the
-tests the default protects (measured 2026-09-12 — with the popout off, one asserts the minimizable
-peek-lock stops the settings window being created and reads `app.setting.popout`, and two wait on
-`activeWindow !== window`, so all three simply time out). What they need is per-**test** granularity, so
-that is what the harness exports, in `src/app-config.ts`:
+The two defaults stay unconditional, and there is deliberately **no provisioning knob** for either. Adding one would not even have helped the case that asked for it: a parameter on the provisioning write is per-**vault**, and in `obsidian-dev-utils` the three tests that need the popout share one vault with the tests the default protects (measured 2026-09-12 — with the popout off, one asserts the minimizable peek-lock stops the settings window being created and reads `app.setting.popout`, and two wait on `activeWindow !== window`, so all three simply time out). What they need is per-**test** granularity, so that is what the harness exports, in `src/app-config.ts`:
 
 - **`getAppConfig({ configKey, transport?, vaultPath? })`** — Obsidian's own `Vault.getConfig`.
-- **`setAppConfig({ …, value })`** → an `AppConfigRestore` token, and **`restoreAppConfig(token)`** — the
-  `beforeAll` / `afterAll` half.
-- **`withAppConfig({ …, value, callback })`** — scoped: it sets, runs the callback, and restores in a
-  `finally`, so a test cannot forget. The callback runs on the **Node** side, free to make several evals.
+- **`setAppConfig({ …, value })`** → an `AppConfigRestore` token, and **`restoreAppConfig(token)`** — the `beforeAll` / `afterAll` half.
+- **`withAppConfig({ …, value, callback })`** — scoped: it sets, runs the callback, and restores in a `finally`, so a test cannot forget. The callback runs on the **Node** side, free to make several evals.
 
-Three things it buys over the inline `app.vault.setConfig` a consumer writes inside its own
-`evalInObsidian` closure — which is what those three tests carried before this existed:
+Three things it buys over the inline `app.vault.setConfig` a consumer writes inside its own `evalInObsidian` closure — which is what those three tests carried before this existed:
 
-- **The value is restored, including *deleting* a key that had never been written.** An inline setter
-  writes into a vault shared with the rest of the run, so every later test in that instance inherits the
-  change — precisely the cross-test contamination the unconditional default exists to end.
-- **One cast instead of one per consumer.** `obsidian-typings`' `ConfigItem` union omits
-  `settingsPopoutWindow`, so `getConfig` / `setConfig` must be bound and widened to pass it at all; every
-  consumer that set the key inline repeated that cast. It disappears from one place when the typings grow
-  the key.
+- **The value is restored, including *deleting* a key that had never been written.** An inline setter writes into a vault shared with the rest of the run, so every later test in that instance inherits the change — precisely the cross-test contamination the unconditional default exists to end.
+- **One cast instead of one per consumer.** `obsidian-typings`' `ConfigItem` union omits `settingsPopoutWindow`, so `getConfig` / `setConfig` must be bound and widened to pass it at all; every consumer that set the key inline repeated that cast. It disappears from one place when the typings grow the key.
 - **Per-test granularity**, as above.
 
 Two facts about Obsidian shape the restore, both read out of the shipped 1.14.1 bundle rather than assumed:
 
-- `Vault.setConfig(key, value)` **deletes** the key when `value` is `undefined` — which is the only way to
-  restore one the vault never carried — and does nothing at all when the value is unchanged (no save, no
-  `config-changed` event).
-- `Vault.getConfig(key)` substitutes Obsidian's own default for an absent key, so it **cannot** tell *unset*
-  from *set to that default*; restoring from it would leave the key written where it had not been. So
-  presence is read off `app.vault.config`, which carries only the keys changed from their default —
-  `Object.hasOwn` on it is the signal, and being an `object` parameter it needs no cast.
+- `Vault.setConfig(key, value)` **deletes** the key when `value` is `undefined` — which is the only way to restore one the vault never carried — and does nothing at all when the value is unchanged (no save, no `config-changed` event).
+- `Vault.getConfig(key)` substitutes Obsidian's own default for an absent key, so it **cannot** tell *unset* from *set to that default*; restoring from it would leave the key written where it had not been. So presence is read off `app.vault.config`, which carries only the keys changed from their default — `Object.hasOwn` on it is the signal, and being an `object` parameter it needs no cast.
 
-Everything is Node-side by necessity: an `evalInObsidian` callback is serialized into the driven Obsidian
-and can import nothing, so a helper callable from *inside* a closure is not expressible — the same
-constraint that makes `openObsidianSettingsTab` (**L38**) a Node entry point over a renderer-side `lib`
-member.
+Everything is Node-side by necessity: an `evalInObsidian` callback is serialized into the driven Obsidian and can import nothing, so a helper callable from *inside* a closure is not expressible — the same constraint that makes `openObsidianSettingsTab` (**L38**) a Node entry point over a renderer-side `lib` member.
 
-**Coverage:** `src/app-config.integration.test.ts` (the `integration-tests` project) drives a live instance
-through both restore branches — a key that was absent is deleted again, a key the vault carries gets its
-value written back — and asserts the restore survives a throwing callback. It can reach both because its
-in-worker vault carries no headless default (next section), so the key starts absent. It stops at the config
-layer on purpose: `SettingsModal.shouldUsePopout()` is `getConfig('settingsPopoutWindow')` verbatim, so
-asserting the window behaviour again would add nothing over
-`owned-instance-worker-attach.integration.test.ts`, and would leave a second Electron window in a run other
-suites share.
+**Coverage:** `src/app-config.integration.test.ts` (the `integration-tests` project) drives a live instance through both restore branches — a key that was absent is deleted again, a key the vault carries gets its value written back — and asserts the restore survives a throwing callback. It can reach both because its in-worker vault carries no headless default (next section), so the key starts absent. It stops at the config layer on purpose: `SettingsModal.shouldUsePopout()` is `getConfig('settingsPopoutWindow')` verbatim, so asserting the window behaviour again would add nothing over `owned-instance-worker-attach.integration.test.ts`, and would leave a second Electron window in a run other suites share.
 
 ### What is still NOT covered, deliberately
 
-A vault a suite builds in-worker with `new TemporaryVault()` gets neither default — the write lives in
-`coreSetup` and `connectToCdp`, not in `TemporaryVault` itself, for the mobile-ordering reason above. This
-does not touch consumers: a plugin's suite reaches the global-setup vault through `getTemporaryVault()`,
-which is provisioned. It does affect this repo's own suites, which build their own vaults for isolation —
-`eval-in-obsidian.integration.test.ts` runs against a popout-enabled vault and is the coverage that keeps
-`openSettingsTab`'s pre-attach fallback honest (**L38**). `app-config.integration.test.ts` depends on the
-same gap in the other direction: a vault the harness never provisioned is the only one where the key starts
-**absent**,
-which is what makes the restore-by-delete branch reachable at all.
+A vault a suite builds in-worker with `new TemporaryVault()` gets neither default — the write lives in `coreSetup` and `connectToCdp`, not in `TemporaryVault` itself, for the mobile-ordering reason above. This does not touch consumers: a plugin's suite reaches the global-setup vault through `getTemporaryVault()`, which is provisioned. It does affect this repo's own suites, which build their own vaults for isolation — `eval-in-obsidian.integration.test.ts` runs against a popout-enabled vault and is the coverage that keeps `openSettingsTab`'s pre-attach fallback honest (**L38**). `app-config.integration.test.ts` depends on the same gap in the other direction: a vault the harness never provisioned is the only one where the key starts **absent**, which is what makes the restore-by-delete branch reachable at all.
 
 ## L49. A wedged emulator is not an absent device — the console is what tells them apart
 
-**L46** made the teardown prove its claims and **L47** made the preflight stop reading silence as an
-answer. This is the same discipline applied to the *last step before the session*, and it is the entry
-that finally names a failure this repo had been misattributing for days.
+**L46** made the teardown prove its claims and **L47** made the preflight stop reading silence as an answer. This is the same discipline applied to the *last step before the session*, and it is the entry that finally names a failure this repo had been misattributing for days.
 
 ### The symptom, and why every reading of it was wrong
 
@@ -2706,14 +1011,11 @@ adb -s emulator-5554 shell getprop ro.build.version.sdk … Command output: erro
 WebDriverError: The operation was aborted due to timeout   (POST /session)
 ```
 
-All three name the device. `adb devices` then lists the device instantly, so the obvious next step says
-everything is fine — the same trap `wedged-appium-server.ts` was written to escape, one layer down. The
-three signatures alternated run to run, which made it look like three faults. It is one.
+All three name the device. `adb devices` then lists the device instantly, so the obvious next step says everything is fine — the same trap `wedged-appium-server.ts` was written to escape, one layer down. The three signatures alternated run to run, which made it look like three faults. It is one.
 
 ### What it actually is, measured 2026-09-05
 
-Six hand-boots with the harness's exact arguments, polled every 5s, no Appium attached at all. **Every
-one wedged 64–92s after boot** — and the reproducer is that cheap: 92 seconds and no suite.
+Six hand-boots with the harness's exact arguments, polled every 5s, no Appium attached at all. **Every one wedged 64–92s after boot** — and the reproducer is that cheap: 92 seconds and no suite.
 
 | Run | Override | Verdict |
 | --- | --- | --- |
@@ -2734,53 +1036,33 @@ At the moment of the wedge:
 
 Two observations relocate the fault, and both are the point of this entry:
 
-- **The emulator console hangs too.** `adb … emu <command>` is served by the emulator process, not by the
-  guest's `adbd`. Its silence means the **emulator** is stuck — not a frozen guest behind a healthy
-  emulator, and not the device being absent.
-- **0% CPU.** Blocked, not spinning. Nothing is executing guest code. **On its own this proves nothing** —
-  a healthy idle emulator sits at 0% too, for most of the 300s the runner survives. It is 0% *while both
-  probes go unanswered* that convicts; the CPU reading corroborates the verdict, it does not make it.
+- **The emulator console hangs too.** `adb … emu <command>` is served by the emulator process, not by the guest's `adbd`. Its silence means the **emulator** is stuck — not a frozen guest behind a healthy emulator, and not the device being absent.
+- **0% CPU.** Blocked, not spinning. Nothing is executing guest code. **On its own this proves nothing** — a healthy idle emulator sits at 0% too, for most of the 300s the runner survives. It is 0% *while both probes go unanswered* that convicts; the CPU reading corroborates the verdict, it does not make it.
 
-Together they explain the downstream symptoms that had looked unrelated: `adb devices` keeps reporting
-`device` because nothing is left running to update that state, and the teardown's `adb emu kill` hangs for
-its full budget because it is asking the wedged console to shut itself down.
+Together they explain the downstream symptoms that had looked unrelated: `adb devices` keeps reporting `device` because nothing is left running to update that state, and the teardown's `adb emu kill` hangs for its full budget because it is asking the wedged console to shut itself down.
 
 ### Three attractive suspects, each killed by measurement
 
 Recorded so they are not re-chased — each looked right from the static configuration:
 
-- **lavapipe.** `hw.gpu.mode=auto` resolves to `vulkan_mode_selected:lavapipe`, software Vulkan, driving a
-  1344x2992 framebuffer headless. Bypassing it with `-gpu swiftshader_indirect` changed nothing.
-- **netsim.** The failing runs log `Netsim Wifi … is gone due to Received RST_STREAM` and `Unable to
-  reconnect to packet streamer`. The run with `-feature -WiFiPacketStream` logged **no netsim lines at
-  all** and died anyway, so that is a consequence of the wedge, not its cause.
-- **Memory.** The run with 12.1 GB free wedged exactly like the one with 4.6 GB, and halving the guest to
-  4096 MB made it die *sooner*.
+- **lavapipe.** `hw.gpu.mode=auto` resolves to `vulkan_mode_selected:lavapipe`, software Vulkan, driving a 1344x2992 framebuffer headless. Bypassing it with `-gpu swiftshader_indirect` changed nothing.
+- **netsim.** The failing runs log `Netsim Wifi … is gone due to Received RST_STREAM` and `Unable to reconnect to packet streamer`. The run with `-feature -WiFiPacketStream` logged **no netsim lines at all** and died anyway, so that is a consequence of the wedge, not its cause.
+- **Memory.** The run with 12.1 GB free wedged exactly like the one with 4.6 GB, and halving the guest to 4096 MB made it die *sooner*.
 
-**So this is below the harness.** Two AVDs and five argument sets share only the emulator build, the
-system image and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending
-to. The first two of those three were then eliminated as well, on the same day:
+**So this is below the harness.** Two AVDs and five argument sets share only the emulator build, the system image and the host itself. `buildEmulatorArguments` cannot fix it, and no flag was added pretending to. The first two of those three were then eliminated as well, on the same day:
 
 | Also tested | Result |
 | --- | --- |
 | A different **system image** — `android-36/google_apis` (not 37.0, not Play Store, no 16 KB page size) on a fresh throwaway AVD | 85s of usable life vs 43-71s, then the identical wedge |
 | A different **emulator build** — 36.6.11.0 → 37.1.11.0, same AVD, same arguments | died at 64s, *sooner* than the 92s baseline |
 
-Which leaves the **host** — and the host here is Windows 11 26200 + WHPX, so the hypervisor is what the
-elimination pointed at. It was the wrong half of the host: the next section names what it actually was,
-and it is not the hypervisor. Recorded in that order because the elimination above is sound and worth
-repeating; it just does not reach far enough on its own. (HVCI is off — `SecurityServicesRunning` is `0` —
-so there was never a memory-integrity setting to turn off either; VBS is up only because Hyper-V/WHPX is
-enabled at all.)
+Which leaves the **host** — and the host here is Windows 11 26200 + WHPX, so the hypervisor is what the elimination pointed at. It was the wrong half of the host: the next section names what it actually was, and it is not the hypervisor. Recorded in that order because the elimination above is sound and worth repeating; it just does not reach far enough on its own. (HVCI is off — `SecurityServicesRunning` is `0` — so there was never a memory-integrity setting to turn off either; VBS is up only because Hyper-V/WHPX is enabled at all.)
 
-Anyone hitting this on their own machine should start from the reproducer below rather than from these
-tests, and should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix
-it, because none of them did here.
+Anyone hitting this on their own machine should start from the reproducer below rather than from these tests, and should not expect an emulator flag, an AVD setting, a newer image or a newer emulator to fix it, because none of them did here.
 
 ### What the host turned out to be, and what was done about it
 
-**It is a host socket-filter driver.** Measured 2026-09-07 on the machine above, idle throughout, same
-AVD and the same arguments in every run — the only variable is which filter product was running:
+**It is a host socket-filter driver.** Measured 2026-09-07 on the machine above, idle throughout, same AVD and the same arguments in every run — the only variable is which filter product was running:
 
 | Run | Content blocker | VPN | Verdict |
 | --- | --- | --- | --- |
@@ -2789,18 +1071,9 @@ AVD and the same arguments in every run — the only variable is which filter pr
 | **content blocker stopped** | **stopped** | running | **survived the full 240s** |
 | **VPN stopped** | running | **stopped** | `guest-unresponsive` at 52s |
 
-The last two rows are the whole result: stopping the VPN changes nothing, stopping the content blocker
-fixes it. On this host that is AdGuard, whose `adgnetworksockdrv.sys` is a socket filter sitting in the
-path of every host socket call the emulator makes — and it updated itself about ninety minutes before the
-first wedge. **The product is incidental; the driver class is the finding.** Any endpoint-security,
-content-blocking or VPN product that installs a socket or WFP filter can do this, so *what is filtering
-this host's sockets* is a question worth asking before concluding a machine is beyond repair.
+The last two rows are the whole result: stopping the VPN changes nothing, stopping the content blocker fixes it. On this host that is AdGuard, whose `adgnetworksockdrv.sys` is a socket filter sitting in the path of every host socket call the emulator makes — and it updated itself about ninety minutes before the first wedge. **The product is incidental; the driver class is the finding.** Any endpoint-security, content-blocking or VPN product that installs a socket or WFP filter can do this, so *what is filtering this host's sockets* is a question worth asking before concluding a machine is beyond repair.
 
-**This also explains the observation above that nothing else could.** The emulator's own console is a
-localhost TCP socket, so it traverses the same filter as everything else — which is why the console hangs
-alongside the guest, and why the 0% CPU reading is a thread blocked in a syscall rather than one spinning.
-That pair of symptoms was read as "the fault is below the harness, in the hypervisor". It was below the
-harness; it was not the hypervisor.
+**This also explains the observation above that nothing else could.** The emulator's own console is a localhost TCP socket, so it traverses the same filter as everything else — which is why the console hangs alongside the guest, and why the 0% CPU reading is a thread blocked in a syscall rather than one spinning. That pair of symptoms was read as "the fault is below the harness, in the hypervisor". It was below the harness; it was not the hypervisor.
 
 **The remedy is to stop the filter service for the duration of the run**, from an elevated prompt:
 
@@ -2812,50 +1085,21 @@ Start-Service 'Adguard Service'
 
 Two things whoever does this needs to know:
 
-- **`StopPending` is already enough, and is the normal outcome.** The service frequently does not reach
-  `Stopped` within 20s and parks in `StopPending`; the driver has disengaged by then regardless. A sweep
-  of thirteen repos' Android legs ran to completion on 2026-09-08 with the service in exactly that state,
-  so a script that treats anything but `Stopped` as failure will abort runs that would have passed.
-- **Check Driver Verifier before stopping anything.** If the filter driver is one Verifier is verifying,
-  stopping the service bugchecks the machine with `0xC4` DRIVER_VERIFIER_DETECTED_VIOLATION — that
-  happened here, twice, and cost two reboots before the pattern was recognised. `verifier /query` lists
-  what is armed; `verifier /reset` plus a reboot disarms it. Verifier was *also* armed over this exact
-  driver list on this host, which made it a compelling suspect in its own right — it is not the cause, and
-  two runs with it disarmed wedged sooner than the armed baseline.
+- **`StopPending` is already enough, and is the normal outcome.** The service frequently does not reach `Stopped` within 20s and parks in `StopPending`; the driver has disengaged by then regardless. A sweep of thirteen repos' Android legs ran to completion on 2026-09-08 with the service in exactly that state, so a script that treats anything but `Stopped` as failure will abort runs that would have passed.
+- **Check Driver Verifier before stopping anything.** If the filter driver is one Verifier is verifying, stopping the service bugchecks the machine with `0xC4` DRIVER_VERIFIER_DETECTED_VIOLATION — that happened here, twice, and cost two reboots before the pattern was recognised. `verifier /query` lists what is armed; `verifier /reset` plus a reboot disarms it. Verifier was *also* armed over this exact driver list on this host, which made it a compelling suspect in its own right — it is not the cause, and two runs with it disarmed wedged sooner than the armed baseline.
 
 Restoring the service afterwards matters: it is the host's actual content blocker, not test scaffolding.
 
-**CI remains the unattended route** — nothing below changes, and a Linux runner needs none of this — but
-the local Android leg is no longer blocked on relocating it.
+**CI remains the unattended route** — nothing below changes, and a Linux runner needs none of this — but the local Android leg is no longer blocked on relocating it.
 
-Two obvious host-side fixes were checked before the filter driver was found, and are dead ends, so nobody
-re-chases them:
+Two obvious host-side fixes were checked before the filter driver was found, and are dead ends, so nobody re-chases them:
 
-- **There is no update to install.** The machine is fully patched (Windows 11 Pro 25H2, build
-  26200.9168; only a Defender definition update pending), and the System event log carries no WHEA, no
-  Hyper-V and no bugcheck entries around any of the wedges. It is a hang, and the platform never notices
-  it.
-- **The AMD-native accelerator is installed and inert.** This is an AMD host (Ryzen 5 7500F) running the
-  emulator through **WHPX**, Microsoft's generic hypervisor API. Google also ships the *Android Emulator
-  hypervisor driver* (AEHD), whose own README says it exists "to run Android Emulator on Windows
-  **without** Windows Hypervisor Platform (WHPX)" — and it is already installed here, as
-  `C:\Windows\System32\drivers\aehd.sys` with a `SYSTEM_START` service. It sits **STOPPED with exit code
-  31**, because Hyper-V holds the CPU's virtualization extensions and the two cannot coexist. Swapping to
-  it therefore is not a flag: it costs an elevated `bcdedit /set hypervisorlaunchtype off` and a reboot,
-  during which no Hyper-V VM, WSL2 or Windows Sandbox can start (reversible with `auto` and another
-  reboot). **Untested here** — recorded so the next reader knows both that the option exists and what it
-  costs, rather than discovering the service is present and assuming it is in use.
+- **There is no update to install.** The machine is fully patched (Windows 11 Pro 25H2, build 26200.9168; only a Defender definition update pending), and the System event log carries no WHEA, no Hyper-V and no bugcheck entries around any of the wedges. It is a hang, and the platform never notices it.
+- **The AMD-native accelerator is installed and inert.** This is an AMD host (Ryzen 5 7500F) running the emulator through **WHPX**, Microsoft's generic hypervisor API. Google also ships the *Android Emulator hypervisor driver* (AEHD), whose own README says it exists "to run Android Emulator on Windows **without** Windows Hypervisor Platform (WHPX)" — and it is already installed here, as `C:\Windows\System32\drivers\aehd.sys` with a `SYSTEM_START` service. It sits **STOPPED with exit code 31**, because Hyper-V holds the CPU's virtualization extensions and the two cannot coexist. Swapping to it therefore is not a flag: it costs an elevated `bcdedit /set hypervisorlaunchtype off` and a reboot, during which no Hyper-V VM, WSL2 or Windows Sandbox can start (reversible with `auto` and another reboot). **Untested here** — recorded so the next reader knows both that the option exists and what it costs, rather than discovering the service is present and assuming it is in use.
 
-Two assets carried the investigation, and both keep their value now that the cause is known — the first is
-how you establish that a host is affected at all, the second is how the Android leg runs where no host
-fix is available:
+Two assets carried the investigation, and both keep their value now that the cause is known — the first is how you establish that a host is affected at all, the second is how the Android leg runs where no host fix is available:
 
-- **`npm run probe:emulator-wedge`** (`scripts/emulator-wedge-probe.ts`) is the reproducer, kept as a repo
-  asset because it had been rebuilt from scratch twice. It boots one AVD with `buildEmulatorArguments`'
-  own output, watches it with the same two-probe verdict the transport uses, and adds the two readings a
-  run has no reason to collect — the backend's CPU share and the host's free memory. It exits non-zero on
-  a wedge. Four runs on 2026-09-06 wedged at 18s, 5s, 16s and 44s — sooner than the 64–163s above, on a
-  host that was compiling throughout, which is a reminder that the timing is not the signal. The shape is:
+- **`npm run probe:emulator-wedge`** (`scripts/emulator-wedge-probe.ts`) is the reproducer, kept as a repo asset because it had been rebuilt from scratch twice. It boots one AVD with `buildEmulatorArguments`' own output, watches it with the same two-probe verdict the transport uses, and adds the two readings a run has no reason to collect — the backend's CPU share and the host's free memory. It exits non-zero on a wedge. Four runs on 2026-09-06 wedged at 18s, 5s, 16s and 44s — sooner than the 64–163s above, on a host that was compiling throughout, which is a reminder that the timing is not the signal. The shape is:
 
   ```text
      5s  alive               cpu=838%  rss=5.05GB  free=5.39GB
@@ -2863,65 +1107,32 @@ fix is available:
     18s  emulator-wedged     cpu=0%    rss=5.62GB  free=5.55GB
   ```
 
-  **A quiet guest inside the post-boot settle window is forgiven; a quiet console never is.** Without that
-  allowance the probe convicted a healthy guest 5s after boot while this host was compiling — the same
-  post-boot contention **L45** sizes its budgets for, and exactly the false wedge a loaded CI runner would
-  otherwise produce. The console is served by the emulator process, so its silence is never settling.
+  **A quiet guest inside the post-boot settle window is forgiven; a quiet console never is.** Without that allowance the probe convicted a healthy guest 5s after boot while this host was compiling — the same post-boot contention **L45** sizes its budgets for, and exactly the false wedge a loaded CI runner would otherwise produce. The console is served by the emulator process, so its silence is never settling.
 
-- **`.github/workflows/validate-android-emulator.yml`** runs that same probe on `ubuntu-latest` and, gated
-  behind it, the Android integration project. **It settles the question: the runner survives.** Measured
-  2026-09-07, same probe, same arguments, same AVD provisioning:
+- **`.github/workflows/validate-android-emulator.yml`** runs that same probe on `ubuntu-latest` and, gated behind it, the Android integration project. **It settles the question: the runner survives.** Measured 2026-09-07, same probe, same arguments, same AVD provisioning:
 
   ```text
      5s  alive  cpu=380%   ...    301s  alive  cpu=0%
   SURVIVED: the guest answered 60 of 60 polls across 300s of uptime.
   ```
 
-  and the suite behind it passed 5/5 against a real Obsidian install, trusted taps included. So the fault
-  is this machine, established by a differential rather than by elimination alone. The probe job is
-  separate from the suite job precisely so those two answers never have to be untangled from one failure —
-  which earned itself immediately: the first two dispatches failed in the probe job's *setup*, and the
-  separation is what made that obvious at a glance.
+  and the suite behind it passed 5/5 against a real Obsidian install, trusted taps included. So the fault is this machine, established by a differential rather than by elimination alone. The probe job is separate from the suite job precisely so those two answers never have to be untangled from one failure — which earned itself immediately: the first two dispatches failed in the probe job's *setup*, and the separation is what made that obvious at a glance.
 
-Two tooling notes for whoever repeats this: `sdkmanager` / `android sdk install` has no download resume
-and failed three times mid-transfer on a 1.8 GB image (`curl -L --retry 20 --retry-all-errors -C -` is the
-workaround), and `android sdk install emulator` exits **9 even on success** — check `emulator -version`
-rather than the exit code.
+Two tooling notes for whoever repeats this: `sdkmanager` / `android sdk install` has no download resume and failed three times mid-transfer on a 1.8 GB image (`curl -L --retry 20 --retry-all-errors -C -` is the workaround), and `android sdk install emulator` exits **9 even on success** — check `emulator -version` rather than the exit code.
 
 ### What the harness does about it
 
-It cannot make the emulator work. It can stop misreporting it, which is the difference between a run that
-sends the reader to `adb devices` and one that sends them to the emulator build.
+It cannot make the emulator work. It can stop misreporting it, which is the difference between a run that sends the reader to `adb devices` and one that sends them to the emulator build.
 
-- **`emulator-liveness.ts` (pure, unit-tested)** owns the two-probe verdict: `alive` /
-  `guest-unresponsive` / `emulator-wedged` / `device-gone`. **Only a successful probe is an answer.** An
-  earlier draft split failures into "errored" and "timed out" and read an errored console as *the emulator
-  speaking, with a refusal* — which is wrong: `adb … emu` is routed by the **adb server**, so against an
-  `offline` device adb refuses on the spot and the console is never reached. That draft logged
-  `shell=errored, console=errored -> guest-unresponsive` for a device whose emulator then had to be killed
-  by PID because `adb emu kill` could not reach it either. Each probe is asked twice before its silence is
-  believed, the same one-retry restraint **L47** applies to the AVD probe and for the same reason.
-- **A non-emulator is never convicted on its console**, for exactly the reason **L47** gives: `adb … emu`
-  errors against a physical handset however healthy it is. There was one plugged into this host during
-  the investigation, which is how the case came up.
-- **The gate runs immediately before `establishSession`**, the last point at which a device that has gone
-  quiet can still be reported as itself. The readiness gates before it are best-effort by design (**L45**)
-  and answer a different question — *is it ready yet*, not *is it still there*.
-- **A failed session re-probes the device** (`establishSessionOrDiagnoseDevice`) and, when the emulator is
-  wedged, replaces the WebDriver error with the diagnosis while keeping it as the `cause`. Deliberately
-  *not* done by teaching `wedged-appium-server.ts` more error strings: those signatures are not about the
-  server, and the module that owns the server's diagnosis should not start guessing at the device's.
-- **The emulator's captured output now survives past boot.** `stopCapture()` used to fire the moment a
-  device appeared, freezing the emulator's testimony one step before the failure nobody could explain —
-  the hanging-thread and packet-streamer lines are printed later, while the run is inside
-  `establishSession`. The window now closes when the session is established.
+- **`emulator-liveness.ts` (pure, unit-tested)** owns the two-probe verdict: `alive` / `guest-unresponsive` / `emulator-wedged` / `device-gone`. **Only a successful probe is an answer.** An earlier draft split failures into "errored" and "timed out" and read an errored console as *the emulator speaking, with a refusal* — which is wrong: `adb … emu` is routed by the **adb server**, so against an `offline` device adb refuses on the spot and the console is never reached. That draft logged `shell=errored, console=errored -> guest-unresponsive` for a device whose emulator then had to be killed by PID because `adb emu kill` could not reach it either. Each probe is asked twice before its silence is believed, the same one-retry restraint **L47** applies to the AVD probe and for the same reason.
+- **A non-emulator is never convicted on its console**, for exactly the reason **L47** gives: `adb … emu` errors against a physical handset however healthy it is. There was one plugged into this host during the investigation, which is how the case came up.
+- **The gate runs immediately before `establishSession`**, the last point at which a device that has gone quiet can still be reported as itself. The readiness gates before it are best-effort by design (**L45**) and answer a different question — *is it ready yet*, not *is it still there*.
+- **A failed session re-probes the device** (`establishSessionOrDiagnoseDevice`) and, when the emulator is wedged, replaces the WebDriver error with the diagnosis while keeping it as the `cause`. Deliberately *not* done by teaching `wedged-appium-server.ts` more error strings: those signatures are not about the server, and the module that owns the server's diagnosis should not start guessing at the device's.
+- **The emulator's captured output now survives past boot.** `stopCapture()` used to fire the moment a device appeared, freezing the emulator's testimony one step before the failure nobody could explain — the hanging-thread and packet-streamer lines are printed later, while the run is inside `establishSession`. The window now closes when the session is established.
 
 ### The wedge is not deterministic, so the run boots a second emulator
 
-**This corrects an earlier reading in this same entry.** The first draft argued *against* an automatic
-cold-boot retry: the wedge recurs at the same point in every run, so a re-boot buys another 90s and the
-identical failure. That inference was drawn from the six hand-boots above — and **every one of them was a
-first boot**, so the data said nothing whatever about second ones.
+**This corrects an earlier reading in this same entry.** The first draft argued *against* an automatic cold-boot retry: the wedge recurs at the same point in every run, so a re-boot buys another 90s and the identical failure. That inference was drawn from the six hand-boots above — and **every one of them was a first boot**, so the data said nothing whatever about second ones.
 
 The run that settled it, 2026-09-05:
 
@@ -2930,228 +1141,82 @@ The run that settled it, 2026-09-05:
 19:09:12  emulator started -> 19:12:50 device connected -> 19:13:11 session ESTABLISHED
 ```
 
-The second emulator — same AVD, same arguments, booted 11 seconds after the first was killed — ran the
-suite to completion. (It happened by accident: the failing run's `afterAll` builds a transport of its own,
-which provisioned again.) A retry would have rescued that run.
+The second emulator — same AVD, same arguments, booted 11 seconds after the first was killed — ran the suite to completion. (It happened by accident: the failing run's `afterAll` builds a transport of its own, which provisioned again.) A retry would have rescued that run.
 
-So `EMULATOR_BOOT_ATTEMPT_COUNT` is 2. **One** retry: a cold boot costs 90-220s, so a second failure is
-where the run should stop and say so rather than keep paying. Only an emulator this run started is
-replaced — an adopted device is somebody else's to restart, the same ownership line **L46** draws in
-never sweeping `qemu*`. And the emulator is disowned *before* it is stopped, so a throw inside the stop
-cannot leave the outer teardown chasing the same processes twice.
+So `EMULATOR_BOOT_ATTEMPT_COUNT` is 2. **One** retry: a cold boot costs 90-220s, so a second failure is where the run should stop and say so rather than keep paying. Only an emulator this run started is replaced — an adopted device is somebody else's to restart, the same ownership line **L46** draws in never sweeping `qemu*`. And the emulator is disowned *before* it is stopped, so a throw inside the stop cannot leave the outer teardown chasing the same processes twice.
 
-What is still not added is a *session* retry: `connectionRetryCount: 3` re-attempting `POST /session`
-against a device that is already gone remains useless, and the liveness gate now stops those three
-attempts before they are made.
+What is still not added is a *session* retry: `connectionRetryCount: 3` re-attempting `POST /session` against a device that is already gone remains useless, and the liveness gate now stops those three attempts before they are made.
 
 ## L50. A death nobody watched for — the owned instance's exit, its stdio, and the marker that carries them
 
-The harness spawned the instance it owns as `spawn(exe, args, { detached: true, stdio: 'ignore' })` +
-`child.unref()`, with **no `exit` listener anywhere in the package**. Three facts were discarded by
-construction: Obsidian's stdout/stderr, the exit code and signal, and the moment of death. Nothing
-noticed the instance was gone until the next CDP call failed.
+The harness spawned the instance it owns as `spawn(exe, args, { detached: true, stdio: 'ignore' })` + `child.unref()`, with **no `exit` listener anywhere in the package**. Three facts were discarded by construction: Obsidian's stdout/stderr, the exit code and signal, and the moment of death. Nothing noticed the instance was gone until the next CDP call failed.
 
-**What that cost, measured.** In `obsidian-patterns` on 2026-09-05, an instance that died 12 minutes into
-a run turned into **156 failing tests across 21 files** — every one a `TypeError: fetch failed` wrapping
-`connect ECONNREFUSED 127.0.0.1:<cdpPort>`, none of them a test result, and none of them naming the app
-that had gone away. Diagnosing it needed a patched `node_modules` before it could even begin, and the two
-lines that were missing answered the whole question in a single run: `code=0` ruled out every crash
-hypothesis at once, and an empty stdout ruled out an Electron fatal. Both had been guesses for a day.
+**What that cost, measured.** In `obsidian-patterns` on 2026-09-05, an instance that died 12 minutes into a run turned into **156 failing tests across 21 files** — every one a `TypeError: fetch failed` wrapping `connect ECONNREFUSED 127.0.0.1:<cdpPort>`, none of them a test result, and none of them naming the app that had gone away. Diagnosing it needed a patched `node_modules` before it could even begin, and the two lines that were missing answered the whole question in a single run: `code=0` ruled out every crash hypothesis at once, and an empty stdout ruled out an Electron fatal. Both had been guesses for a day.
 
 **Three changes, and the reason each is where it is.**
 
-- **Piped stdio, drained and logged** (`obsidian-instance.ts` + `process-capture.ts`). An Electron or
-  Chromium fatal is written to stderr and nowhere else. The pipes are drained for the process's whole
-  life — a full OS pipe buffer blocks the writer, which here is the app under test — and only a bounded
-  8 000-character tail is retained. **No opt-out knob, deliberately:** a real run prints a handful of
-  lines at boot (`Updates disabled.`, the `DevTools listening on` line, an occasional CLI-server
-  `EADDRINUSE`) and then nothing, so the "noise" the knob would guard against does not exist, while
-  silence demonstrably costs days. Add the knob if a run ever proves otherwise.
-- **An `exit` listener that says so loudly.** `!!! OWNED OBSIDIAN EXITED: pid=… code=… signal=…`. A
-  death the harness **ordered** is logged quietly instead: `kill()` sets a flag first, so teardown and the
-  relaunch loop never masquerade as failures.
-- **A cross-process exit marker** (`owned-instance-exit-marker.ts`). Only the process that launched the
-  instance holds the child and can see `exit`; the test workers get nothing but the port (**L9**). So the
-  exit code crosses the boundary as a JSON sentinel keyed by port, next to the setup lock and the Appium
-  server marker (**L40**), and is read back by whichever process needs it. It is written **only for a
-  death the harness did not order**, and cleared on every deliberate kill and at every launch — a marker
-  left behind by a clean run would convict the next run's healthy instance of an exit that never
-  happened. Reads are tolerant in the same way the Appium marker's are: missing or unreadable is "no
-  marker", and the error is still raised, just without the exit code.
+- **Piped stdio, drained and logged** (`obsidian-instance.ts` + `process-capture.ts`). An Electron or Chromium fatal is written to stderr and nowhere else. The pipes are drained for the process's whole life — a full OS pipe buffer blocks the writer, which here is the app under test — and only a bounded 8 000-character tail is retained. **No opt-out knob, deliberately:** a real run prints a handful of lines at boot (`Updates disabled.`, the `DevTools listening on` line, an occasional CLI-server `EADDRINUSE`) and then nothing, so the "noise" the knob would guard against does not exist, while silence demonstrably costs days. Add the knob if a run ever proves otherwise.
+- **An `exit` listener that says so loudly.** `!!! OWNED OBSIDIAN EXITED: pid=… code=… signal=…`. A death the harness **ordered** is logged quietly instead: `kill()` sets a flag first, so teardown and the relaunch loop never masquerade as failures.
+- **A cross-process exit marker** (`owned-instance-exit-marker.ts`). Only the process that launched the instance holds the child and can see `exit`; the test workers get nothing but the port (**L9**). So the exit code crosses the boundary as a JSON sentinel keyed by port, next to the setup lock and the Appium server marker (**L40**), and is read back by whichever process needs it. It is written **only for a death the harness did not order**, and cleared on every deliberate kill and at every launch — a marker left behind by a clean run would convict the next run's healthy instance of an exit that never happened. Reads are tolerant in the same way the Appium marker's are: missing or unreadable is "no marker", and the error is still raised, just without the exit code.
 
-**Acting on it, not just logging it.** `getPageTargets` is the choke point every "talk to the instance"
-path funnels through, and an unreachable endpoint there means two different things. For a
-harness-owned instance — one this process launched, or one a worker was told to attach to — the harness
-owns that port and nothing else may hold it, so nothing answering means *our* instance is gone: it throws
-`OwnedInstanceExitedError` (exported, so consumers can `instanceof` it), carrying the exit code, the
-signal, when it happened and the output tail. In plain **attach** mode the endpoint belongs to a foreign
-Obsidian that is simply not running, and that path keeps its raw failure for `ensureObsidianRunning` to
-act on.
+**Acting on it, not just logging it.** `getPageTargets` is the choke point every "talk to the instance" path funnels through, and an unreachable endpoint there means two different things. For a harness-owned instance — one this process launched, or one a worker was told to attach to — the harness owns that port and nothing else may hold it, so nothing answering means *our* instance is gone: it throws `OwnedInstanceExitedError` (exported, so consumers can `instanceof` it), carrying the exit code, the signal, when it happened and the output tail. In plain **attach** mode the endpoint belongs to a foreign Obsidian that is simply not running, and that path keeps its raw failure for `ensureObsidianRunning` to act on.
 
-A worker additionally **probes once, at transport creation** (`transport-factory.ts`), which is once per
-test file: a live instance pays one loopback request, and a dead one turns the whole file into a single
-named error raised before its first test. That is the harness-side replacement for the per-file CDP probe
-consumers had started writing into their own `setupFiles` to get the same effect.
+A worker additionally **probes once, at transport creation** (`transport-factory.ts`), which is once per test file: a live instance pays one loopback request, and a dead one turns the whole file into a single named error raised before its first test. That is the harness-side replacement for the per-file CDP probe consumers had started writing into their own `setupFiles` to get the same effect.
 
-**Relaunch-and-continue was considered and rejected.** A desktop run shares one renderer across every
-file, and its accumulated state is part of what the later files are testing; a silently relaunched app
-would go on reporting passes and failures about something the earlier files never ran against. Failing by
-name is the honest outcome, and it is the one that gets fixed.
+**Relaunch-and-continue was considered and rejected.** A desktop run shares one renderer across every file, and its accumulated state is part of what the later files are testing; a silently relaunched app would go on reporting passes and failures about something the earlier files never ran against. Failing by name is the honest outcome, and it is the one that gets fixed.
 
-**Pure/glue split** (as **L20**/**L33**): the capture state machine, the marker, and the error's message
-are unit-tested modules; only the wiring in `obsidian-instance.ts`, `transport-desktop-cdp.ts` and
-`transport-factory.ts` is `v8 ignore`d. What the unit tests cannot reach — a real Obsidian actually
-dying — is covered by `integration-tests:instance-death`, which has its own project for the same reason
-`failed-setup` does: it destroys the instance its project shares. Its companion
-`harness-owned-attach-probe.integration.test.ts` covers the creation-time probe hermetically, by
-attaching to port 1.
+**Pure/glue split** (as **L20**/**L33**): the capture state machine, the marker, and the error's message are unit-tested modules; only the wiring in `obsidian-instance.ts`, `transport-desktop-cdp.ts` and `transport-factory.ts` is `v8 ignore`d. What the unit tests cannot reach — a real Obsidian actually dying — is covered by `integration-tests:instance-death`, which has its own project for the same reason `failed-setup` does: it destroys the instance its project shares. Its companion `harness-owned-attach-probe.integration.test.ts` covers the creation-time probe hermetically, by attaching to port 1.
 
 ## L51. Two flags mean "the harness owns this", and only one guard read both — teardown is by registration, not by mode
 
-`DesktopCdpTransport` carries two ownership flags, and they are not synonyms. `ownedConfig` is set on
-the transport that **launched** the instance; `isHarnessOwnedInstance` is set on a transport **attached**
-to one somebody else launched. Together they mean "this instance belongs to the harness"; separately they
-mean two different jobs. `preflightCheck` read both. `unregisterVault` read only `ownedConfig`.
+`DesktopCdpTransport` carries two ownership flags, and they are not synonyms. `ownedConfig` is set on the transport that **launched** the instance; `isHarnessOwnedInstance` is set on a transport **attached** to one somebody else launched. Together they mean "this instance belongs to the harness"; separately they mean two different jobs. `preflightCheck` read both. `unregisterVault` read only `ownedConfig`.
 
-A test worker is exactly the case that falls between them: `augmentTransportOptions`
-(`global-setup-core.ts`) hands each worker the owned instance's port plus `isHarnessOwnedInstance: true`,
-and nothing else — the global setup keeps the config, so the worker's `ownedConfig` is `undefined`. It
-therefore fell straight through the teardown guard and ran `destroyCurrentWindow()` on whatever vault it
-was asked to unregister. When that is the vault the run shares, its window is the instance's **only** one:
-the app quits, and every later file fails with `ECONNREFUSED` on a closed CDP port — the exact cascade
-**L50** exists to name, arriving this time from inside the harness.
+A test worker is exactly the case that falls between them: `augmentTransportOptions` (`global-setup-core.ts`) hands each worker the owned instance's port plus `isHarnessOwnedInstance: true`, and nothing else — the global setup keeps the config, so the worker's `ownedConfig` is `undefined`. It therefore fell straight through the teardown guard and ran `destroyCurrentWindow()` on whatever vault it was asked to unregister. When that is the vault the run shares, its window is the instance's **only** one: the app quits, and every later file fails with `ECONNREFUSED` on a closed CDP port — the exact cascade **L50** exists to name, arriving this time from inside the harness.
 
 **Two things the original report got wrong, both worth keeping straight.**
 
-- **`connectToCdp` cannot reach this.** `buildCdpTransportOptions` never sets `isHarnessOwnedInstance`,
-  so a `connectToCdp` transport always takes the full teardown path, by design — a debugging session opens
-  a vault in a foreign Obsidian and must put it back. The flag is set in exactly **one** place, the
-  augmentation above. That makes the exposed population larger, not smaller: not "suites that build their
-  own connection", but **every worker in a `createSetup` run**, which is the default consumption shape.
-- **Making the two guards identical would trade one defect for another.** An attached worker that
-  registers its **own** `TemporaryVault` does need that window closed. A blanket
-  `ownedConfig || isHarnessOwnedInstance` early-return leaks one stale window per temp vault for the life
-  of the run, each left pointing at a directory `TemporaryVault.dispose()` has already deleted. Symmetry
-  was the shape of the fix, not the fix.
+- **`connectToCdp` cannot reach this.** `buildCdpTransportOptions` never sets `isHarnessOwnedInstance`, so a `connectToCdp` transport always takes the full teardown path, by design — a debugging session opens a vault in a foreign Obsidian and must put it back. The flag is set in exactly **one** place, the augmentation above. That makes the exposed population larger, not smaller: not "suites that build their own connection", but **every worker in a `createSetup` run**, which is the default consumption shape.
+- **Making the two guards identical would trade one defect for another.** An attached worker that registers its **own** `TemporaryVault` does need that window closed. A blanket `ownedConfig || isHarnessOwnedInstance` early-return leaks one stale window per temp vault for the life of the run, each left pointing at a directory `TemporaryVault.dispose()` has already deleted. Symmetry was the shape of the fix, not the fix.
 
-**What it does instead: teardown is earned by registration.** The transport remembers, in
-`selfRegisteredVaultPaths`, the vaults its own `registerVault` opened — recorded only on the attach
-branch (`openVaultInRunningInstance`), only on success, and normalized through
-`normalizeVaultPathForComparison` so a separator flavour or a case difference cannot lose an entry. A
-worker attached to a harness-owned instance may tear down only those; everything else in that instance
-belongs to the global setup that launched it. Owned mode still tears nothing down per vault (the instance
-is killed wholesale), and plain attach mode still tears everything down (the foreign Obsidian outlives the
-run). The set is per-transport and per-process, which is exactly the scope the invariant needs: the global
-setup registered the shared vault in a different process, so no worker can ever claim it.
+**What it does instead: teardown is earned by registration.** The transport remembers, in `selfRegisteredVaultPaths`, the vaults its own `registerVault` opened — recorded only on the attach branch (`openVaultInRunningInstance`), only on success, and normalized through `normalizeVaultPathForComparison` so a separator flavour or a case difference cannot lose an entry. A worker attached to a harness-owned instance may tear down only those; everything else in that instance belongs to the global setup that launched it. Owned mode still tears nothing down per vault (the instance is killed wholesale), and plain attach mode still tears everything down (the foreign Obsidian outlives the run). The set is per-transport and per-process, which is exactly the scope the invariant needs: the global setup registered the shared vault in a different process, so no worker can ever claim it.
 
-**Pure/glue split** (as **L50**): the decision is `vault-teardown-verdict.ts`, unit-tested across all
-three modes; the transport keeps only the set and the call. The regression that a unit test cannot reach —
-a real instance surviving the call — is the last case in
-`src/owned-instance-worker-attach.integration.test.ts`, deliberately last in the file because a regression
-there destroys the instance the project shares. Reverting the guard makes it fail with
-`OwnedInstanceExitedError: … its process exited with code 0`, which is what the fix is measured against.
+**Pure/glue split** (as **L50**): the decision is `vault-teardown-verdict.ts`, unit-tested across all three modes; the transport keeps only the set and the call. The regression that a unit test cannot reach — a real instance surviving the call — is the last case in `src/owned-instance-worker-attach.integration.test.ts`, deliberately last in the file because a regression there destroys the instance the project shares. Reverting the guard makes it fail with `OwnedInstanceExitedError: … its process exited with code 0`, which is what the fix is measured against.
 
-**The other half of `dispose()` — the directory — is fixed one layer up, in `TemporaryVault` itself; see
-**L52**.** No `unregisterVault` guard could have reached it.
+**The other half of `dispose()` — the directory — is fixed one layer up, in `TemporaryVault` itself; see **L52**.** No `unregisterVault` guard could have reached it.
 
 ## L52. A `TemporaryVault` deletes only a directory it created — ownership is per-instance, not per-path
 
-`TemporaryVault.dispose()` used to end in an unconditional `await retryRm(this.path)` inside a `finally`.
-`getTemporaryVault()` (both adapters) returns `new TemporaryVault(inject('temporaryVaultPath'))` — a full,
-public handle over the **shared** vault the global setup provisioned for the whole run — so a consumer's
-`afterAll(() => vault.dispose())`, which reads as the symmetric counterpart of the documented
-`new TemporaryVault()` + `dispose()` pair, deleted that directory out from under the still-open window and
-under every test file that had not run yet. **L51** fixed the unregister half and named this one as still
-open; it sits above the transport, where no `unregisterVault` guard reaches.
+`TemporaryVault.dispose()` used to end in an unconditional `await retryRm(this.path)` inside a `finally`. `getTemporaryVault()` (both adapters) returns `new TemporaryVault(inject('temporaryVaultPath'))` — a full, public handle over the **shared** vault the global setup provisioned for the whole run — so a consumer's `afterAll(() => vault.dispose())`, which reads as the symmetric counterpart of the documented `new TemporaryVault()` + `dispose()` pair, deleted that directory out from under the still-open window and under every test file that had not run yet. **L51** fixed the unregister half and named this one as still open; it sits above the transport, where no `unregisterVault` guard reaches.
 
-**The discriminator has to be instance ownership, not the path.** The obvious guard — compare `this.path`
-against the run's shared vault through the same `setVaultPathResolver` seam — is wrong, and wrong in a way
-that only Jest shows. Jest's global setup and global teardown share one module instance and one
-`globalThis.__obsidianIntegrationTesting`, which `setup()` populates, so `getVaultPath()` resolves during
-`coreTeardown` too: the guard would have refused the harness's own disposal of the vault it created, and
-leaked the directory on every Jest run instead of deleting one on some Vitest runs.
+**The discriminator has to be instance ownership, not the path.** The obvious guard — compare `this.path` against the run's shared vault through the same `setVaultPathResolver` seam — is wrong, and wrong in a way that only Jest shows. Jest's global setup and global teardown share one module instance and one `globalThis.__obsidianIntegrationTesting`, which `setup()` populates, so `getVaultPath()` resolves during `coreTeardown` too: the guard would have refused the harness's own disposal of the vault it created, and leaked the directory on every Jest run instead of deleting one on some Vitest runs.
 
-**What it does instead:** the constructor records `options?.shouldRemoveDirectoryOnDispose ?? path === undefined`
-— a handle owns the directory only when it made one — and `dispose()` still always unregisters but
-`retryRm`s only an owned directory, logging the path it kept otherwise. This is not a new rule; it is the
-rule `connectToCdp` already applied one layer up as `shouldRemoveVaultOnDispose ?? (options?.vault === undefined)`,
-moved down into the class so every caller gets it. `connectToCdp` now hands its flag to the constructor,
-which both preserves its explicit override and collapses its `dispose()` branch to one call.
+**What it does instead:** the constructor records `options?.shouldRemoveDirectoryOnDispose ?? path === undefined` — a handle owns the directory only when it made one — and `dispose()` still always unregisters but `retryRm`s only an owned directory, logging the path it kept otherwise. This is not a new rule; it is the rule `connectToCdp` already applied one layer up as `shouldRemoveVaultOnDispose ?? (options?.vault === undefined)`, moved down into the class so every caller gets it. `connectToCdp` now hands its flag to the constructor, which both preserves its explicit override and collapses its `dispose()` branch to one call.
 
-**The change was free because nothing real relied on the old default.** Across every repo that consumes
-this package, each `new TemporaryVault(...)` outside this repo's own unit tests passes **no** argument; the
-only sites passing a path are `getTemporaryVault()` (the defect) and `connectToCdp` (which keeps its
-opt-in). That is why the default was flipped rather than a `false` threaded through the two accessors — the
-honest invariant cost the same as the narrow patch.
+**The change was free because nothing real relied on the old default.** Across every repo that consumes this package, each `new TemporaryVault(...)` outside this repo's own unit tests passes **no** argument; the only sites passing a path are `getTemporaryVault()` (the defect) and `connectToCdp` (which keeps its opt-in). That is why the default was flipped rather than a `false` threaded through the two accessors — the honest invariant cost the same as the narrow patch.
 
-The regression is the last case in `src/owned-instance-worker-attach.integration.test.ts`, immediately after
-**L51**'s and last for the same reason: it disposes the `getTemporaryVault()` handle and asserts both that
-the directory survives and that the window over it still answers. Reverting the fix deletes the vault the
-project shares.
+The regression is the last case in `src/owned-instance-worker-attach.integration.test.ts`, immediately after **L51**'s and last for the same reason: it disposes the `getTemporaryVault()` handle and asserts both that the directory survives and that the window over it still answers. Reverting the fix deletes the vault the project shares.
 
 ## L53. `populate` writes to the HOST — `register` is what carries the vault to the device
 
-`TemporaryVault.populate` writes with `writeFileSync` into `TemporaryVault.path`, which is always a **host**
-path. On Android the vault the app opens is the device's copy under the Appium transport's `vaultBasePath`,
-so a file written before registration reaches the app only if something pushes the directory across. That
-something is `TemporaryVault.syncToDevice()`, which delegates to the transport's optional `pushFiles`.
+`TemporaryVault.populate` writes with `writeFileSync` into `TemporaryVault.path`, which is always a **host** path. On Android the vault the app opens is the device's copy under the Appium transport's `vaultBasePath`, so a file written before registration reaches the app only if something pushes the directory across. That something is `TemporaryVault.syncToDevice()`, which delegates to the transport's optional `pushFiles`.
 
-**The transport's `registerVault` does not push vault contents, on either platform.**
-`AppiumTransport.registerVault` pushes only a minimal `.obsidian` marker so the folder is recognized as a
-vault, points the app's `localStorage` at it, and reloads. The `ObsidianTransport.registerVault` docblock
-claimed otherwise — *"On mobile: pushes vault files to the device and restarts the app"* — until 2026-09-08,
-and that false contract is the likeliest reason the one caller that got this wrong believed `register()`
-sufficed.
+**The transport's `registerVault` does not push vault contents, on either platform.** `AppiumTransport.registerVault` pushes only a minimal `.obsidian` marker so the folder is recognized as a vault, points the app's `localStorage` at it, and reloads. The `ObsidianTransport.registerVault` docblock claimed otherwise — *"On mobile: pushes vault files to the device and restarts the app"* — until 2026-09-08, and that false contract is the likeliest reason the one caller that got this wrong believed `register()` sufficed.
 
-**What went wrong.** `coreSetup` had the sequence right (populate → sync → register), but the Android
-trusted-input suite is the only `TemporaryVault` caller outside it, and it called populate → register. Its
-vault therefore opened **empty**: `app.vault.getMarkdownFiles()` returned `[]` and the file explorer rendered
-no `.nav-file-title`. Nothing failed, because until the long-press test needed a real file to press, every
-test in that file built its own DOM nodes and read nothing from the vault. A silently empty vault satisfied
-every assertion in it for the suite's whole life.
+**What went wrong.** `coreSetup` had the sequence right (populate → sync → register), but the Android trusted-input suite is the only `TemporaryVault` caller outside it, and it called populate → register. Its vault therefore opened **empty**: `app.vault.getMarkdownFiles()` returned `[]` and the file explorer rendered no `.nav-file-title`. Nothing failed, because until the long-press test needed a real file to press, every test in that file built its own DOM nodes and read nothing from the vault. A silently empty vault satisfied every assertion in it for the suite's whole life.
 
-**The fix is that the ordering is no longer the caller's to remember.** `TemporaryVault.register()` resolves
-the transport once, calls `syncToDevice` with it, and only then registers. On a desktop transport
-`syncToDevice` returns before it collects anything (no `pushFiles`), so the fold costs nothing there and the
-host directory is the very one Obsidian opens. `coreSetup`'s separate `syncToDevice` call was dropped as
-redundant. `syncToDevice` stays public for the case the fold cannot cover: files written **after**
-registration, which no longer have a push to ride along with.
+**The fix is that the ordering is no longer the caller's to remember.** `TemporaryVault.register()` resolves the transport once, calls `syncToDevice` with it, and only then registers. On a desktop transport `syncToDevice` returns before it collects anything (no `pushFiles`), so the fold costs nothing there and the host directory is the very one Obsidian opens. `coreSetup`'s separate `syncToDevice` call was dropped as redundant. `syncToDevice` stays public for the case the fold cannot cover: files written **after** registration, which no longer have a push to ride along with.
 
-**What holds it.** Unit tests in `src/temporary-vault.test.ts` assert the push happens *before* the
-registration, that one transport resolution serves both, and that a transport without `pushFiles` collects
-nothing. The end-to-end guard is in the Android suite, which now asserts from inside the app that the
-populated `note.md` is in `app.vault.getMarkdownFiles()` — without it a re-broken push goes straight back to
-being invisible. The long-press test's workaround, which seeded its own note whenever the vault reported no
-markdown files, was deleted in the same change: it presses the populated file now.
+**What holds it.** Unit tests in `src/temporary-vault.test.ts` assert the push happens *before* the registration, that one transport resolution serves both, and that a transport without `pushFiles` collects nothing. The end-to-end guard is in the Android suite, which now asserts from inside the app that the populated `note.md` is in `app.vault.getMarkdownFiles()` — without it a re-broken push goes straight back to being invisible. The long-press test's workaround, which seeded its own note whenever the vault reported no markdown files, was deleted in the same change: it presses the populated file now.
 
 ## L54. Photographing the keyboard means photographing the DEVICE, and asking for the IME with a real touch
 
-A mobile store screenshot that shows a text field is dishonest without a keyboard under it, and the harness
-could not take that picture at all. Two separate things were in the way, and only the first is the obvious
-one.
+A mobile store screenshot that shows a text field is dishonest without a keyboard under it, and the harness could not take that picture at all. Two separate things were in the way, and only the first is the obvious one.
 
-**`captureObsidianScreenshot` photographs the PAGE, not the device.** It goes through Appium in the WebView
-context, so on Android the frame carries no status bar and — the reason it cannot take this shot — no
-keyboard, because the IME is a system window and not part of the page. `captureDeviceScreenshot`
-(`src/device-screenshot.ts`) reads `adb exec-out screencap -p` instead, the same route the trusted-input
-passes already use. It checks the bytes are a PNG before returning them: a device still booting and an adb
-transport that decoded the stream as text both come back as something that is not, and catching it here is
-far cheaper than in an image diff. The bytes must not go through `exec` — that helper decodes stdout as
-UTF-8, which corrupts every byte above 0x7F — hence the separate `runAdbBinary` in `src/adb.ts`.
+**`captureObsidianScreenshot` photographs the PAGE, not the device.** It goes through Appium in the WebView context, so on Android the frame carries no status bar and — the reason it cannot take this shot — no keyboard, because the IME is a system window and not part of the page. `captureDeviceScreenshot` (`src/device-screenshot.ts`) reads `adb exec-out screencap -p` instead, the same route the trusted-input passes already use. It checks the bytes are a PNG before returning them: a device still booting and an adb transport that decoded the stream as text both come back as something that is not, and catching it here is far cheaper than in an image diff. The bytes must not go through `exec` — that helper decodes stdout as UTF-8, which corrupts every byte above 0x7F — hence the separate `runAdbBinary` in `src/adb.ts`.
 
-**The screenshot AVDs suppress the on-screen keyboard.** They are built `hw.keyboard=yes`, so Android draws
-no IME. `withSoftKeyboardEnabled` (`src/device-settings.ts`) flips `secure show_ime_with_hard_keyboard` for
-the duration of a callback and restores the device exactly afterwards, whether the callback returned or
-threw. *Exactly* is load-bearing: `settings get` prints the literal `null` for a setting that was never
-written and `settings put … null` writes the four-character string rather than reproducing the absence, so a
-device that started unset has to be `settings delete`d back. That choice is
-`resolveDeviceSettingRestore` in `src/device-setting-restore.ts`, and it is unit-tested.
+**The screenshot AVDs suppress the on-screen keyboard.** They are built `hw.keyboard=yes`, so Android draws no IME. `withSoftKeyboardEnabled` (`src/device-settings.ts`) flips `secure show_ime_with_hard_keyboard` for the duration of a callback and restores the device exactly afterwards, whether the callback returned or threw. *Exactly* is load-bearing: `settings get` prints the literal `null` for a setting that was never written and `settings put … null` writes the four-character string rather than reproducing the absence, so a device that started unset has to be `settings delete`d back. That choice is `resolveDeviceSettingRestore` in `src/device-setting-restore.ts`, and it is unit-tested.
 
-**The setting is necessary and NOT sufficient.** A field that takes focus programmatically does not get an
-IME — an Android WebView asks for one on a real gesture, and a run with the setting flipped and no touch
-comes back with exactly the empty band it had before. `raiseSoftKeyboard` (`src/soft-keyboard.ts`) supplies
-that gesture with `adb shell input tap`, then confirms the keyboard actually arrived rather than trusting
-it.
+**The setting is necessary and NOT sufficient.** A field that takes focus programmatically does not get an IME — an Android WebView asks for one on a real gesture, and a run with the setting flipped and no touch comes back with exactly the empty band it had before. `raiseSoftKeyboard` (`src/soft-keyboard.ts`) supplies that gesture with `adb shell input tap`, then confirms the keyboard actually arrived rather than trusting it.
 
 **Nothing in the page reports the keyboard, so the confirmation is geometric.** `innerHeight`, `visualViewport` and the modal container all stay at full height with the keyboard shown and `dumpsys input_method` reporting `mInputShown=true` — Obsidian Mobile keeps a full-screen container and lifts its contents inside it. The only signal is that the field **moves**, which is what `checkIsSoftKeyboardUp` reads. The tap aims at two candidate points, not one: the WebView may or may not start at the top of the screen and the page cannot tell which, so `resolveSoftKeyboardTapPoints` offers the `screenY`-shifted point and the plain one. Both land inside the field, which is taller than the offset, so a wrong guess costs a touch rather than a mis-tap on whatever sits below. A failure writes the device framebuffer and the device's own `input_method` state to `dist/screenshots/` before throwing, because a bare "the keyboard did not come up" is unreadable and cost two runs before the dump said what was happening.
 
@@ -3159,43 +1224,19 @@ it.
 
 **The trade, which a caller has to know:** a keyboard that is **already up** when `raiseSoftKeyboard` is called now fails, because the field has nowhere left to lift to. Geometry cannot separate that from a centred modal with no keyboard — both read as "clear of the bottom and not moving" — so one of the two has to be the wrong answer, and a loud failure is the one worth keeping over a screenshot of a keyboard that is not there. Raise it with the keyboard down; the failure message prints `lift=0` beside the device's own `mInputShown`, which is how a reader tells the two apart.
 
-**Never take the first device `adb devices` lists.** `resolveEmulatorDeviceId`
-(`src/resolve-emulator-device-id.ts`) matches by AVD name. A physical phone is routinely plugged into this
-machine, and the harness's own `obsidian_test` AVD is a different geometry than the `obsidian_screenshots`
-one sized to the store's frame — so picking by position photographs the wrong screen at the wrong size, and
-the dimension assertion that would have caught it fires minutes later.
+**Never take the first device `adb devices` lists.** `resolveEmulatorDeviceId` (`src/resolve-emulator-device-id.ts`) matches by AVD name. A physical phone is routinely plugged into this machine, and the harness's own `obsidian_test` AVD is a different geometry than the `obsidian_screenshots` one sized to the store's frame — so picking by position photographs the wrong screen at the wrong size, and the dimension assertion that would have caught it fires minutes later.
 
-**Consequence a consumer must accept and write down: a device capture is not byte-reproducible.** The
-status-bar clock and battery are in the frame. That is why the swap is per SHOT rather than per suite — a
-shot with no focused input has no keyboard on a real phone either, so it should stay on
-`captureObsidianScreenshot` and stay reproducible.
+**Consequence a consumer must accept and write down: a device capture is not byte-reproducible.** The status-bar clock and battery are in the frame. That is why the swap is per SHOT rather than per suite — a shot with no focused input has no keyboard on a real phone either, so it should stay on `captureObsidianScreenshot` and stay reproducible.
 
-**Why the modules are split the way they are.** Everything that shells out sits in a module that is
-`v8 ignore`d whole, and everything pure — the restore decision, the settings argument list, the geometry,
-the AVD selection — lives in its own module with unit tests. That is not tidiness: `perfectionist/sort-modules`
-reorders declarations on `lint:fix`, and a coverage block is positional, so a pure function sharing a file
-with integration code gets sorted inside the ignored region and silently stops being measured. It happened
-during this change before the split. The same reasoning already put `adb-device-list` outside
-`transport-factory`.
+**Why the modules are split the way they are.** Everything that shells out sits in a module that is `v8 ignore`d whole, and everything pure — the restore decision, the settings argument list, the geometry, the AVD selection — lives in its own module with unit tests. That is not tidiness: `perfectionist/sort-modules` reorders declarations on `lint:fix`, and a coverage block is positional, so a pure function sharing a file with integration code gets sorted inside the ignored region and silently stops being measured. It happened during this change before the split. The same reasoning already put `adb-device-list` outside `transport-factory`.
 
 ## L55. Security overrides (`js-yaml` GHSA-2883-xcg3-v3hh, `smol-toml` GHSA-7w5x-hrqm-74c2)
 
-The 2026-09-10 sweep opened on 11 high advisories from two roots, and both are transitive — nothing here
-declares either package, so **L30**'s and **L44**'s shape applies again: override the transitive, and record
-why in [`pinned-versions.json`](pinned-versions.json).
+The 2026-09-10 sweep opened on 11 high advisories from two roots, and both are transitive — nothing here declares either package, so **L30**'s and **L44**'s shape applies again: override the transitive, and record why in [`pinned-versions.json`](pinned-versions.json).
 
-**`js-yaml` — an existing pin that had drifted INTO the vulnerable range.** GHSA-2883-xcg3-v3hh
-(`maxTotalMergeKeys` does not bound CPU on empty merge sources) covers `4.0.0 – 4.3.1`, and the override was
-sitting on exactly `4.3.1`. It accounted for 9 of the 11 paths, because every js-yaml consumer here
-(`astro`, `@astrojs/starlight`, `cosmiconfig` under `@commitlint/load`, `@istanbuljs/load-nyc-config`,
-`markdownlint-cli2`) resolves through it. The fix is a patch bump to `4.3.2` — the first 4.x release with it
-— and **not** a move to 5.x: the pin's original reason still holds, js-yaml 5 is ESM-only with no default
-export, so Astro's `import yaml from 'js-yaml'` makes `docs:build` die before it reads a page. Two
-independent conditions now hold that pin, and `pinned-versions.json` says both, because a reader who knows
-only the ESM one would happily bump it back into the advisory range.
+**`js-yaml` — an existing pin that had drifted INTO the vulnerable range.** GHSA-2883-xcg3-v3hh (`maxTotalMergeKeys` does not bound CPU on empty merge sources) covers `4.0.0 – 4.3.1`, and the override was sitting on exactly `4.3.1`. It accounted for 9 of the 11 paths, because every js-yaml consumer here (`astro`, `@astrojs/starlight`, `cosmiconfig` under `@commitlint/load`, `@istanbuljs/load-nyc-config`, `markdownlint-cli2`) resolves through it. The fix is a patch bump to `4.3.2` — the first 4.x release with it — and **not** a move to 5.x: the pin's original reason still holds, js-yaml 5 is ESM-only with no default export, so Astro's `import yaml from 'js-yaml'` makes `docs:build` die before it reads a page. Two independent conditions now hold that pin, and `pinned-versions.json` says both, because a reader who knows only the ESM one would happily bump it back into the advisory range.
 
-**`smol-toml` — held vulnerable by one exact pin, and everything else deduped onto it.** GHSA-7w5x-hrqm-74c2
-(denial of service on malformed TOML) covers `<= 1.7.0`:
+**`smol-toml` — held vulnerable by one exact pin, and everything else deduped onto it.** GHSA-7w5x-hrqm-74c2 (denial of service on malformed TOML) covers `<= 1.7.0`:
 
 ```text
 markdownlint-cli2 → smol-toml@1.7.0    ← an EXACT pin, and the only thing holding the tree back
@@ -3204,29 +1245,15 @@ astro                             ┐
 cspell-config-lib → smol-toml@1.8.0    ← a second, patched copy
 ```
 
-`overrides.smol-toml` → `^1.8.0` clears it and **dedupes** the two copies into one, the same double win
-`fflate` gave in **L44**. Caret-ranged so the sweep carries it forward, listed in `pinned-versions.json`
-anyway for the reason **L44** ends on. Its `check` reads markdownlint-cli2's declared range and expects
-`1.7.0`; when that moves, re-resolve without the override before deleting anything, because astro is what
-dedupes onto whatever markdownlint-cli2 asks for.
+`overrides.smol-toml` → `^1.8.0` clears it and **dedupes** the two copies into one, the same double win `fflate` gave in **L44**. Caret-ranged so the sweep carries it forward, listed in `pinned-versions.json` anyway for the reason **L44** ends on. Its `check` reads markdownlint-cli2's declared range and expects `1.7.0`; when that moves, re-resolve without the override before deleting anything, because astro is what dedupes onto whatever markdownlint-cli2 asks for.
 
-**The `check` goes through `fs.readFileSync`, not `require()`.** Written the obvious way first, it returned
-empty and failed the sweep's own pins report: `markdownlint-cli2`'s `exports` map does not expose
-`./package.json`, so `require('markdownlint-cli2/package.json')` throws `ERR_PACKAGE_PATH_NOT_EXPORTED`.
-The `@puppeteer/browsers` entry already used the `fs` form for the same reason. Reach for it whenever a
-`check` reads a dependency's own manifest — the `require()` form works only for packages with no `exports`
-map, which is a property of the dependency, not something the check can assume.
+**The `check` goes through `fs.readFileSync`, not `require()`.** Written the obvious way first, it returned empty and failed the sweep's own pins report: `markdownlint-cli2`'s `exports` map does not expose `./package.json`, so `require('markdownlint-cli2/package.json')` throws `ERR_PACKAGE_PATH_NOT_EXPORTED`. The `@puppeteer/browsers` entry already used the `fs` form for the same reason. Reach for it whenever a `check` reads a dependency's own manifest — the `require()` form works only for packages with no `exports` map, which is a property of the dependency, not something the check can assume.
 
-**Two words joined `cspell.json` with this change** — `smol` and `hrqm`. GHSA slugs mostly survive the
-spell check by carrying digits (`jmr9-qjv8-65gv` in **L36** never tripped it); an all-letter segment does
-not.
+**Two words joined `cspell.json` with this change** — `smol` and `hrqm`. GHSA slugs mostly survive the spell check by carrying digits (`jmr9-qjv8-65gv` in **L36** never tripped it); an all-letter segment does not.
 
 ## L56. An emulator the harness started stays the harness's until a stop is verified — and `netsimd`'s log is capped
 
-**What happened.** On 2026-09-10 an idle headless emulator ran from 19:20 until 01:24 the next morning, and
-the network simulator it starts, `netsimd`, wrote **278 GB** to `%TEMP%\netsimd\netsim_stderr.log`. That
-file is on the same drive as every repo, so the drive filled up and took builds, git, npm and every agent
-shell down with it. 22,429 of the 22,430 lines in a kept 4 MB tail are the same warning:
+**What happened.** On 2026-09-10 an idle headless emulator ran from 19:20 until 01:24 the next morning, and the network simulator it starts, `netsimd`, wrote **278 GB** to `%TEMP%\netsimd\netsim_stderr.log`. That file is on the same drive as every repo, so the drive filled up and took builds, git, npm and every agent shell down with it. 22,429 of the 22,430 lines in a kept 4 MB tail are the same warning:
 
 ```text
 netsimd W … external/netsim+/rust/daemon/src\wifi\stats.rs:121 - Frame error: Failed to process IEEE
@@ -3237,30 +1264,15 @@ Two independent failures combined, and each one is fixed on its own.
 
 ### The flood is a netsimd bug; `RUST_LOG` is the only lever
 
-netsimd's `hostapd_response_task` (`rust/hostapd-rs/src/hostapd.rs` upstream) never checks the socket
-`read()` for `Ok(0)`. Once hostapd's socket closes, every pass forwards an **empty** packet, the Wi-Fi
-manager fails to decode it ("needed length of 1 but got 0"), and `wifi/stats.rs` `warn!`s each failure
-with no rate limit. The session stats file recorded **1.78 billion** frame errors against zero hostapd
-errors. That was emulator 37.1.11 with netsimd 0.3.114, the newest stable at the time of writing. No public
-report or fix was found, and nothing starts the loop on demand, so it cannot be reproduced to order.
+netsimd's `hostapd_response_task` (`rust/hostapd-rs/src/hostapd.rs` upstream) never checks the socket `read()` for `Ok(0)`. Once hostapd's socket closes, every pass forwards an **empty** packet, the Wi-Fi manager fails to decode it ("needed length of 1 but got 0"), and `wifi/stats.rs` `warn!`s each failure with no rate limit. The session stats file recorded **1.78 billion** frame errors against zero hostapd errors. That was emulator 37.1.11 with netsimd 0.3.114, the newest stable at the time of writing. No public report or fix was found, and nothing starts the loop on demand, so it cannot be reproduced to order.
 
-netsimd has no `--no-wifi` flag and no quieter-than-default flag (`-v` only raises it). Its level is
-env_logger's `RUST_LOG`, defaulting to `info`, read from the environment the emulator hands down. So
-`buildEmulatorEnvironment` (`emulator-arguments.ts`) spawns the emulator with `RUST_LOG=error`, and both
-spawn sites use it: `startEmulator` and `scripts/emulator-wedge-probe.ts`. Some facts about that choice:
+netsimd has no `--no-wifi` flag and no quieter-than-default flag (`-v` only raises it). Its level is env_logger's `RUST_LOG`, defaulting to `info`, read from the environment the emulator hands down. So `buildEmulatorEnvironment` (`emulator-arguments.ts`) spawns the emulator with `RUST_LOG=error`, and both spawn sites use it: `startEmulator` and `scripts/emulator-wedge-probe.ts`. Some facts about that choice:
 
-- **An explicit `RUST_LOG` wins.** The run logs that the guard is off, because `warn` or chattier brings
-  the flood back.
-- **Why `error` and not a directive for the one module:** nothing reads that log, real netsim errors are
-  still recorded, and a *level* is verifiable. `netsimd I` lines stop appearing. A module directive could
-  only be checked by reproducing a flood nobody can trigger.
-- **Known limit:** netsimd is shared between emulators and reads its environment once. An emulator that
-  joins a netsimd a foreign emulator started gets that netsimd's level.
-- Redirecting the log with `ANDROID_TMP` would only move the unbounded file; `--logtostderr` would pour
-  the flood into the emulator pipe the harness drains.
-- `-feature -WiFiPacketStream` also silences it (**L49** measured "no netsim lines at all"), but it changes
-  how the guest gets Wi-Fi, and the **L45** network gate validates a Wi-Fi transport. It is kept as the
-  fallback, not the fix.
+- **An explicit `RUST_LOG` wins.** The run logs that the guard is off, because `warn` or chattier brings the flood back.
+- **Why `error` and not a directive for the one module:** nothing reads that log, real netsim errors are still recorded, and a *level* is verifiable. `netsimd I` lines stop appearing. A module directive could only be checked by reproducing a flood nobody can trigger.
+- **Known limit:** netsimd is shared between emulators and reads its environment once. An emulator that joins a netsimd a foreign emulator started gets that netsimd's level.
+- Redirecting the log with `ANDROID_TMP` would only move the unbounded file; `--logtostderr` would pour the flood into the emulator pipe the harness drains.
+- `-feature -WiFiPacketStream` also silences it (**L49** measured "no netsim lines at all"), but it changes how the guest gets Wi-Fi, and the **L45** network gate validates a Wi-Fi transport. It is kept as the fallback, not the fix.
 
 The log was only the symptom. It grew for six hours because nothing stopped the emulator.
 
@@ -3277,58 +1289,31 @@ Ownership lived only in the memory of the process that launched the emulator. It
 
 ### The marker
 
-`emulator-marker.ts` writes `<tmpdir>/obsidian-integration-testing/<avdName>.emulator.json` =
-`{ avdName, deviceId, ownedEmulatorPids, ownerPid, preLaunchEmulatorPids, startedAtInMilliseconds }` from the
-moment a start is **launched** — see *The boot window* below for the three phases, of which the first two
-carry no backend PID and the first no device either. That includes a start from a worker, which is the whole
-fix for **A**. Only a **verified** stop removes it. `clearEmulatorMarkerIfStopped` also re-checks the marker's own PIDs, because a stop is verified
-against the PIDs *it* owned: a launch that died instantly owns nothing and would otherwise erase the record
-of an emulator still running.
+`emulator-marker.ts` writes `<tmpdir>/obsidian-integration-testing/<avdName>.emulator.json` = `{ avdName, deviceId, ownedEmulatorPids, ownerPid, preLaunchEmulatorPids, startedAtInMilliseconds }` from the moment a start is **launched** — see *The boot window* below for the three phases, of which the first two carry no backend PID and the first no device either. That includes a start from a worker, which is the whole fix for **A**. Only a **verified** stop removes it. `clearEmulatorMarkerIfStopped` also re-checks the marker's own PIDs, because a stop is verified against the PIDs *it* owned: a launch that died instantly owns nothing and would otherwise erase the record of an emulator still running.
 
-**Evidence decides, not the file.** `resolveEmulatorMarkerVerdict` (pure, unit-tested) returns one of three
-answers:
+**Evidence decides, not the file.** `resolveEmulatorMarkerVerdict` (pure, unit-tested) returns one of three answers:
 
-- `stale-marker`: none of the marker's PIDs is in the host's **emulator process listing**, and — while the
-  record is still provisional — nothing in that listing postdates its `preLaunchEmulatorPids` snapshot
-  either. The check is not a signal-0 probe, so a recycled PID never convicts.
+- `stale-marker`: none of the marker's PIDs is in the host's **emulator process listing**, and — while the record is still provisional — nothing in that listing postdates its `preLaunchEmulatorPids` snapshot either. The check is not a signal-0 probe, so a recycled PID never convicts.
 - `in-use-by-live-run`: the owner PID is alive and not the caller.
 - `harness-leftover`: everything else.
 
 Where each path is now closed:
 
 - **Preflight** (`ensureDeviceConnected`, under the `android` lock, **L7**):
-  - Every marker-verified leftover of **another** AVD is stopped before the device listing. That closes
-    the 09-10 sequence.
-  - A leftover of the **requested** AVD is adopted **and taken over**: the marker is rewritten with this
-    run as owner and its live PIDs become `ownedEmulatorPids`. That closes **C**, and a leak serves at most
-    one more run.
-  - The retry-a-wedged-emulator path (**L49**) now keys on owned PIDs rather than on holding a launcher,
-    so a taken-over leftover can be replaced too.
-- **`stopHarnessStartedEmulators()`** (`transport-factory.ts`) is the same reclaim with scope
-  `'end-of-run'`, which also stops an emulator whose owner is still alive. The owner can only be one of
-  the ending run's workers. `scripts/android-global-setup.ts` calls it before releasing the
-  lock, which closes **A** directly.
-- **`EmulatorReclaimer.stopEmulator` works without a launcher handle:** console `emu kill`, then the owned
-  PIDs, then the usual two-proof verify and **L46** verdict line. Both teardown paths now gate on "owns an
-  emulator" (a process *or* PIDs), not on `emulatorProcess` alone. The reclaim and the stop live in
-  `emulator-reclaim.ts`, not in `AppiumTransportFactory`, so the reaper below can load them; the factory
-  holds one `EmulatorReclaimer` and delegates, and the log lines are unchanged.
+  - Every marker-verified leftover of **another** AVD is stopped before the device listing. That closes the 09-10 sequence.
+  - A leftover of the **requested** AVD is adopted **and taken over**: the marker is rewritten with this run as owner and its live PIDs become `ownedEmulatorPids`. That closes **C**, and a leak serves at most one more run.
+  - The retry-a-wedged-emulator path (**L49**) now keys on owned PIDs rather than on holding a launcher, so a taken-over leftover can be replaced too.
+- **`stopHarnessStartedEmulators()`** (`transport-factory.ts`) is the same reclaim with scope `'end-of-run'`, which also stops an emulator whose owner is still alive. The owner can only be one of the ending run's workers. `scripts/android-global-setup.ts` calls it before releasing the lock, which closes **A** directly.
+- **`EmulatorReclaimer.stopEmulator` works without a launcher handle:** console `emu kill`, then the owned PIDs, then the usual two-proof verify and **L46** verdict line. Both teardown paths now gate on "owns an emulator" (a process *or* PIDs), not on `emulatorProcess` alone. The reclaim and the stop live in `emulator-reclaim.ts`, not in `AppiumTransportFactory`, so the reaper below can load them; the factory holds one `EmulatorReclaimer` and delegates, and the log lines are unchanged.
 - **The emulator reaper** closes **B**, the killed runner with no later run; see the section below.
-- **`stopEmulatorAfterFailedStart`** stops a launch whose gates failed, using the same pre-launch PID
-  snapshot. That closes **D**.
-- **A failed host process listing never deletes a marker.** `queryHostProcesses` returns `undefined` for
-  a failed query or a zero-row listing, and the reclaim then leaves the markers for a later run. An empty
-  listing would otherwise read every marker as stale.
+- **`stopEmulatorAfterFailedStart`** stops a launch whose gates failed, using the same pre-launch PID snapshot. That closes **D**.
+- **A failed host process listing never deletes a marker.** `queryHostProcesses` returns `undefined` for a failed query or a zero-row listing, and the reclaim then leaves the markers for a later run. An empty listing would otherwise read every marker as stale.
 
-**What stays untouched, deliberately:** any emulator without a marker. That covers one booted by hand, the
-CI workflow's (`validate-android-emulator.yml` boots its own, and the harness adopts it), and anything
-predating this change. **L46**'s "never a `qemu*` sweep" stands.
+**What stays untouched, deliberately:** any emulator without a marker. That covers one booted by hand, the CI workflow's (`validate-android-emulator.yml` boots its own, and the harness adopts it), and anything predating this change. **L46**'s "never a `qemu*` sweep" stands.
 
 ### End-to-end evidence (2026-09-11, this host, AdGuard stopped per L49)
 
-**Before, on `main`.** A run of `integration-tests:android` leaves
-`qemu-system-x86_64-headless` and `netsimd` running with nothing recorded, which is exactly the incident.
-Only a hand `adb emu kill` removed them.
+**Before, on `main`.** A run of `integration-tests:android` leaves `qemu-system-x86_64-headless` and `netsimd` running with nothing recorded, which is exactly the incident. Only a hand `adb emu kill` removed them.
 
 **After, one run per path:**
 
@@ -3351,107 +1336,45 @@ C  obsidian_test run, after another SIGKILLed obsidian_test run:
 
 After each run: no `qemu*` process, no `netsimd`, no marker. Two more facts from these runs:
 
-- **`RUST_LOG` reaches netsimd.** The captured `netsim_stderr.log` holds no `rust/daemon` line at all.
-  It keeps only a few `src/hci/*.cc` INFO lines, which come from netsim's separate C++ logger. The
-  wifi-stats warning is on the Rust side, so it is covered. A pre-change log from the same day was full of
-  Rust INFO lines.
-- A short-lived `emulator.exe` appears at the moment of shutdown and exits within seconds. That is the
-  emulator's own, not a leak; a snapshot taken right after a verified stop can catch it.
+- **`RUST_LOG` reaches netsimd.** The captured `netsim_stderr.log` holds no `rust/daemon` line at all. It keeps only a few `src/hci/*.cc` INFO lines, which come from netsim's separate C++ logger. The wifi-stats warning is on the Rust side, so it is covered. A pre-change log from the same day was full of Rust INFO lines.
+- A short-lived `emulator.exe` appears at the moment of shutdown and exits within seconds. That is the emulator's own, not a leak; a snapshot taken right after a verified stop can catch it.
 
 ### The reaper: a killed runner with no Android run after it
 
-The marker only helps a *later* run. If the runner is killed and no Android run follows on that host, the
-leftover idles indefinitely. After the `RUST_LOG` cap that costs no disk, but netsimd's empty-read loop can
-still spin a core. `emulator-reaper.ts` closes that last gap.
+The marker only helps a *later* run. If the runner is killed and no Android run follows on that host, the leftover idles indefinitely. After the `RUST_LOG` cap that costs no disk, but netsimd's empty-read loop can still spin a core. `emulator-reaper.ts` closes that last gap.
 
-**What it is.** Every time the harness records an emulator as its own, it spawns a small detached Node
-process beside it. That happens twice: after `writeEmulatorMarker` for a fresh start, and on a
-`harness-leftover` takeover. The reaper holds no handle to the emulator. The marker says what to stop, and
-the stop is `EmulatorReclaimer.reclaimLeftoverEmulators({ scope: 'end-of-run' })`, the one the run's own
-global teardown uses.
+**What it is.** Every time the harness records an emulator as its own, it spawns a small detached Node process beside it. That happens twice: after `writeEmulatorMarker` for a fresh start, and on a `harness-leftover` takeover. The reaper holds no handle to the emulator. The marker says what to stop, and the stop is `EmulatorReclaimer.reclaimLeftoverEmulators({ scope: 'end-of-run' })`, the one the run's own global teardown uses.
 
-**What it waits for: the `android` setup lock, not the L33 socket.** The task that opened this work
-proposed arming the reaper on the **L33** parent-liveness socket. That was rejected because the socket
-belongs to the process that *started* the emulator. On path **A** that process is a Vitest worker, and
-Vitest ends workers during a healthy run, so a socket-armed reaper would stop the emulator mid-run or race
-the next worker's takeover. The lock (**L7**) is held by the run's main process for the whole run, and a
-live holder is exactly what "an Android run is in flight" means. So every
-`EMULATOR_REAPER_POLL_INTERVAL_IN_MILLISECONDS` (5 s, one heartbeat) the reaper does this:
+**What it waits for: the `android` setup lock, not the L33 socket.** The task that opened this work proposed arming the reaper on the **L33** parent-liveness socket. That was rejected because the socket belongs to the process that *started* the emulator. On path **A** that process is a Vitest worker, and Vitest ends workers during a healthy run, so a socket-armed reaper would stop the emulator mid-run or race the next worker's takeover. The lock (**L7**) is held by the run's main process for the whole run, and a live holder is exactly what "an Android run is in flight" means. So every `EMULATOR_REAPER_POLL_INTERVAL_IN_MILLISECONDS` (5 s, one heartbeat) the reaper does this:
 
 1. **Re-read the marker.** It exits quietly in three cases:
    - the marker is gone, because the run stopped the emulator;
-   - the marker's `startedAtInMilliseconds` differs, meaning a later emulator of the AVD with its own
-     reaper (a takeover keeps the original launch time, so this key names one emulator across owners);
+   - the marker's `startedAtInMilliseconds` differs, meaning a later emulator of the AVD with its own reaper (a takeover keeps the original launch time, so this key names one emulator across owners);
    - none of the marker's PIDs is alive.
-2. **Try to take the lock** (`tryAcquireSetupLock`, one attempt). If a live run holds it, the reaper
-   waits for the next poll.
-3. **Once the lock is taken**, re-check the marker, since the run may have ended normally in between. Then
-   reclaim while holding the lock and release it. Holding the lock is the precondition every leftover stop
-   documents: no run can adopt an emulator that is mid-shutdown. The reaper makes one attempt, and an
-   unverified stop keeps the marker for the next run, as always.
+2. **Try to take the lock** (`tryAcquireSetupLock`, one attempt). If a live run holds it, the reaper waits for the next poll.
+3. **Once the lock is taken**, re-check the marker, since the run may have ended normally in between. Then reclaim while holding the lock and release it. Holding the lock is the precondition every leftover stop documents: no run can adopt an emulator that is mid-shutdown. The reaper makes one attempt, and an unverified stop keeps the marker for the next run, as always.
 
-What the reaper does is exactly what the next run's preflight would do, at the first moment that run could
-have done it. It also finishes the job of `process.on('exit')`'s best-effort teardown, which kills without
-waiting and keeps the marker when PIDs survive.
+What the reaper does is exactly what the next run's preflight would do, at the first moment that run could have done it. It also finishes the job of `process.on('exit')`'s best-effort teardown, which kills without waiting and keeps the marker when PIDs survive.
 
-**A wider silence threshold than a waiting run's.** A dead same-host holder PID is abandoned at once, which
-is what a SIGKILL leaves behind. But a *live*-PID holder that has stopped beating is abandoned only after
-`EMULATOR_REAPER_LOCK_SILENCE_IN_MILLISECONDS` (30 min, the lock's cross-host threshold), passed as
-`staleAfterSilenceInMilliseconds`. The usual 2-minute threshold is fine for a run that happens to be
-waiting, but a reaper is *always* waiting. At 2 minutes, a live run that blocked its event loop would lose
-its emulator. Only a recycled PID should ever reach 30 minutes.
+**A wider silence threshold than a waiting run's.** A dead same-host holder PID is abandoned at once, which is what a SIGKILL leaves behind. But a *live*-PID holder that has stopped beating is abandoned only after `EMULATOR_REAPER_LOCK_SILENCE_IN_MILLISECONDS` (30 min, the lock's cross-host threshold), passed as `staleAfterSilenceInMilliseconds`. The usual 2-minute threshold is fine for a run that happens to be waiting, but a reaper is *always* waiting. At 2 minutes, a live run that blocked its event loop would lose its emulator. Only a recycled PID should ever reach 30 minutes.
 
-**Fail-open, like the L33 watchdog.** The spawner arms a reaper only when `checkIsSetupLockHeld('android')`
-says a live run holds the lock right now. A run that takes no lock, such as a hand-wired
-`createTransportFromOptions`, gets no reaper and logs `No emulator reaper armed …`. Otherwise its missing
-lock would read as "the run is over". A spawn failure is logged and never fails the launch. A reaper that
-cannot read the lock gives up rather than guess.
+**Fail-open, like the L33 watchdog.** The spawner arms a reaper only when `checkIsSetupLockHeld('android')` says a live run holds the lock right now. A run that takes no lock, such as a hand-wired `createTransportFromOptions`, gets no reaper and logs `No emulator reaper armed …`. Otherwise its missing lock would read as "the run is over". A spawn failure is logged and never fails the launch. A reaper that cannot read the lock gives up rather than guess.
 
-**Duplicates are harmless.** A takeover arms a second reaper for an emulator whose first reaper may still
-be watching. That covers emulators started by an older harness, which have no reaper at all. The first
-reaper to take the lock stops the emulator; the other then finds the marker gone.
+**Duplicates are harmless.** A takeover arms a second reaper for an emulator whose first reaper may still be watching. That covers emulators started by an older harness, which have no reaper at all. The first reaper to take the lock stops the emulator; the other then finds the marker gone.
 
-**How it is launched — through a relay, so a process-tree kill cannot take it.** `detached` does **not**
-reparent on Windows. A reaper spawned straight from the harness stays a child of whichever process armed
-it, which puts it squarely inside the run's process tree — so every kill shape that walks that tree takes
-the safety net along with the thing it was guarding. That is not an exotic way to end a run: it is what
-Task Manager's **End task** does, what `taskkill /T` does, what an IDE stop button often does, and what a
-`ParentProcessId` descendant sweep does. Measured 2026-09-11, taking device evidence for the boot-window
-work: a descendant sweep of the run killed reaper PID 23256 along with the Vitest main process and its
-workers, and the leftover `qemu-system-x86_64-headless` and its `netsimd` idled on until a reaper was
-started by hand ten minutes later.
+**How it is launched — through a relay, so a process-tree kill cannot take it.** `detached` does **not** reparent on Windows. A reaper spawned straight from the harness stays a child of whichever process armed it, which puts it squarely inside the run's process tree — so every kill shape that walks that tree takes the safety net along with the thing it was guarding. That is not an exotic way to end a run: it is what Task Manager's **End task** does, what `taskkill /T` does, what an IDE stop button often does, and what a `ParentProcessId` descendant sweep does. Measured 2026-09-11, taking device evidence for the boot-window work: a descendant sweep of the run killed reaper PID 23256 along with the Vitest main process and its workers, and the leftover `qemu-system-x86_64-headless` and its `netsimd` idled on until a reaper was started by hand ten minutes later.
 
-So the spawn goes through a **relay**: `process.execPath -e <buildEmulatorReaperRelayBootstrap()>
-<buildEmulatorReaperBootstrap()> <own module URL> <avdName> <startedAtInMilliseconds>`, detached and
-`windowsHide`, then `unref()`ed. The relay's whole body is one `spawn` of the reaper — `detached`,
-`stdio: ['ignore', 1, 2]` so the reaper inherits the same capped log file, `unref()` — after which it
-exits. By the time any tree-walker takes its snapshot the relay is gone, so **no edge from the run to the
-reaper exists to follow**. It is the double-fork idiom, and it holds on POSIX for the same reason: once
-the relay exits, the reaper belongs to `init`.
+So the spawn goes through a **relay**: `process.execPath -e <buildEmulatorReaperRelayBootstrap()> <buildEmulatorReaperBootstrap()> <own module URL> <avdName> <startedAtInMilliseconds>`, detached and `windowsHide`, then `unref()`ed. The relay's whole body is one `spawn` of the reaper — `detached`, `stdio: ['ignore', 1, 2]` so the reaper inherits the same capped log file, `unref()` — after which it exits. By the time any tree-walker takes its snapshot the relay is gone, so **no edge from the run to the reaper exists to follow**. It is the double-fork idiom, and it holds on POSIX for the same reason: once the relay exits, the reaper belongs to `init`.
 
-The relay knows nothing about what it is passing on: its own arguments are the reaper's entire command
-line, bootstrap first. That bootstrap `import()`s the module and calls `runEmulatorReaper`, falling back
-to `default` for a CJS module whose named export Node's lexer misses. That one bootstrap loads all three
-forms the module ships as:
+The relay knows nothing about what it is passing on: its own arguments are the reaper's entire command line, bootstrap first. That bootstrap `import()`s the module and calls `runEmulatorReaper`, falling back to `default` for a CJS module whose named export Node's lexer misses. That one bootstrap loads all three forms the module ships as:
 
 - `.mjs` (ESM build);
 - `.cjs` (CJS build);
 - `.ts` in this repo's own suites, which plain Node 26 type-strips.
 
-The module's own URL is `__filename` in the CJS build and `import.meta.url` otherwise.
-`scripts/build-lib.ts` silences esbuild's `empty-import-meta` warning for the CJS build, since that
-emptied `import.meta` is never read there. **Keep the reaper's import graph small and erasable.** It must
-never reach `obsidian-metadata.ts`, which reads the build-time `OBSIDIAN_METADATA` global and cannot load
-under plain Node. That constraint is why the reclaim moved out of `transport-factory.ts`.
+The module's own URL is `__filename` in the CJS build and `import.meta.url` otherwise. `scripts/build-lib.ts` silences esbuild's `empty-import-meta` warning for the CJS build, since that emptied `import.meta` is never read there. **Keep the reaper's import graph small and erasable.** It must never reach `obsidian-metadata.ts`, which reads the build-time `OBSIDIAN_METADATA` global and cannot load under plain Node. That constraint is why the reclaim moved out of `transport-factory.ts`.
 
-**Where its output goes.** The spawner opens
-`<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log` and hands the descriptor down as the
-relay's stdout/stderr; the relay passes its own fds 1 and 2 on to the reaper, so the extra hop changes
-nothing about the log and the **L46** verdict lines of a stop nobody watched are still on record. The
-spawner starts the file afresh once it passes `EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES` (1 MB), so this log
-can never become the next unbounded file. **The armed line no longer names a PID** — the spawner only ever
-sees the relay's, which is not the reaper's and is dead within milliseconds. The reaper's own PID is the
-first line it writes to that log.
+**Where its output goes.** The spawner opens `<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log` and hands the descriptor down as the relay's stdout/stderr; the relay passes its own fds 1 and 2 on to the reaper, so the extra hop changes nothing about the log and the **L46** verdict lines of a stop nobody watched are still on record. The spawner starts the file afresh once it passes `EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES` (1 MB), so this log can never become the next unbounded file. **The armed line no longer names a PID** — the spawner only ever sees the relay's, which is not the reaper's and is dead within milliseconds. The reaper's own PID is the first line it writes to that log.
 
 **The pure/glue split** follows **L33**. Unit-tested in `emulator-reaper.test.ts`:
 
@@ -3459,24 +1382,15 @@ first line it writes to that log.
 - the argument codec;
 - the log-cap decision;
 - the bootstrap, run for real with `node -e` against ESM, CJS and default-only CJS fixtures;
-- the relay, run for real against a fixture reaper that reports its own `ppid`: the property asserted is
-  that the reaper's parent is the relay and the relay has already exited — which is precisely what a
-  spawn skipping the relay would fail, since there the parent is the caller and the caller is alive.
+- the relay, run for real against a fixture reaper that reports its own `ppid`: the property asserted is that the reaper's parent is the relay and the relay has already exited — which is precisely what a spawn skipping the relay would fail, since there the parent is the caller and the caller is alive.
 
-`tryAcquireSetupLock` and `checkIsSetupLockHeld` are covered in `setup-lock.test.ts`. The spawn and the
-loop are `v8 ignore`d, and the device evidence below covers them. `ANDROID_SETUP_LOCK_SCOPE` is now the one
-definition of `'android'`, shared by `coreSetup`, the trusted-input project's global setup, and the reaper.
+`tryAcquireSetupLock` and `checkIsSetupLockHeld` are covered in `setup-lock.test.ts`. The spawn and the loop are `v8 ignore`d, and the device evidence below covers them. `ANDROID_SETUP_LOCK_SCOPE` is now the one definition of `'android'`, shared by `coreSetup`, the trusted-input project's global setup, and the reaper.
 
-**The Appium server is deliberately left alone.** A worker-started Appium server (path **A**) is still
-adopted by the next run rather than stopped at the global teardown. An idle server grows no log and spins
-no core, **L40**'s marker and wedged-server restart already reclaim a stale or wedged one, and adopting it
-spares each run the server's start time (owner decision, 2026-09-11).
+**The Appium server is deliberately left alone.** A worker-started Appium server (path **A**) is still adopted by the next run rather than stopped at the global teardown. An idle server grows no log and spins no core, **L40**'s marker and wedged-server restart already reclaim a stale or wedged one, and adopting it spares each run the server's start time (owner decision, 2026-09-11).
 
 ### Reaper evidence (2026-09-11, this host)
 
-Three device checks. **AdGuard was left RUNNING**: the owner's application exclusions for `emulator.exe`
-and `qemu-system-x86_64-headless.exe` make the **L49** service stop unnecessary, and every boot here was
-clean.
+Three device checks. **AdGuard was left RUNNING**: the owner's application exclusions for `emulator.exe` and `qemu-system-x86_64-headless.exe` make the **L49** service stop unnecessary, and every boot here was clean.
 
 ```text
 B, the target — a SIGKILLed run with nothing after it:
@@ -3496,17 +1410,11 @@ The race — a SIGKILLed run with the next one starting at once:
    16:24:51 + 16:24:54  both reapers exit: "The emulator was stopped; nothing left to watch."
 ```
 
-The race came out on the "next run wins" side, which is the harder one to get right: the reaper stood down
-without touching an emulator another run had adopted. The other side — the reaper taking the lock first,
-after which the next run waits and boots fresh — was exercised with stand-in processes rather than a real
-emulator. One test failed in that run — the long-press menu timeout, which failed on `main` too. It was
-diagnosed and fixed afterwards; L57 records what it was.
+The race came out on the "next run wins" side, which is the harder one to get right: the reaper stood down without touching an emulator another run had adopted. The other side — the reaper taking the lock first, after which the next run waits and boots fresh — was exercised with stand-in processes rather than a real emulator. One test failed in that run — the long-press menu timeout, which failed on `main` too. It was diagnosed and fixed afterwards; L57 records what it was.
 
 ### Relay evidence: the reaper measured against a real tree kill (2026-09-12, this host)
 
-Both shapes built from the shipped `buildEmulatorReaperBootstrap()` /
-`buildEmulatorReaperRelayBootstrap()`, against a fixture reaper that reports its own PID and parent, then
-one `taskkill /F /T` per launcher:
+Both shapes built from the shipped `buildEmulatorReaperBootstrap()` / `buildEmulatorReaperRelayBootstrap()`, against a fixture reaper that reports its own PID and parent, then one `taskkill /F /T` per launcher:
 
 ```text
 direct (the pre-fix shape)   launcher 24036 -> reaper 23656 (ppid 24036)
@@ -3518,12 +1426,9 @@ relay  (the shipped shape)   launcher 33576 -> relay 2508 (already exited) -> re
                              reaper alive afterwards: TRUE
 ```
 
-`taskkill /T` walks `ParentProcessId`, which is the same set of edges a descendant sweep walks, so the
-measurement covers both. The relay hop was already gone from the host listing before the kill ran, which
-is the whole mechanism: there is no edge to walk.
+`taskkill /T` walks `ParentProcessId`, which is the same set of edges a descendant sweep walks, so the measurement covers both. The relay hop was already gone from the host listing before the kill ran, which is the whole mechanism: there is no edge to walk.
 
-The spawner glue itself — `v8 ignore`d, so nothing but device evidence covers it — was then driven for
-real against a throwaway AVD marker rather than an emulator, which exercises every step but the reclaim:
+The spawner glue itself — `v8 ignore`d, so nothing but device evidence covers it — was then driven for real against a throwaway AVD marker rather than an emulator, which exercises every step but the reclaim:
 
 ```text
 [spawner] Emulator reaper armed for AVD "reaper_relay_probe": … Its PID is the first line of its log: …
@@ -3533,65 +1438,31 @@ real against a throwaway AVD marker rather than an emulator, which exercises eve
 00:54:00.885  The emulator was stopped; nothing left to watch.      ← the marker was removed under the lock
 ```
 
-So the relay passes the arguments through in the right order, the reaper loads the real module under
-plain Node, the inherited descriptor lands it on the spawner's capped log, and its parent is a process
-that no longer exists — while the spawner is untouched and still holding the lock.
+So the relay passes the arguments through in the right order, the reaper loads the real module under plain Node, the inherited descriptor lands it on the spawner's capped log, and its parent is a process that no longer exists — while the spawner is untouched and still holding the lock.
 
 ### The boot window: the marker is written from the launch, not from the device
 
-The marker above used to be written once the device connected, about 45 s into a cold boot, and the reaper
-was armed with it. A runner killed inside that window left a running emulator with **no marker at all**,
-which every later run correctly refuses to touch (**L46**) and no reaper was watching — the pre-marker
-shape, surviving inside the boot. It is now written **three times**, all carrying the same
-`startedAtInMilliseconds` so the reaper armed by the first recognizes the last as the same emulator:
+The marker above used to be written once the device connected, about 45 s into a cold boot, and the reaper was armed with it. A runner killed inside that window left a running emulator with **no marker at all**, which every later run correctly refuses to touch (**L46**) and no reaper was watching — the pre-marker shape, surviving inside the boot. It is now written **three times**, all carrying the same `startedAtInMilliseconds` so the reaper armed by the first recognizes the last as the same emulator:
 
-1. **At the launch**, from the launcher's PID, with no device and with the pre-launch emulator-process
-   snapshot. The reaper is armed here.
+1. **At the launch**, from the launcher's PID, with no device and with the pre-launch emulator-process snapshot. The reaper is armed here.
 2. **When the device appears**, before the boot/idle/network gates, adding the `deviceId`.
-3. **On success**, the write that always existed: the real owned PIDs (launcher + backend) and the device,
-   dropping the snapshot because the owned set is now exact.
+3. **On success**, the write that always existed: the real owned PIDs (launcher + backend) and the device, dropping the snapshot because the owned set is now exact.
 
-**The verdict needed no change, and that is not luck.** `resolveEmulatorMarkerVerdict` convicts a marker
-only when one of its PIDs is in the host's **emulator** listing, and
-`EMULATOR_BACKEND_NAME_PATTERN` matches the bare `emulator` launcher as well as both QEMU builds. So a
-launch-time marker is evidence by the same rule as a completed one, and the `stale-marker` reasoning — *a
-marker proves nothing without a live emulator process* — stands as written.
+**The verdict needed no change, and that is not luck.** `resolveEmulatorMarkerVerdict` convicts a marker only when one of its PIDs is in the host's **emulator** listing, and `EMULATOR_BACKEND_NAME_PATTERN` matches the bare `emulator` launcher as well as both QEMU builds. So a launch-time marker is evidence by the same rule as a completed one, and the `stale-marker` reasoning — *a marker proves nothing without a live emulator process* — stands as written.
 
-**Why the marker also carries `preLaunchEmulatorPids`.** The launcher is not enough on its own, and the
-first evidence run below is why: **the launcher exits with its parent while the
-`qemu-system-x86_64-headless` backend it forked keeps running** — the same asymmetry **L46** is built on,
-reached from the other end. A record naming the launcher alone therefore goes stale over a live emulator,
-which is the leak the marker exists to prevent. The snapshot fixes it without a new liberty:
-`selectLiveMarkedPids` adds every emulator process in the listing that is **not** in the snapshot, which is
-the identical pre-launch diff the success path makes, and still never touches a backend that predates the
-launch.
+**Why the marker also carries `preLaunchEmulatorPids`.** The launcher is not enough on its own, and the first evidence run below is why: **the launcher exits with its parent while the `qemu-system-x86_64-headless` backend it forked keeps running** — the same asymmetry **L46** is built on, reached from the other end. A record naming the launcher alone therefore goes stale over a live emulator, which is the leak the marker exists to prevent. The snapshot fixes it without a new liberty: `selectLiveMarkedPids` adds every emulator process in the listing that is **not** in the snapshot, which is the identical pre-launch diff the success path makes, and still never touches a backend that predates the launch.
 
 Three consequences worth keeping:
 
-- **Phase 2 deliberately makes no host process listing.** That query is budgeted at
-  `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` (30 s) for exactly this contended window, and spending it
-  inside the boot path would eat the readiness budgets that follow. The device id is the half that matters
-  there, because the console shutdown is the only stop that releases `multiinstance.lock`.
-- **A launch never overwrites a marker whose processes are still running.** A launch can happen while an
-  older emulator of the same AVD is still up and recorded — an `offline` leftover the probe cannot see,
-  which is the launch that dies on `Running multiple emulators with the same AVD`. Clobbering that marker
-  would erase the only record of a running emulator, the very thing `clearEmulatorMarkerIfStopped` exists
-  to prevent, so the record then waits for the success path as before.
-- **The reaper never reads a provisional marker as stopped.** Its 5 s poll is signal-0 only, and a
-  provisional marker's PID list is knowingly incomplete, so `resolveEmulatorReaperWatch` keeps watching one
-  and leaves the judgement to the reclaim, which does make the listing.
+- **Phase 2 deliberately makes no host process listing.** That query is budgeted at `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` (30 s) for exactly this contended window, and spending it inside the boot path would eat the readiness budgets that follow. The device id is the half that matters there, because the console shutdown is the only stop that releases `multiinstance.lock`.
+- **A launch never overwrites a marker whose processes are still running.** A launch can happen while an older emulator of the same AVD is still up and recorded — an `offline` leftover the probe cannot see, which is the launch that dies on `Running multiple emulators with the same AVD`. Clobbering that marker would erase the only record of a running emulator, the very thing `clearEmulatorMarkerIfStopped` exists to prevent, so the record then waits for the success path as before.
+- **The reaper never reads a provisional marker as stopped.** Its 5 s poll is signal-0 only, and a provisional marker's PID list is knowingly incomplete, so `resolveEmulatorReaperWatch` keeps watching one and leaves the judgement to the reclaim, which does make the listing.
 
-**The cost, measured below: a device-less stop takes ~21 s rather than ~5 s.** With no device there is no
-console to shut down, and the launcher's tree kill does not reach the backend, so the stop waits out
-`EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS` before escalating to the PID the diff identified. It still ends in a
-**verified** stop; it just gets there the slow way.
+**The cost, measured below: a device-less stop takes ~21 s rather than ~5 s.** With no device there is no console to shut down, and the launcher's tree kill does not reach the backend, so the stop waits out `EMULATOR_STOP_TIMEOUT_IN_MILLISECONDS` before escalating to the PID the diff identified. It still ends in a **verified** stop; it just gets there the slow way.
 
 ### Boot-window evidence (2026-09-11, this host)
 
-Two runs of `integration-tests:android`, each killed while `adb devices` was still empty, and
-one normal run. The kill is `Stop-Process -Force` on the npx shim, the Vitest main process holding the lock,
-and the worker that owns the emulator — not a descendant sweep, which would take the detached reaper with
-it (it is a `node` child of the run; that is a Task-Manager-tree hazard the reaper has always had).
+Two runs of `integration-tests:android`, each killed while `adb devices` was still empty, and one normal run. The kill is `Stop-Process -Force` on the npx shim, the Vitest main process holding the lock, and the worker that owns the emulator — not a descendant sweep, which would take the detached reaper with it (it is a `node` child of the run; that is a Task-Manager-tree hazard the reaper has always had).
 
 ```text
 The window itself — a run killed 12s in, with the reaper left to do its job:
@@ -3621,15 +1492,11 @@ A normal run, all three phases in order:
    23:30:50.753  the reaper exits itself: "The emulator was stopped; nothing left to watch."
 ```
 
-After each: no `qemu*`, no `netsimd`, no marker. One test failed in that run — the long-press menu
-timeout, which failed on `main` too, and was diagnosed and fixed afterwards (L57). A short-lived `emulator.exe` was again visible for a few seconds
-after the verified stop — the emulator's own shutdown process, as recorded above, not a leak.
+After each: no `qemu*`, no `netsimd`, no marker. One test failed in that run — the long-press menu timeout, which failed on `main` too, and was diagnosed and fixed afterwards (L57). A short-lived `emulator.exe` was again visible for a few seconds after the verified stop — the emulator's own shutdown process, as recorded above, not a leak.
 
 ## L57. Obsidian re-collapses the mobile drawer right after `expand()`, and `expand()` is not idempotent mid-slide
 
-A test that needs a real `.nav-file-title` to press has to open the left drawer, and opening it once does
-not do that. Measured over six consecutive Android runs (2026-09-12) with a per-poll timeline taken inside
-the guest:
+A test that needs a real `.nav-file-title` to press has to open the left drawer, and opening it once does not do that. Measured over six consecutive Android runs (2026-09-12) with a per-poll timeline taken inside the guest:
 
 ```text
 +0ms    collapsed=false  box=none             expand() took; the explorer has not rendered its item yet
@@ -3638,35 +1505,15 @@ the guest:
 +361ms  collapsed=true   box=0,0 0x0          drawer hidden; the item stays in the DOM at zero size
 ```
 
-**The item is in the DOM the whole time.** It is the ancestor that is not laid out, so every
-`querySelector` for `.nav-file-title` succeeds while every `getBoundingClientRect()` comes back `0x0`. A
-predicate that waits on the element merely existing is therefore satisfied instantly and wrongly; one that
-waits on its centre being inside the viewport is what actually waits for the drawer — which is the reason
-the wait is written the way it is, quite apart from the "Position out of bounds" rejection it also avoids.
+**The item is in the DOM the whole time.** It is the ancestor that is not laid out, so every `querySelector` for `.nav-file-title` succeeds while every `getBoundingClientRect()` comes back `0x0`. A predicate that waits on the element merely existing is therefore satisfied instantly and wrongly; one that waits on its centre being inside the viewport is what actually waits for the drawer — which is the reason the wait is written the way it is, quite apart from the "Position out of bounds" rejection it also avoids.
 
-**`revealLeaf` is not the trigger.** Dropping `await app.workspace.revealLeaf(leaf)` entirely leaves the
-timeline identical, collapse included — and the explorer still renders its item. Nor is this slowness:
-five further seconds of polling never bring the drawer back, so a larger timeout buys nothing at all. The
-collapse is ONE-SHOT, part of Obsidian settling the vault it has just opened, which is what makes
-re-opening the right answer rather than waiting longer.
+**`revealLeaf` is not the trigger.** Dropping `await app.workspace.revealLeaf(leaf)` entirely leaves the timeline identical, collapse included — and the explorer still renders its item. Nor is this slowness: five further seconds of polling never bring the drawer back, so a larger timeout buys nothing at all. The collapse is ONE-SHOT, part of Obsidian settling the vault it has just opened, which is what makes re-opening the right answer rather than waiting longer.
 
-**But re-asserting `expand()` on every poll is worse than the bug it is meant to fix.** `expand()` is not
-idempotent mid-animation: called while the drawer is sliding, it leaves the element hidden at `0x0` with
-`collapsed === false` — stuck in that self-contradiction for the remainder of the wait, so the predicate
-can never pass and the state now lies about itself. A run that re-expanded on every poll got exactly one
-re-expand in and then sat in that state for 4.9 s.
+**But re-asserting `expand()` on every poll is worse than the bug it is meant to fix.** `expand()` is not idempotent mid-animation: called while the drawer is sliding, it leaves the element hidden at `0x0` with `collapsed === false` — stuck in that self-contradiction for the remainder of the wait, so the predicate can never pass and the state now lies about itself. A run that re-expanded on every poll got exactly one re-expand in and then sat in that state for 4.9 s.
 
-**So the drawer is re-opened only from REST**, which an attempt timeout comfortably longer than the ~300ms
-slide guarantees: by the time an attempt gives up, whatever the drawer was doing has finished. The
-long-press test loops four 1.5 s attempts, sized against the transport per-eval cap of 30 s
-(`DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS`), so the 6 s worst case plus the 600 ms press and the 5 s menu
-wait stay well inside it.
+**So the drawer is re-opened only from REST**, which an attempt timeout comfortably longer than the ~300ms slide guarantees: by the time an attempt gives up, whatever the drawer was doing has finished. The long-press test loops four 1.5 s attempts, sized against the transport per-eval cap of 30 s (`DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS`), so the 6 s worst case plus the 600 ms press and the 5 s menu wait stay well inside it.
 
-**Every wait in that suite now carries a `message`.** `lib.waitUntil` appends one to its timeout text, and
-the two waits in the long-press test had none — which is the whole reason a deterministic failure,
-reproduced on run after run, could not say which of the two had expired. A wait without a message is a
-timeout that names nothing. The same failure now also reports what the explorer actually held, because "no
-item was on screen" and "here is the item, and its box is 0x0" are different amounts of answer.
+**Every wait in that suite now carries a `message`.** `lib.waitUntil` appends one to its timeout text, and the two waits in the long-press test had none — which is the whole reason a deterministic failure, reproduced on run after run, could not say which of the two had expired. A wait without a message is a timeout that names nothing. The same failure now also reports what the explorer actually held, because "no item was on screen" and "here is the item, and its box is 0x0" are different amounts of answer.
 
 ## L58. One `message` listener per CDP socket, not one per command — concurrency is not a leak
 
