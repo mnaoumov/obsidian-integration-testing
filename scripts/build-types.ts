@@ -16,6 +16,7 @@ import {
 } from 'node:path';
 
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
+import { resolveToolCommand } from './helpers/package-manager.ts';
 import { execFromRoot } from './helpers/root.ts';
 
 exitIfScriptDisabled();
@@ -48,7 +49,7 @@ function copySourceDeclarationFiles(): void {
 }
 
 async function main(): Promise<void> {
-  await execFromRoot('tsc --project tsconfig.build.json');
+  await execFromRoot([...resolveToolCommand({ tool: 'tsc' }), '--project', 'tsconfig.build.json']);
   copySourceDeclarationFiles();
 
   const dtsFiles = collectFiles(ESM_DIR, '.d.ts');
