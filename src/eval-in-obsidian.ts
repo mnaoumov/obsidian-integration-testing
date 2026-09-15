@@ -350,6 +350,9 @@ export interface Lib {
    *
    * @param params - The element to hover.
    * @returns A {@link Promise} that resolves once the element matches `:hover`.
+   * @throws When the element never matches `:hover`. Resolving quietly there
+   *   would let a test read an element that is not hovered and pass on whatever
+   *   its base style happens to be.
    */
   hoverElement(this: void, params: HoverElementParams): Promise<void>;
 
@@ -487,6 +490,8 @@ export interface Lib {
    * @param params - The element to move the pointer away from.
    * @returns A {@link Promise} that resolves once the element no longer matches
    *   `:hover`.
+   * @throws When the element keeps matching `:hover`, which is what a
+   *   full-viewport element does.
    */
   unhoverElement(this: void, params: UnhoverElementParams): Promise<void>;
 
