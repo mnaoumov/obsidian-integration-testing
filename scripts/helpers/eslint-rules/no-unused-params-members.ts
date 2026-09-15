@@ -11,7 +11,7 @@
  * to the parameter (not unrelated same-named identifiers). A member counts as
  * used when it is referenced by name — `params.member`, `params['member']`, or
  * `const { member } = params` (plus a destructured signature
- * `callback({ member }: FooParams)`).
+ * `fn({ member }: FooParams)`).
  *
  * Crucially, if the object ever ESCAPES whole — spread (`{ ...params }`), rest
  * (`const { ...rest } = params`), passed as an argument (`f(params)`), returned,
@@ -39,6 +39,9 @@ import { ensureNonNullable } from '../type-guards.ts';
 
 const PARAMS_OPTIONS_SUFFIX_PATTERN = /(?:Params|Options)$/;
 
+/**
+Message ID reported when a `*Params`/`*Options` interface member is never accessed by the function that receives it.
+ */
 export const MESSAGE_ID = 'unusedParamsMember';
 
 interface IdentifierBinding {
@@ -84,7 +87,11 @@ export const noUnusedParamsMembers: Rule.RuleModule = {
           if (info.binding.type === 'pattern') {
             collectPatternMembers(info.binding.pattern, usage);
           } else {
-            collectReferenceMembers(context.sourceCode.getScope(node), info.binding.name, usage);
+            collectReferenceMembers({
+              parameterName: info.binding.name,
+              scope: context.sourceCode.getScope(node),
+              usage
+            });
           }
         }
       },
@@ -139,6 +146,26 @@ export const noUnusedParamsMembers: Rule.RuleModule = {
   }
 };
 
+/**
+ * Parameters for {@link collectReferenceMembers}.
+ */
+interface CollectReferenceMembersParams {
+  /**
+   * The name of the parameter whose references are inspected.
+   */
+  readonly parameterName: string;
+
+  /**
+   * The scope in which the parameter is bound.
+   */
+  readonly scope: Scope.Scope;
+
+  /**
+   * The usage accumulator to record accessed members into.
+   */
+  readonly usage: InterfaceUsage;
+}
+
 function classifyReference(reference: object, usage: InterfaceUsage): void {
   const parent = record(reference)['parent'] as Rule.Node;
   if (parent.type === 'MemberExpression' && record(parent)['object'] === reference) {
@@ -190,7 +217,8 @@ function collectPatternMembers(pattern: Rule.Node, usage: InterfaceUsage): void 
   }
 }
 
-function collectReferenceMembers(scope: Scope.Scope, parameterName: string, usage: InterfaceUsage): void {
+function collectReferenceMembers(params: CollectReferenceMembersParams): void {
+  const { parameterName, scope, usage } = params;
   const variable = ensureNonNullable(scope.set.get(parameterName));
   for (const reference of variable.references) {
     classifyReference(reference.identifier, usage);

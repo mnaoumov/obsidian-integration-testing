@@ -550,6 +550,23 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
         'obsidian-dev-utils/no-used-underscore-variables': 'error',
         'obsidian-dev-utils/readonly-params-options-result-members': 'error'
       }
+    },
+    {
+      /*
+       * Scoped to `scripts/` rather than every file, and the scope is the measurement rather than a preference.
+       * This tree is where the convention was hand-repaired once already — `helpers/eslint.ts`, `helpers/format.ts`
+       * and `helpers/markdownlint.ts` — which is what the rule is here to stop recurring, and it reports ZERO
+       * findings across the tree today. `src/` reports 35, and they are not renames: the library threads a handful
+       * of shared bags (`ObsidianTransportOptions`, `ObsidianAndroidAppiumTransportOptions`, `TransportEvalOptions`,
+       * `CaptureScreenshotParams`, ...) through many helpers apiece, and one type cannot carry the four different
+       * per-owner names the rule derives, so ~24 of the 35 have no fix but a scoped suppression. Ten of the types
+       * are re-exported from `index.ts`, so what remains to rename is a breaking change to a published package.
+       * Widening this glob is therefore a decision about the library's API, tracked separately, not a config edit.
+       */
+      files: scriptFiles,
+      rules: {
+        'obsidian-dev-utils/params-options-name-match': 'error'
+      }
     }
   ]);
 }
@@ -983,6 +1000,20 @@ function getUnicornConfigs(): Linter.Config[] {
          */
         'unicorn/name-replacements': 'off',
         'unicorn/prefer-type-literal-last': 'off'
+      }
+    },
+    {
+      /*
+       * The rule fires on the tail call that follows a type alias. That function recurses in two places — there,
+       * and above, fanning out over the members of a union — so turning the tail call into a loop would leave it
+       * half recursive and half iterative over the same tree. The suppression lives here rather than on the line
+       * itself because the file is shared byte-for-byte with sibling projects that do not install this plugin,
+       * where a disable directive naming one of its rules is an unresolvable rule reference and fails their lint
+       * outright.
+       */
+      files: ['scripts/helpers/eslint-rules/no-async-callback-to-unsafe-return.ts'],
+      rules: {
+        'unicorn/no-useless-recursion': 'off'
       }
     },
     {

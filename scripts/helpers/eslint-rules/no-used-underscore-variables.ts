@@ -16,6 +16,9 @@ interface NodeWithBody {
   body?: Rule.Node;
 }
 
+/**
+Message ID reported when a variable carries a `_` prefix (signalling unused) but is actually used.
+ */
 export const MESSAGE_ID = 'noUsedUnderscoreVariables';
 
 export const noUsedUnderscoreVariables: Rule.RuleModule = {
@@ -38,13 +41,13 @@ export const noUsedUnderscoreVariables: Rule.RuleModule = {
           const functionBody = (node as NodeWithBody).body;
           const bodyRange = functionBody?.range;
           const isParameter = definitionNode.type === 'Parameter';
-          const hasBodyReferences = variable.references.some((ref) => {
-            if (!ref.isRead()) {
+          const hasBodyReferences = variable.references.some((reference) => {
+            if (!reference.isRead()) {
               return false;
             }
-            if (isParameter && bodyRange && ref.identifier.range) {
-              return ref.identifier.range[0] >= bodyRange[0]
-                && ref.identifier.range[1] <= bodyRange[1];
+            if (isParameter && bodyRange && reference.identifier.range) {
+              return reference.identifier.range[0] >= bodyRange[0]
+                && reference.identifier.range[1] <= bodyRange[1];
             }
             // Local variables or fallback: count all reads
             return true;

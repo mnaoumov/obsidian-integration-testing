@@ -10,7 +10,7 @@
  *
  * Example:
  * ```typescript
- * // onClick(callback: (evt: MouseEvent) => any)
+ * // onClick(fn: (evt: MouseEvent) => any)
  * button.onClick(async () => {
  *   await someFn(); // Unhandled rejection if someFn throws
  * });
@@ -42,6 +42,9 @@ import {
 
 import { assertNonNullable } from '../type-guards.ts';
 
+/**
+Message ID reported when an async function is passed as a callback to a parameter whose return type is `any`/`unknown`, risking an unhandled promise rejection.
+ */
 export const MESSAGE_ID = 'noAsyncCallbackToUnsafeReturn';
 
 /**
@@ -95,16 +98,15 @@ function containsPromiseReference(checker: TypeChecker, node: TypeNode): boolean
     }
 
     // Resolve type alias (following imports) and check its definition body
-    let symbol = checker.getSymbolAtLocation(node.typeName);
+    let $symbol = checker.getSymbolAtLocation(node.typeName);
     /* v8 ignore start -- Import aliases require multi-file setup not available in RuleTester. */
     // eslint-disable-next-line no-bitwise -- Bitwise flag check is idiomatic for TypeScript compiler API.
-    if (symbol && symbol.flags & SymbolFlags.Alias) {
-      symbol = checker.getAliasedSymbol(symbol);
+    if ($symbol && $symbol.flags & SymbolFlags.Alias) {
+      $symbol = checker.getAliasedSymbol($symbol);
     }
     /* v8 ignore stop */
-    const declaration = symbol?.declarations?.[0];
+    const declaration = $symbol?.declarations?.[0];
     if (declaration && isTypeAliasDeclaration(declaration)) {
-      // eslint-disable-next-line unicorn/no-useless-recursion -- This is a recursive TREE walk, not a disguised loop: the union branch above fans out over `node.types`, so only this one call happens to be in tail position. Turning it into a loop would leave the function half-recursive and harder to follow.
       return containsPromiseReference(checker, declaration.type);
     }
   }
@@ -186,7 +188,7 @@ export const noAsyncCallbackToUnsafeReturn: Rule.RuleModule = {
       description: 'Disallow passing async functions as callbacks to parameters with `any` or `unknown` return type'
     },
     messages: {
-      [MESSAGE_ID]: 'Async function passed as callback to a parameter with `any`/`unknown` return type. This may cause unhandled promise rejections. Wrap the call: `(...input) => { yourAsyncFn(...input); }`.'
+      [MESSAGE_ID]: 'Async function passed as callback to a parameter with `any`/`unknown` return type. This may cause unhandled promise rejections. Wrap the call: `(...args) => { yourAsyncFn(...args); }`.'
     },
     schema: [],
     type: 'problem'
