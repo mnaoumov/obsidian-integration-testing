@@ -19,8 +19,9 @@
  * expensive: the parse succeeded, the cast asserted a shape nothing had checked, `result[0]` was
  * `undefined`, and `publishGitHubRelease` died with `Cannot read properties of undefined (reading
  * 'filename')` at the SECOND-TO-LAST step of a release -- after the bump, changelog, commit, tag and
- * `git push --follow-tags` had all already landed on the remote. So this module validates
- * instead of asserting, and every failure names the raw output it could not read.
+ * `git push --follow-tags` had all already landed on the remote -- measured on npm 12.0.2 / Node 26.5.0,
+ * and fixed in lockstep in the sibling copies in `obsidian-test-mocks` and `obsidian-dev-utils`.
+ * So this module validates instead of asserting, and every failure names the raw output it could not read.
  *
  * No noise-stripping is needed here, unlike the sibling copy in `obsidian-dev-utils`: `execFromRoot`
  * accumulates the child's `stdout` and `stderr` separately and returns `stdout` alone, and npm writes its
