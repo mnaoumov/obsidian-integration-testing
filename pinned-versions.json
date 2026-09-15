@@ -7,7 +7,7 @@
     "means the condition that justified the pin has changed and the pin should be re-examined. `check: null` means no",
     "mechanical test exists — it is reported for manual review on every run instead of going quiet. Every exact pin must",
     "have an entry here, and every entry must correspond to a real pin; the script errors on either mismatch.",
-    "The caret-ranged overrides (glob, markdown-it, readdir-glob, test-exclude, tmp) are swept automatically and",
+    "The caret-ranged overrides (glob, readdir-glob, test-exclude, tmp) are swept automatically and",
     "are deliberately not listed. An advisory-driven override is the exception — it is listed even when caret-ranged,",
     "because the sweep only keeps it current, it never reports that the advisory it answers is gone and the override with",
     "it. Modeled on obsidian-dev-utils/pinned-versions.json."
