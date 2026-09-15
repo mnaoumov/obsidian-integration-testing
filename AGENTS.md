@@ -3139,16 +3139,11 @@ comes back with exactly the empty band it had before. `raiseSoftKeyboard` (`src/
 that gesture with `adb shell input tap`, then confirms the keyboard actually arrived rather than trusting
 it.
 
-**Nothing in the page reports the keyboard, so the confirmation is geometric.** `innerHeight`,
-`visualViewport` and the modal container all stay at full height with the keyboard shown and `dumpsys
-input_method` reporting `mInputShown=true` — Obsidian Mobile keeps a full-screen container and lifts its
-contents inside it. The only signal is the field's own offset from the bottom, which is what
-`checkIsSoftKeyboardUp` reads. The tap aims at two candidate points, not one: the WebView may or may not
-start at the top of the screen and the page cannot tell which, so `resolveSoftKeyboardTapPoints` offers the
-`screenY`-shifted point and the plain one. Both land inside the field, which is taller than the offset,
-so a wrong guess costs a touch rather than a mis-tap on whatever sits below. A failure writes the device
-framebuffer and the device's own `input_method` state to `dist/screenshots/` before throwing, because a bare
-"the keyboard did not come up" is unreadable and cost two runs before the dump said what was happening.
+**Nothing in the page reports the keyboard, so the confirmation is geometric.** `innerHeight`, `visualViewport` and the modal container all stay at full height with the keyboard shown and `dumpsys input_method` reporting `mInputShown=true` — Obsidian Mobile keeps a full-screen container and lifts its contents inside it. The only signal is that the field **moves**, which is what `checkIsSoftKeyboardUp` reads. The tap aims at two candidate points, not one: the WebView may or may not start at the top of the screen and the page cannot tell which, so `resolveSoftKeyboardTapPoints` offers the `screenY`-shifted point and the plain one. Both land inside the field, which is taller than the offset, so a wrong guess costs a touch rather than a mis-tap on whatever sits below. A failure writes the device framebuffer and the device's own `input_method` state to `dist/screenshots/` before throwing, because a bare "the keyboard did not come up" is unreadable and cost two runs before the dump said what was happening.
+
+**It is a DELTA against a baseline read before the first touch, and that is a correction rather than a detail.** The check used to read the field's absolute offset from the viewport bottom, which is the same sentence as "it lifted" only for a **bottom-anchored** field — a suggester, a command palette, which is every frame the harness was built against. On a **centred modal** the condition is already true with no keyboard at all, so `raiseSoftKeyboard` broke out of its tap loop on the first read and returned success having dispatched no touch: the caller got a device capture identical to a page capture apart from the status-bar clock, and no error. Measured 2026-09-12 against a centred prompt modal: the field's `top` read `352.4453125` before and after real `adb` taps and the check said the keyboard was up both times. Reading the baseline first also makes the vacuous pass unrepresentable rather than merely fixed — the delta of the baseline against itself is zero, so the first iteration always taps.
+
+**The trade, which a caller has to know:** a keyboard that is **already up** when `raiseSoftKeyboard` is called now fails, because the field has nowhere left to lift to. Geometry cannot separate that from a centred modal with no keyboard — both read as "clear of the bottom and not moving" — so one of the two has to be the wrong answer, and a loud failure is the one worth keeping over a screenshot of a keyboard that is not there. Raise it with the keyboard down; the failure message prints `lift=0` beside the device's own `mInputShown`, which is how a reader tells the two apart.
 
 **Never take the first device `adb devices` lists.** `resolveEmulatorDeviceId`
 (`src/resolve-emulator-device-id.ts`) matches by AVD name. A physical phone is routinely plugged into this

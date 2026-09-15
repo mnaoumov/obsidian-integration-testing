@@ -8,9 +8,21 @@
  * and the modal container all stay at their full height with the keyboard shown
  * and `dumpsys input_method` reporting `mInputShown=true` — Obsidian Mobile keeps
  * a full-screen container and lifts its contents inside it. The only signal is
- * the field's own offset from the bottom, which is why the detection here is
- * geometric rather than an API call. Two runs failed on that before a framebuffer
- * dump said so, which is also why the diagnostic below exists.
+ * that the field *moves*, which is why the detection here is geometric rather
+ * than an API call. Two runs failed on that before a framebuffer dump said so,
+ * which is also why the diagnostic below exists.
+ *
+ * **The signal is a DELTA against a baseline read before the touch, not the
+ * field's absolute offset from the bottom.** The absolute offset was the original
+ * test and it is right only for a **bottom-anchored** field — a suggester, a
+ * command palette — where "clear of the bottom" and "lifted" are the same
+ * sentence. For a **centred modal** the condition is already true with no
+ * keyboard at all, so the test passed vacuously and `raiseSoftKeyboard` returned
+ * success having dispatched no touch (measured 2026-09-12 against a centred
+ * prompt modal: the field's `top` read `352.4453125` before and after real taps
+ * and the check said the keyboard was up both times). A delta is the same public
+ * API for both shapes, and it costs a field that cannot move its verdict — see
+ * {@link checkIsSoftKeyboardUp} for the one case that trades away.
  *
  * Pure and unit-tested; the touching and the capture live in `soft-keyboard`.
  */
@@ -19,6 +31,11 @@
  * Parameters for {@link buildSoftKeyboardDiagnosticMessage}.
  */
 export interface BuildSoftKeyboardDiagnosticMessageParams {
+  /**
+   * The geometry read before the first touch, which is what the verdict is measured against.
+   */
+  readonly baselineSnapshot: SoftKeyboardViewportSnapshot;
+
   /**
    * The lines of `dumpsys input_method` worth reading, as {@link parseInputMethodState} returned them.
    */
@@ -40,6 +57,14 @@ export interface BuildSoftKeyboardDiagnosticMessageParams {
  */
 export interface CheckIsSoftKeyboardUpParams {
   /**
+   * The geometry read **before** the first touch, with the keyboard still down.
+   *
+   * Required, and deliberately not optional: an absent baseline could only mean falling back to the
+   * absolute-offset test, which is the vacuous pass this parameter exists to make unrepresentable.
+   */
+  readonly baselineSnapshot: SoftKeyboardViewportSnapshot;
+
+  /**
    * The least a raised keyboard lifts the field by, so a stray rounding pixel is not read as one.
    *
    * @default {@link DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS}
@@ -47,7 +72,7 @@ export interface CheckIsSoftKeyboardUpParams {
   readonly minimumKeyboardHeightInPixels?: number;
 
   /**
-   * The geometry to judge.
+   * The geometry to judge, read after the touch.
    */
   readonly snapshot: SoftKeyboardViewportSnapshot;
 }
@@ -151,36 +176,58 @@ const CENTER_DIVISOR = 2;
  * Builds the message a failed raise reports.
  *
  * A bare "the keyboard did not come up" is unreadable — what the reader needs is what the page saw and what
- * the device thought, side by side, because the two disagreeing is the whole diagnosis.
+ * the device thought, side by side, because the two disagreeing is the whole diagnosis. The page's half is
+ * the lift and the two tops it came from, since the lift is the verdict; a lift of zero gets a sentence of
+ * its own, being the one reading that an already-up keyboard also produces.
  *
- * @param params - The evidence gathered after the last touch.
+ * @param params - The evidence gathered before the first touch and after the last one.
  * @returns The message, ready to throw.
  */
 export function buildSoftKeyboardDiagnosticMessage(params: BuildSoftKeyboardDiagnosticMessageParams): string {
-  const { inputRect } = params.snapshot;
-  const inputBottom = inputRect ? inputRect.top + inputRect.height : null;
+  const baselineTop = params.baselineSnapshot.inputRect?.top ?? null;
+  const currentTop = params.snapshot.inputRect?.top ?? null;
+  const lift = baselineTop === null || currentTop === null ? null : baselineTop - currentTop;
 
-  return [
+  const lines = [
     `raiseSoftKeyboard: the keyboard did not come up. Device framebuffer written to ${params.screenshotPath}.`,
-    `page: innerHeight=${String(params.snapshot.innerHeight)} inputBottom=${inputBottom === null ? '(no input)' : String(inputBottom)}`,
+    `page: innerHeight=${String(params.snapshot.innerHeight)} baselineInputTop=${formatMeasurement(baselineTop)} inputTop=${formatMeasurement(currentTop)} lift=${formatMeasurement(lift)}`,
     `device: ${params.inputMethodState || '(no input_method state reported)'}`
-  ].join('\n');
+  ];
+
+  if (lift === 0) {
+    lines.push('The field did not move at all. If the device says the keyboard is showing, it was already up before the first touch — this check cannot tell that from a field that never lifts.');
+  }
+
+  return lines.join('\n');
 }
 
 /**
- * Decides whether the IME is up, from the page's own geometry.
+ * Decides whether the IME is up, from how far the field moved.
  *
- * @param params - The geometry to judge, and how far the field must have lifted.
- * @returns Whether the field has stopped short of the bottom to make room for a keyboard.
+ * The verdict is a **delta**: the field must have risen from where it sat before the touch, by at least
+ * `minimumKeyboardHeightInPixels`. Obsidian Mobile lifts whatever is on screen to make room for the IME,
+ * so a field that has not moved has had no keyboard arrive under it — whether it is a bottom-anchored
+ * suggester or a centred modal.
+ *
+ * **The one case this gets wrong, deliberately:** a keyboard that was *already* up before the baseline was
+ * read. The field has nowhere left to lift to, so the answer is `false`. No amount of geometry separates
+ * that from a centred modal with no keyboard — both read as "clear of the bottom and not moving" — and of
+ * the two possible wrong answers, a loud `false` is the one worth keeping: it fails a capture rather than
+ * silently returning a screenshot of a keyboard that is not there. Read the baseline with the keyboard
+ * down, which is what `raiseSoftKeyboard` does.
+ *
+ * @param params - The geometry before and after the touch, and how far the field must have lifted.
+ * @returns Whether the field lifted far enough to have made room for a keyboard.
  */
 export function checkIsSoftKeyboardUp(params: CheckIsSoftKeyboardUpParams): boolean {
+  const baselineRect = params.baselineSnapshot.inputRect;
   const { inputRect } = params.snapshot;
-  if (!inputRect) {
+  if (!baselineRect || !inputRect) {
     return false;
   }
 
   const minimumKeyboardHeightInPixels = params.minimumKeyboardHeightInPixels ?? DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS;
-  return params.snapshot.innerHeight - (inputRect.top + inputRect.height) > minimumKeyboardHeightInPixels;
+  return baselineRect.top - inputRect.top > minimumKeyboardHeightInPixels;
 }
 
 /**
@@ -225,4 +272,14 @@ export function resolveSoftKeyboardTapPoints(params: ResolveSoftKeyboardTapPoint
     { xInPixels, yInPixels: centerYInPixels + topOffsetInPixels },
     { xInPixels, yInPixels: centerYInPixels }
   ];
+}
+
+/**
+ * Formats a measurement for the diagnostic, saying so rather than printing a number when there was none.
+ *
+ * @param value - The measurement, or `null` when the field was not on screen to measure.
+ * @returns The number as text, or `(no input)`.
+ */
+function formatMeasurement(value: null | number): string {
+  return value === null ? '(no input)' : String(value);
 }

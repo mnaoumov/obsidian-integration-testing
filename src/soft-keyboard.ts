@@ -13,6 +13,15 @@
  *    real touch, and a run with the setting flipped and no touch comes back with
  *    exactly the empty band it had before. `adb shell input tap` is that gesture.
  *
+ * 3. The proof that it arrived is that the field **moved**, measured against a
+ *    baseline read here before the first touch. An absolute offset from the
+ *    viewport bottom is the same test only for a bottom-anchored field; for a
+ *    centred modal it is already true with no keyboard, which used to break the
+ *    loop below before it had dispatched a single touch and return success
+ *    having done nothing. Reading the baseline first also makes that shape
+ *    unrepresentable rather than merely corrected: the delta of the baseline
+ *    against itself is zero, so the first iteration always taps.
+ *
  * The geometry that decides whether it worked is unit-tested in
  * `soft-keyboard-geometry`; everything here drives a real device, so the whole
  * module is integration-time code.
@@ -110,13 +119,19 @@ const KEYBOARD_SETTLE_DELAY_IN_MILLISECONDS = 1500;
  * Call it inside `withSoftKeyboardEnabled` — the device setting alone does not raise the keyboard, and this
  * touch alone cannot while the setting suppresses it.
  *
+ * **Call it with the keyboard DOWN.** The first read is the baseline every later read is compared against,
+ * so a keyboard that is already up leaves the field nothing to lift by and this throws. That is the
+ * deliberate trade for working on a centred modal as well as a bottom-anchored one — see
+ * {@link checkIsSoftKeyboardUp}.
+ *
  * @param params - The device, the field to touch, and how far it must lift.
  * @returns A {@link Promise} that resolves to the geometry read once the keyboard is up.
- * @throws Error if the keyboard never came up, after writing the device framebuffer and the device's own
- *   `input_method` state to the diagnostics directory.
+ * @throws Error if the field never matched, or if it never lifted, the latter after writing the device
+ *   framebuffer and the device's own `input_method` state to the diagnostics directory.
  */
 export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promise<SoftKeyboardViewportSnapshot> {
-  let snapshot = await readSoftKeyboardViewport(params);
+  const baselineSnapshot = await readSoftKeyboardViewport(params);
+  let snapshot = baselineSnapshot;
 
   if (!snapshot.inputRect) {
     throw new Error(`raiseSoftKeyboard: nothing matches "${params.inputSelector}", so there is no field to touch.`);
@@ -133,13 +148,14 @@ export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promis
   }
 
   if (!checkIsUp(snapshot)) {
-    throw new Error(await buildFailureMessage(params, snapshot));
+    throw new Error(await buildFailureMessage(params, baselineSnapshot, snapshot));
   }
 
   return snapshot;
 
   function checkIsUp(current: SoftKeyboardViewportSnapshot): boolean {
     return checkIsSoftKeyboardUp({
+      baselineSnapshot,
       ...(params.minimumKeyboardHeightInPixels !== undefined && { minimumKeyboardHeightInPixels: params.minimumKeyboardHeightInPixels }),
       snapshot: current
     });
@@ -163,10 +179,15 @@ export async function tapDevice(params: TapDeviceParams): Promise<void> {
  * Writes the device framebuffer and reads the device's `input_method` state, then composes the failure.
  *
  * @param params - The device and the diagnostics directory.
+ * @param baselineSnapshot - The geometry read before the first touch, which the verdict is measured against.
  * @param snapshot - The geometry read after the last touch.
  * @returns A {@link Promise} that resolves to the message to throw.
  */
-async function buildFailureMessage(params: RaiseSoftKeyboardParams, snapshot: SoftKeyboardViewportSnapshot): Promise<string> {
+async function buildFailureMessage(
+  params: RaiseSoftKeyboardParams,
+  baselineSnapshot: SoftKeyboardViewportSnapshot,
+  snapshot: SoftKeyboardViewportSnapshot
+): Promise<string> {
   const diagnosticsDirectory = params.diagnosticsDirectory ?? DEFAULT_DIAGNOSTICS_DIRECTORY;
   mkdirSync(diagnosticsDirectory, { recursive: true });
 
@@ -179,6 +200,7 @@ async function buildFailureMessage(params: RaiseSoftKeyboardParams, snapshot: So
   });
 
   return buildSoftKeyboardDiagnosticMessage({
+    baselineSnapshot,
     inputMethodState: parseInputMethodState(dumpsysOutput),
     screenshotPath,
     snapshot

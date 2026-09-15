@@ -20,6 +20,12 @@ import {
 const VIEWPORT_HEIGHT = 800;
 
 /**
+ * The field's `top` on a centred prompt modal, measured on a device on 2026-09-12 — before and after real
+ * `adb` taps alike, since nothing moved.
+ */
+const MEASURED_CENTERED_MODAL_TOP = 352.4453125;
+
+/**
  * Builds a snapshot with the field's bottom edge at a given offset from the viewport bottom.
  *
  * @param liftInPixels - How far the field's bottom sits above the viewport bottom.
@@ -43,21 +49,71 @@ function buildSnapshot(liftInPixels: number, overrides?: Partial<SoftKeyboardVie
   };
 }
 
+/**
+ * Builds a snapshot with the field's top edge at a given offset from the viewport top.
+ *
+ * The bottom-anchored builder above cannot say "a centred field that never moves" without arithmetic that
+ * hides the measured number, and that number is the whole point of the regression it serves.
+ *
+ * @param topInPixels - How far the field's top sits below the viewport top.
+ * @returns The snapshot.
+ */
+function buildSnapshotAtTop(topInPixels: number): SoftKeyboardViewportSnapshot {
+  return buildSnapshot(0, {
+    inputRect: {
+      height: 40,
+      left: 20,
+      top: topInPixels,
+      width: 400
+    }
+  });
+}
+
 describe('checkIsSoftKeyboardUp', () => {
-  it('should report the keyboard up when the field has lifted clear of the bottom', () => {
-    expect(checkIsSoftKeyboardUp({ snapshot: buildSnapshot(350) })).toBe(true);
+  it('should report the keyboard up when the field has lifted from where it started', () => {
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(0), snapshot: buildSnapshot(350) })).toBe(true);
   });
 
   /*
    * The state every unfixed mobile frame is in: the field sits at the bottom of a full-height modal, and
    * the band above it where the keyboard belongs is empty.
    */
-  it('should report the keyboard down when the field sits at the bottom', () => {
-    expect(checkIsSoftKeyboardUp({ snapshot: buildSnapshot(0) })).toBe(false);
+  it('should report the keyboard down when the field has not moved off the bottom', () => {
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(0), snapshot: buildSnapshot(0) })).toBe(false);
+  });
+
+  /*
+   * The regression this check was rewritten for. A centred modal's field sits clear of the bottom with no
+   * keyboard at all, so the absolute-offset test this replaced answered `true` on the very first read --
+   * before a single touch had been dispatched -- and `raiseSoftKeyboard` returned success having done
+   * nothing. The number is what a device actually reported, before and after real taps.
+   */
+  it('should report the keyboard down for a centred field that sits clear of the bottom and never moves', () => {
+    const baselineSnapshot = buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP);
+
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot, snapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP) })).toBe(false);
+  });
+
+  it('should report the keyboard up when a centred field does lift', () => {
+    const baselineSnapshot = buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP);
+
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot, snapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP - 200) })).toBe(true);
+  });
+
+  /*
+   * A field that sank is not a keyboard either, however far it went -- only an absolute-value comparison
+   * would read it as one.
+   */
+  it('should report the keyboard down when the field moved down instead of up', () => {
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(350), snapshot: buildSnapshot(0) })).toBe(false);
   });
 
   it('should report the keyboard down when there is no field on screen', () => {
-    expect(checkIsSoftKeyboardUp({ snapshot: buildSnapshot(350, { inputRect: null }) })).toBe(false);
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(0), snapshot: buildSnapshot(350, { inputRect: null }) })).toBe(false);
+  });
+
+  it('should report the keyboard down when the baseline had no field to measure from', () => {
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(0, { inputRect: null }), snapshot: buildSnapshot(350) })).toBe(false);
   });
 
   /*
@@ -65,24 +121,25 @@ describe('checkIsSoftKeyboardUp', () => {
    * exactly as passing the documented constant does, on both sides of the threshold.
    */
   it('should default the minimum lift to DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS', () => {
+    const baselineSnapshot = buildSnapshot(0);
     const justUnder = buildSnapshot(DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS);
     const justOver = buildSnapshot(DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS + 1);
 
-    expect(checkIsSoftKeyboardUp({ snapshot: justUnder })).toBe(false);
-    expect(checkIsSoftKeyboardUp({ snapshot: justOver })).toBe(true);
-    expect(checkIsSoftKeyboardUp({ minimumKeyboardHeightInPixels: DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS, snapshot: justUnder })).toBe(false);
-    expect(checkIsSoftKeyboardUp({ minimumKeyboardHeightInPixels: DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS, snapshot: justOver })).toBe(true);
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot, snapshot: justUnder })).toBe(false);
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot, snapshot: justOver })).toBe(true);
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot, minimumKeyboardHeightInPixels: DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS, snapshot: justUnder })).toBe(false);
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot, minimumKeyboardHeightInPixels: DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS, snapshot: justOver })).toBe(true);
   });
 
   it('should honour a stricter minimum lift', () => {
-    expect(checkIsSoftKeyboardUp({ minimumKeyboardHeightInPixels: 400, snapshot: buildSnapshot(350) })).toBe(false);
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(0), minimumKeyboardHeightInPixels: 400, snapshot: buildSnapshot(350) })).toBe(false);
   });
 
   /*
    * A rounding pixel is not a keyboard. This is exactly what the minimum exists to reject.
    */
-  it('should not read a one-pixel gap as a keyboard', () => {
-    expect(checkIsSoftKeyboardUp({ snapshot: buildSnapshot(1) })).toBe(false);
+  it('should not read a one-pixel shift as a keyboard', () => {
+    expect(checkIsSoftKeyboardUp({ baselineSnapshot: buildSnapshot(0), snapshot: buildSnapshot(1) })).toBe(false);
   });
 });
 
@@ -149,32 +206,65 @@ describe('buildSoftKeyboardDiagnosticMessage', () => {
    */
   it('should name the framebuffer, the page geometry and the device state', () => {
     const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshot(0),
       inputMethodState: 'mInputShown=true',
       screenshotPath: 'F:/dist/screenshots/keyboard-not-raised.png',
-      snapshot: buildSnapshot(0)
+      snapshot: buildSnapshot(50)
     });
 
     expect(message).toContain('F:/dist/screenshots/keyboard-not-raised.png');
     expect(message).toContain('innerHeight=800');
-    expect(message).toContain('inputBottom=800');
+    expect(message).toContain('baselineInputTop=760');
+    expect(message).toContain('inputTop=710');
+    expect(message).toContain('lift=50');
     expect(message).toContain('device: mInputShown=true');
+  });
+
+  /*
+   * The lift is the verdict, so a lift of zero is the one number worth a sentence: it is also what an
+   * already-up keyboard looks like, which is the case this check cannot see and the reader can.
+   */
+  it('should spell out what a lift of zero could also mean', () => {
+    const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP),
+      inputMethodState: 'mInputShown=true',
+      screenshotPath: 'a.png',
+      snapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP)
+    });
+
+    expect(message).toContain('lift=0');
+    expect(message).toContain('already up before the first touch');
+  });
+
+  it('should not raise the already-up possibility when the field did move', () => {
+    const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshot(0),
+      inputMethodState: 'mInputShown=true',
+      screenshotPath: 'a.png',
+      snapshot: buildSnapshot(50)
+    });
+
+    expect(message).not.toContain('already up before the first touch');
   });
 
   it('should say the field was gone rather than printing a number for it', () => {
     const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshot(0),
       inputMethodState: 'mInputShown=false',
       screenshotPath: 'a.png',
       snapshot: buildSnapshot(0, { inputRect: null })
     });
 
-    expect(message).toContain('inputBottom=(no input)');
+    expect(message).toContain('inputTop=(no input)');
+    expect(message).toContain('lift=(no input)');
   });
 
   it('should say so when the device reported no input_method state at all', () => {
     const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshot(0),
       inputMethodState: '',
       screenshotPath: 'a.png',
-      snapshot: buildSnapshot(0)
+      snapshot: buildSnapshot(50)
     });
 
     expect(message).toContain('device: (no input_method state reported)');
