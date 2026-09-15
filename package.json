@@ -172,7 +172,6 @@
     "glob": "^13.0.6",
     "js-yaml": "4.3.2",
     "lodash": "4.18.1",
-    "markdown-it": "^15.0.2",
     "readdir-glob": "^3.0.0",
     "smol-toml": "^1.8.0",
     "test-exclude": "^8.0.0",
