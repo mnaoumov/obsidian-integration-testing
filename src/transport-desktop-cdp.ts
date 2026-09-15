@@ -289,6 +289,12 @@ interface CdpValue {
   value?: unknown;
 }
 
+/**
+ * A command waiting for its reply: settles the caller's promise and cancels the
+ * timeout that would otherwise fail it.
+ */
+type PendingCommand = (response: CdpResponse) => void;
+
 const COMMAND_TIMEOUT_IN_MILLISECONDS = 30_000;
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10_000;
@@ -342,6 +348,17 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
+  /**
+   * The in-flight commands of every socket this transport has opened, keyed by
+   * the CDP message id each is waiting for. One entry per command, added by
+   * {@link sendCommand} and removed by whichever of the reply and the timeout
+   * comes first — see {@link getPendingCommands} for why this exists at all.
+   *
+   * Weak by socket so a closed temporary connection is collectable with its
+   * pending map; the dispatcher listener is the socket's own, so nothing here
+   * keeps it alive.
+   */
+  private readonly pendingCommandsBySocket = new WeakMap<WebSocket, Map<number, PendingCommand>>();
   /**
    * Vault paths THIS transport opened via {@link registerVault}, normalized by
    * {@link normalizeVaultPathForComparison}. A worker attached to a
@@ -1105,6 +1122,59 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Returns a socket's in-flight command map, installing its reply dispatcher on
+   * first use.
+   *
+   * ONE `message` listener per socket, for the socket's whole life — not one per
+   * command. A listener per in-flight command makes the count scale with how many
+   * evaluations a suite has in flight at once, so a consumer that fires eleven
+   * concurrent `evalInObsidian` calls crosses Node's default `maxListeners` of 10
+   * and is told its transport is leaking memory, which it is not: measured
+   * 2026-09-15, fifteen concurrent evaluations registered fifteen listeners on the
+   * one long-lived socket and the count fell back to zero the moment they settled.
+   * A warning that fires on correct use is worse than no warning, because the real
+   * signal — an entry that is added and never removed — is then indistinguishable
+   * from it. With one dispatcher the listener count is a constant, and a genuine
+   * leak shows instead as a pending map that never empties.
+   *
+   * The dispatcher is deliberately forgiving about what arrives: a CDP **event**
+   * carries no `id` and belongs to no command, and a frame that is not JSON at all
+   * belongs to nothing this transport sent. Both are ignored. The old per-command
+   * handler parsed unguarded, so one frame that is not JSON threw once per
+   * in-flight command, out of the event dispatch, where nothing could catch it.
+   *
+   * @param ws - The socket whose replies are being awaited.
+   * @returns The socket's map of in-flight commands, keyed by CDP message id.
+   */
+  private getPendingCommands(ws: WebSocket): Map<number, PendingCommand> {
+    const existingPendingCommands = this.pendingCommandsBySocket.get(ws);
+    if (existingPendingCommands) {
+      return existingPendingCommands;
+    }
+
+    const pendingCommands = new Map<number, PendingCommand>();
+    this.pendingCommandsBySocket.set(ws, pendingCommands);
+    ws.addEventListener('message', (event: MessageEvent): void => {
+      let message: CdpResponse;
+      try {
+        message = JSON.parse(String(event.data)) as CdpResponse;
+      } catch {
+        return;
+      }
+
+      const pendingCommand = pendingCommands.get(message.id);
+      if (!pendingCommand) {
+        return;
+      }
+
+      pendingCommands.delete(message.id);
+      pendingCommand(message);
+    });
+
+    return pendingCommands;
+  }
+
+  /**
    * Kills the currently-running owned instance (if any) and waits for it to exit,
    * so the next launch gets a pristine single-window instance.
    *
@@ -1464,24 +1534,27 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private async sendCommand(ws: WebSocket, method: string, params: Record<string, unknown>): Promise<CdpResponse> {
     const id = ++this.messageId;
+    const pendingCommands = this.getPendingCommands(ws);
 
     return new Promise<CdpResponse>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        ws.removeEventListener('message', handler);
+        pendingCommands.delete(id);
         reject(new CdpCommandTimeoutError({ method, timeoutInMilliseconds: this.commandTimeoutInMilliseconds }));
       }, this.commandTimeoutInMilliseconds);
 
-      function handler(event: MessageEvent): void {
-        const message = JSON.parse(String(event.data)) as CdpResponse;
-        if (message.id === id) {
-          clearTimeout(timeout);
-          ws.removeEventListener('message', handler);
-          resolve(message);
-        }
-      }
+      pendingCommands.set(id, (response) => {
+        clearTimeout(timeout);
+        resolve(response);
+      });
 
-      ws.addEventListener('message', handler);
-      ws.send(JSON.stringify({ id, method, params }));
+      try {
+        ws.send(JSON.stringify({ id, method, params }));
+      } catch (error: unknown) {
+        // Nothing will answer a send that threw, so holding the entry for the full command timeout would only delay the failure and then misname it.
+        clearTimeout(timeout);
+        pendingCommands.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 

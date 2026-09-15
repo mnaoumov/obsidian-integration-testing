@@ -3667,3 +3667,22 @@ the two waits in the long-press test had none — which is the whole reason a de
 reproduced on run after run, could not say which of the two had expired. A wait without a message is a
 timeout that names nothing. The same failure now also reports what the explorer actually held, because "no
 item was on screen" and "here is the item, and its box is 0x0" are different amounts of answer.
+
+## L58. One `message` listener per CDP socket, not one per command — concurrency is not a leak
+
+A long desktop aggregate used to print this once, from the test process, and nothing in the suite explained it:
+
+```text
+MaxListenersExceededWarning: Possible EventTarget memory leak detected.
+11 message listeners added to WebSocket. MaxListeners is 10.
+```
+
+**The socket it names is the transport's own** — one connection held for the whole run — so the obvious reading is that something adds a listener per evaluation and never removes it, and that eleven is simply where such a drift first becomes visible. Measured 2026-09-15, that reading is wrong in both halves. `sendCommand` removed its listener on the reply path, on the timeout path, and on the path where the closure outran the per-eval cap: the count read **zero** after registration, zero after a fifteen-wide concurrent batch, and zero after a 40 s closure was killed by the 30 s cap. Nothing leaked. What the count tracked was the number of commands **in flight at that instant**, which the fifteen-wide batch drove to fifteen — reproducing the warning verbatim in about four seconds. Node warns once per emitter, which is why a run says this once and then goes quiet however much worse it gets; the warning is therefore a report of a suite's concurrency, not of its history.
+
+**That makes it a warning that fires on correct use, which is worse than no warning at all.** Eleven concurrent `evalInObsidian` calls is an ordinary thing for a consumer's suite to do, and there is nothing to fix at the call site; meanwhile the signal the warning would be worth having — an entry that is added and never removed — is now indistinguishable from the noise. `events.setMaxListeners` was refused for exactly that reason: it silences the symptom and keeps the design that produces it.
+
+**So the transport multiplexes instead.** `DesktopCdpTransport.getPendingCommands` installs ONE `message` listener per socket on first use and keeps a `Map` of in-flight commands keyed by CDP message id; a reply is routed to the entry that was waiting for it, and the entry is deleted by whichever of the reply and the timeout arrives first. The listener count is then a constant 1 for the socket's whole life, whatever the concurrency, and a genuine leak shows as a pending map that never empties rather than as a warning about listeners. `src/cdp-command-multiplexing.integration.test.ts` asserts both halves — the count under a fifteen-wide batch, and that each of those fifteen closures gets its **own** result back, since one shared listener is only correct if the id routing is.
+
+**Two defects went with the old shape, and both are gone with it.** The per-command handler called `JSON.parse` unguarded, so a single frame that is not JSON threw once per in-flight command, out of the event dispatch where nothing can catch it; the dispatcher ignores what it cannot read, and ignores a CDP event (no `id`) the same way. And a `ws.send()` that threw left its listener and its 30 s timer registered with no reply ever coming, so the caller was told the command had timed out when in truth it was never sent; the send is inside a `try` now and settles the entry itself.
+
+**`WebViewCdpConnection` (Android) got the same treatment**, where it matters slightly more: that class already held one permanent `message` listener to route CDP **events**, so its per-command listeners sat on top of that, and its event-routing parse was unguarded on every frame the WebView sent. Both now share the one listener.
