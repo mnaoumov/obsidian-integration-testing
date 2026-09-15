@@ -35,7 +35,7 @@ describe('checkInputClaimGranted', () => {
   });
 
   // The whole point: the SECOND host to service one broadcast `Runtime.bindingCalled` must not inject
-  // The gesture again.
+  // the gesture again.
   it('should refuse the claim when the page says false', () => {
     expect(checkInputClaimGranted({ result: { type: 'boolean', value: false } })).toBe(false);
   });
@@ -133,8 +133,8 @@ describe('toCdpInputCommands: pointer', () => {
   });
 
   // A touch pair held apart by a dwell is injected past Android's gesture recognizer, so no long press is
-  // Ever recognized and the pair reads as a tap however long the wait. The single gesture command is the
-  // Whole fix, so the shape is asserted exactly rather than by a property.
+  // ever recognized and the pair reads as a tap however long the wait. The single gesture command is the
+  // whole fix, so the shape is asserted exactly rather than by a property.
   it('should synthesize a long press as ONE gesture command, not a touch pair', () => {
     expect(toCdpInputCommands({ kind: 'longPress', modifiers: [], x: 10.5, y: 20.5 })).toEqual([
       {
@@ -151,7 +151,7 @@ describe('toCdpInputCommands: pointer', () => {
   });
 
   // The gesture API takes no modifier bitmask, and a touch screen has no modifier keys to hold during a
-  // Press — so a modifier a caller passes is dropped rather than mistranslated into the tap's spelling.
+  // press — so a modifier a caller passes is dropped rather than mistranslated into the tap's spelling.
   it('should not carry modifiers on a long press, which has nowhere to put them', () => {
     const [gesture] = toCdpInputCommands({ kind: 'longPress', modifiers: ['shift'], x: 1, y: 2 });
 

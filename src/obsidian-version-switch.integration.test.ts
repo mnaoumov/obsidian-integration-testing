@@ -40,22 +40,22 @@ import {
 const DOWNLOAD_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 // Live network downloads: retry to absorb transient CDN 5xx / empty-body blips
-// Without masking a real regression, which fails every attempt.
+// without masking a real regression, which fails every attempt.
 const DOWNLOAD_RETRY_COUNT = 2;
 
 // The first UInt32LE of every asar archive is 4 — the size of the Pickle that
-// Holds the header-length integer (verified empirically against a real Obsidian
-// Asar). A still-gzipped payload would start with the 0x1f 0x8b gzip magic
-// Instead, so this doubles as proof the download was actually decompressed.
+// holds the header-length integer (verified empirically against a real Obsidian
+// asar). A still-gzipped payload would start with the 0x1f 0x8b gzip magic
+// instead, so this doubles as proof the download was actually decompressed.
 const ASAR_MAGIC_HEADER_SIZE_PREFIX = 4;
 
 // The asar header JSON length is a UInt32LE at byte offset 12, and the JSON
-// Itself begins immediately after the 16-byte size preamble.
+// itself begins immediately after the 16-byte size preamble.
 const ASAR_HEADER_JSON_LENGTH_OFFSET = 12;
 const ASAR_HEADER_JSON_OFFSET = 16;
 
 // A real Obsidian asar is tens of megabytes; a tiny file means the download or
-// Decompression produced a truncated/invalid result.
+// decompression produced a truncated/invalid result.
 const MINIMUM_PLAUSIBLE_ASAR_SIZE_IN_BYTES = 1_000_000;
 
 interface AsarHeader {

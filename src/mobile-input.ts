@@ -321,7 +321,7 @@ export function toCdpInputCommands(request: MobileInputRequest): CdpInputCommand
  */
 export function toCdpModifiers(modifiers: readonly string[]): number {
   // Summing DISTINCT bits equals OR-ing them, and the `Set` is what makes that hold even when a caller
-  // Passes the same modifier twice — so the mask is built without a bitwise operator.
+  // passes the same modifier twice — so the mask is built without a bitwise operator.
   const bits = new Set<number>();
   for (const modifier of modifiers) {
     const bit = CDP_MODIFIER_BIT_BY_NAME.get(modifier);

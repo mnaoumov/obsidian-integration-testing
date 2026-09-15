@@ -63,7 +63,7 @@ describe('isScriptTimeoutError', () => {
   it('should recognize it by its name, whatever the message says', () => {
     const error = new Error('Something went wrong');
     // Defined rather than assigned: `unicorn/no-error-property-assignment` bans writing `name` on a
-    // Built-in error, and the shape under test is a client that renamed the W3C code into a type.
+    // built-in error, and the shape under test is a client that renamed the W3C code into a type.
     Object.defineProperty(error, 'name', { value: 'ScriptTimeoutError' });
     expect(isScriptTimeoutError(error)).toBe(true);
   });

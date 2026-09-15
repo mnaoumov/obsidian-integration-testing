@@ -38,8 +38,8 @@ import { connectToCdp } from './connect-to-cdp.ts';
 import { SilentAsarFallbackError } from './silent-asar-fallback-error.ts';
 
 // Downloading + extracting the old installer shell, then launching Electron and
-// Waiting for CDP plus the vault to open. Give it a wide margin like the other
-// Installer boot tests.
+// waiting for CDP plus the vault to open. Give it a wide margin like the other
+// installer boot tests.
 const FALLBACK_BOOT_TIMEOUT_IN_MILLISECONDS = 1_800_000;
 
 // App pinned above the below-floor shell's bundled version: on the `1.1.9` shell,
@@ -88,7 +88,7 @@ describe.runIf(SHOULD_RUN)('post-boot silent-asar-fallback verify', () => {
     { timeout: FALLBACK_BOOT_TIMEOUT_IN_MILLISECONDS },
     async () => {
       // Default `shouldThrowOnSilentAsarFallback` (true); still bypass the proactive
-      // Installer throw so the boot proceeds far enough to hit the reactive check.
+      // installer throw so the boot proceeds far enough to hit the reactive check.
       await expect(connectToCdp({
         isObsidianAppVisible: false,
         obsidianInstallerVersion: OLD_INSTALLER_VERSION,

@@ -11,7 +11,7 @@ import {
 import { connectToCdp } from './connect-to-cdp.ts';
 
 // Launching an owned Obsidian instance can take up to a minute (download-free
-// When the installed asar is reused, but CDP still needs time to come up).
+// when the installed asar is reused, but CDP still needs time to come up).
 const LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 // The desktop size the plugin store listings are shot at.
@@ -26,7 +26,7 @@ describe('captureScreenshot integration', () => {
       expect(isPng(bytes)).toBe(true);
 
       // No override was requested, so the size is the window's own — unknown,
-      // But necessarily a real image rather than a zero-sized one.
+      // but necessarily a real image rather than a zero-sized one.
       const { heightInPixels, widthInPixels } = readPngDimensions(bytes);
       expect(widthInPixels).toBeGreaterThan(0);
       expect(heightInPixels).toBeGreaterThan(0);
@@ -63,7 +63,7 @@ describe('captureScreenshot integration', () => {
       const after = await connection.invoke('window.innerWidth');
 
       // The override is applied and cleared around the capture, so the window
-      // The next screenshot (or evaluation) sees is the one it started with.
+      // the next screenshot (or evaluation) sees is the one it started with.
       expect(after).toBe(before);
     } finally {
       await connection.dispose();

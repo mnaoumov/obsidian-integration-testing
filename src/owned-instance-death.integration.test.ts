@@ -51,7 +51,7 @@ async function scheduleInstanceDeath(): Promise<void> {
       // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.
       const holder = globalThis as unknown as IntegrationTestingHolder;
       // Resolves once the destroy is SCHEDULED (it is queued behind a timeout),
-      // So this eval still returns normally and the death lands just after it.
+      // so this eval still returns normally and the death lands just after it.
       await holder.__obsidianIntegrationTesting.destroyCurrentWindow();
       return 'scheduled';
     }
@@ -104,7 +104,7 @@ describe('a harness-owned instance that dies mid-run', () => {
     expect(error.message).not.toContain('ECONNREFUSED');
 
     // The exit marker is the cross-process channel: the worker never held the
-    // Child, so an exit code here can only have come from the process that did.
+    // child, so an exit code here can only have come from the process that did.
     const transportOptions = inject('obsidianTransport');
     const port = transportOptions?.type === 'obsidian-cdp' ? transportOptions.port : undefined;
     expect(port).toBeDefined();

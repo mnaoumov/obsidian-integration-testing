@@ -714,8 +714,8 @@ export async function evalInObsidian<Input extends GenericObject, Result, TConte
   if ('type' in envelope) {
     if (envelope.type === 'error') {
       // Rewrite bare-origin localhost stack frames like "(http://localhost/:915:32)"
-      // So Vitest's source-map resolver won't extract "/" as the file path and crash
-      // With EISDIR when it tries to readFileSync on the root directory.
+      // so Vitest's source-map resolver won't extract "/" as the file path and crash
+      // with EISDIR when it tries to readFileSync on the root directory.
       const sanitizedDetail = envelope.value
         .replaceAll(/\(https?:\/\/localhost\/:(?<line>\d)/g, '(obsidian-webview:$<line>');
       throw new Error(`evalInObsidian: Error inside Obsidian:\n${sanitizedDetail}`);

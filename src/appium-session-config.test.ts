@@ -40,13 +40,13 @@ describe('resolveAppiumStartTimeoutInMilliseconds', () => {
 
 describe('resolveScriptTimeoutInMilliseconds', () => {
   // The number matters: it is the cap a closure runs under, and until it was declared here WebDriver
-  // Supplied the same 30s silently, which is what made an overrun read as a broken device.
+  // supplied the same 30s silently, which is what made an overrun read as a broken device.
   it('should default to 30000ms when the option is omitted', () => {
     expect(resolveScriptTimeoutInMilliseconds(BASE_OPTIONS)).toBe(30_000);
   });
 
   // The Android default is not merely equal to the shared cap, it IS the shared cap. Asserting the
-  // Identity is what stops the two drifting apart into a coincidence a reader has to guess at.
+  // identity is what stops the two drifting apart into a coincidence a reader has to guess at.
   it('should default to the shared per-eval cap', () => {
     expect(resolveScriptTimeoutInMilliseconds(BASE_OPTIONS)).toBe(DEFAULT_EVAL_CAP_IN_MILLISECONDS);
   });

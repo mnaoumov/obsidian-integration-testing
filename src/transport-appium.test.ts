@@ -407,7 +407,7 @@ describe('AppiumTransport.evaluate', () => {
     mockBrowser.execute.mockResolvedValue('"result"');
 
     // CWD is ignored on mobile — the test verifies it doesn't throw
-    // Regardless of what cwd is passed.
+    // regardless of what cwd is passed.
     const result = await transport.evaluate('"hello"', { cwd: '/nonexistent/path' });
     expect(result).toBe('"result"');
   });

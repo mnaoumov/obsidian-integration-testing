@@ -87,7 +87,7 @@ describe('vitest projects', () => {
 
   it('should file every project under exactly one runner', () => {
     // Kept as a map from the project to the runners actually found, because the two ways this fails want
-    // Different fixes: an empty list is the defect this file exists for — defined and run by nothing — while
+    // different fixes: an empty list is the defect this file exists for — defined and run by nothing — while
     // A list of two is the same suite paid for twice in one run.
     const misfiledProjects = Object.fromEntries(
       ALL_PROJECT_NAMES

@@ -25,7 +25,7 @@ describe('checkIsMobileTransport', () => {
   it('reports a desktop CDP transport as not mobile', () => {
     expect(checkIsMobileTransport({ type: 'obsidian-cdp' })).toBe(false);
     // The other knobs must not enter into it -- the caller consults this before a transport exists, so
-    // The discriminant is the only field it can rely on.
+    // the discriminant is the only field it can rely on.
     expect(checkIsMobileTransport({ isObsidianAppVisible: true, type: 'obsidian-cdp' })).toBe(false);
   });
 });
@@ -41,7 +41,7 @@ describe('resolveOwnedConfigDirectory', () => {
 
   it('ignores the override in attach mode, where the vault is opened under the user own config', () => {
     // `port` is the attach discriminator, and the option's own docs call it ignored there. Honouring it
-    // Anyway would write the harness defaults into a folder the attached Obsidian never reads.
+    // anyway would write the harness defaults into a folder the attached Obsidian never reads.
     expect(resolveOwnedConfigDirectory({ configDirectory: '.obsidian-desktop', port: 9222, type: 'obsidian-cdp' })).toBeUndefined();
   });
 

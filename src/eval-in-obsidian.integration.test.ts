@@ -412,7 +412,7 @@ ${name}`;
 
     // The Android transport loses ~0.9% of `vault.create` writes: the file lands 0 bytes on disk while
     // `TFile.stat` reports the full size. It cannot be provoked on desktop, so the repair path is driven
-    // By patching `vault.read` to report the lost-write symptom once — the same thing the helper sees.
+    // by patching `vault.read` to report the lost-write symptom once — the same thing the helper sees.
     it('should rewrite a note whose content did not land, then confirm it', async () => {
       const result = await evalInObsidian({
         async callback({ app, lib: { createNote } }): Promise<CreateNoteRepairProbe> {
@@ -475,16 +475,16 @@ ${name}`;
 
   // This suite's vault is built in-worker and so carries none of the global setup's headless defaults --
   // `settingsPopoutWindow` is still Obsidian's shipped `true` here, and `app.setting.open()` therefore
-  // Puts the modal in a SECOND Electron window. That is deliberate coverage: it is the helper's
-  // Pre-attach fallback under test, not the vault-level fix. Every case asserts against the live
-  // Document rather than against `open()` not throwing.
+  // puts the modal in a SECOND Electron window. That is deliberate coverage: it is the helper's
+  // pre-attach fallback under test, not the vault-level fix. Every case asserts against the live
+  // document rather than against `open()` not throwing.
   describe('openSettingsTab', () => {
     it('should attach the container and render the requested tab', async () => {
       const result = await evalInObsidian({
         async callback({ app, lib: { openSettingsTab } }): Promise<SettingsTabProbe> {
           const setting = app.setting;
           // Take a real id off the running instance instead of hard-coding a core one, so this holds
-          // Across every Obsidian version the harness supports.
+          // across every Obsidian version the harness supports.
           const targetTabId = setting.settingTabs[0]?.id ?? '';
           const names = await openSettingsTab({ tabId: targetTabId });
           const probe = {

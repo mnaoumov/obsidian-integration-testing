@@ -12,7 +12,7 @@ import { TemporaryVault } from './temporary-vault.ts';
 
 // Augment the injected `lib` bag with the two providers registered below.
 // Same declaration-merging a real provider uses (e.g. obsidian-dev-utils),
-// Here targeting the local module that declares `Lib`.
+// here targeting the local module that declares `Lib`.
 declare module './eval-in-obsidian.ts' {
   interface Lib {
     echo(this: void, value: string): string;

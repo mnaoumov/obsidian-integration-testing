@@ -106,11 +106,11 @@ export function createSetup(options?: CreateSetupOptions): VitestGlobalSetup {
       });
     } catch (error: unknown) {
       // Catch setup errors so that other projects' tests can still run. Every test in THIS project
-      // Then fails with the stored error: `getOrCreateTransport` reads it through the setup-error
-      // Resolver and throws before it can build a transport. Without that a worker gets no options
-      // At all and silently rebuilds the owned DESKTOP default, whatever platform this project asked
-      // For -- which is how an Android run came to report nine `Failed to parse URL from /json`
-      // Failures while the real cause sat once, far above, in this log (see AGENTS.md L9).
+      // then fails with the stored error: `getOrCreateTransport` reads it through the setup-error
+      // resolver and throws before it can build a transport. Without that a worker gets no options
+      // at all and silently rebuilds the owned DESKTOP default, whatever platform this project asked
+      // for -- which is how an Android run came to report nine `Failed to parse URL from /json`
+      // failures while the real cause sat once, far above, in this log (see AGENTS.md L9).
       log(`[integration-setup:${label}] Setup failed (every test in this project will fail with this error): ${errorToString(error)}`);
       project.provide('setupError', {
         errorName: error instanceof Error ? error.name : 'Error',

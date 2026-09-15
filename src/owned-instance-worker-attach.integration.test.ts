@@ -51,8 +51,8 @@ interface VaultProbe {
 describe('owned instance worker attach', () => {
   it('evals from a worker by attaching to the global-setup-owned instance', async () => {
     // No `transport` and no `vaultPath`: the worker resolves both from the
-    // Context the global setup published (transport options incl. the owned CDP
-    // Port, and the temp vault path).
+    // context the global setup published (transport options incl. the owned CDP
+    // port, and the temp vault path).
     const basePath = await evalInObsidian({
       callback({ app }): string {
         return (app.vault.adapter as FileSystemAdapter).getBasePath();
@@ -155,7 +155,7 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
     const config = await evalInObsidian({
       callback({ app }): Record<string, unknown> {
         // `obsidian-typings`' `ConfigItem` union does not list `settingsPopoutWindow`, so the key cannot
-        // Be passed as typed. Widening the bound function keeps it to one assertion.
+        // be passed as typed. Widening the bound function keeps it to one assertion.
         const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
         return {
           alwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
@@ -165,8 +165,8 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
     });
 
     // Obsidian ships `settingsPopoutWindow` as `true`, so `false` here can only have come from the
-    // Harness -- reading back the default proves the `app.json` write reached the opened vault, which
-    // Is the thing a `configDirectory` override used to break silently.
+    // harness -- reading back the default proves the `app.json` write reached the opened vault, which
+    // is the thing a `configDirectory` override used to break silently.
     expect(config['alwaysUpdateLinks']).toBe(true);
     expect(config['settingsPopoutWindow']).toBe(false);
   });
@@ -178,8 +178,8 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
         const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
 
         // No helper, no pre-append: this measures `open()` alone, which is what the popout branch
-        // Hijacks. With the popout on, `open()` appends `modalEl` into a SECOND Electron window and
-        // Reassigns the `activeDocument` global to it, leaving this document with none of the modal.
+        // hijacks. With the popout on, `open()` appends `modalEl` into a SECOND Electron window and
+        // reassigns the `activeDocument` global to it, leaving this document with none of the modal.
         setting.open();
         const result = {
           configuredAlwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
@@ -196,11 +196,11 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
     expect(probe.configuredAlwaysUpdateLinks).toBe(true);
     expect(probe.configuredSettingsPopoutWindow).toBe(false);
     // The globals stay this window's, so `captureObsidianScreenshot` photographs the window the modal
-    // Is in rather than one it left behind.
+    // is in rather than one it left behind.
     expect(probe.isActiveDocumentMain).toBe(true);
     expect(probe.isContainerInMainDocument).toBe(true);
     // `open()` attaches the container itself once the popout is off -- the fact AGENTS.md L38 got
-    // Wrong, and the reason the helper's own append is a fallback rather than the load-bearing step.
+    // wrong, and the reason the helper's own append is a fallback rather than the load-bearing step.
     expect(probe.isContainerAttachedByOpenAlone).toBe(true);
   });
 });

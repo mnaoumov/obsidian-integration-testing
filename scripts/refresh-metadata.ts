@@ -265,7 +265,7 @@ async function main(): Promise<void> {
  */
 async function mergeCatalystAsars(table: MetadataTable, feedVersions: readonly string[]): Promise<number> {
   // Every probe completes before anything is written back, so the table is never
-  // Assigned from a snapshot taken before an await.
+  // assigned from a snapshot taken before an await.
   const published: PublishedCatalystAsar[] = [];
   for (const version of feedVersions) {
     const existing = table[version];

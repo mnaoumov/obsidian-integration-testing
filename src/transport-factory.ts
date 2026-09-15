@@ -222,7 +222,7 @@ const APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const APPIUM_STOP_TIMEOUT_IN_MILLISECONDS = 15_000;
 const ADB_VAULT_SWEEP_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Appium insecure feature letting the UiAutomator2 driver auto-download a
-// Chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
+// chromedriver matching Obsidian's WebView Chrome version. Enabling it on the
 // Appium server (it has no effect as a capability) avoids the failure
 // "No Chromedriver found that can automate Chrome ...".
 const CHROMEDRIVER_AUTODOWNLOAD_FEATURE = 'uiautomator2:chromedriver_autodownload';
@@ -948,7 +948,7 @@ class AppiumTransportFactory {
       isSessionOwner: false,
       platform: 'android',
       // The session this reattaches to was created with the same resolution, so the number reported on a
-      // Script timeout is the one that session is actually enforcing.
+      // script timeout is the one that session is actually enforcing.
       scriptTimeoutInMilliseconds: resolveScriptTimeoutInMilliseconds(options),
       shouldSweepLeftovers: willSweepLeftovers(options),
       ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
@@ -1286,7 +1286,7 @@ class AppiumTransportFactory {
       };
 
       // Chain rather than replace: the transport's own sync teardown drops the trusted-input channel's
-      // Adb port forward, which would otherwise be stranded on the device by an abrupt exit.
+      // adb port forward, which would otherwise be stranded on the device by an abrupt exit.
       const originalDisposeSync = appiumTransport.disposeSync.bind(appiumTransport);
       transport.disposeSync = (): void => {
         try {
@@ -3258,7 +3258,7 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
   log('[transport-factory:obsidian-cdp] Creating owned isolated Obsidian instance');
   // Before `resolveOwnedInstanceConfig`, which may download and cache an installer shell:
   // A structurally invalid config folder name cannot become valid later, so paying for a
-  // Provisioning round-trip first would only delay the same failure.
+  // provisioning round-trip first would only delay the same failure.
   if (options?.configDirectory !== undefined) {
     assertValidConfigDirectory(options.configDirectory);
   }
@@ -3412,10 +3412,10 @@ async function resolveAsarPlan(
     }
 
     // Asar-swap is upgrade-only, so it cannot apply a version older than the
-    // Shell's bundled one — and when the shell version is unknown (a Linux
-    // Path-parse miss) we cannot prove the swap would apply at all. In both
-    // Cases use the requested version's own installer shell, whose bundled asar
-    // Is exactly this version, so the pin is always honored.
+    // shell's bundled one — and when the shell version is unknown (a Linux
+    // path-parse miss) we cannot prove the swap would apply at all. In both
+    // cases use the requested version's own installer shell, whose bundled asar
+    // is exactly this version, so the pin is always honored.
     log(`[transport-factory:obsidian-cdp] Using the ${asarVersion} installer shell (shell version ${shellVersion ?? 'unknown'}; asar-swap is upgrade-only).`);
     return { downgradeInstallerVersion: asarVersion };
   }
@@ -3475,8 +3475,8 @@ async function resolveInstalledShellOrNull(): Promise<InstalledShell | undefined
  */
 async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions): Promise<OwnedInstanceConfig> {
   // Resolve the concrete shell (installer) version first, but for a pinned
-  // Installer DEFER resolving/downloading the actual shell until after the
-  // Proactive compatibility check, so an unrunnable pin fails fast — before the
+  // installer DEFER resolving/downloading the actual shell until after the
+  // proactive compatibility check, so an unrunnable pin fails fast — before the
   // (possibly slow) installed-shell detection and any download.
   let exePath: string | undefined;
   let shellVersion: string | undefined;
@@ -3487,7 +3487,7 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
     shellVersion = detectInstalledShellVersion(exePath);
   } else {
     // A pinned installer version fully determines the shell version up front,
-    // Without requiring a locally-installed Obsidian (a CI runner has none).
+    // without requiring a locally-installed Obsidian (a CI runner has none).
     pinnedInstallerVersion = await resolveConcreteVersion(options.obsidianInstallerVersion);
     shellVersion = pinnedInstallerVersion;
   }
@@ -3496,8 +3496,8 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   const plan = await resolveAsarPlan(options, shellVersion);
 
   // The app version that will run as an asar-swap onto `shellVersion` — the only
-  // Combination that can dead-boot. The downgrade / own-installer paths run the
-  // App's own installer shell, so they always boot and are not checked.
+  // combination that can dead-boot. The downgrade / own-installer paths run the
+  // app's own installer shell, so they always boot and are not checked.
   const swapAppVersion = plan.asarVersionToSwap ?? plan.asar?.version;
   const compatibility = resolveAndReportCompatibility({
     appVersion: swapAppVersion,
@@ -3508,7 +3508,7 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
 
   // The pin is known runnable — resolve/download the deferred shell + asar now.
   // Reuse the installed shell only when it already matches the pin (saves the
-  // Download); otherwise download and extract the pinned installer.
+  // download); otherwise download and extract the pinned installer.
   if (pinnedInstallerVersion !== undefined) {
     const installed = await resolveInstalledShellOrNull();
     exePath = installed?.shellVersion === pinnedInstallerVersion ? installed.exePath : await ensureShellCached(pinnedInstallerVersion);

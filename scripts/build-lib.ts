@@ -21,9 +21,9 @@ interface PackageJson {
 const packageVersion = (JSON.parse(readFileSync('package.json', 'utf-8')) as PackageJson).version;
 
 // The whole per-version compatibility table, injected as a value so the built
-// Library is self-contained (inlined into the output, no runtime file read). The
-// Raw JSON text is a valid expression, so esbuild substitutes it as an object
-// Literal — matching how OBSIDIAN_INTEGRATION_TESTING_VERSION is injected.
+// library is self-contained (inlined into the output, no runtime file read). The
+// raw JSON text is a valid expression, so esbuild substitutes it as an object
+// literal — matching how OBSIDIAN_INTEGRATION_TESTING_VERSION is injected.
 const obsidianMetadataJson = readMetadataJsonText();
 
 function getEntryPoints(directory: string): string[] {

@@ -120,9 +120,9 @@ export function buildOwnedObsidianJson(params: BuildOwnedObsidianJsonParams): Ow
 
   return {
     // Spread rather than `last_open: undefined`, so the key is genuinely absent from
-    // The written JSON: this seed is read by Obsidian versions spanning a decade, and
+    // the written JSON: this seed is read by Obsidian versions spanning a decade, and
     // A present-but-undefined auto-open marker is not a shape any of them was tested
-    // Against.
+    // against.
     // eslint-disable-next-line camelcase -- Obsidian's own obsidian.json field name (old versions' auto-open marker).
     ...shouldAutoOpenVault && { last_open: params.vaultId },
     updateDisabled: true,

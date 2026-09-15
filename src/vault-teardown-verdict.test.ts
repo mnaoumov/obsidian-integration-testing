@@ -23,7 +23,7 @@ describe('shouldTearDownVaultWindow', () => {
 
   it('refuses when an attached worker did not register the vault itself', () => {
     // The regression this module exists for: the shared setup vault's window is
-    // The instance's only one, so tearing it down quits the app for every worker.
+    // the instance's only one, so tearing it down quits the app for every worker.
     expect(shouldTearDownVaultWindow({
       isHarnessOwnedInstance: true,
       isOwnedInstance: false,

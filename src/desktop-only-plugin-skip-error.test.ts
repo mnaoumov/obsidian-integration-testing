@@ -25,7 +25,7 @@ describe('DesktopOnlyPluginSkipError', () => {
 
   it('carries no stack frames', () => {
     // An expected skip, not a defect. The trace is the whole reason a green release run reads as broken,
-    // So the stack is the message and nothing else -- no `at ...` frames pointing into the harness.
+    // so the stack is the message and nothing else -- no `at ...` frames pointing into the harness.
     expect(error.stack).toBe(`${error.name}: ${error.message}`);
     expect(error.stack).not.toContain('    at ');
   });

@@ -87,7 +87,7 @@ describe('the desktop per-eval cap', () => {
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // The cap must not have eaten the session with the closure: everything after it would otherwise fail
-  // For a reason that has nothing to do with what it is testing.
+  // for a reason that has nothing to do with what it is testing.
   it('should leave the transport usable for the next evaluation', async () => {
     const markdownPaths = await evalInObsidian({
       callback({ app }): string[] {

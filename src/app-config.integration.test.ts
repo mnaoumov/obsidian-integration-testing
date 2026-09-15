@@ -88,7 +88,7 @@ describe('app-config integration', () => {
     expect(before.isPresent).toBe(false);
 
     // Obsidian ships the popout ON, and `getConfig` substitutes that default —
-    // Which is exactly why a restore cannot be driven from this value alone.
+    // which is exactly why a restore cannot be driven from this value alone.
     expect(before.value).toBe(true);
     expect(
       await getAppConfig({

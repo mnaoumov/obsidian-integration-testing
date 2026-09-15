@@ -20,7 +20,7 @@ describe('IntegrationSetupFailedError', () => {
 
   it('names the configured transport and the original failure in the message', () => {
     // The whole point: the report must name the platform the suite was meant to run on and the real
-    // Cause, rather than a downstream transport error from a fallback nobody asked for.
+    // cause, rather than a downstream transport error from a fallback nobody asked for.
     expect(error.message).toContain('obsidian-android-appium');
     expect(error.message).toContain('Could not find a connected Android device');
   });
@@ -33,7 +33,7 @@ describe('IntegrationSetupFailedError', () => {
 
   it('carries no stack frames', () => {
     // The global setup already logged the original failure with its own trace; a second trace pointing
-    // Into the harness only suggests the harness broke.
+    // into the harness only suggests the harness broke.
     expect(error.stack).toBe(`${error.name}: ${error.message}`);
     expect(error.stack).not.toContain('    at ');
   });

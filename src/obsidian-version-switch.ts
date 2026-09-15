@@ -103,8 +103,8 @@ export async function ensureAsarCached(version: string): Promise<string> {
 
   // A version's asar.gz lives on exactly one host depending on its channel
   // (public → GitHub release assets, catalyst → the Obsidian CDN). The concrete
-  // Version alone does not tell us which, so try both and use the first that
-  // Returns a valid archive.
+  // version alone does not tell us which, so try both and use the first that
+  // returns a valid archive.
   const errors: string[] = [];
   for (const url of getAsarDownloadUrls(version)) {
     try {

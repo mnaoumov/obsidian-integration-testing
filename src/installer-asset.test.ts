@@ -25,9 +25,9 @@ const DOWNLOADS_CATALYST_ONLY_ASAR = {
 
 // Real GitHub release asset name lists, captured from the
 // `obsidianmd/obsidian-releases` release API. They span the historical rename
-// Of the desktop installer separator: older releases use a DOT
+// of the desktop installer separator: older releases use a DOT
 // (`Obsidian.<ver>.exe`), newer ones a HYPHEN (`Obsidian-<ver>.exe`). The old
-// Mac dmg additionally carried a `-universal` infix in the dot era.
+// mac dmg additionally carried a `-universal` infix in the dot era.
 const ASSET_NAMES_0_14_5 = [
   'Obsidian-0.14.5-arm64.AppImage',
   'Obsidian-0.14.5-universal.dmg',

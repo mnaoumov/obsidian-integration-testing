@@ -76,7 +76,7 @@ describe('runObsidianVersionMatrix', () => {
     const catalystVersion = firstEntry?.version ?? '';
 
     // De-duplication is keyed on the RESOLVED version, so naming the catalyst
-    // Build explicitly must not buy a second run of the same build.
+    // build explicitly must not buy a second run of the same build.
     const entries = await collectEntries([catalystVersion, CATALYST_LATEST]);
 
     expect(entries).toEqual([{ specs: [catalystVersion, CATALYST_LATEST], version: catalystVersion }]);

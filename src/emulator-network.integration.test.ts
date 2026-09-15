@@ -19,7 +19,7 @@ import { TemporaryVault } from './temporary-vault.ts';
 
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 // Generous overall budget: the connectivity check retries a flaky public
-// Endpoint several times with backoff before giving up.
+// endpoint several times with backoff before giving up.
 const FETCH_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 interface NetworkCheckResult {

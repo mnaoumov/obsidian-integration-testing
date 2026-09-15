@@ -72,9 +72,9 @@ const TS_CONFIG_PATH = resolve(ROOT_DIR, 'tsconfig.json');
 
 // Building a ts-morph Project over the whole `tsconfig.json` takes a couple of seconds, and it loses the
 // CPU race when the full unit suite runs in parallel — the same reason `unit-tests:docs-generator` raises
-// Its timeout.
+// its timeout.
 // `test:coverage` makes that far worse: v8 instrumentation slows the very same load by roughly 10x (3.1 s
-// Plain, past 30 s instrumented), so this budget has to clear the instrumented cost, not the plain one.
+// plain, past 30 s instrumented), so this budget has to clear the instrumented cost, not the plain one.
 const BIG_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**
@@ -119,7 +119,7 @@ interface UnexportedTypeReference {
 }
 
 // Both assertions load the same project; building it twice would double the most expensive thing in this
-// File. See `getProject`.
+// file. See `getProject`.
 let cachedProject: Project | undefined;
 
 describe('public API barrel', () => {

@@ -17,11 +17,11 @@ import { connectToCdp } from './connect-to-cdp.ts';
 import { getFunctionExpressionString } from './function-expression.ts';
 
 // Launching an owned Obsidian instance can take up to a minute (download-free
-// When the installed asar is reused, but CDP still needs time to come up).
+// when the installed asar is reused, but CDP still needs time to come up).
 const LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 // A config folder that is not Obsidian's default, so a vault opened against the
-// Default is distinguishable from one opened against the override.
+// default is distinguishable from one opened against the override.
 const CONFIG_DIRECTORY = '.obsidian-desktop';
 
 /**
@@ -168,7 +168,7 @@ describe('connect-to-cdp integration', () => {
   it('reads settings from the requested config folder, not from a stale .obsidian beside it', async () => {
     // The motivating case: a vault that has both folders. Asserting on
     // `app.vault.configDir` alone would pass even if Obsidian had loaded the stale folder's
-    // Settings, so this asserts on a value that differs BETWEEN the two folders.
+    // settings, so this asserts on a value that differs BETWEEN the two folders.
     const vaultPath = mkdtempSync(join(tmpdir(), 'connect-to-cdp-stale-config-'));
     try {
       writeAppJson(join(vaultPath, '.obsidian'), 'stale');
@@ -192,7 +192,7 @@ describe('connect-to-cdp integration', () => {
 
   it('rejects an invalid config folder name before launching Obsidian', async () => {
     // Obsidian would silently substitute `.obsidian` for each of these, so they
-    // Have to fail here rather than boot a plausible-looking wrong vault.
+    // have to fail here rather than boot a plausible-looking wrong vault.
     for (const configDirectory of ['obsidian-desktop', '.', '.config/nested']) {
       await expect(connectToCdp({ configDirectory })).rejects.toThrow('Invalid configDir');
     }

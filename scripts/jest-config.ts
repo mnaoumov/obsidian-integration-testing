@@ -8,12 +8,12 @@ export const jestConfig: Config = {
   rootDir: join(import.meta.dirname, '..'),
   // The harness chain reads the `OBSIDIAN_METADATA` global at module scope, and
   // Jest has no `define` to inline it — publish it per worker from the same
-  // Setup file the Vitest integration projects use (L6, L20).
+  // setup file the Vitest integration projects use (L6, L20).
   setupFiles: [join(import.meta.dirname, 'metadata-global-setup.ts')],
   testMatch: ['**/jest/*.jest.test.ts'],
   transform: {
     // `ts-jest` resolves a relative `tsconfig` against the cwd, not `rootDir` —
-    // Pass it absolute so the config works from any working directory.
+    // pass it absolute so the config works from any working directory.
     '^.+\\.ts$': ['ts-jest', { tsconfig: join(import.meta.dirname, '..', 'tsconfig.json'), useESM: true }]
   }
 };

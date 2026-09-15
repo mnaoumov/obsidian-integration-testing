@@ -186,7 +186,7 @@ describe('acquireSetupLock', () => {
       lockInfoJson({ heartbeatAtInMilliseconds: Date.now() - THREE_MINUTES_IN_MILLISECONDS })
     );
     // The pid exists, but it was recycled by an unrelated process — the real
-    // Holder died without releasing, so its heartbeat stopped.
+    // holder died without releasing, so its heartbeat stopped.
     mockKill.mockReturnValue(undefined);
 
     const lock = await acquireSetupLock({ label: 'obsidian-cli', scope: 'desktop' });
@@ -306,7 +306,7 @@ describe('acquireSetupLock', () => {
   it('stops beating when the lock file names this pid on a different host', async () => {
     const lock = await acquireSetupLock({ label: 'obsidian-cli', scope: 'desktop' });
     // Same pid number, different machine — a shared temp directory makes that
-    // Collision possible, and it is not our lock.
+    // collision possible, and it is not our lock.
     mockReadFileSync.mockReturnValue(lockInfoJson({ hostname: 'other-host', pid: OWN_PID }));
 
     await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_IN_MILLISECONDS);
@@ -456,7 +456,7 @@ describe('acquireSetupLock', () => {
     });
     mockReadFileSync.mockReturnValue(lockInfoJson());
     // A dead holder, so every attempt steals — and a competing run keeps
-    // Recreating the file, so the steal never lets this run in.
+    // recreating the file, so the steal never lets this run in.
     mockKill.mockImplementation(() => {
       throw makeErrnoError('ESRCH');
     });

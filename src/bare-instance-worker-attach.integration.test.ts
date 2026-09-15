@@ -32,8 +32,8 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 describe('bare (plugin-less) instance worker attach', () => {
   it('evals from a worker by attaching to the global-setup-owned instance', async () => {
     // No `transport` and no `vaultPath`: the worker resolves both from the
-    // Context the plugin-less global setup published (transport options incl. the
-    // Owned CDP port, and the temp vault path).
+    // context the plugin-less global setup published (transport options incl. the
+    // owned CDP port, and the temp vault path).
     const basePath = await evalInObsidian({
       callback({ app }): string {
         return (app.vault.adapter as FileSystemAdapter).getBasePath();

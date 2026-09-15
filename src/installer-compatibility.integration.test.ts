@@ -8,11 +8,11 @@ import { IncompatibleInstallerVersionError } from './incompatible-installer-vers
 import { createTransportFromOptions } from './transport-factory.ts';
 
 // A pinned installer below the app's run floor: Obsidian 1.12.7's run floor is
-// Installer 1.1.9 (metadata.json), so the 0.14.5 installer (Electron 18.0.3)
-// Cannot boot it. The proactive compatibility check catches this from the table
-// At version-resolution time and throws before any shell/asar download or launch,
-// So this suite is fast and needs no real Obsidian — unlike the reactive
-// Dead-boot fast-fail it supersedes (which had to launch and wait out a grace).
+// installer 1.1.9 (metadata.json), so the 0.14.5 installer (Electron 18.0.3)
+// cannot boot it. The proactive compatibility check catches this from the table
+// at version-resolution time and throws before any shell/asar download or launch,
+// so this suite is fast and needs no real Obsidian — unlike the reactive
+// dead-boot fast-fail it supersedes (which had to launch and wait out a grace).
 const UNRUNNABLE_ASAR_VERSION = '1.12.7';
 const UNRUNNABLE_INSTALLER_VERSION = '0.14.5';
 

@@ -246,7 +246,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   // Community-plugin API members that old Obsidian versions (e.g. 0.6.x) lack.
   // `obsidian-typings` declares them as always-present, so probe through this
-  // Optional-member view to detect their runtime absence without a false
+  // optional-member view to detect their runtime absence without a false
   // `no-unnecessary-condition`.
   interface PluginsLike {
     isEnabled?: () => boolean;
@@ -261,7 +261,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   // The shape of the `trustedInput` seam. Every member is one of the L17-synced helpers, exposed as the
-  // Same function object `evalWrapper` puts in a closure's `lib` bag.
+  // same function object `evalWrapper` puts in a closure's `lib` bag.
   interface TrustedInputHelpers {
     clickElement(clickParams: ClickElementParams): Promise<void>;
     clickMouse(clickParams: ClickMouseParams): Promise<void>;
@@ -274,16 +274,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   // `Vault.configDir` is declared always-present by `obsidian-typings`, but old
   // Obsidian versions (e.g. 0.9.10) leave it undefined at runtime. Probe through
-  // This optional-member view so a `?? '.obsidian'` default is not flagged as an
-  // Unnecessary condition.
+  // this optional-member view so a `?? '.obsidian'` default is not flagged as an
+  // unnecessary condition.
   interface VaultLike {
     // eslint-disable-next-line unicorn/name-replacements -- Structural mirror of Obsidian's own `Vault.configDir`; the name has to match for the probe to read it.
     configDir?: string;
   }
 
   // `window.app` / `app.workspace` are declared always-present, but are transiently
-  // Undefined during boot and after an owned-window reload. Probe through these
-  // Optional-member views so the readiness check can guard them without a false
+  // undefined during boot and after an owned-window reload. Probe through these
+  // optional-member views so the readiness check can guard them without a false
   // `no-unnecessary-condition`.
   interface WorkspaceLike {
     layoutReady?: boolean;
@@ -406,8 +406,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   let nextInputId = 0;
 
   // Request ids already claimed by some host, so a second attached host does not inject the gesture a
-  // Second time — see `claimInput`. Ids are monotonic within a page, so this only grows as fast as the
-  // Run drives input, and it dies with the page.
+  // second time — see `claimInput`. Ids are monotonic within a page, so this only grows as fast as the
+  // run drives input, and it dies with the page.
   const claimedInputIds = new Set<string>();
 
   const ns: IntegrationTestingNamespace = {
@@ -448,8 +448,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     async evalWrapper(this: IntegrationTestingNamespace, params): Promise<string> {
       // Old Obsidian (e.g. 0.6.x) predates the community-plugin API: `plugins`
-      // Exists but has no `isEnabled`/`setEnable`, and there are no third-party
-      // Plugins to enable, so skip this step when the API is absent.
+      // exists but has no `isEnabled`/`setEnable`, and there are no third-party
+      // plugins to enable, so skip this step when the API is absent.
       // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
       const plugins = this.app.plugins as unknown as PluginsLike;
       if (plugins.isEnabled && !plugins.isEnabled()) {
@@ -503,7 +503,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       }
 
       // The temp-plugin trick below resolves `require('obsidian')`, which only
-      // Works inside a plugin-load context. It needs the community-plugin registry
+      // works inside a plugin-load context. It needs the community-plugin registry
       // (`loadPlugin` + `manifests`), which FIRST appears in Obsidian 0.9.7; the
       // 0.6.4-0.9.6 band has no registry and cannot run it, so return `null` (not
       // `undefined`) - app-only closures (`callback({ app })`) still run.
@@ -522,7 +522,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const temporaryModuleName = `get-obsidian-module-${randomSuffix}`;
       // Old versions (e.g. 0.9.10) leave `vault.configDir` undefined; fall back to
       // Obsidian's default config dir so the temp plugin still gets a valid path,
-      // Loads, and its `require('obsidian')` resolves the module.
+      // loads, and its `require('obsidian')` resolves the module.
       // eslint-disable-next-line no-restricted-syntax -- configDir is runtime-optional on old versions.
       const configDirectory = (this.app.vault as unknown as VaultLike).configDir ?? '.obsidian';
       const pluginsDirectory = `${configDirectory}/plugins`;
@@ -539,8 +539,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         version: ''
       };
       // `adapter.mkdir` is not recursive, and an old version on a fresh vault may not
-      // Have the config/plugins dirs yet — create the chain so `loadPlugin` finds the
-      // Temp plugin at `<configDir>/plugins/<id>`.
+      // have the config/plugins dirs yet — create the chain so `loadPlugin` finds the
+      // temp plugin at `<configDir>/plugins/<id>`.
       if (!(await this.app.vault.adapter.exists(configDirectory))) {
         await this.app.vault.adapter.mkdir(configDirectory);
       }
@@ -555,8 +555,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       await this.app.plugins.loadPlugin(temporaryModuleName);
       // `uninstallPlugin` arrived after the plugin API itself, so it is absent on
       // 0.9.7 - the FIRST version to expose `loadPlugin`/`manifests` (0.9.6 and below
-      // Have neither, and return `undefined` above). The module is already captured by
-      // The plugin's `main.js` at this point, so only uninstall when the method exists;
+      // have neither, and return `undefined` above). The module is already captured by
+      // the plugin's `main.js` at this point, so only uninstall when the method exists;
       // On 0.9.7 the temp plugin lingers harmlessly in the ephemeral owned vault.
       // eslint-disable-next-line no-restricted-syntax -- uninstallPlugin is runtime-optional on old versions.
       const pluginsForCleanup = this.app.plugins as unknown as PluginsLike;
@@ -582,19 +582,19 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     async pollVaultBasePath(this: IntegrationTestingNamespace): Promise<string> {
       // `window.app`, its `workspace`, and layout can all be transiently
-      // Unavailable during boot or right after an owned-window reload, and old
+      // unavailable during boot or right after an owned-window reload, and old
       // Obsidian predates `Workspace.onLayoutReady`. This runs inside the transport's
-      // Readiness poll, which retries on throw, so check `window.app` FIRST and bail
-      // Cleanly until it, its workspace, and layout are all ready — never dereference
-      // An undefined `window.app`.
+      // readiness poll, which retries on throw, so check `window.app` FIRST and bail
+      // cleanly until it, its workspace, and layout are all ready — never dereference
+      // an undefined `window.app`.
       // eslint-disable-next-line no-restricted-syntax -- window.app/workspace are runtime-optional during boot.
       const app = this.app as unknown as AppLike | undefined;
       if (!app?.workspace) {
         throw new Error('Owned vault is not ready yet (window.app/workspace not initialized).');
       }
       // Old Obsidian predates `Workspace.onLayoutReady` but has `layoutReady === true`
-      // By the time a window is up; only wait via `ensureLayoutReady` when it is not
-      // Yet ready (modern versions early in boot), so the missing method is never hit.
+      // by the time a window is up; only wait via `ensureLayoutReady` when it is not
+      // yet ready (modern versions early in boot), so the missing method is never hit.
       if (!app.workspace.layoutReady) {
         await this.ensureLayoutReady();
       }
@@ -602,7 +602,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       // eslint-disable-next-line no-restricted-syntax -- DataAdapter is actually FileSystemAdapter at runtime on desktop.
       const adapter = this.app.vault.adapter as unknown as FileSystemAdapterLike;
       // Old Obsidian versions (e.g. 0.6.x) predate the `getBasePath()` method but
-      // Expose the `basePath` property; the method exists from ~0.9.20 onward.
+      // expose the `basePath` property; the method exists from ~0.9.20 onward.
       const basePath = adapter.getBasePath ? adapter.getBasePath() : (adapter.basePath ?? '');
       return JSON.stringify(basePath);
     },
@@ -628,7 +628,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     },
 
     // The same function objects `evalWrapper` puts in a closure's `lib` bag — deliberately not re-derived
-    // And not wrapped, so `obsidian-dev-utils` gets exactly the harness's behavior on both platforms.
+    // and not wrapped, so `obsidian-dev-utils` gets exactly the harness's behavior on both platforms.
     trustedInput: {
       clickElement,
       clickMouse,
@@ -674,7 +674,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   // True when this closure is running in Obsidian Mobile rather than the Electron desktop app.
   // Reading `Platform` off the resolved obsidian module is safe here: `evalWrapper` always resolves that
-  // Module before any callback can run, which is the same guarantee `toElectronModifiers` relies on.
+  // module before any callback can run, which is the same guarantee `toElectronModifiers` relies on.
   function checkIsMobile(): boolean {
     return (ns.obsidianModule as ObsidianModuleWithPlatform).Platform.isMobile;
   }
@@ -683,9 +683,9 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   //
   // Mobile has no in-renderer route to a trusted event at all — `dispatchEvent` and `element.click()` are
   // `isTrusted === false` by spec — so the injection has to happen from the Node side, over a CDP
-  // Connection independent of the Appium session that is currently blocked awaiting this very closure
+  // connection independent of the Appium session that is currently blocked awaiting this very closure
   // (see L39). `bindingName` is a host-installed global; calling it delivers the request, and the host
-  // Answers by calling `ns.resolveInput`.
+  // answers by calling `ns.resolveInput`.
   async function requestHostInput(request: MobileInputRequest): Promise<void> {
     const bindingName = bootstrapParams.inputBindingName;
     // eslint-disable-next-line no-restricted-syntax -- Approved cast: the binding is installed by the host at runtime via `Runtime.addBinding`, so it cannot be declared on `Window`.
@@ -716,8 +716,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   // A pointer helper that has no touch analog is a hard error, never a silent no-op: `:hover` does not
-  // Exist on touch, so a test that "hovered" and then asserted would pass while exercising nothing —
-  // Exactly the false-confidence failure the trusted-input work exists to end.
+  // exist on touch, so a test that "hovered" and then asserted would pass while exercising nothing —
+  // exactly the false-confidence failure the trusted-input work exists to end.
   // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
   function throwUnsupportedOnMobile(helperName: string): never {
     throw new Error(
@@ -773,7 +773,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     if (checkIsMobile()) {
       // Touch has no buttons. A left click is a tap; a right click is the long-press that opens Obsidian
       // Mobile's context menu, so it is hidden behind the same name rather than a separate helper. A
-      // Middle click has no gesture at all, and inventing one would be worse than saying so.
+      // middle click has no gesture at all, and inventing one would be worse than saying so.
       if (button === 'middle') {
         throw new Error('`clickMouse({ button: \'middle\' })` has no meaning on mobile: touch input has no middle button.');
       }
@@ -817,7 +817,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const { button = 'left', element, modifiers = [] } = clickParams;
 
     // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`, and equal CDP's
-    // Page coordinates in the mobile WebView — so neither path needs a device-pixel conversion.
+    // page coordinates in the mobile WebView — so neither path needs a device-pixel conversion.
     const rect = element.getBoundingClientRect();
     await clickMouse({
       button,
@@ -931,8 +931,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const file = await ns.app.vault.create(path, content);
 
     // Read the file back rather than trusting `file.stat`. `stat` is precisely
-    // The field that lies here: on a lost write it reports the full byte count
-    // While the filesystem holds zero bytes.
+    // the field that lies here: on a lost write it reports the full byte count
+    // while the filesystem holds zero bytes.
     for (let attempt = 0; attempt <= CREATE_NOTE_REPAIR_ATTEMPT_COUNT; attempt++) {
       const actualContent = await ns.app.vault.read(file);
       if (actualContent === content) {
@@ -947,7 +947,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       }
 
       // A rewrite of the same content lands correctly — measured. This is the
-      // Whole workaround.
+      // whole workaround.
       await ns.app.vault.modify(file, content);
     }
 
@@ -980,8 +980,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
 
     // Both lists are populated before `open()`, so an unknown id can be rejected up front — with the
-    // Ids that DO exist — instead of spending the whole timeout looking exactly like the modal-does-
-    // Not-render symptom this helper exists to rule out. Plugin tabs live in `pluginTabs`, not
+    // ids that DO exist — instead of spending the whole timeout looking exactly like the modal-does-
+    // not-render symptom this helper exists to rule out. Plugin tabs live in `pluginTabs`, not
     // `settingTabs`, so both are searched.
     const knownTabs = [...setting.settingTabs, ...setting.pluginTabs];
     if (knownTabs.every((tab) => tab.id !== tabId)) {
@@ -994,7 +994,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     setting.openTabById(tabId);
 
     // Poll the modal's own state rather than sleeping: a fixed delay is either too short on a loaded
-    // Machine or wasted time. A rendered tab is the requested one AND has content.
+    // machine or wasted time. A rendered tab is the requested one AND has content.
     await waitUntil({
       message: `the "${tabId}" settings tab to render`,
       predicate: () => {
@@ -1013,7 +1013,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
 
     // Not every tab renders `.setting-item-name` rows (Hotkeys does not), so an empty array is a valid
-    // Answer here — the render itself was already proven by the poll above.
+    // answer here — the render itself was already proven by the poll above.
     return [...activeTab.containerEl.querySelectorAll('.setting-item-name')].map((nameEl) => nameEl.textContent);
   }
 

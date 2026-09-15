@@ -75,8 +75,8 @@ export async function runObsidianVersionMatrix(params: RunObsidianVersionMatrixP
   const { droppedSpecs, resolvedSpecs } = resolveVersionSpecs({
     manifest,
     // The default list must not break every consumer's gate when a channel is
-    // Momentarily absent from the manifest; an explicitly requested specifier
-    // That cannot resolve is a real error.
+    // momentarily absent from the manifest; an explicitly requested specifier
+    // that cannot resolve is a real error.
     shouldTolerateUnresolvableSpecs: isDefault,
     specs
   });

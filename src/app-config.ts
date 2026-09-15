@@ -235,7 +235,7 @@ export async function restoreAppConfig(restore: AppConfigRestore): Promise<void>
       const setConfig = app.vault.setConfig.bind(app.vault) as (configKey: string, value: unknown) => void;
 
       // `undefined` is not a no-op here: `setConfig` deletes the key for it,
-      // Which is the only way to restore one the vault never carried.
+      // which is the only way to restore one the vault never carried.
       setConfig(key, wasPresent ? previousValue : undefined);
     },
     input: {
@@ -277,10 +277,10 @@ export async function setAppConfig(params: SetAppConfigParams): Promise<AppConfi
       value: newValue
     }): CapturedValue {
       // `config` carries ONLY the keys changed from their default, which is what
-      // Makes it the presence signal; `getConfig` substitutes the default and so
-      // Cannot tell an unset key from one set to that default. The value itself
-      // Still comes from `getConfig`, which returns the stored one whenever
-      // There is one — so the read needs no cast of the config object.
+      // makes it the presence signal; `getConfig` substitutes the default and so
+      // cannot tell an unset key from one set to that default. The value itself
+      // still comes from `getConfig`, which returns the stored one whenever
+      // there is one — so the read needs no cast of the config object.
       const isPresent = Object.hasOwn(app.vault.config, key);
 
       const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
