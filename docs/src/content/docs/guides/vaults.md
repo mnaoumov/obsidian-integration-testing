@@ -5,11 +5,9 @@ sidebar:
     order: 4
 ---
 
-Every run works against a temporary vault. The global setup creates one for you; `TemporaryVault` lets you
-create more, and `populate` puts fixture files in either.
+Every run works against a temporary vault. The global setup creates one for you; `TemporaryVault` lets you create more, and `populate` puts fixture files in either.
 
-The same `populate` map shape is used everywhere: `path` → file content, a path ending with `/` and empty
-content creates an empty folder, and parent directories are created automatically.
+The same `populate` map shape is used everywhere: `path` → file content, a path ending with `/` and empty content creates an empty folder, and parent directories are created automatically.
 
 ## A disposable vault of your own
 
@@ -66,13 +64,9 @@ Both `TemporaryVault` and `ContextId` implement `AsyncDisposable`, so `await usi
 
 ### `dispose()` deletes only a directory the handle created
 
-`dispose()` always unregisters the vault from Obsidian, but it removes the **directory** only when that
-handle is the one that created it — a `new TemporaryVault()` with no path, as above. A handle built over a
-path you supplied unregisters and leaves the files where they are.
+`dispose()` always unregisters the vault from Obsidian, but it removes the **directory** only when that handle is the one that created it — a `new TemporaryVault()` with no path, as above. A handle built over a path you supplied unregisters and leaves the files where they are.
 
-That is what makes the handle `getTemporaryVault()` returns safe: it wraps the vault the global setup
-provisioned for the whole run, so an `afterAll(() => vault.dispose())` that looks symmetric would otherwise
-delete the directory out from under the open window and every test file that had not run yet.
+That is what makes the handle `getTemporaryVault()` returns safe: it wraps the vault the global setup provisioned for the whole run, so an `afterAll(() => vault.dispose())` that looks symmetric would otherwise delete the directory out from under the open window and every test file that had not run yet.
 
 Pass `shouldRemoveDirectoryOnDispose` to override the default in either direction:
 
@@ -83,14 +77,11 @@ const vault = new TemporaryVault(myScratchPath, { shouldRemoveDirectoryOnDispose
 
 ## Pre-populate before Obsidian opens
 
-For large fixtures, write the files **before** Obsidian opens the vault, so its startup scan indexes them
-in a single pass. Writing thousands of notes *after* open and forcing a re-scan is far slower and less
-reliable.
+For large fixtures, write the files **before** Obsidian opens the vault, so its startup scan indexes them in a single pass. Writing thousands of notes *after* open and forcing a re-scan is far slower and less reliable.
 
 ### Vitest
 
-Create your own `globalSetup` module with `createSetup({ populate })` and point the config at it.
-`populate` is a thunk, so a large fixture is built lazily, once, in the setup process:
+Create your own `globalSetup` module with `createSetup({ populate })` and point the config at it. `populate` is a thunk, so a large fixture is built lazily, once, in the setup process:
 
 ```ts
 // integration-global-setup.ts
@@ -117,9 +108,7 @@ export default defineConfig({
 
 ### Jest
 
-The same `createSetup({ populate })` factory, but Jest needs `globalSetup` and `globalTeardown` to be
-separate modules, each with a **default-export** function. Build the pair once in a shared module and
-re-export each half as a default:
+The same `createSetup({ populate })` factory, but Jest needs `globalSetup` and `globalTeardown` to be separate modules, each with a **default-export** function. Build the pair once in a shared module and re-export each half as a default:
 
 ```ts
 // integration-global-setup.ts — shared createSetup pair
@@ -150,27 +139,18 @@ export default {
 };
 ```
 
-Both files share the same `createSetup` instance through the common module, so `teardown` cleans up
-exactly what `setup` created.
+Both files share the same `createSetup` instance through the common module, so `teardown` cleans up exactly what `setup` created.
 
 ### Manual
 
-When wiring `TemporaryVault` yourself, without a framework global setup, call `vault.populate()` before
-`vault.register()`, as shown above.
+When wiring `TemporaryVault` yourself, without a framework global setup, call `vault.populate()` before `vault.register()`, as shown above.
 
 ## Seed a plugin's `demo-vault/`
 
-A plugin's committed `demo-vault/` often needs more than the plugin under test — **CodeScript Toolkit**
-(`fix-require-modules`) to run its `code-button` blocks, say, or the `demo-vault-helper` bootstrap. Two
-pieces make that a one-liner:
+A plugin's committed `demo-vault/` often needs more than the plugin under test — **CodeScript Toolkit** (`fix-require-modules`) to run its `code-button` blocks, say, or the `demo-vault-helper` bootstrap. Two pieces make that a one-liner:
 
-- **`enableCommunityPlugins`** — a `createSetup` option listing community-plugin ids to enable **in
-  addition to** the plugin under test, after it is enabled. Each id's built files must already be in the
-  vault (seed them below). It replaces the hand-rolled `beforeAll` that turned off restricted mode and
-  called `enablePlugin(...)` in every demo-vault test.
-- **`buildDemoVaultPopulate`** — reads the repo's `demo-vault/` tree, carries over selected `.obsidian/*`
-  config (`app.json`, `appearance.json`, `core-plugins.json` by default), and seeds each injected plugin's
-  binaries (plus an optional `data.json`), returning a `populate` map.
+- **`enableCommunityPlugins`** — a `createSetup` option listing community-plugin ids to enable **in addition to** the plugin under test, after it is enabled. Each id's built files must already be in the vault (seed them below). It replaces the hand-rolled `beforeAll` that turned off restricted mode and called `enablePlugin(...)` in every demo-vault test.
+- **`buildDemoVaultPopulate`** — reads the repo's `demo-vault/` tree, carries over selected `.obsidian/*` config (`app.json`, `appearance.json`, `core-plugins.json` by default), and seeds each injected plugin's binaries (plus an optional `data.json`), returning a `populate` map.
 
 ```ts
 // integration-global-setup.ts
@@ -192,21 +172,13 @@ export const { setup, teardown } = createSetup({
 });
 ```
 
-`enableCommunityPlugins` also composes with `installPlugin: false`, enabling extras into an otherwise
-plugin-less vault.
+`enableCommunityPlugins` also composes with `installPlugin: false`, enabling extras into an otherwise plugin-less vault.
 
 ### Install the injected plugins headlessly
 
-An injected plugin's built files are **not in git** — `.obsidian/plugins/*` is gitignored — so a fresh
-clone, a new machine, or CI has nothing to seed and `buildDemoVaultPopulate` throws. Since a release
-preflight runs the integration tests, that is enough to block cutting a release. Two headless remedies,
-both of which download the plugin's published GitHub release assets into
-`demo-vault/.obsidian/plugins/<id>/` — the same folder Obsidian itself would have produced, so the shipped
-`*-demo-vault.zip` — which unzips into a single `*-demo-vault-<version>` folder — is unaffected:
+An injected plugin's built files are **not in git** — `.obsidian/plugins/*` is gitignored — so a fresh clone, a new machine, or CI has nothing to seed and `buildDemoVaultPopulate` throws. Since a release preflight runs the integration tests, that is enough to block cutting a release. Two headless remedies, both of which download the plugin's published GitHub release assets into `demo-vault/.obsidian/plugins/<id>/` — the same folder Obsidian itself would have produced, so the shipped `*-demo-vault.zip` — which unzips into a single `*-demo-vault-<version>` folder — is unaffected:
 
-- **`buildDemoVaultPopulateAsync`** — the self-healing drop-in. It installs whatever is missing and then
-  builds the very same map, so the setup above needs one identifier changed and an `await`-able thunk (both
-  the Vitest and Jest adapters accept a `populate` thunk that returns a promise):
+- **`buildDemoVaultPopulateAsync`** — the self-healing drop-in. It installs whatever is missing and then builds the very same map, so the setup above needs one identifier changed and an `await`-able thunk (both the Vitest and Jest adapters accept a `populate` thunk that returns a promise):
 
   ```ts
   import { buildDemoVaultPopulateAsync } from 'obsidian-integration-testing';
@@ -228,26 +200,15 @@ both of which download the plugin's published GitHub release assets into
   npx obsidian-integration-testing bootstrap-demo-vault --plugin fix-require-modules --version 13.6.11
   ```
 
-  With no `--plugin` it installs every id already present under `.obsidian/plugins/`. `--force`
-  re-downloads plugins that are already installed; `--repo owner/name` and `--version <tag>` apply to a
-  single `--plugin`.
+  With no `--plugin` it installs every id already present under `.obsidian/plugins/`. `--force` re-downloads plugins that are already installed; `--repo owner/name` and `--version <tag>` apply to a single `--plugin`.
 
-Each id resolves to its GitHub repository through **Obsidian's own community plugin registry** — the same
-`id` → `repo` table the in-app community browser installs from — so nothing is hardcoded. Pass `repo` on
-the injected plugin to skip that lookup (or to bootstrap a plugin that is not listed there), and `version`
-to pin a release tag instead of taking the latest.
+Each id resolves to its GitHub repository through **Obsidian's own community plugin registry** — the same `id` → `repo` table the in-app community browser installs from — so nothing is hardcoded. Pass `repo` on the injected plugin to skip that lookup (or to bootstrap a plugin that is not listed there), and `version` to pin a release tag instead of taking the latest.
 
-An injected plugin that names an explicit `sourceDirectory` is deliberately **excluded**: that points at a
-local build output, not somewhere to download a release into. `buildDemoVaultPopulate` stays synchronous
-and keeps throwing — `fetch` has no synchronous form — but its message now names both remedies above.
+An injected plugin that names an explicit `sourceDirectory` is deliberately **excluded**: that points at a local build output, not somewhere to download a release into. `buildDemoVaultPopulate` stays synchronous and keeps throwing — `fetch` has no synchronous form — but its message now names both remedies above.
 
 ## Non-plugin consumers
 
-If your project is **not** a plugin — a tool that only needs a registered, empty vault to `evalInObsidian`
-against, such as a typings crawler — point `globalSetup` at the **`-no-plugin`** entry point instead of
-`-plugin`. It still launches one owned, off-screen Obsidian instance and publishes its endpoint to workers
-so each worker attaches to it, but it skips reading `dist/manifest.json`, copying a plugin, writing
-`community-plugins.json`, and enabling a plugin. No wrapper module is needed:
+If your project is **not** a plugin — a tool that only needs a registered, empty vault to `evalInObsidian` against, such as a typings crawler — point `globalSetup` at the **`-no-plugin`** entry point instead of `-plugin`. It still launches one owned, off-screen Obsidian instance and publishes its endpoint to workers so each worker attaches to it, but it skips reading `dist/manifest.json`, copying a plugin, writing `community-plugins.json`, and enabling a plugin. No wrapper module is needed:
 
 ```ts
 // vitest.config.ts
@@ -265,14 +226,10 @@ export default defineConfig({
 import { getTemporaryVault } from 'obsidian-integration-testing/vitest-global-setup-no-plugin';
 ```
 
-For Jest, use `obsidian-integration-testing/jest-global-setup-no-plugin` (`globalSetup`) plus
-`obsidian-integration-testing/jest-global-teardown-no-plugin` (`globalTeardown`). If you also need to
-pre-populate that empty vault, build the pair yourself with `createSetup({ installPlugin: false, populate })`
-from the `-plugin` factory and re-export its `setup` / `teardown`, following the wrapper pattern above.
+For Jest, use `obsidian-integration-testing/jest-global-setup-no-plugin` (`globalSetup`) plus `obsidian-integration-testing/jest-global-teardown-no-plugin` (`globalTeardown`). If you also need to pre-populate that empty vault, build the pair yourself with `createSetup({ installPlugin: false, populate })` from the `-plugin` factory and re-export its `setup` / `teardown`, following the wrapper pattern above.
 
 ## Related
 
 - [`TemporaryVault` API reference](/obsidian-integration-testing/api/temporary-vault/TemporaryVault/)
 - [`buildDemoVaultPopulate` API reference](/obsidian-integration-testing/api/demo-vault-populate/buildDemoVaultPopulate/)
-- [Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/) — what happens to vaults a
-  dead run left behind.
+- [Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/) — what happens to vaults a dead run left behind.

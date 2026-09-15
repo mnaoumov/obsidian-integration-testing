@@ -5,13 +5,9 @@ sidebar:
     order: 0
 ---
 
-`obsidian-integration-testing` runs your tests against a **real, running Obsidian**. There is no mock of
-the `App`, the vault or the workspace — the assertions execute inside the Obsidian renderer, so what
-passes is what the app actually does.
+`obsidian-integration-testing` runs your tests against a **real, running Obsidian**. There is no mock of the `App`, the vault or the workspace — the assertions execute inside the Obsidian renderer, so what passes is what the app actually does.
 
-By default the harness **launches and owns an isolated instance** in a temporary `--user-data-dir`, so
-your own Obsidian — its config, its vault registry, its open window, its auto-update — is never touched,
-and it can keep running while the suite does.
+By default the harness **launches and owns an isolated instance** in a temporary `--user-data-dir`, so your own Obsidian — its config, its vault registry, its open window, its auto-update — is never touched, and it can keep running while the suite does.
 
 ## Installation
 
@@ -21,15 +17,12 @@ npm install --save-dev obsidian-integration-testing
 
 You also need:
 
-- [Obsidian](https://obsidian.md/download) (the desktop app) installed, so the harness has a shell to
-  launch.
+- [Obsidian](https://obsidian.md/download) (the desktop app) installed, so the harness has a shell to launch.
 - [Node.js](https://nodejs.org/) 22+ — the transport uses the built-in `WebSocket` and `fetch` globals.
 
 ## Wire up your runner
 
-The global setup expects your built plugin in `dist/dev` or `dist/build` (whichever has the newer
-`main.js`), with a `manifest.json` at the root of the chosen folder. It creates a temporary vault, copies
-the build into it, and enables the plugin.
+The global setup expects your built plugin in `dist/dev` or `dist/build` (whichever has the newer `main.js`), with a `manifest.json` at the root of the chosen folder. It creates a temporary vault, copies the build into it, and enables the plugin.
 
 ### Vitest
 
@@ -45,9 +38,7 @@ export default defineConfig({
 });
 ```
 
-To get the Vitest module augmentations (`environmentOptions.obsidianTransport`,
-`inject('obsidianTransport')`, `inject('temporaryVaultPath')`), add a side-effect import in your test
-setup or config:
+To get the Vitest module augmentations (`environmentOptions.obsidianTransport`, `inject('obsidianTransport')`, `inject('temporaryVaultPath')`), add a side-effect import in your test setup or config:
 
 ```ts
 import 'obsidian-integration-testing/vitest/typings';
@@ -74,12 +65,10 @@ export default {
 ```
 
 :::note
-Jest requires `globalSetup` and `globalTeardown` to be **separate** entry points, each with a
-**default-export** function — that is why setup and teardown are imported from two different subpaths.
+Jest requires `globalSetup` and `globalTeardown` to be **separate** entry points, each with a **default-export** function — that is why setup and teardown are imported from two different subpaths.
 :::
 
-To configure transport options with Jest, populate `globalThis.__obsidianIntegrationTesting` before the
-global setup runs (in a setup file, or via Jest `globals`):
+To configure transport options with Jest, populate `globalThis.__obsidianIntegrationTesting` before the global setup runs (in a setup file, or via Jest `globals`):
 
 ```ts
 globalThis.__obsidianIntegrationTesting = {
@@ -90,15 +79,12 @@ globalThis.__obsidianIntegrationTesting = {
 After setup, `globalThis.__obsidianIntegrationTesting.temporaryVaultPath` is available in test workers.
 
 :::caution[Run test files serially]
-A run shares a single Obsidian instance and one temporary vault. Test files running in parallel race on
-both, which surfaces as flakiness that moves between tests. Set `fileParallelism: false` (Vitest) or
-`maxWorkers: 1` (Jest).
+A run shares a single Obsidian instance and one temporary vault. Test files running in parallel race on both, which surfaces as flakiness that moves between tests. Set `fileParallelism: false` (Vitest) or `maxWorkers: 1` (Jest).
 :::
 
 ## Your first test
 
-Everything happens through `evalInObsidian`: you hand it a callback, it runs inside Obsidian, and the
-return value comes back to your test.
+Everything happens through `evalInObsidian`: you hand it a callback, it runs inside Obsidian, and the return value comes back to your test.
 
 ```ts
 import { evalInObsidian } from 'obsidian-integration-testing';
@@ -160,18 +146,13 @@ describe('my-plugin', () => {
 });
 ```
 
-The Jest version is identical apart from the import:
-`obsidian-integration-testing/jest-global-setup-plugin`.
+The Jest version is identical apart from the import: `obsidian-integration-testing/jest-global-setup-plugin`.
 
 `vaultPath` is optional and defaults to `process.cwd()`.
 
 ## Where to go next
 
-- [Writing tests](/obsidian-integration-testing/guides/writing-tests/) — what a callback may and may not
-  do, passing arguments, keeping state between calls, reaching internal APIs.
-- [Vaults and fixtures](/obsidian-integration-testing/guides/vaults/) — temporary vaults, pre-populating
-  files before Obsidian opens, seeding a plugin's `demo-vault/`.
-- [Transport modes](/obsidian-integration-testing/guides/transports/) — pin an Obsidian version, attach
-  to a running instance, hide the window.
-- [Android testing](/obsidian-integration-testing/guides/android/) — run the same suites on Obsidian
-  Mobile.
+- [Writing tests](/obsidian-integration-testing/guides/writing-tests/) — what a callback may and may not do, passing arguments, keeping state between calls, reaching internal APIs.
+- [Vaults and fixtures](/obsidian-integration-testing/guides/vaults/) — temporary vaults, pre-populating files before Obsidian opens, seeding a plugin's `demo-vault/`.
+- [Transport modes](/obsidian-integration-testing/guides/transports/) — pin an Obsidian version, attach to a running instance, hide the window.
+- [Android testing](/obsidian-integration-testing/guides/android/) — run the same suites on Obsidian Mobile.

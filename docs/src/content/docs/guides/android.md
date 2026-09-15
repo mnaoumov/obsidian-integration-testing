@@ -5,21 +5,18 @@ sidebar:
     order: 6
 ---
 
-The `obsidian-android-appium` transport runs tests against Obsidian Mobile on an Android emulator or a
-real device, via Appium WebView injection.
+The `obsidian-android-appium` transport runs tests against Obsidian Mobile on an Android emulator or a real device, via Appium WebView injection.
 
 ## Setup
 
-1. Install [Android Studio](https://developer.android.com/studio), which includes the Android SDK and the
-   `adb` command-line tools.
+1. Install [Android Studio](https://developer.android.com/studio), which includes the Android SDK and the `adb` command-line tools.
 
 2. Create an Android Virtual Device (AVD):
 
    - Device Manager → *Create Virtual Device*.
    - Pick a phone profile (e.g. Pixel 7) and a system image (e.g. API 34).
    - Give it a name (e.g. `obsidian_test`) — that is the value you pass as `avdName`.
-   - **Provision it deliberately.** Android Studio's defaults are not enough; see
-     [AVD provisioning](#avd-provisioning) and apply it before you start using the device.
+   - **Provision it deliberately.** Android Studio's defaults are not enough; see [AVD provisioning](#avd-provisioning) and apply it before you start using the device.
    - You do **not** need to start the emulator manually — the harness auto-starts it.
 
    To list existing AVD names:
@@ -28,15 +25,13 @@ real device, via Appium WebView injection.
    emulator -list-avds
    ```
 
-3. Install [Obsidian](https://obsidian.md/download) on the emulator (Play Store or APK sideload) and grant
-   storage permission — either through the app's prompt or over `adb`:
+3. Install [Obsidian](https://obsidian.md/download) on the emulator (Play Store or APK sideload) and grant storage permission — either through the app's prompt or over `adb`:
 
    ```bash
    adb shell appops set md.obsidian MANAGE_EXTERNAL_STORAGE allow
    ```
 
-4. *(Optional)* Install [Appium](https://appium.io/) and the
-   [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
+4. *(Optional)* Install [Appium](https://appium.io/) and the [UiAutomator2 driver](https://github.com/appium/appium-uiautomator2-driver):
 
    ```bash
    npm install -g appium
@@ -44,10 +39,7 @@ real device, via Appium WebView injection.
    ```
 
    :::note
-   This step is optional. You do not need to start the Appium server manually — the harness auto-starts it
-   if it is not already running, and by default it also **auto-installs** Appium (globally) and the
-   UiAutomator2 driver when they are missing. Set `shouldAutoInstallAppiumDependencies: false` to manage
-   the Appium toolchain yourself and skip the global install.
+   This step is optional. You do not need to start the Appium server manually — the harness auto-starts it if it is not already running, and by default it also **auto-installs** Appium (globally) and the UiAutomator2 driver when they are missing. Set `shouldAutoInstallAppiumDependencies: false` to manage the Appium toolchain yourself and skip the global install.
    :::
 
 5. Configure the runner:
@@ -75,9 +67,7 @@ Plugins with `isDesktopOnly: true` in `manifest.json` automatically reject Andro
 
 ## AVD provisioning
 
-These are minimums, not suggestions. Following the setup above with Android Studio's defaults produces a
-device that fails — and it fails in ways that look like plugin bugs, so the cost of getting this wrong is
-paid in debugging, not in an obvious error.
+These are minimums, not suggestions. Following the setup above with Android Studio's defaults produces a device that fails — and it fails in ways that look like plugin bugs, so the cost of getting this wrong is paid in debugging, not in an obvious error.
 
 | Setting                   | Minimum | Android Studio's default | Why                                                                     |
 | ------------------------- | ------- | ------------------------ | ----------------------------------------------------------------------- |
@@ -86,26 +76,14 @@ paid in debugging, not in an obvious error.
 | `vm.heapSize`             | `512`   | `256`                    | Obsidian is a large WebView app.                                        |
 | `hw.cpu.ncore`            | `4`+    | `4`                      | Raise it if the host has cores to spare; emulator startup is CPU-bound. |
 
-Edit them in Device Manager → *Edit* → *Show Advanced Settings*, or directly in the AVD's `config.ini`
-(`~/.android/avd/<name>.avd/config.ini`); a size change needs a wipe of user data.
+Edit them in Device Manager → *Edit* → *Show Advanced Settings*, or directly in the AVD's `config.ini` (`~/.android/avd/<name>.avd/config.ini`); a size change needs a wipe of user data.
 
-**Why disk is the setting that matters.** Every failed run leaks a `temp-vault-*` directory, and every
-leaked vault stays **registered** for Obsidian to enumerate at startup — inside the same WebView-readiness
-budget the run is already straining (see
-[Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/)). A full `/data` then produces
-failures that look like anything but a full disk:
+**Why disk is the setting that matters.** Every failed run leaks a `temp-vault-*` directory, and every leaked vault stays **registered** for Obsidian to enumerate at startup — inside the same WebView-readiness budget the run is already straining (see [Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/)). A full `/data` then produces failures that look like anything but a full disk:
 
-- `/data` at 92 % with 103 leftover vaults: runs failed in global setup with `WEBVIEW_md.obsidian` timing
-  out at the full 60 s. After a sweep the same context was found in **0.3 s**.
-- `/data` at 91 % with only **8** leftover vaults — the count alone is not the signal. The four
-  disk-bound cases (the only ones creating folders and renaming files) timed out at webdriver's 30 s wall,
-  and the same four passed **6/6 in isolation on the same device**.
+- `/data` at 92 % with 103 leftover vaults: runs failed in global setup with `WEBVIEW_md.obsidian` timing out at the full 60 s. After a sweep the same context was found in **0.3 s**.
+- `/data` at 91 % with only **8** leftover vaults — the count alone is not the signal. The four disk-bound cases (the only ones creating folders and renaming files) timed out at webdriver's 30 s wall, and the same four passed **6/6 in isolation on the same device**.
 
-**Prefer a `google_apis` image over `google_apis_playstore`.** A Play-Store image consumes most of a
-default data partition on its own, and it blocks `adb root` (`adbd cannot run as root in production
-builds`) — so when `/data` does fill, you cannot inspect it to find out what is using the space.
-`pm trim-caches 5G` recovers on the order of tens of megabytes and is the only lever left without root.
-`google_apis` is smaller and does allow `adb root`; nothing in this harness needs the Play Store.
+**Prefer a `google_apis` image over `google_apis_playstore`.** A Play-Store image consumes most of a default data partition on its own, and it blocks `adb root` (`adbd cannot run as root in production builds`) — so when `/data` does fill, you cannot inspect it to find out what is using the space. `pm trim-caches 5G` recovers on the order of tens of megabytes and is the only lever left without root. `google_apis` is smaller and does allow `adb root`; nothing in this harness needs the Play Store.
 
 **Health check — run this before blaming the plugin:**
 
@@ -114,13 +92,11 @@ adb shell df -h /data
 adb shell ls -d /sdcard/Documents/temp-vault-* | wc -l
 ```
 
-And apply the isolation rule: **a suite that fails in the aggregate and passes alone is the device**, not
-the code.
+And apply the isolation rule: **a suite that fails in the aggregate and passes alone is the device**, not the code.
 
 ## Options
 
-Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs, all with
-sensible defaults:
+Besides the required `appiumUrl` and `avdName`, the transport accepts these optional knobs, all with sensible defaults:
 
 | Option                                        | Purpose                                                                                                                | Default                |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
@@ -145,41 +121,19 @@ sensible defaults:
 
 ### "Process system isn't responding"
 
-A resource-starved emulator can raise a **"Process system isn't responding"** ANR dialog during boot. If
-it appears before Appium attaches, nothing can dismiss it and the run fails intermittently. As soon as the
-device reports `sys.boot_completed`, the harness runs
-`adb shell settings put global hide_error_dialogs 1` so Android no longer draws crash/ANR dialogs. That
-narrows but cannot fully close the race — an ANR that fires between boot completing and that command still
-slips through. To eliminate it entirely, boot the AVD once, run the command yourself, save a snapshot, and
-always boot from that snapshot. Either way, an ANR signals the emulator is under-provisioned, so check it
-against [AVD provisioning](#avd-provisioning) and confirm hardware acceleration (`emulator -accel-check`).
+A resource-starved emulator can raise a **"Process system isn't responding"** ANR dialog during boot. If it appears before Appium attaches, nothing can dismiss it and the run fails intermittently. As soon as the device reports `sys.boot_completed`, the harness runs `adb shell settings put global hide_error_dialogs 1` so Android no longer draws crash/ANR dialogs. That narrows but cannot fully close the race — an ANR that fires between boot completing and that command still slips through. To eliminate it entirely, boot the AVD once, run the command yourself, save a snapshot, and always boot from that snapshot. Either way, an ANR signals the emulator is under-provisioned, so check it against [AVD provisioning](#avd-provisioning) and confirm hardware acceleration (`emulator -accel-check`).
 
 ### "Android AVD ... not found" / "Appium server ... exited during startup"
 
-The Android setup fails fast, rather than spinning out a timeout, when the toolchain cannot be brought up
-— and names what is missing:
+The Android setup fails fast, rather than spinning out a timeout, when the toolchain cannot be brought up — and names what is missing:
 
-- **`Android AVD "<name>" not found. Available AVDs: ...`** — the `avdName` you passed does not exist. Run
-  `emulator -list-avds`, then either point `avdName` at a listed AVD or create the one you want (Android
-  Studio Device Manager, or `avdmanager create avd`). AVD creation is not automated: it needs a
-  system-image download, license acceptance, and hardware/API-level choices.
-- **`Auto-started Appium server ... during startup` / `... did not become ready ...`** — the harness
-  auto-started Appium (`npx --no-install appium`) but it exited or never responded; the message appends the
-  captured server output. Usually a missing or broken toolchain: pass `isAppiumConsoleVisible: true` to
-  watch the live server log, or manage Appium yourself (`shouldAutoStartAppium: false`, with `appiumUrl`
-  pointing at your own running server).
-- **`Appium was installed ... but is still not resolvable ...`** — the auto-install ran
-  `npm install -g appium`, but the npm global bin directory is not on `PATH` (common with scoop- or
-  nvm-managed Node). Add it to `PATH` (see `npm config get prefix`), or set
-  `shouldAutoInstallAppiumDependencies: false` and install Appium yourself.
+- **`Android AVD "<name>" not found. Available AVDs: ...`** — the `avdName` you passed does not exist. Run `emulator -list-avds`, then either point `avdName` at a listed AVD or create the one you want (Android Studio Device Manager, or `avdmanager create avd`). AVD creation is not automated: it needs a system-image download, license acceptance, and hardware/API-level choices.
+- **`Auto-started Appium server ... during startup` / `... did not become ready ...`** — the harness auto-started Appium (`npx --no-install appium`) but it exited or never responded; the message appends the captured server output. Usually a missing or broken toolchain: pass `isAppiumConsoleVisible: true` to watch the live server log, or manage Appium yourself (`shouldAutoStartAppium: false`, with `appiumUrl` pointing at your own running server).
+- **`Appium was installed ... but is still not resolvable ...`** — the auto-install ran `npm install -g appium`, but the npm global bin directory is not on `PATH` (common with scoop- or nvm-managed Node). Add it to `PATH` (see `npm config get prefix`), or set `shouldAutoInstallAppiumDependencies: false` and install Appium yourself.
 
 ### "AVD ... did not answer `adb -s ... emu avd name`"
 
-Before starting an emulator, the harness asks every connected emulator which AVD it is serving, so it can
-adopt one already running that AVD instead of launching a second. A device that **does not answer** — the
-probe times out twice, 5s each — is not evidence that the answer is no: it is most often the very emulator
-you are about to collide with, wedged badly enough that every `adb` call against it times out. So the run
-stops and names the device rather than launching beside it:
+Before starting an emulator, the harness asks every connected emulator which AVD it is serving, so it can adopt one already running that AVD instead of launching a second. A device that **does not answer** — the probe times out twice, 5s each — is not evidence that the answer is no: it is most often the very emulator you are about to collide with, wedged badly enough that every `adb` call against it times out. So the run stops and names the device rather than launching beside it:
 
 ```text
 AVD "obsidian_test": device emulator-5554 did not answer `adb -s emulator-5554 emu avd name` within
@@ -189,54 +143,28 @@ feature`), which the emulator reports only to its own stdout. Kill the unrespons
 `adb kill-server`, then retry.
 ```
 
-The recovery is exactly what the message says. Note that under `-no-window` (the default) the process
-holding the AVD is `qemu-system-x86_64-headless`, **not** `qemu-system-x86_64`, so the obvious
-`Get-Process -Name qemu-system-x86_64` filter does not find it — match `qemu*` instead. Physical handsets
-and TCP-attached devices are never probed, so a phone plugged into the host cannot trigger this.
+The recovery is exactly what the message says. Note that under `-no-window` (the default) the process holding the AVD is `qemu-system-x86_64-headless`, **not** `qemu-system-x86_64`, so the obvious `Get-Process -Name qemu-system-x86_64` filter does not find it — match `qemu*` instead. Physical handsets and TCP-attached devices are never probed, so a phone plugged into the host cannot trigger this.
 
 ### An emulator left running by an earlier run
 
-The harness stops every emulator it starts, and it records each one in a small marker file under
-`<tmpdir>/obsidian-integration-testing/<avd>.emulator.json` until that stop is verified. A run that dies
-before stopping its emulator (killed, or ended from a test worker whose teardown never ran) therefore
-leaves a marked leftover, and the next Android run deals with it:
+The harness stops every emulator it starts, and it records each one in a small marker file under `<tmpdir>/obsidian-integration-testing/<avd>.emulator.json` until that stop is verified. A run that dies before stopping its emulator (killed, or ended from a test worker whose teardown never ran) therefore leaves a marked leftover, and the next Android run deals with it:
 
-- A leftover of the AVD it wants is **reused and taken over**: the log says so, and that run stops it at
-  the end.
+- A leftover of the AVD it wants is **reused and taken over**: the log says so, and that run stops it at the end.
 - A leftover of any other AVD is **stopped** before the run starts its own.
 
-A run that is killed with no Android run after it is covered too. Beside every emulator it starts, the
-harness spawns a small detached **reaper** process. The reaper waits until no Android run holds the
-`android` setup lock any more, then takes the lock and stops the marked emulator itself, usually within
-five seconds of the kill. Its log is `<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`,
-and the first line it writes there is its own process ID.
+A run that is killed with no Android run after it is covered too. Beside every emulator it starts, the harness spawns a small detached **reaper** process. The reaper waits until no Android run holds the `android` setup lock any more, then takes the lock and stops the marked emulator itself, usually within five seconds of the kill. Its log is `<tmpdir>/obsidian-integration-testing/<avd>.emulator-reaper.log`, and the first line it writes there is its own process ID.
 
-The reaper deliberately sits **outside the run's process tree** — it is started through a short-lived
-relay that exits at once, so it has no live parent to be swept up with. That matters because the usual
-ways of stopping a run take the whole tree: Task Manager's **End task**, `taskkill /T`, and most IDE stop
-buttons. Ending a run any of those ways still leaves the reaper watching, and the emulator is stopped
-within seconds.
+The reaper deliberately sits **outside the run's process tree** — it is started through a short-lived relay that exits at once, so it has no live parent to be swept up with. That matters because the usual ways of stopping a run take the whole tree: Task Manager's **End task**, `taskkill /T`, and most IDE stop buttons. Ending a run any of those ways still leaves the reaper watching, and the emulator is stopped within seconds.
 
-A reaper is armed only while a run holds that lock, which the global setups do. If you create an Android
-transport by hand without taking the lock, no reaper is armed; the run log says so, and only the next
-Android run stops a leftover.
+A reaper is armed only while a run holds that lock, which the global setups do. If you create an Android transport by hand without taking the lock, no reaper is armed; the run log says so, and only the next Android run stops a leftover.
 
-An emulator without a marker is never touched: one you booted by hand, one CI booted, or one another tool
-started. The harness only adopts it, as described above.
+An emulator without a marker is never touched: one you booted by hand, one CI booted, or one another tool started. The harness only adopts it, as described above.
 
-The harness also launches the emulator with `RUST_LOG=error` so the network simulator it spawns, `netsimd`,
-cannot fill the disk. One of its Wi-Fi loops can log a single warning tens of thousands of times a second
-into `%TEMP%\netsimd\netsim_stderr.log`, and an idle emulator once grew that file to 278 GB. If you set
-`RUST_LOG` yourself, your value wins and the run logs that the guard is off. If that file is ever huge,
-stop the emulator and `netsimd`, then delete it; it holds nothing but that warning.
+The harness also launches the emulator with `RUST_LOG=error` so the network simulator it spawns, `netsimd`, cannot fill the disk. One of its Wi-Fi loops can log a single warning tens of thousands of times a second into `%TEMP%\netsimd\netsim_stderr.log`, and an idle emulator once grew that file to 278 GB. If you set `RUST_LOG` yourself, your value wins and the run logs that the guard is off. If that file is ever huge, stop the emulator and `netsimd`, then delete it; it holds nothing but that warning.
 
 ### The emulator dies about a minute into every run
 
-If the guest boots, serves `adb`, accepts a session, and then drops to `offline` roughly 30–90s later —
-every time, on the same AVD — suspect the AVD's saved boot snapshot rather than your code. The harness
-cold-boots by default (`-no-snapshot-load -no-snapshot-save`) precisely so a rotten snapshot cannot cause
-this. If you have opted into `shouldReuseEmulatorSnapshot: true`, the run logs which snapshot it is
-resuming and when it was saved; a stale one is repaired by cold-booting the AVD by hand and re-saving it:
+If the guest boots, serves `adb`, accepts a session, and then drops to `offline` roughly 30–90s later — every time, on the same AVD — suspect the AVD's saved boot snapshot rather than your code. The harness cold-boots by default (`-no-snapshot-load -no-snapshot-save`) precisely so a rotten snapshot cannot cause this. If you have opted into `shouldReuseEmulatorSnapshot: true`, the run logs which snapshot it is resuming and when it was saved; a stale one is repaired by cold-booting the AVD by hand and re-saving it:
 
 ```sh
 emulator -avd <name> -no-snapshot-load
@@ -247,35 +175,15 @@ If it still dies after cold-booting, the snapshot was not the cause — read the
 
 ### "Device ... stopped answering before the Appium session could be established"
 
-The harness probes the device once more immediately before creating the session. When the device has gone
-quiet and the emulator is one the harness started, it **boots a fresh emulator and tries once more** — the
-wedge is not deterministic, and a second boot from the same AVD often runs the whole suite. A device the
-harness merely adopted is never replaced, and a second failure stops the run rather than paying for
-another 90–220s boot.
+The harness probes the device once more immediately before creating the session. When the device has gone quiet and the emulator is one the harness started, it **boots a fresh emulator and tries once more** — the wedge is not deterministic, and a second boot from the same AVD often runs the whole suite. A device the harness merely adopted is never replaced, and a second failure stops the run rather than paying for another 90–220s boot.
 
 When the run does stop, the message names **which layer** stopped answering, because the recovery differs:
 
-- **`the EMULATOR is wedged`** — neither the guest nor the emulator's own console answered, each asked
-  twice. The console (`adb -s <device> emu ...`) is served by the emulator process rather than by the
-  guest, so its silence convicts the emulator itself. Nothing recovers a wedged emulator, which is why the
-  harness replaces it rather than retrying against it; seeing this message means the replacement failed
-  too. **`adb devices` will still list the device and will mislead you** — nothing is left running to
-  update that state, which is why this used to surface as Appium's `Device <id> was not in the list of
-  connected devices` and send everybody to the one diagnostic that cannot help.
-- **The guest did not answer but the console did** — the emulator is healthy and the guest is frozen or
-  starved. A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget for
-  waiting one out.
-- **`adb devices` no longer lists it** — the emulator exited, or wedged badly enough to drop off adb. The
-  emulator's own output is appended to the message and is the best evidence for which.
+- **`the EMULATOR is wedged`** — neither the guest nor the emulator's own console answered, each asked twice. The console (`adb -s <device> emu ...`) is served by the emulator process rather than by the guest, so its silence convicts the emulator itself. Nothing recovers a wedged emulator, which is why the harness replaces it rather than retrying against it; seeing this message means the replacement failed too. **`adb devices` will still list the device and will mislead you** — nothing is left running to update that state, which is why this used to surface as Appium's `Device <id> was not in the list of connected devices` and send everybody to the one diagnostic that cannot help.
+- **The guest did not answer but the console did** — the emulator is healthy and the guest is frozen or starved. A contended host is the usual cause; `deviceIdleTimeoutInMilliseconds` is the budget for waiting one out.
+- **`adb devices` no longer lists it** — the emulator exited, or wedged badly enough to drop off adb. The emulator's own output is appended to the message and is the best evidence for which.
 
-**If the emulator wedges at the same point in every run, the fault is below this harness.** That was
-measured on one host on 2026-09-05: six hand-boots, two AVDs and five different emulator argument sets,
-every one wedging 64–92s after boot with the QEMU backend at **0% CPU** — blocked, not spinning. Changing
-the GPU mode (`-gpu swiftshader_indirect`), disabling the network simulator (`-feature
--WiFiPacketStream`), halving the guest RAM and dropping `-dns-server` each changed nothing. When you see
-that shape, the fault is in the platform rather than your tests. On that host a newer system image
-(`android-36/google_apis`) and a newer emulator build (37.1.11.0) were both tried and both wedged
-identically, which left the host hypervisor. Reproduce it directly before spending time anywhere else:
+**If the emulator wedges at the same point in every run, the fault is below this harness.** That was measured on one host on 2026-09-05: six hand-boots, two AVDs and five different emulator argument sets, every one wedging 64–92s after boot with the QEMU backend at **0% CPU** — blocked, not spinning. Changing the GPU mode (`-gpu swiftshader_indirect`), disabling the network simulator (`-feature -WiFiPacketStream`), halving the guest RAM and dropping `-dns-server` each changed nothing. When you see that shape, the fault is in the platform rather than your tests. On that host a newer system image (`android-36/google_apis`) and a newer emulator build (37.1.11.0) were both tried and both wedged identically, which left the host hypervisor. Reproduce it directly before spending time anywhere else:
 
 ```sh
 # Reproduce without Appium or a suite: boot by hand and poll. A healthy guest answers indefinitely.
@@ -287,10 +195,7 @@ adb -s emulator-5554 emu avd status      # the emulator's console -- if THIS han
 
 **Once you have that shape, it is the machine — but check one thing before you give up on it.**
 
-**Ask what is filtering this host's sockets.** Endpoint-security, content-blocking and VPN products
-install socket or WFP filter drivers that sit in the path of every socket call the emulator makes,
-including the localhost connection its own console is served over — which is exactly why the console goes
-quiet alongside the guest. Stop the service, from an elevated prompt, and run the probe again:
+**Ask what is filtering this host's sockets.** Endpoint-security, content-blocking and VPN products install socket or WFP filter drivers that sit in the path of every socket call the emulator makes, including the localhost connection its own console is served over — which is exactly why the console goes quiet alongside the guest. Stop the service, from an elevated prompt, and run the probe again:
 
 ```powershell
 Get-Service | Where-Object Status -eq 'Running'   # find the blocker/VPN/AV service
@@ -299,95 +204,41 @@ npm run probe:emulator-wedge -- --survive-for 240
 Start-Service '<that service>'                    # put it back afterwards
 ```
 
-That was the answer on the host measured above: with a content blocker's socket filter stopped, the same
-AVD and arguments that had wedged at 49–89s survived the full 240s watch, and a thirteen-repo Android
-sweep then ran to completion. Stopping the VPN alongside it changed nothing, so test one product at a
-time rather than stopping everything at once. Two practical notes: the service often parks in
-`StopPending` rather than reaching `Stopped`, and that is already enough; and if Windows **Driver
-Verifier** is armed over that driver (`verifier /query`), stopping the service will bugcheck the machine
-with `0xC4` — disarm it with `verifier /reset` and a reboot first.
+That was the answer on the host measured above: with a content blocker's socket filter stopped, the same AVD and arguments that had wedged at 49–89s survived the full 240s watch, and a thirteen-repo Android sweep then ran to completion. Stopping the VPN alongside it changed nothing, so test one product at a time rather than stopping everything at once. Two practical notes: the service often parks in `StopPending` rather than reaching `Stopped`, and that is already enough; and if Windows **Driver Verifier** is armed over that driver (`verifier /query`), stopping the service will bugcheck the machine with `0xC4` — disarm it with `verifier /reset` and a reboot first.
 
-If nothing filters this host's sockets, or stopping it changes nothing, then it is the platform and the
-answer is to **move the run rather than tune it**. Everything a project controls has already been
-eliminated above; what is left is the host's hypervisor, and there is no option in this harness that
-reaches it. Two things are worth knowing before you spend a day on it:
+If nothing filters this host's sockets, or stopping it changes nothing, then it is the platform and the answer is to **move the run rather than tune it**. Everything a project controls has already been eliminated above; what is left is the host's hypervisor, and there is no option in this harness that reaches it. Two things are worth knowing before you spend a day on it:
 
-- **On an AMD Windows host, check which accelerator is actually in use.** The emulator normally runs
-  through WHPX, Microsoft's generic hypervisor API. Google also ships the *Android Emulator hypervisor
-  driver* (AEHD) for exactly this reason — its README describes it as the way "to run Android Emulator on
-  Windows without Windows Hypervisor Platform (WHPX)". `emulator -accel-check` reports which one you have.
-  AEHD cannot coexist with Hyper-V, so switching to it means disabling the hypervisor
-  (`bcdedit /set hypervisorlaunchtype off`, elevated, plus a reboot) and losing Hyper-V VMs, WSL2 and
-  Windows Sandbox until you set it back to `auto`.
-- **A Linux CI runner with KVM is the reliable escape hatch, and it is proven rather than proposed.**
-  GitHub-hosted `ubuntu-latest` runners can run the emulator once `/dev/kvm` is made accessible, which
-  makes the Android leg something CI does even when no local machine can. This repo's own
-  `validate-android-emulator.yml` is a worked example — enable KVM, create the AVD to the minimums above,
-  install Obsidian from its published APK, run the Android project — and on the host whose wedge is
-  described above, the identical AVD and arguments survived 300s there and the suite passed.
+- **On an AMD Windows host, check which accelerator is actually in use.** The emulator normally runs through WHPX, Microsoft's generic hypervisor API. Google also ships the *Android Emulator hypervisor driver* (AEHD) for exactly this reason — its README describes it as the way "to run Android Emulator on Windows without Windows Hypervisor Platform (WHPX)". `emulator -accel-check` reports which one you have. AEHD cannot coexist with Hyper-V, so switching to it means disabling the hypervisor (`bcdedit /set hypervisorlaunchtype off`, elevated, plus a reboot) and losing Hyper-V VMs, WSL2 and Windows Sandbox until you set it back to `auto`.
+- **A Linux CI runner with KVM is the reliable escape hatch, and it is proven rather than proposed.** GitHub-hosted `ubuntu-latest` runners can run the emulator once `/dev/kvm` is made accessible, which makes the Android leg something CI does even when no local machine can. This repo's own `validate-android-emulator.yml` is a worked example — enable KVM, create the AVD to the minimums above, install Obsidian from its published APK, run the Android project — and on the host whose wedge is described above, the identical AVD and arguments survived 300s there and the suite passed.
 
 ### "The Appium server ... cannot see Android device ..., although this host's adb can"
 
-An Appium server that has been listening for a while can go **stale**: it still answers `/status` with
-`ready: true`, but its internal `adb` can no longer enumerate devices. Every session then fails with
-Appium's own `Could not find a connected Android device in 20000ms` — which blames the device, so the
-obvious next step (`adb devices`) lists the device instantly and tells you nothing. The device is fine; the
-server is wedged.
+An Appium server that has been listening for a while can go **stale**: it still answers `/status` with `ready: true`, but its internal `adb` can no longer enumerate devices. Every session then fails with Appium's own `Could not find a connected Android device in 20000ms` — which blames the device, so the obvious next step (`adb devices`) lists the device instantly and tells you nothing. The device is fine; the server is wedged.
 
-The harness cross-checks the two before believing that error. When this host's `adb` *can* see the device
-and Appium cannot, it says so and names the server instead:
+The harness cross-checks the two before believing that error. When this host's `adb` *can* see the device and Appium cannot, it says so and names the server instead:
 
-- **The harness started that server itself, in an earlier run** — it restarts it for you (kills it, waits
-  for the port to go quiet, starts a fresh one, retries the session once) and the run continues. Nothing to
-  do.
-- **The server is yours** (`shouldAutoStartAppium: false`, or simply one you started by hand) — it is
-  reported, never killed. Restart it yourself and re-run.
+- **The harness started that server itself, in an earlier run** — it restarts it for you (kills it, waits for the port to go quiet, starts a fresh one, retries the session once) and the run continues. Nothing to do.
+- **The server is yours** (`shouldAutoStartAppium: false`, or simply one you started by hand) — it is reported, never killed. Restart it yourself and re-run.
 
-The preflight also logs the provenance of any server it adopts — *"started by an earlier run of this
-harness, pid N, up for Ns"* or *"not started by this harness"* — so a long-lived leftover is visible before
-anything goes wrong.
+The preflight also logs the provenance of any server it adopts — *"started by an earlier run of this harness, pid N, up for Ns"* or *"not started by this harness"* — so a long-lived leftover is visible before anything goes wrong.
 
 ### "Integration setup for transport ... failed, so its tests cannot run"
 
-Every test in the project reports this when the project's global setup failed — the device was not
-found, Appium never came up, the vault could not be pushed. It is not the defect itself: the cause is
-the `Original error:` it quotes, and the setup logged it once, in full, above the first test.
+Every test in the project reports this when the project's global setup failed — the device was not found, Appium never came up, the vault could not be pushed. It is not the defect itself: the cause is the `Original error:` it quotes, and the setup logged it once, in full, above the first test.
 
-Only that project is affected; other projects in the same run still execute. Nothing in the failed
-project runs against Obsidian, which is the point — with no transport published, a worker would
-otherwise build the default **desktop** instance and an Android suite would quietly prove itself on
-desktop, then fail on an unrelated CDP error naming neither the device nor the setup.
+Only that project is affected; other projects in the same run still execute. Nothing in the failed project runs against Obsidian, which is the point — with no transport published, a worker would otherwise build the default **desktop** instance and an Android suite would quietly prove itself on desktop, then fail on an unrelated CDP error naming neither the device nor the setup.
 
-A related message, `No CDP endpoint configured: the owned Obsidian instance has not been launched
-yet`, means a worker reached the desktop transport with nothing prepared for it — either that same
-failed setup, or an integration project missing `obsidian-integration-testing/vitest-setup` from its
-`setupFiles`.
+A related message, `No CDP endpoint configured: the owned Obsidian instance has not been launched yet`, means a worker reached the desktop transport with nothing prepared for it — either that same failed setup, or an integration project missing `obsidian-integration-testing/vitest-setup` from its `setupFiles`.
 
 ### "Obsidian layout did not become ready" / "Obsidian Mobile did not finish starting"
 
-Registering a vault reloads the page, triggering a full Obsidian re-init — reopen the vault and reload
-every plugin, the heaviest startup step. That reload is waited out as **two** budgets, so the message
-tells you which half ran out: `appStartTimeoutInMilliseconds` covers the app's own cold start (up to
-`globalThis.app` existing), and only then does `layoutReadyTimeoutInMilliseconds` start ticking on
-Obsidian's own work.
+Registering a vault reloads the page, triggering a full Obsidian re-init — reopen the vault and reload every plugin, the heaviest startup step. That reload is waited out as **two** budgets, so the message tells you which half ran out: `appStartTimeoutInMilliseconds` covers the app's own cold start (up to `globalThis.app` existing), and only then does `layoutReadyTimeoutInMilliseconds` start ticking on Obsidian's own work.
 
-**Read the numbers in the message before raising anything.** It reports the furthest startup milestone
-reached, how many times the WebView was probed, and the slowest probe round-trip. A budget that ran out
-after a *handful* of probes each taking tens of seconds was not spent on Obsidian at all — it was spent
-on a busy guest inflating every round-trip, and the fix is to let the emulator settle
-(`deviceIdleTimeoutInMilliseconds`), not to enlarge the budget. Many *fast* probes stalled at one
-milestone is the opposite reading, and there the budget is the right knob.
+**Read the numbers in the message before raising anything.** It reports the furthest startup milestone reached, how many times the WebView was probed, and the slowest probe round-trip. A budget that ran out after a *handful* of probes each taking tens of seconds was not spent on Obsidian at all — it was spent on a busy guest inflating every round-trip, and the fix is to let the emulator settle (`deviceIdleTimeoutInMilliseconds`), not to enlarge the budget. Many *fast* probes stalled at one milestone is the opposite reading, and there the budget is the right knob.
 
-There is a third reading, and it does not look like a timeout at all. A test whose network-dependent
-assertion comes back **empty rather than failing** — an empty list, a panel with no rows — was very likely
-run against a device with no route: a cold emulator's default network is not created and validated until
-some 80s into the guest's uptime, well after the idle gate clears. The harness waits that out by default
-(`networkReadyTimeoutInMilliseconds`) and logs a warning naming the missing network when it gives up, so
-check the harness log above the failure before reading the assertion at face value.
+There is a third reading, and it does not look like a timeout at all. A test whose network-dependent assertion comes back **empty rather than failing** — an empty list, a panel with no rows — was very likely run against a device with no route: a cold emulator's default network is not created and validated until some 80s into the guest's uptime, well after the idle gate clears. The harness waits that out by default (`networkReadyTimeoutInMilliseconds`) and logs a warning naming the missing network when it gives up, so check the harness log above the failure before reading the assertion at face value.
 
-Either way, run the health check in [AVD provisioning](#avd-provisioning) first — a full `/data`
-presents exactly like this — and bring the AVD up to the minimums there. A raised budget is headroom,
-not a substitute for adequate provisioning.
+Either way, run the health check in [AVD provisioning](#avd-provisioning) first — a full `/data` presents exactly like this — and bring the AVD up to the minimums there. A raised budget is headroom, not a substitute for adequate provisioning.
 
 ## Related
 
