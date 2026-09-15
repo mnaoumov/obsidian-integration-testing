@@ -13,7 +13,7 @@ describe('getVersionMetadata', () => {
 
   it('records 1.13.0 as needing installer 1.6.5 (silent-fallback correction, not the false-positive 1.1.9)', () => {
     // 1.13.0 silently falls back to the installer's bundled asar below 1.6.5; verified over CDP that it
-    // Does not actually run 1.13.0 on installer 1.1.9. See CLAUDE.md L20's silent-fallback caveat.
+    // does not actually run 1.13.0 on installer 1.1.9. See CLAUDE.md L20's silent-fallback caveat.
     expect(getVersionMetadata('1.13.0')?.minRunnableInstallerVersion).toBe('1.6.5');
   });
 

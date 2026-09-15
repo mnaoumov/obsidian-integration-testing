@@ -26,8 +26,8 @@ import { connectToCdp } from './connect-to-cdp.ts';
 import { resolveConcreteVersion } from './obsidian-version-switch.ts';
 
 // Downloading + extracting a multi-hundred-MB installer, then launching Electron
-// And waiting for CDP plus the vault to open. GitHub's release CDN can be slow,
-// So give it a wide margin (mirrors the installer download test).
+// and waiting for CDP plus the vault to open. GitHub's release CDN can be slow,
+// so give it a wide margin (mirrors the installer download test).
 const BOOT_TIMEOUT_IN_MILLISECONDS = 1_800_000;
 
 const SHOULD_RUN_BOOT_TEST = process.env['OBSIDIAN_TEST_INSTALLER_BOOT'] === '1';

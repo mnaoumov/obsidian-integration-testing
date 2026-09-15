@@ -335,8 +335,8 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 
   // The headless defaults go only into a vault the harness made — the same
   // `options.vault === undefined` discriminator the disposal above turns on. A
-  // Caller-supplied vault is a real one the user keeps, and a debugging session
-  // Has no business rewriting its settings.
+  // caller-supplied vault is a real one the user keeps, and a debugging session
+  // has no business rewriting its settings.
   if (options?.vault === undefined) {
     await ensureHeadlessVaultConfig({
       configDirectory: resolveOwnedConfigDirectory(transportOptions),
@@ -346,8 +346,8 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   }
 
   // Registering the vault is what launches the owned instance (provisions the
-  // Asar, opens the vault, and bootstraps the helper namespace), or opens the
-  // Vault in the attached instance.
+  // asar, opens the vault, and bootstraps the helper namespace), or opens the
+  // vault in the attached instance.
   await vault.register(transport);
 
   const { host, port } = resolveEndpoint(transport, options);
@@ -364,8 +364,8 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
 
     async captureScreenshot(params?: Except<CaptureScreenshotParams, 'cwd'>): Promise<Uint8Array> {
       // Every transport `connectToCdp` builds is a DesktopCdpTransport, which
-      // Implements the optional method — but the interface still types it
-      // Optional, so the absence is reported rather than silently thrown at.
+      // implements the optional method — but the interface still types it
+      // optional, so the absence is reported rather than silently thrown at.
       if (!transport.captureScreenshot) {
         throw new Error('connectToCdp: this transport cannot capture screenshots.');
       }
@@ -376,8 +376,8 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
     async dispose(): Promise<void> {
       try {
         // The vault carries `shouldRemoveVaultOnDispose` itself (handed to its constructor above), so
-        // This is one call rather than a branch: it always unregisters, and removes the directory only
-        // When that flag says to.
+        // this is one call rather than a branch: it always unregisters, and removes the directory only
+        // when that flag says to.
         await vault.dispose(transport);
       } finally {
         await transport.dispose?.();

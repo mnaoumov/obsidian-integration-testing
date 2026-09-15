@@ -32,13 +32,13 @@ import {
 import { connectToCdp } from './connect-to-cdp.ts';
 
 // Downloading + extracting the old installer shell, then launching Electron and
-// Waiting for CDP plus the vault to open. Give it a wide margin like the other
-// Installer boot tests.
+// waiting for CDP plus the vault to open. Give it a wide margin like the other
+// installer boot tests.
 const NAG_BOOT_TIMEOUT_IN_MILLISECONDS = 1_800_000;
 
 // A modern app that recommends a recent Electron, pinned onto an old installer
-// Shell whose bundled Electron is below that recommendation — but new enough that
-// The app still boots (verified: 1.13.1 runs on the 1.1.9 shell).
+// shell whose bundled Electron is below that recommendation — but new enough that
+// the app still boots (verified: 1.13.1 runs on the 1.1.9 shell).
 const APP_VERSION = '1.13.1';
 const OLD_INSTALLER_VERSION = '1.1.9';
 const RECOMMENDED_ELECTRON_VERSION = '28.2.3';

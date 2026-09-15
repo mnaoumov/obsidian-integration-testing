@@ -45,12 +45,12 @@ import {
 import { connectToCdp } from './connect-to-cdp.ts';
 
 // Downloading + extracting the old installer shell, then launching Electron and
-// Waiting for CDP plus the vault to open. Give it a wide margin like the other
-// Installer boot tests.
+// waiting for CDP plus the vault to open. Give it a wide margin like the other
+// installer boot tests.
 const OLD_VAULT_OPEN_BOOT_TIMEOUT_IN_MILLISECONDS = 1_800_000;
 
 // The oldest supported installer — exercises the whole old-version stack (see the
-// File overview).
+// file overview).
 const OLD_VERSION = '0.6.4';
 
 const SHOULD_RUN = process.env['OBSIDIAN_TEST_OLD_VAULT_OPEN'] === '1';
@@ -68,9 +68,9 @@ describe.runIf(SHOULD_RUN)('force auto-open + full usability of the owned vault 
       });
       try {
         // Reaching here already proves readiness — the owned instance opened the
-        // Seeded vault rather than sticking on the selector (which would time out).
+        // seeded vault rather than sticking on the selector (which would time out).
         // Run an app-only closure end-to-end (evalWrapper must tolerate the missing
-        // Community-plugin API) and confirm it sees the seeded vault.
+        // community-plugin API) and confirm it sees the seeded vault.
         const vaultName = await connection.evalInObsidian({ callback: ({ app }) => app.vault.getName() });
         expect(vaultName).toBe(basename(connection.vault.path));
       } finally {

@@ -303,9 +303,9 @@ describe('plugin load detection', () => {
 
 describe('isDesktopOnly check', () => {
   // These cases exercise `checkIsMobileTransport`, the predicate the setup now consults BEFORE creating a
-  // Transport, rather than re-deriving mobile-ness from a live one. That ordering is the whole point: the
-  // Old call site read `transport.isMobile`, which meant booting the AVD and Appium (~70 s) to learn what
-  // The options already said, then tearing it all down again.
+  // transport, rather than re-deriving mobile-ness from a live one. That ordering is the whole point: the
+  // old call site read `transport.isMobile`, which meant booting the AVD and Appium (~70 s) to learn what
+  // the options already said, then tearing it all down again.
   it('should reject mobile transport for desktop-only plugins', () => {
     const manifest = JSON.parse(createManifest({ id: 'desktop-only', isDesktopOnly: true })) as ManifestCheckParams;
 
@@ -327,7 +327,7 @@ describe('isDesktopOnly check', () => {
     expect(shouldReject).toBe(false);
 
     // And the predicate still agrees with the live transport it replaced -- if these two ever diverge the
-    // Setup skips the wrong runs, which is the one way this shortcut could be silently wrong.
+    // setup skips the wrong runs, which is the one way this shortcut could be silently wrong.
     const transport = await getOrCreateTransport(inject('obsidianTransport'));
     expect(transport.isMobile).toBe(checkIsMobileTransport({ type: 'obsidian-cdp' }));
   });

@@ -309,20 +309,20 @@ const NO_OUTPUT = '(no output)';
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Old (Electron 10-era) Obsidian occasionally boots without the workspace ever
-// Initializing, so the vault never becomes ready. A fresh instance is an
-// Independent chance; relaunch up to this many times before giving up.
+// initializing, so the vault never becomes ready. A fresh instance is an
+// independent chance; relaunch up to this many times before giving up.
 const OWNED_LAUNCH_MAX_ATTEMPTS = 3;
 // Brief settle before a relaunch so the killed instance's memory/handles are
-// Reclaimed before the next boot — improves the odds on a loaded machine.
+// reclaimed before the next boot — improves the odds on a loaded machine.
 const OWNED_RELAUNCH_SETTLE_IN_MILLISECONDS = 3000;
 const VAULT_CLOSE_DELAY_IN_MILLISECONDS = 1000;
 const AUTO_START_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const AUTO_START_TIMEOUT_IN_MILLISECONDS = 30_000;
 const INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS = 500;
 // How long to wait for the starter screen's renderer to expose `localStorage`
-// And `window.electron.ipcRenderer` — the two things the config-folder override
-// Needs. CDP already serves a page target by the time the launch resolves, so
-// This only covers the renderer finishing its own script evaluation.
+// and `window.electron.ipcRenderer` — the two things the config-folder override
+// needs. CDP already serves a page target by the time the launch resolves, so
+// this only covers the renderer finishing its own script evaluation.
 const STARTER_SCREEN_TIMEOUT_IN_MILLISECONDS = 30_000;
 const STARTER_SCREEN_POLL_INTERVAL_IN_MILLISECONDS = 250;
 const OWNED_WINDOW_OFFSCREEN_MARGIN_IN_PIXELS = 200;
@@ -385,14 +385,14 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public constructor(config?: DesktopCdpTransportConfig) {
     // Destructure with per-field defaults (each applies when the field is omitted,
-    // Exactly like the former `config?.x ?? default`) so the constructor stays
-    // Under the cyclomatic-complexity limit as fields are added.
+    // exactly like the former `config?.x ?? default`) so the constructor stays
+    // under the cyclomatic-complexity limit as fields are added.
     const {
       cdpHost = 'localhost',
       cdpPort,
       // A test's closure travels as one `Runtime.evaluate` CDP command, so the
-      // Command budget IS the per-eval cap on this transport — hence the shared
-      // Constant rather than a desktop-specific number that happens to match.
+      // command budget IS the per-eval cap on this transport — hence the shared
+      // constant rather than a desktop-specific number that happens to match.
       commandTimeoutInMilliseconds = DEFAULT_EVAL_CAP_IN_MILLISECONDS,
       configDirectory,
       deadBootGraceInMilliseconds = DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS,
@@ -442,7 +442,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     try {
       const response = await this.sendCommand(ws, 'Page.captureScreenshot', {
         // The override already sizes the viewport, so capturing beyond it would
-        // Re-introduce the scroll height the override exists to pin down.
+        // re-introduce the scroll height the override exists to pin down.
         captureBeyondViewport: false,
         format: 'png'
       });
@@ -626,9 +626,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
   public async preflightCheck(vaultPath: string): Promise<void> {
     if (this.ownedConfig || this.isHarnessOwnedInstance) {
       // Owned instance (launched here) or a worker attached to one: readiness is
-      // Guaranteed by the global setup's registerVault, and the vault lives in
-      // The isolated config — there is nothing to verify against the user-scope
-      // Registry.
+      // guaranteed by the global setup's registerVault, and the vault lives in
+      // the isolated config — there is nothing to verify against the user-scope
+      // registry.
       return;
     }
 
@@ -667,7 +667,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     await this.openVaultInRunningInstance(vaultPath);
     // Recorded only on success, and only here: this is the one branch that opens
     // A window in an instance this transport did not launch, so it is the one
-    // Branch that earns the right to close one (see `unregisterVault`).
+    // branch that earns the right to close one (see `unregisterVault`).
     this.selfRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
   }
 
@@ -727,7 +727,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     if (targets.length > 0) {
       // The `vault-remove` IPC is sent through a still-open window (`targets[0]`) —
       // `vaultPath`'s own window was just destroyed above, so bootstrap the namespace
-      // On the existing window's OWN base path, not on `vaultPath` (which no longer has
+      // on the existing window's OWN base path, not on `vaultPath` (which no longer has
       // A live target to match).
       const removalTarget = ensureNonNullable(targets[0]);
       const removalBasePath = await this.probeVaultPath(removalTarget);
@@ -922,7 +922,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     // Fails fast (when enabled) on a silent asar fallback — MUST run before the
-    // Best-effort nag and outside any try/catch so the throw escapes the poll.
+    // best-effort nag and outside any try/catch so the throw escapes the poll.
     this.checkRuntimeAsarFallback(appVersion);
     this.applyElectronCompatibility(appVersion, actualElectronVersion);
   }
@@ -1100,7 +1100,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       // `this.cdpUrl` is still empty -- which used to make this a `fetch('/json')` and fail with
       // `Failed to parse URL from /json`, an error naming neither the transport nor what went wrong.
       // A transport in this state is always a symptom of something upstream (a failed global setup, a
-      // Worker with no registered resolvers -- L9), so say so rather than report a malformed URL.
+      // worker with no registered resolvers -- L9), so say so rather than report a malformed URL.
       throw new Error(
         'No CDP endpoint configured: the owned Obsidian instance has not been launched yet, and no `port` '
           + 'was given to attach to a running one. A test worker in this state usually means its global setup '
@@ -1220,13 +1220,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private async moveOwnedWindowOffscreen(): Promise<void> {
     // Resolve the Electron remote bridge two ways so BOTH modern and old Obsidian
-    // Can be moved off-screen: modern injects `window.electron.remote`; old
-    // Versions (no `window.electron`) still expose the built-in `remote` module via
+    // can be moved off-screen: modern injects `window.electron.remote`; old
+    // versions (no `window.electron`) still expose the built-in `remote` module via
     // `require('electron')` in the node-integrated renderer (removed from Electron
     // 14+, but present on the Electron 8-13 shells old Obsidian ships). Returning
     // `moved` on the first success is important on Electron 10-era builds: polling
-    // On without a resolvable bridge hammers the renderer with CDP round-trips
-    // During boot and intermittently prevents the workspace from initializing.
+    // on without a resolvable bridge hammers the renderer with CDP round-trips
+    // during boot and intermittently prevents the workspace from initializing.
     const moveExpression = `(() => {
       let remote = (window.electron && window.electron.remote) || null;
       if (!remote) {
@@ -1339,12 +1339,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     // The `vault-open` IPC is sent through an EXISTING window (`targets[0]`), so the
-    // Helper namespace must be bootstrapped on THAT window — not on `vaultPath`, whose
-    // Window does not exist yet. Bootstrapping against `vaultPath` here would route
-    // Through `findTargetForVault(vaultPath)` with only the existing window present and
-    // Poison the connection cache (label `vaultPath`, socket → the existing window), so
-    // Every later eval for `vaultPath` would mis-route to the existing window. Probe the
-    // Existing window's own base path and bootstrap against that instead.
+    // helper namespace must be bootstrapped on THAT window — not on `vaultPath`, whose
+    // window does not exist yet. Bootstrapping against `vaultPath` here would route
+    // through `findTargetForVault(vaultPath)` with only the existing window present and
+    // poison the connection cache (label `vaultPath`, socket → the existing window), so
+    // every later eval for `vaultPath` would mis-route to the existing window. Probe the
+    // existing window's own base path and bootstrap against that instead.
     const existingTarget = ensureNonNullable(targets[0]);
     const existingVaultPath = await this.probeVaultPath(existingTarget);
     const ipcWs = await this.connectToTarget(existingTarget);
@@ -1434,7 +1434,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     try {
       const response = await this.sendCommand(ws, 'Runtime.evaluate', {
         // Old Obsidian versions (e.g. 0.6.x) predate the `getBasePath()` method but
-        // Expose the `basePath` property; the method exists from ~0.9.20 onward.
+        // expose the `basePath` property; the method exists from ~0.9.20 onward.
         expression: 'app.vault.adapter.getBasePath ? app.vault.adapter.getBasePath() : app.vault.adapter.basePath',
         returnByValue: true
       });
@@ -1463,17 +1463,17 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
 
     // A config-folder override is a `localStorage` entry, and `localStorage` needs a
-    // Renderer, so the vault must NOT auto-open: the instance boots to the starter
-    // Screen, the override is written there, and the vault is opened from it over
+    // renderer, so the vault must NOT auto-open: the instance boots to the starter
+    // screen, the override is written there, and the vault is opened from it over
     // IPC. Obsidian reuses the pre-registered id for that open (verified on 1.13.7),
-    // Which is what makes the `<vaultId>-config` key name knowable before launch.
+    // which is what makes the `<vaultId>-config` key name knowable before launch.
     const shouldAutoOpenVault = this.configDirectory === undefined;
 
     // Relaunch-retry: some old (Electron 10-era) Obsidian builds intermittently
-    // Boot with `window.app` present but the workspace never initializing, so the
-    // Vault never becomes ready. A fresh instance is an independent chance. A
-    // Deterministic failure (dead boot, silent asar fallback) is re-thrown at once —
-    // Retrying it only wastes the readiness timeout.
+    // boot with `window.app` present but the workspace never initializing, so the
+    // vault never becomes ready. A fresh instance is an independent chance. A
+    // deterministic failure (dead boot, silent asar fallback) is re-thrown at once —
+    // retrying it only wastes the readiness timeout.
     let lastError: unknown;
     for (let attempt = 1; attempt <= OWNED_LAUNCH_MAX_ATTEMPTS; attempt++) {
       await this.killRunningOwnedInstance();
@@ -1483,8 +1483,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
       // Re-seeded every attempt rather than once before the loop: Obsidian rewrites
       // `obsidian.json` as it opens a vault (it stamps the entry `open: true`), so a
-      // Relaunch that inherited the previous attempt's file would sail past the
-      // Starter screen the override needs.
+      // relaunch that inherited the previous attempt's file would sail past the
+      // starter screen the override needs.
       const obsidianJson = buildOwnedObsidianJson({ shouldAutoOpenVault, ts: Date.now(), vaultId, vaultPath });
       writeFileSync(join(config.userDataDirectory, 'obsidian.json'), JSON.stringify(obsidianJson));
 
@@ -1509,7 +1509,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       try {
         if (!shouldAutoOpenVault) {
           // `shouldAutoOpenVault` is a `const` derived from `this.configDirectory === undefined`,
-          // So TypeScript narrows the field to `string` in this branch on its own.
+          // so TypeScript narrows the field to `string` in this branch on its own.
           await this.openVaultFromStarterScreen(vaultPath, vaultId, this.configDirectory);
         }
         await this.waitForOwnedVaultReady(vaultPath);
@@ -1518,7 +1518,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         return;
       } catch (error: unknown) {
         // A config-folder fallback is deterministic — the name is either one Obsidian
-        // Accepts or it is not — so relaunching only burns another boot.
+        // accepts or it is not — so relaunching only burns another boot.
         if (
           error instanceof RendererFailedToInitializeError
           || error instanceof SilentAsarFallbackError
@@ -1637,9 +1637,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
         break;
       } catch {
         // The vault is not ready yet — also drop the cached CDP connection before
-        // Retrying. Old (Electron 10-era) Obsidian reloads the owned window during
-        // Boot, which can leave the cached WebSocket pinned to a stale execution
-        // Context; reconnecting each attempt re-binds to the live context.
+        // retrying. Old (Electron 10-era) Obsidian reloads the owned window during
+        // boot, which can leave the cached WebSocket pinned to a stale execution
+        // context; reconnecting each attempt re-binds to the live context.
         this.disconnect();
       }
 
@@ -1666,8 +1666,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     // The vault is ready. Run the post-boot compatibility checks here — OUTSIDE the
-    // Poll's try/catch — so a SilentAsarFallbackError fails fast instead of being
-    // Swallowed as "not ready yet" and looping until the readiness timeout.
+    // poll's try/catch — so a SilentAsarFallbackError fails fast instead of being
+    // swallowed as "not ready yet" and looping until the readiness timeout.
     await this.checkRuntimeCompatibility(vaultPath);
     log('[cdp-transport] Owned vault is ready.');
   }

@@ -67,7 +67,7 @@ describe('the Android per-eval cap', () => {
   });
 
   // The same guard the sibling Android suite carries: without a registered transport resolver the harness
-  // Falls back to the desktop owned-CDP default, and this file would then prove the desktop path twice.
+  // falls back to the desktop owned-CDP default, and this file would then prove the desktop path twice.
   it('should actually be running on mobile', async () => {
     const isMobile = await evalInObsidian({
       callback({ obsidianModule }): boolean {
@@ -109,10 +109,10 @@ describe('the Android per-eval cap', () => {
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // A capped eval must not take the session with it, or every later Android test fails for a reason that
-  // Has nothing to do with what it is testing. This is not a formality: the abandoned Execute Script is
-  // Still in flight on the wire, and nothing cancels it — `Runtime.terminateExecution` over the
-  // Transport's own CDP channel was measured releasing nothing — so the only evidence that abandoning is
-  // Safe is this assertion.
+  // has nothing to do with what it is testing. This is not a formality: the abandoned Execute Script is
+  // still in flight on the wire, and nothing cancels it — `Runtime.terminateExecution` over the
+  // transport's own CDP channel was measured releasing nothing — so the only evidence that abandoning is
+  // safe is this assertion.
   it('should leave the session usable for the next evaluation', async () => {
     const markdownPaths = await evalInObsidian({
       callback({ app }): string[] {

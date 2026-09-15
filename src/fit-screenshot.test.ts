@@ -31,7 +31,7 @@ describe('computeFitToCanvas', () => {
 
   it('should scale 1344x2992 to 718 wide, the nearest width that splits evenly', () => {
     // 1344 * (1600 / 2992) = 718.716..., and 719 would leave a 181px remainder
-    // That cannot halve. 718 is nearer the true width than 720.
+    // that cannot halve. 718 is nearer the true width than 720.
     const geometry = computeFitToCanvas({ ...PIXEL_10_PRO_XL, ...STORE_MOBILE_CANVAS });
     expect(geometry.scaledWidthInPixels).toBe(718);
   });
@@ -52,7 +52,7 @@ describe('computeFitToCanvas', () => {
 
   it('should always produce an even remainder, so the margins can be equal', () => {
     // Sweep a range of source widths: every one must split evenly, which is the
-    // Property an asymmetric pillarbox would violate.
+    // property an asymmetric pillarbox would violate.
     for (let sourceWidthInPixels = 600; sourceWidthInPixels <= 1400; sourceWidthInPixels++) {
       const geometry = computeFitToCanvas({
         ...STORE_MOBILE_CANVAS,
@@ -119,7 +119,7 @@ describe('fitScreenshotToCanvas', () => {
 
   it('should fill the margins from the image rather than leaving them empty', async () => {
     // A red source: the blurred cover fill must make the margin columns red
-    // Too, which is what distinguishes this from a transparent pillarbox.
+    // too, which is what distinguishes this from a transparent pillarbox.
     const source = await buildSolidPng(1344, 2992);
     const fitted = await fitScreenshotToCanvas(source, STORE_MOBILE_CANVAS);
 

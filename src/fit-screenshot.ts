@@ -207,7 +207,7 @@ export async function fitScreenshotToCanvas(bytes: Uint8Array, options: FitScree
   });
 
   // The background is the same frame blown up to COVER the canvas and blurred,
-  // So the margins carry the screenshot's own colors instead of a flat bar.
+  // so the margins carry the screenshot's own colors instead of a flat bar.
   const background = await sharp(bytes)
     .resize(canvasWidthInPixels, canvasHeightInPixels, { fit: 'cover' })
     .blur(blurSigma)
@@ -244,6 +244,6 @@ function roundToMatchingParity(value: number, target: number): number {
   }
 
   // `rounded` leaves an odd remainder, so step to whichever neighbor is closer
-  // To the true value; both have the parity `rounded` lacks.
+  // to the true value; both have the parity `rounded` lacks.
   return value >= rounded ? rounded + 1 : rounded - 1;
 }

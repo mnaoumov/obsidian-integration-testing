@@ -72,8 +72,8 @@ describe('mobile trusted input', () => {
   });
 
   // Guard, not a feature test. Without a registered transport resolver the harness silently falls back to
-  // The desktop owned-CDP default (observed 2026-08-30), and this whole suite would then pass on desktop
-  // While claiming to prove something about Android. Assert the platform before asserting anything else.
+  // the desktop owned-CDP default (observed 2026-08-30), and this whole suite would then pass on desktop
+  // while claiming to prove something about Android. Assert the platform before asserting anything else.
   it('should actually be running on mobile', async () => {
     const isMobile = await evalInObsidian({
       callback({ obsidianModule }): boolean {
@@ -88,8 +88,8 @@ describe('mobile trusted input', () => {
   // The second guard, and the reason this file once ran against an EMPTY vault for its whole life:
   // `populate` writes to the HOST filesystem, while the app on Android opens the device's copy. Until
   // `register` learned to push the directory across, the note below never arrived — and nothing raised an
-  // Error, because no assertion in this file read the vault's contents. Asserting that the seeded file is
-  // Visible from inside the app is what keeps a re-broken push loud instead of silent.
+  // error, because no assertion in this file read the vault's contents. Asserting that the seeded file is
+  // visible from inside the app is what keeps a re-broken push loud instead of silent.
   it('should open the vault the harness populated, not an empty one', async () => {
     const markdownPaths = await evalInObsidian({
       callback({ app }): string[] {
@@ -138,10 +138,10 @@ describe('mobile trusted input', () => {
     expect(result.hasOnlyTrustedEvents).toBe(true);
 
     // COUNTS, not `toContain`. A tap is ONE of each event, and the presence-only form this replaces
-    // Passed just as happily on the TWO `pointerdown` / `touchstart` pairs the dispatch route actually
-    // Delivered — which is how a doubled tap shipped unnoticed and toggled a consumer's panel open and
-    // Straight back shut. Multiplicity is the property that was never asserted, so it is what is
-    // Asserted here.
+    // passed just as happily on the TWO `pointerdown` / `touchstart` pairs the dispatch route actually
+    // delivered — which is how a doubled tap shipped unnoticed and toggled a consumer's panel open and
+    // straight back shut. Multiplicity is the property that was never asserted, so it is what is
+    // asserted here.
     expect(countByType(result.events)).toStrictEqual({
       click: 1,
       pointerdown: 1,
@@ -179,7 +179,7 @@ describe('mobile trusted input', () => {
 
   it('should obey real hit-testing, so a covered element is NOT clicked', async () => {
     // The mutation check established: a trusted tap goes to whatever is on top at that point, while a
-    // Dispatched event reaches its target through any overlay. If this passes, the tap is not a dispatch.
+    // dispatched event reaches its target through any overlay. If this passes, the tap is not a dispatch.
     const wasCoveredElementClicked = await evalInObsidian({
       async callback({ lib }): Promise<boolean> {
         const target = document.body.createDiv();
@@ -208,18 +208,18 @@ describe('mobile trusted input', () => {
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // The test whose absence let a broken long-press ship. `button: 'right'` used to be a dispatched touch
-  // Pair held apart by a dwell, which Android's gesture recognizer never sees — so it was classified as a
-  // Tap, and a long press on a file OPENED it instead of opening its menu. Every other assertion in this
-  // File still passed, because none of them pressed anything for longer than an instant.
+  // pair held apart by a dwell, which Android's gesture recognizer never sees — so it was classified as a
+  // tap, and a long press on a file OPENED it instead of opening its menu. Every other assertion in this
+  // file still passed, because none of them pressed anything for longer than an instant.
   //
   // It presses a REAL Obsidian element rather than a probe `div` on purpose: a synthetic element has no
   // Obsidian handler, so it can only ever show that the `contextmenu` arrived, never that a consumer's
-  // Menu opens from it. Both halves are asserted here — the trusted event AND the menu it produced.
+  // menu opens from it. Both halves are asserted here — the trusted event AND the menu it produced.
   it('should open a REAL Obsidian menu from a long press, rather than tapping the element', async () => {
     const result = await evalInObsidian({
       async callback({ app, lib }): Promise<LongPressResult> {
         // Sized against the transport's 30s per-eval cap: four attempts at 1.5s is 6s of drawer opening,
-        // Which leaves the 600ms press and the 5s menu wait below it with room to spare.
+        // which leaves the 600ms press and the 5s menu wait below it with room to spare.
         const DRAWER_OPEN_ATTEMPT_COUNT = 4;
         const DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS = 1500;
 
@@ -230,10 +230,10 @@ describe('mobile trusted input', () => {
         }
 
         // The item must be ON SCREEN, not merely laid out. The drawer slides in from the left, so during
-        // The animation an item already has its full width at a NEGATIVE `left` — and the gesture's centre
-        // Point is then off the viewport, which `Input.synthesizeTapGesture` rejects with "Position out of
-        // Bounds" rather than pressing anything. Waiting on the centre point rather than on the width is
-        // What makes this wait for the drawer to arrive instead of merely to exist.
+        // the animation an item already has its full width at a NEGATIVE `left` — and the gesture's centre
+        // point is then off the viewport, which `Input.synthesizeTapGesture` rejects with "Position out of
+        // bounds" rather than pressing anything. Waiting on the centre point rather than on the width is
+        // what makes this wait for the drawer to arrive instead of merely to exist.
         function findVisibleNavFile(): HTMLElement | undefined {
           return [...document.querySelectorAll<HTMLElement>('.nav-file-title')].find((item) => {
             const rect = item.getBoundingClientRect();
@@ -246,8 +246,8 @@ describe('mobile trusted input', () => {
         }
 
         // What the explorer actually rendered is the half of the answer a bare timeout throws away, and
-        // It is the half that decides: a drawer that never opened, a vault that came up empty, and an item
-        // Laid out past the viewport all produce the same silence otherwise.
+        // it is the half that decides: a drawer that never opened, a vault that came up empty, and an item
+        // laid out past the viewport all produce the same silence otherwise.
         function describeNavFiles(): string {
           const split = `left split ${app.workspace.leftSplit.collapsed ? 'collapsed' : 'expanded'}`;
           const explorer = leaf ? 'file-explorer leaf present' : 'NO file-explorer leaf';
@@ -266,16 +266,16 @@ describe('mobile trusted input', () => {
 
         // Opening the drawer ONCE is not enough, and re-asserting it on every poll is worse than useless.
         // Measured over six consecutive runs (2026-09-12): `expand()` takes — `collapsed` goes false and
-        // The drawer starts sliding in — and then, ~100ms later and unprompted, `collapsed` flips back to
-        // True and the drawer slides straight back out, ending hidden at 0x0 with its item still in the
+        // the drawer starts sliding in — and then, ~100ms later and unprompted, `collapsed` flips back to
+        // true and the drawer slides straight back out, ending hidden at 0x0 with its item still in the
         // DOM. `revealLeaf` is not the trigger: dropping that call leaves the timeline identical. Nor is
-        // It slowness, since five further seconds of polling never bring the drawer back.
+        // it slowness, since five further seconds of polling never bring the drawer back.
         //
         // The collapse is ONE-SHOT, so re-opening does work — but only from REST. `expand()` is NOT
-        // Idempotent mid-animation: called while the drawer is sliding it leaves the element hidden with
+        // idempotent mid-animation: called while the drawer is sliding it leaves the element hidden with
         // `collapsed === false`, stuck that way for the whole of the remaining wait. An attempt timeout
-        // Comfortably longer than the ~300ms slide is what guarantees the next `expand()` is issued from
-        // Rest rather than into a moving drawer.
+        // comfortably longer than the ~300ms slide is what guarantees the next `expand()` is issued from
+        // rest rather than into a moving drawer.
         for (let attempt = 1; attempt <= DRAWER_OPEN_ATTEMPT_COUNT; attempt++) {
           if (app.workspace.leftSplit.collapsed) {
             app.workspace.leftSplit.expand();
@@ -321,7 +321,7 @@ describe('mobile trusted input', () => {
             // Which events the press delivered is the whole diagnosis when no menu appears: a trusted
             // `contextmenu` with none of Obsidian's menu behind it is a consumer problem, while no
             // `contextmenu` at all is a gesture one. Losing that list to the timeout would leave the two
-            // Indistinguishable.
+            // indistinguishable.
             const observed = events.length === 0
               ? 'none'
               : events.map((event) => `${event.type}(isTrusted=${String(event.isTrusted)})`).join(', ');

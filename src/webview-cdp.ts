@@ -364,15 +364,15 @@ export function parseForwardedPort(forwardList: string, deviceId: string, socket
  */
 export function parseWebViewDevtoolsSocketName(procNetUnix: string, pid: string): string {
   // The whole match minus its leading `@`, rather than a named capture group: a mandatory group is always
-  // Present once the pattern has matched, so `match.groups?.['name'] ?? ''` would leave behind two branches
-  // No input can ever reach — and this file is measured against a 100% branch gate.
+  // present once the pattern has matched, so `match.groups?.['name'] ?? ''` would leave behind two branches
+  // no input can ever reach — and this file is measured against a 100% branch gate.
   const names = [
     ...new Set([...procNetUnix.matchAll(/@webview_devtools_remote_\w+/g)]
       .map((match) => match[0].slice('@'.length)))
   ];
 
   // Destructured rather than indexed for the same reason: `soleName` carries the "there is at least one"
-  // Fact in the type, so neither the empty check below nor the single-candidate one leaves a dead branch.
+  // fact in the type, so neither the empty check below nor the single-candidate one leaves a dead branch.
   const [soleName, ...otherNames] = names;
 
   if (soleName === undefined) {

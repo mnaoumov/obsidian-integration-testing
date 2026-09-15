@@ -57,8 +57,8 @@ exitIfScriptDisabled();
 
 // The built library reads its version table from the `OBSIDIAN_METADATA` global.
 // Esbuild's `define` inlines it at build time; under jiti that global is absent,
-// So the transitively-imported reader throws at load. Publish it first — the same
-// Shim `scripts/metadata-global-setup.ts` gives the test runners.
+// so the transitively-imported reader throws at load. Publish it first — the same
+// shim `scripts/metadata-global-setup.ts` gives the test runners.
 defineObsidianMetadataGlobal();
 
 /**
@@ -149,7 +149,7 @@ async function main(): Promise<void> {
     .filter((version) => shouldForce || table[version]?.runtimeVersions === undefined)
     // Newest-first so the most-relevant versions land first even if interrupted.
     // Old versions once stuck on the first-run vault selector; the owned-vault
-    // Auto-open (down to 0.6.4) now handles them, so they boot and collect too.
+    // auto-open (down to 0.6.4) now handles them, so they boot and collect too.
     .sort((aVersion, bVersion) => compareVersions(bVersion, aVersion));
 
   console.log(`Collecting process.versions for ${String(versions.length)} version(s) via the ${platformKey} installer.`);
@@ -184,7 +184,7 @@ async function main(): Promise<void> {
 
   if (outPath !== undefined) {
     // A fragment, not the catalog: the matrix jobs run concurrently on separate
-    // Runners and their results are merged in one place afterwards.
+    // runners and their results are merged in one place afterwards.
     await writeFile(outPath, `${JSON.stringify(collected, null, JSON_INDENT)}\n`);
     console.log(`Wrote ${String(Object.keys(collected).length)} collected version(s) to ${outPath}.`);
   }

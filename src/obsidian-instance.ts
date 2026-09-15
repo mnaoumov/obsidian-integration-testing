@@ -123,11 +123,11 @@ export async function launchOwnedObsidianInstance(
   const cdpUrl = `http://${cdpHost}:${String(port)}`;
 
   // Listen BEFORE spawning, so the renderer watchdog can never race the server
-  // Into a failed connect (which it treats as "no watchdog", leaving the instance alive).
+  // into a failed connect (which it treats as "no watchdog", leaving the instance alive).
   const livenessServer = await startParentLivenessServer();
 
   // Ports are recycled by the OS, so an older instance's death recorded on this
-  // Port would otherwise be read as this one's.
+  // port would otherwise be read as this one's.
   clearOwnedInstanceExitMarker(port);
 
   log(`[obsidian-instance] Launching owned Obsidian: userData=${params.userDataDirectory}, cdpPort=${String(port)}`);
@@ -154,8 +154,8 @@ export async function launchOwnedObsidianInstance(
   });
 
   // Set by `kill()`, so a death the harness ordered is never reported as one it
-  // Suffered — a marker left by a clean teardown would convict the next run's
-  // Healthy instance of an exit that never happened.
+  // suffered — a marker left by a clean teardown would convict the next run's
+  // healthy instance of an exit that never happened.
   let isKillExpected = false;
 
   child.once('exit', (code: null | number, signal: NodeJS.Signals | null) => {
@@ -165,7 +165,7 @@ export async function launchOwnedObsidianInstance(
     }
 
     // Loud on purpose. This one line is what separates a clean quit from a
-    // Crash, and its absence once cost a day of guessing.
+    // crash, and its absence once cost a day of guessing.
     log(`[obsidian-instance] !!! OWNED OBSIDIAN EXITED: pid=${String(child.pid)} code=${String(code)} signal=${String(signal)}`);
     writeOwnedInstanceExitMarker({
       code,

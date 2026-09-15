@@ -323,7 +323,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
   const shouldInstallPlugin = params?.installPlugin !== false;
 
   // Before the lock, the sweep and above all the transport: creating a mobile transport boots the AVD and
-  // Auto-starts Appium (~70 s) only to reach the same conclusion from `transport.isMobile` further down.
+  // auto-starts Appium (~70 s) only to reach the same conclusion from `transport.isMobile` further down.
   // Neither input needs a device -- the manifest is on disk and the discriminant already says mobile.
   await skipIfDesktopOnly({ label, projectRoot, shouldInstallPlugin, transportOptions });
 
@@ -380,7 +380,7 @@ export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResu
     });
 
     // `register` pushes the directory to the device before registering it, so every write above —
-    // The plugin copy, the populate map, and the headless config just written — reaches the app.
+    // the plugin copy, the populate map, and the headless config just written — reaches the app.
     log(`[integration-setup:${label}] Registering vault...`);
     await temporaryVault.register(transport);
     log(`[integration-setup:${label}] Vault registered.`);
@@ -580,8 +580,8 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
   const pluginId = manifestJson.id;
 
   // The same refusal {@link skipIfDesktopOnly} already made before the transport existed. Kept as the
-  // Backstop for any caller that reaches here another way, and throwing the same type so both paths read
-  // Identically in the log.
+  // backstop for any caller that reaches here another way, and throwing the same type so both paths read
+  // identically in the log.
   if (transport.isMobile && manifestJson.isDesktopOnly) {
     throw new DesktopOnlyPluginSkipError(pluginId);
   }

@@ -70,7 +70,7 @@ export const configs = defineConfig(
   ...getEslintConfigs(),
   ...getTseslintConfigs(),
   // Must follow `getTseslintConfigs`: it re-enables `projectService` for every file, which conflicts
-  // With the one-file `project` this needs.
+  // with the one-file `project` this needs.
   ...getAstroConfigTypeCheckingConfigs(),
   ...getStylisticConfigs(),
   ...getImportXConfigs(),

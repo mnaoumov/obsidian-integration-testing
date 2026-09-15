@@ -44,7 +44,7 @@ describe('buildOwnedObsidianJson', () => {
     const json = buildOwnedObsidianJson({ shouldAutoOpenVault: false, ts: TS, vaultId: VAULT_ID, vaultPath: VAULT_PATH });
 
     // Either marker left behind would auto-open the vault on the version that reads it,
-    // Destroying the starter-screen renderer the caller needs to write into.
+    // destroying the starter-screen renderer the caller needs to write into.
     expect(json.last_open).toBeUndefined();
     expect(json.vaults[VAULT_ID]?.open).toBeUndefined();
   });

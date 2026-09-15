@@ -36,8 +36,8 @@ describe('attaching to a harness-owned instance that is not there', () => {
 
     await expect(transportPromise).rejects.toThrow(OwnedInstanceExitedError);
     // No marker for this port, so the error says what it can and still names the
-    // Instance as the cause — the point of it is that the reader stops looking at
-    // Their own test for an explanation.
+    // instance as the cause — the point of it is that the reader stops looking at
+    // their own test for an explanation.
     await expect(transportPromise).rejects.toThrow('is gone');
     await expect(transportPromise).rejects.toThrow('these failures are not test results');
   });

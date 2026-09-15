@@ -40,10 +40,10 @@ import {
 import { resolveConcreteVersion } from './obsidian-version-switch.ts';
 
 // A multi-hundred-MB download plus a platform-specific extraction. GitHub's
-// Release-asset CDN can be very slow (observed ~0.3 MB/s), so the download alone
-// Can take ~18 min; give it a wide margin. No retry: re-pulling a multi-minute
-// Download to absorb a transient blip costs far more than it saves — re-run the
-// Opt-in test manually if it fails.
+// release-asset CDN can be very slow (observed ~0.3 MB/s), so the download alone
+// can take ~18 min; give it a wide margin. No retry: re-pulling a multi-minute
+// download to absorb a transient blip costs far more than it saves — re-run the
+// opt-in test manually if it fails.
 const INSTALLER_TIMEOUT_IN_MILLISECONDS = 1_800_000;
 
 const SHOULD_RUN_INSTALLER_TEST = process.env['OBSIDIAN_TEST_INSTALLER_DOWNLOAD'] === '1';
@@ -64,9 +64,9 @@ describe.runIf(SHOULD_RUN_INSTALLER_TEST)('installer shell download and extract'
       expect(exePath.endsWith(getExpectedExeSuffix())).toBe(true);
 
       // Windows (PE FileVersion) and macOS (Info.plist) reliably report the
-      // Shell's version, so it must match the pinned build. Linux detection is a
-      // Best-effort path parse that is usually `undefined`, so it is not asserted
-      // There — the exe-path and cache-hit checks validate that branch instead.
+      // shell's version, so it must match the pinned build. Linux detection is a
+      // best-effort path parse that is usually `undefined`, so it is not asserted
+      // there — the exe-path and cache-hit checks validate that branch instead.
       if (process.platform !== 'linux') {
         const detectedVersion = detectInstalledShellVersion(exePath);
         expect(detectedVersion).toBeDefined();

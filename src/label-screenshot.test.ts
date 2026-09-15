@@ -23,8 +23,8 @@ describe('computeLabelBand', () => {
 
   it('should size the caption from the WIDTH, so both formats read alike', () => {
     // A 1200-wide desktop frame and a 900-wide phone frame are viewed at similar
-    // On-screen widths in a listing; sizing by height would make the phone
-    // Caption twice the desktop one.
+    // on-screen widths in a listing; sizing by height would make the phone
+    // caption twice the desktop one.
     const desktop = computeLabelBand(DESKTOP);
     const mobile = computeLabelBand(MOBILE);
     expect(desktop.fontSizeInPixels).toBe(41);
@@ -33,7 +33,7 @@ describe('computeLabelBand', () => {
 
   it('should deepen the band on a tall frame, so it covers the status row it sits over', () => {
     // Caption-derived height on a 900x1600 phone is 68px, which sliced through
-    // The status row; the floor takes it to 120px.
+    // the status row; the floor takes it to 120px.
     const mobile = computeLabelBand(MOBILE);
     expect(mobile.heightInPixels).toBe(120);
     // On a wide frame the caption-derived height already wins, so the floor is inert.

@@ -10,110 +10,110 @@ const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
 const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
 // Every test under `scripts/` — the vendored docs generator (L35), the custom ESLint rules, and the
-// Release-script helpers. Deliberately the whole tree rather than `scripts/docs-gen/**`, which is what it
-// Used to be: that narrower glob silently left `scripts/helpers/eslint-rules/*.test.ts` run by no project
-// At all, and left `scripts/version.ts` with nowhere to put a regression test at all.
+// release-script helpers. Deliberately the whole tree rather than `scripts/docs-gen/**`, which is what it
+// used to be: that narrower glob silently left `scripts/helpers/eslint-rules/*.test.ts` run by no project
+// at all, and left `scripts/version.ts` with nowhere to put a regression test at all.
 const SCRIPTS_TEST_FILES = 'scripts/**/*.test.ts';
 const DOCS_SITE_TEST_FILES = 'docs/src/**/*.test.ts';
 const BIG_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 // Vitest 4 projects do NOT inherit the root-level `test` options, so a project that omits `testTimeout`
-// Silently runs on the built-in 5000 ms default. That is how the release gate went flaky: every
-// Project here carried a budget EXCEPT `unit-tests` — the only one `npm run test:coverage` runs — so the
-// One project gating a release had the tightest budget in the repo. Spreading the default into each project
-// Makes the omission impossible rather than merely unlikely. The budget covers two costs a per-suite number
-// Cannot: v8 coverage instrumentation, measured at ~2.2x on this project, and the CPU contention of a busy
-// Machine. Suites that are genuinely slow in their own right — rendering an OG image with satori + resvg,
-// Building a ts-morph Project over the whole `tsconfig.json` — sit comfortably inside it.
+// silently runs on the built-in 5000 ms default. That is how the release gate went flaky: every
+// project here carried a budget EXCEPT `unit-tests` — the only one `npm run test:coverage` runs — so the
+// one project gating a release had the tightest budget in the repo. Spreading the default into each project
+// makes the omission impossible rather than merely unlikely. The budget covers two costs a per-suite number
+// cannot: v8 coverage instrumentation, measured at ~2.2x on this project, and the CPU contention of a busy
+// machine. Suites that are genuinely slow in their own right — rendering an OG image with satori + resvg,
+// building a ts-morph Project over the whole `tsconfig.json` — sit comfortably inside it.
 const SHARED_TEST_DEFAULTS = { testTimeout: BIG_TIMEOUT_IN_MILLISECONDS };
 
 // The owned-instance worker-attach regression suite runs in its own project: it
-// Owns the instance in the global setup and evals from a worker (every other
-// Integration suite registers in-worker), so it needs the harness-owned global
-// Setup plus the per-worker `vitest-setup` resolvers.
+// owns the instance in the global setup and evals from a worker (every other
+// integration suite registers in-worker), so it needs the harness-owned global
+// setup plus the per-worker `vitest-setup` resolvers.
 const OWNED_ATTACH_TEST_FILE = 'src/owned-instance-worker-attach.integration.test.ts';
 
 // The plugin-less counterpart of the owned-attach suite: it owns the instance in
-// The global setup via `createSetup({ installPlugin: false })` and evals from a
-// Worker, so it likewise needs its own global setup plus the per-worker
+// the global setup via `createSetup({ installPlugin: false })` and evals from a
+// worker, so it likewise needs its own global setup plus the per-worker
 // `vitest-setup` resolvers.
 const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.ts';
 
 // The `enableCommunityPlugins` end-to-end suite runs in its own project: its global
-// Setup seeds a demo vault with two dummy plugins (via `buildDemoVaultPopulate`) and
-// Enables them through `createSetup({ enableCommunityPlugins })`, then the worker
-// Asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
+// setup seeds a demo vault with two dummy plugins (via `buildDemoVaultPopulate`) and
+// enables them through `createSetup({ enableCommunityPlugins })`, then the worker
+// asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
 const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
 
 // The `configDirectory` override suite runs in its own project because the override is a property of the
-// Whole run: its global setup opens the owned vault under `.obsidian-desktop`, and every other integration
-// Project deliberately runs under Obsidian's default. It evals from a worker to assert that what the harness
-// Wrote before open — the seeded plugin, the headless `app.json` — actually reached the folder the vault
-// Opened, so it needs its own global setup plus the per-worker resolvers.
+// whole run: its global setup opens the owned vault under `.obsidian-desktop`, and every other integration
+// project deliberately runs under Obsidian's default. It evals from a worker to assert that what the harness
+// wrote before open — the seeded plugin, the headless `app.json` — actually reached the folder the vault
+// opened, so it needs its own global setup plus the per-worker resolvers.
 const CONFIG_DIRECTORY_OVERRIDE_TEST_FILE = 'src/config-directory-override.integration.test.ts';
 // Kept in sync with the `CONFIG_DIRECTORY` the companion test asserts `app.vault.configDir` against.
 const CONFIG_DIRECTORY_OVERRIDE = '.obsidian-desktop';
 
 // The failed-setup regression suite runs in its own project because its global setup must FAIL:
 // It attaches to a CDP port nothing can serve, so every test in it runs in the state a worker is left in
-// After a real setup failure. Port 1 is refused outright by `fetch`, so the failure is instant and never
-// Touches the network -- and an `obsidian-cdp` transport takes no setup lock, unlike an Appium one, so
-// This project stays hermetic and safe inside the default aggregate.
+// after a real setup failure. Port 1 is refused outright by `fetch`, so the failure is instant and never
+// touches the network -- and an `obsidian-cdp` transport takes no setup lock, unlike an Appium one, so
+// this project stays hermetic and safe inside the default aggregate.
 const FAILED_SETUP_TEST_FILE = 'src/failed-setup-fail-fast.integration.test.ts';
 const UNREACHABLE_CDP_PORT = 1;
 
 // The instance-death regression suite runs in its own project because it DESTROYS the instance its project
-// Shares — the same reason the failed-setup suite has one. It owns the instance in the global setup and evals
-// From a worker, so it needs the per-worker resolvers; the plugin-less setup is enough, since what is under
-// Test is the death of the instance rather than anything in a vault.
+// shares — the same reason the failed-setup suite has one. It owns the instance in the global setup and evals
+// from a worker, so it needs the per-worker resolvers; the plugin-less setup is enough, since what is under
+// test is the death of the instance rather than anything in a vault.
 const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
 
 // The Android suites run in their own project because they are the only ones that need a real Android
-// Emulator through Appium (see L39). Keeping them out of the default `integration-tests` aggregate is
-// Deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator. That
-// Exemption is declared where it can be checked — `WORKFLOW_ONLY_TEST_PROJECTS` in
+// emulator through Appium (see L39). Keeping them out of the default `integration-tests` aggregate is
+// deliberate: that aggregate is desktop, runs on every change, and must not boot an emulator. That
+// exemption is declared where it can be checked — `WORKFLOW_ONLY_TEST_PROJECTS` in
 // `helpers/vitest-projects.ts`, which asserts a workflow really does run what no package script does. They
-// Share one project rather than taking one each, because each project boots its own emulator session — the
-// Cost that dominates an Android run — and these files are serialized within it anyway.
+// share one project rather than taking one each, because each project boots its own emulator session — the
+// cost that dominates an Android run — and these files are serialized within it anyway.
 const ANDROID_TEST_FILES = [
   'src/mobile-trusted-input.android.integration.test.ts',
   'src/eval-cap.android.integration.test.ts'
 ];
 
 // Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
-// Single shared window's GLOBAL focus and pointer, so pointer-dependent files cannot run against each
-// Other — which the default `integration-tests` project does not guarantee. That is a statement about how
-// This project runs its own files, and NOT a reason to keep it out of the desktop aggregate: it is in
+// single shared window's GLOBAL focus and pointer, so pointer-dependent files cannot run against each
+// other — which the default `integration-tests` project does not guarantee. That is a statement about how
+// this project runs its own files, and NOT a reason to keep it out of the desktop aggregate: it is in
 // `DESKTOP_INTEGRATION_TEST_PROJECTS` like every other desktop project, it launches its own isolated
-// Instance (L7), and it is the only integration file in the repo that touches the pointer or the keyboard,
-// So there is nothing for it to race. Until it was added to that list it sat in no aggregate at all, which
-// Left the repo's only desktop coverage of the trusted-input helpers run by nothing.
+// instance (L7), and it is the only integration file in the repo that touches the pointer or the keyboard,
+// so there is nothing for it to race. Until it was added to that list it sat in no aggregate at all, which
+// left the repo's only desktop coverage of the trusted-input helpers run by nothing.
 const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/trusted-input.desktop.integration.test.ts';
 
 // An emulator run is 140-200s cold (L19), and every step before the first assertion — boot, Appium session,
-// Vault push, app restart — happens inside the hooks. Raised by the 120s the network-ready gate can add on
+// vault push, app restart — happens inside the hooks. Raised by the 120s the network-ready gate can add on
 // A guest that never reports a validated default network (L45); `afterAll`'s dispose builds a
-// Transport of its own, so it needs the same headroom the registration hook does.
+// transport of its own, so it needs the same headroom the registration hook does.
 const ANDROID_TIMEOUT_IN_MILLISECONDS = 420_000;
 
 // Inject the per-version compatibility table into `obsidian-metadata.ts` under
-// Test, the same way the esbuild build does via `define`. Two mechanisms are
-// Needed because Vitest's per-project `define` reaches the unit-test project but
-// Not the integration-test projects (a known quirk): the unit-test project uses
+// test, the same way the esbuild build does via `define`. Two mechanisms are
+// needed because Vitest's per-project `define` reaches the unit-test project but
+// not the integration-test projects (a known quirk): the unit-test project uses
 // `define` (a string value is substituted as a raw expression, so the JSON text
-// Becomes an object literal replacing the `OBSIDIAN_METADATA` global — keeping the
-// Unit project filesystem-free), while the integration-test projects publish the
-// Same table as a global via `METADATA_SETUP_FILE`.
+// becomes an object literal replacing the `OBSIDIAN_METADATA` global — keeping the
+// unit project filesystem-free), while the integration-test projects publish the
+// same table as a global via `METADATA_SETUP_FILE`.
 const DEFINE = {
   OBSIDIAN_METADATA: readMetadataJsonText()
 };
 const METADATA_SETUP_FILE = './scripts/metadata-global-setup.ts';
 
 // The integration projects' global-setup modules (owned-attach / bare-attach) run in
-// The Vitest main process, where the per-project `define` (unit-tests only) and the
-// Per-worker `METADATA_SETUP_FILE` setupFile do NOT apply. Publish the table as a
-// Global here — this config is evaluated in that same main process — so a global
-// Setup importing the harness chain resolves `OBSIDIAN_METADATA` instead of throwing
+// the Vitest main process, where the per-project `define` (unit-tests only) and the
+// per-worker `METADATA_SETUP_FILE` setupFile do NOT apply. Publish the table as a
+// global here — this config is evaluated in that same main process — so a global
+// setup importing the harness chain resolves `OBSIDIAN_METADATA` instead of throwing
 // `OBSIDIAN_METADATA is not defined` at module evaluation.
 defineObsidianMetadataGlobal();
 
@@ -197,7 +197,7 @@ export const config = defineConfig({
           fileParallelism: false,
           // Point straight at the plugin-less setup module (the same
           // `vitest-global-setup-no-plugin` subpath a non-plugin consumer uses),
-          // Exercising it end-to-end — no wrapper needed.
+          // exercising it end-to-end — no wrapper needed.
           globalSetup: ['./src/vitest/global-setup-no-plugin.ts'],
           include: [BARE_ATTACH_TEST_FILE],
           maxWorkers: 1,
@@ -210,8 +210,8 @@ export const config = defineConfig({
           ...SHARED_TEST_DEFAULTS,
           environment: 'node',
           // The whole point of this project: a global setup that FAILS. It points the standard
-          // Plugin-less setup at a CDP port nothing serves, so `registerVault` throws and the adapter
-          // Stores the failure instead of publishing a transport.
+          // plugin-less setup at a CDP port nothing serves, so `registerVault` throws and the adapter
+          // stores the failure instead of publishing a transport.
           environmentOptions: {
             obsidianTransport: {
               port: UNREACHABLE_CDP_PORT,
@@ -280,10 +280,10 @@ export const config = defineConfig({
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           // One emulator, one Appium server, and trusted input targets the app's GLOBAL focus and pointer,
-          // So these files cannot run against each other (the same reason L8/L11 give consumers).
+          // so these files cannot run against each other (the same reason L8/L11 give consumers).
           fileParallelism: false,
           // Takes the shared-emulator lock (L7). This project has no transport global setup, so it never
-          // Goes through `coreSetup` — which is what normally acquires it.
+          // goes through `coreSetup` — which is what normally acquires it.
           globalSetup: ['./scripts/android-global-setup.ts'],
           hookTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS,
           include: ANDROID_TEST_FILES,

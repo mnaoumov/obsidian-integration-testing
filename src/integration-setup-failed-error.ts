@@ -84,7 +84,7 @@ export class IntegrationSetupFailedError extends Error {
     this.originalMessage = message;
     this.transportLabel = transportLabel;
     // The global setup already logged the original failure with its own trace. A second trace, pointing
-    // At the harness internals that merely re-raised it, is what makes the real cause hard to find.
+    // at the harness internals that merely re-raised it, is what makes the real cause hard to find.
     this.stack = `${this.name}: ${this.message}`;
   }
 }

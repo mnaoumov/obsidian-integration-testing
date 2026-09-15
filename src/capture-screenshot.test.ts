@@ -85,7 +85,7 @@ describe('isPng', () => {
 
   it('should reject a PNG signature with no IHDR chunk behind it', () => {
     // The dimensions are read out of IHDR, so a signature alone is not enough
-    // To call these bytes readable.
+    // to call these bytes readable.
     expect(isPng(buildPngHeader(1, 1).subarray(0, 12))).toBe(false);
   });
 

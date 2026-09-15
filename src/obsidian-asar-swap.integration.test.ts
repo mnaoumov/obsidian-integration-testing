@@ -32,12 +32,12 @@ import {
 import { connectToCdp } from './connect-to-cdp.ts';
 
 // Downloads the older version's asar (bug path) or installer (fixed path), then
-// Boots. Give it a wide margin like the other installer tests.
+// boots. Give it a wide margin like the other installer tests.
 const ASAR_SWAP_TIMEOUT_IN_MILLISECONDS = 1_800_000;
 
 // An app version comfortably OLDER than any current public-latest shell, so the
-// Upgrade-only asar-swap cannot apply it: honoring the pin requires resolving
-// This version's own installer shell instead.
+// upgrade-only asar-swap cannot apply it: honoring the pin requires resolving
+// this version's own installer shell instead.
 const OLDER_APP_VERSION = '1.8.10';
 
 const SHOULD_RUN = process.env['OBSIDIAN_TEST_ASAR_SWAP'] === '1' && process.platform === 'linux';
@@ -59,8 +59,8 @@ describe.runIf(SHOULD_RUN)('Linux asar-swap version-pin regression', () => {
           }
         });
         // The pinned older version must actually run. With the bug, the
-        // Upgrade-only asar-swap is silently ignored and the newer shell version
-        // Runs instead, so this reads the shell version rather than the pin.
+        // upgrade-only asar-swap is silently ignored and the newer shell version
+        // runs instead, so this reads the shell version rather than the pin.
         expect(runningVersion).toBe(OLDER_APP_VERSION);
       } finally {
         await connection.dispose();

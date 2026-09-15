@@ -386,7 +386,7 @@ describe('sweepDeviceLeftovers', () => {
   });
 
   // The defect this function exists for: one directory whose name the FUSE layer cannot express refuses
-  // Removal forever, and a single batched `rm -rf` let it take every other directory down with it.
+  // removal forever, and a single batched `rm -rf` let it take every other directory down with it.
   it('should remove the rest when one directory refuses to be removed', async () => {
     const device = createDevice(
       ['temp-vault-a', 'temp-vault-X8fvA4', 'temp-vault-b'],
@@ -401,7 +401,7 @@ describe('sweepDeviceLeftovers', () => {
   });
 
   // A removal command can exit 0 and still leave the directory behind, which is how a sweep came to
-  // Report success while clearing nothing. Counting the survivors is the only honest answer.
+  // report success while clearing nothing. Counting the survivors is the only honest answer.
   it('should not count a directory that survives a removal reporting success', async () => {
     const result = await sweepDeviceLeftovers({
       listNames: (): Promise<readonly string[]> => Promise.resolve(['temp-vault-a']),

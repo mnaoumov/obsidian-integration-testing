@@ -42,7 +42,7 @@ const ASSETS_1_13_7 = toAssets('v1.13.7', [
 ]);
 
 // The oldest installer-bearing release: dot separator, no tarball at all (it
-// Shipped an AppImage and a snap instead), and no apk (Android came at 1.5.8).
+// shipped an AppImage and a snap instead), and no apk (Android came at 1.5.8).
 const ASSETS_0_6_4 = toAssets('v0.6.4', [
   'Obsidian-0.6.4.AppImage',
   'obsidian-0.6.4.asar.gz',
@@ -52,7 +52,7 @@ const ASSETS_0_6_4 = toAssets('v0.6.4', [
 ]);
 
 // The dot era with a `-universal` dmg infix and 32-bit / arm64 exe siblings that
-// Must not be selected.
+// must not be selected.
 const ASSETS_0_14_5 = toAssets('v0.14.5', [
   'Obsidian-0.14.5-arm64.AppImage',
   'Obsidian-0.14.5-universal.dmg',
@@ -66,7 +66,7 @@ const ASSETS_0_14_5 = toAssets('v0.14.5', [
 ]);
 
 // An early-access tag whose assets carry the BASE version, not the tag — so
-// Nothing matches and the release contributes no downloads.
+// nothing matches and the release contributes no downloads.
 const ASSETS_1_6_3_E30 = toAssets('v1.6.3-e30', [
   'Obsidian.1.6.3.exe'
 ]);
@@ -94,7 +94,7 @@ describe('resolveReleaseChannel', () => {
   });
 
   // The pre-1.0 era: the whole app was early access, so the feed tagged every
-  // Page that way even for ordinary GitHub releases. Publication wins.
+  // page that way even for ordinary GitHub releases. Publication wins.
   it('reports public for a GitHub release the feed only tagged early access', () => {
     expect(resolveReleaseChannel({ hasCatalystPage: true, hasPublicPage: false, hasPublicRelease: true }))
       .toBe('public');

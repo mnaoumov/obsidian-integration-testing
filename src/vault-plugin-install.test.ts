@@ -70,8 +70,8 @@ describe('installPluginIntoVault', () => {
 
   it('honours a configDirectory override, which the vault is the one reading', async () => {
     // Installing into `.obsidian` while the vault reads `.obsidian-desktop` puts the plugin where nothing
-    // Looks for it, and the enable that follows reports only the generic "enabled but not loaded" -- the
-    // Failure the override path had before this parameter existed.
+    // looks for it, and the enable that follows reports only the generic "enabled but not loaded" -- the
+    // failure the override path had before this parameter existed.
     await installPluginIntoVault({ configDirectory: OVERRIDE, distPath: DIST_PATH, pluginId: PLUGIN_ID, vaultPath: VAULT_PATH });
 
     expect(mockMkdir).toHaveBeenCalledWith(join(VAULT_PATH, OVERRIDE, 'plugins', PLUGIN_ID), { recursive: true });
@@ -80,7 +80,7 @@ describe('installPluginIntoVault', () => {
 
   it('puts community-plugins.json in the overridden folder too, not beside it in .obsidian', async () => {
     // The enable list is the half that decides whether Obsidian loads the plugin at all, so a copy that
-    // Reached the right folder still loads nothing if this one did not.
+    // reached the right folder still loads nothing if this one did not.
     await installPluginIntoVault({ configDirectory: OVERRIDE, distPath: DIST_PATH, pluginId: PLUGIN_ID, vaultPath: VAULT_PATH });
 
     expect(mockWriteFile).toHaveBeenCalledWith(join(VAULT_PATH, OVERRIDE, 'community-plugins.json'), expect.any(String));
@@ -89,7 +89,7 @@ describe('installPluginIntoVault', () => {
 
   it('falls back to .obsidian when the override is explicitly undefined', async () => {
     // `resolveOwnedConfigDirectory` returns `undefined` in attach mode and on Android, and the caller
-    // Passes that through rather than branching -- so the property is present and unset on those runs.
+    // passes that through rather than branching -- so the property is present and unset on those runs.
     await installPluginIntoVault({ configDirectory: undefined, distPath: DIST_PATH, pluginId: PLUGIN_ID, vaultPath: VAULT_PATH });
 
     expect(mockMkdir).toHaveBeenCalledWith(join(VAULT_PATH, '.obsidian', 'plugins', PLUGIN_ID), { recursive: true });

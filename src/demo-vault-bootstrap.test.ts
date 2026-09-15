@@ -23,10 +23,10 @@ import {
 } from './demo-vault-bootstrap.ts';
 
 // No case here reaches the network. Most are NO-DOWNLOAD cases outright: the bootstrap must not fetch when
-// The binaries are on disk already, or the plugin opted out. The one case that DOES walk the install loop
-// Stubs `fetch` and passes an explicit `repo`, so neither the asset download nor the memoised community
-// Registry lookup leaves the process — a real GitHub round-trip would be slow and flaky here, and the
-// Genuine end-to-end download stays an integration test.
+// the binaries are on disk already, or the plugin opted out. The one case that DOES walk the install loop
+// stubs `fetch` and passes an explicit `repo`, so neither the asset download nor the memoised community
+// registry lookup leaves the process — a real GitHub round-trip would be slow and flaky here, and the
+// genuine end-to-end download stays an integration test.
 const HTTP_NOT_FOUND = 404;
 const PLUGIN_ASSET_BODIES = new Map<string, string>([
   ['main.js', '// installed main'],

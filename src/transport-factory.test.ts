@@ -17,8 +17,8 @@ describe('getOrCreateTransport', () => {
   it('should throw the original setup failure instead of building a fallback transport', async () => {
     // The regression: with the global setup failed, no transport options reach the worker, and
     // `undefined` options mean the owned DESKTOP default -- so an Android project's suite ran on
-    // Desktop and died on an unrelated CDP error. Nothing may be constructed here; if anything were,
-    // This test would launch a real Obsidian rather than reject.
+    // desktop and died on an unrelated CDP error. Nothing may be constructed here; if anything were,
+    // this test would launch a real Obsidian rather than reject.
     setSetupErrorResolver(() => ({
       errorName: 'WebDriverError',
       message: 'WebDriverError: Could not find a connected Android device in 20000ms',

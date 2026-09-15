@@ -108,7 +108,7 @@ describe('ensureHeadlessVaultConfig', () => {
 
   it('honours a configDirectory override, which the vault is the one reading', async () => {
     // Writing into `.obsidian` while the vault reads `.obsidian-desktop` drops both defaults with no
-    // Error to say so -- the failure the override path had before this parameter existed.
+    // error to say so -- the failure the override path had before this parameter existed.
     await ensureHeadlessVaultConfig({ configDirectory: '.obsidian-desktop', label: LABEL, vaultPath: VAULT_PATH });
 
     expect(mockMkdir).toHaveBeenCalledWith(join(VAULT_PATH, '.obsidian-desktop'), { recursive: true });

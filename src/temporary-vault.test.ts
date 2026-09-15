@@ -198,7 +198,7 @@ describe('register', () => {
   });
 
   // The defect this ordering exists to prevent: registering first opens the vault on the device before
-  // Its files are there, so the app reads an EMPTY vault and nothing is raised to say so.
+  // its files are there, so the app reads an EMPTY vault and nothing is raised to say so.
   it('should push the vault directory BEFORE registering it', async () => {
     const calls: string[] = [];
     const pushFiles = vi.fn(async () => {

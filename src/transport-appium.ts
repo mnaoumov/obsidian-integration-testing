@@ -645,7 +645,7 @@ export class AppiumTransport implements ObsidianTransport {
     await this.ensureWebViewContext();
 
     // Invalidate before reload — the page will navigate and the WebView
-    // Context may be temporarily unavailable during reload.
+    // context may be temporarily unavailable during reload.
     this.isInWebViewContext = false;
 
     const stalePrefix = this.shouldSweepLeftovers ? `${this.vaultBasePath}${TEMP_VAULT_DIR_PREFIX}` : '';
@@ -749,8 +749,8 @@ export class AppiumTransport implements ObsidianTransport {
 
     // The channel is reachable only over local `adb`, so it does not exist on iOS or against a remote hub
     // (BrowserStack). Those are supported transports, so this stays **best-effort**: a run that never
-    // Drives input must not fail because the channel could not be opened. A run that *does* drive input
-    // Gets a legible error from the renderer's own guard, which names the missing channel.
+    // drives input must not fail because the channel could not be opened. A run that *does* drive input
+    // gets a legible error from the renderer's own guard, which names the missing channel.
     if (this.platform !== 'android') {
       this.isInputChannelUnavailable = true;
       return;
@@ -769,8 +769,8 @@ export class AppiumTransport implements ObsidianTransport {
 
         const payload = params['payload'];
         // Deliberately not awaited: this runs while the renderer's `Execute Script` is still pending, and
-        // That is the whole point — the request is serviced concurrently and answered by resolving the
-        // Renderer's promise over this same socket. It handles its own failures, so nothing reaches here.
+        // that is the whole point — the request is serviced concurrently and answered by resolving the
+        // renderer's promise over this same socket. It handles its own failures, so nothing reaches here.
         this.handleInputRequest(connection, typeof payload === 'string' ? payload : '').catch(() => {
           // Unreachable: `handleInputRequest` never rejects.
         });
@@ -780,8 +780,8 @@ export class AppiumTransport implements ObsidianTransport {
 
       // Self-cleaning, deliberately: this transport can be created straight from a test worker, with no
       // `coreSetup` owning its lifecycle and therefore nothing that ever calls `dispose`/`disposeSync` —
-      // Which is how a run leaves its adb port forward stranded on the device (observed 2026-08-30). The
-      // Handler is removed again on disposal so reconnects do not stack listeners.
+      // which is how a run leaves its adb port forward stranded on the device (observed 2026-08-30). The
+      // handler is removed again on disposal so reconnects do not stack listeners.
       this.disposeInputChannelOnExit = (): void => {
         connection.disposeSync();
       };
@@ -791,7 +791,7 @@ export class AppiumTransport implements ObsidianTransport {
     } catch (error: unknown) {
       // Give up for the life of the transport rather than paying an `adb` round-trip on every eval.
       // A socket that merely *closed* after a successful connect is a different case — `isOpen` is false
-      // There while this flag stays unset, so the reconnect above still runs.
+      // there while this flag stays unset, so the reconnect above still runs.
       this.isInputChannelUnavailable = true;
       log(`[appium-transport] Trusted input is unavailable on this device: ${errorToString(error)}`);
     }
@@ -936,8 +936,8 @@ export class AppiumTransport implements ObsidianTransport {
       // `clickElement` reached the page as two `pointerdown` / `touchstart` pairs.
       //
       // A LOSER MUST RETURN SILENTLY: the winner is the one that injects and the one that resolves the
-      // Renderer's promise, so answering here as well would resolve a request whose gesture this
-      // Process never sent.
+      // renderer's promise, so answering here as well would resolve a request whose gesture this
+      // process never sent.
       const claim = await connection.send('Runtime.evaluate', { expression: buildClaimInputExpression(id), returnByValue: true });
       if (!checkInputClaimGranted(claim)) {
         return;

@@ -55,9 +55,9 @@ const SECONDS_PER_MINUTE = 60;
 const HEARTBEAT_INTERVAL_IN_SECONDS = 5;
 const HEARTBEAT_INTERVAL_IN_MILLISECONDS = HEARTBEAT_INTERVAL_IN_SECONDS * MILLISECONDS_PER_SECOND;
 // Generous on purpose: a dead holder is normally caught instantly by the PID
-// Probe, so this threshold only has to cover the recycled-PID case. Two minutes
-// Keeps a holder that blocks its event loop during heavy synchronous work (a
-// Large vault sync, an installer unpack) from being robbed while it is alive.
+// probe, so this threshold only has to cover the recycled-PID case. Two minutes
+// keeps a holder that blocks its event loop during heavy synchronous work (a
+// large vault sync, an installer unpack) from being robbed while it is alive.
 const MISSED_HEARTBEATS_BEFORE_STALE = 24;
 const HEARTBEAT_STALE_IN_MILLISECONDS = HEARTBEAT_INTERVAL_IN_MILLISECONDS * MISSED_HEARTBEATS_BEFORE_STALE;
 const WAIT_LOG_INTERVAL_IN_SECONDS = 30;
@@ -322,7 +322,7 @@ export async function acquireSetupLock(params: AcquireSetupLockParams): Promise<
     if (info && checkIsLockStale(info, HEARTBEAT_STALE_IN_MILLISECONDS)) {
       stealStaleLock({ info, label, lockFilePath, scope });
       // Retry immediately — but still honour the deadline, so a lock that a
-      // Competing run keeps recreating cannot spin this loop forever.
+      // competing run keeps recreating cannot spin this loop forever.
       if (Date.now() >= deadlineInMilliseconds) {
         throw createTimeoutError({
           info,
@@ -614,7 +614,7 @@ function didRefreshHeartbeat(params: RefreshHeartbeatParams): boolean {
     writeFileSync(lockFilePath, JSON.stringify(refreshedInfo));
   } catch (error: unknown) {
     // Not fatal: the lock is still held and will still be released. Only its
-    // Heartbeat goes stale, which at worst lets a waiting run steal it.
+    // heartbeat goes stale, which at worst lets a waiting run steal it.
     log(`[integration-setup:${label}] Failed to refresh the setup lock heartbeat: ${errorToString(error)}`);
   }
   return true;

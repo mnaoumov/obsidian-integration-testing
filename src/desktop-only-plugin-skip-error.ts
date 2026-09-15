@@ -36,7 +36,7 @@ export class DesktopOnlyPluginSkipError extends Error {
     this.name = 'DesktopOnlyPluginSkipError';
     this.pluginId = pluginId;
     // An expected skip, not a defect: the message says everything, and a trace pointing into the harness
-    // Only suggests the harness broke.
+    // only suggests the harness broke.
     this.stack = `${this.name}: ${this.message}`;
   }
 }

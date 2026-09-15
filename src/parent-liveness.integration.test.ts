@@ -109,7 +109,7 @@ describe('parent-liveness watchdog', () => {
     const before = await readRemotePort();
 
     // Re-evaluate the very expression the transport uses. The port is irrelevant
-    // Here: a second arming must short-circuit before it ever tries to connect.
+    // here: a second arming must short-circuit before it ever tries to connect.
     const UNUSED_PORT = 1;
     const result = await evalInObsidian({
       callback({ expression }): string {

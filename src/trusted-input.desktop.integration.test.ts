@@ -56,7 +56,7 @@ describe('desktop trusted input', () => {
   });
 
   // The mirror of the Android guard: if this suite ever ran on a mobile transport, every assertion below
-  // Would be testing the other branch while claiming to cover Electron.
+  // would be testing the other branch while claiming to cover Electron.
   it('should actually be running on desktop', async () => {
     const isDesktopApp = await evalInObsidian({
       callback({ obsidianModule }): boolean {
@@ -104,9 +104,9 @@ describe('desktop trusted input', () => {
     expect(result.hasOnlyTrustedEvents).toBe(true);
 
     // COUNTS, not `toContain` — the mobile twin's presence-only form let a DOUBLED gesture ship
-    // Unnoticed. Desktop injects straight through `webContents.sendInputEvent` with no broadcast
-    // Channel to duplicate it, so this is a guard against the class of bug rather than a fix for a
-    // Live one.
+    // unnoticed. Desktop injects straight through `webContents.sendInputEvent` with no broadcast
+    // channel to duplicate it, so this is a guard against the class of bug rather than a fix for a
+    // live one.
     expect(countByType(result.events)).toStrictEqual({
       click: 1,
       mousedown: 1,
@@ -188,8 +188,8 @@ describe('desktop trusted input', () => {
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // A hover that never landed reads to an assertion exactly like one that did — the element still has its
-  // Base style — so an unmet post-condition throws instead of resolving quietly. The overlay is what makes
-  // The failure deterministic: it takes the hit at the target's center, so the target never matches `:hover`.
+  // base style — so an unmet post-condition throws instead of resolving quietly. The overlay is what makes
+  // the failure deterministic: it takes the hit at the target's center, so the target never matches `:hover`.
   it('should throw from hoverElement when the element never takes the hover', async () => {
     const message = await evalInObsidian({
       async callback({ lib }): Promise<string> {

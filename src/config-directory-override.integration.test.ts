@@ -26,8 +26,8 @@ import {
 import { evalInObsidian } from './eval-in-obsidian.ts';
 
 // Kept in sync with `CONFIG_DIRECTORY_OVERRIDE` in this project's entry in `scripts/vitest-config.ts`,
-// Which is where the override is set: `createSetup` takes no transport options, reading them from the
-// Project's `environmentOptions.obsidianTransport`.
+// which is where the override is set: `createSetup` takes no transport options, reading them from the
+// project's `environmentOptions.obsidianTransport`.
 const CONFIG_DIRECTORY = '.obsidian-desktop';
 
 // Kept in sync with `OVERRIDE_PLUGIN_ID` in `scripts/config-directory-override-global-setup.ts`.
@@ -36,7 +36,7 @@ const OVERRIDE_PLUGIN_ID = 'config-directory-override-extra';
 describe('configDirectory override', () => {
   it('opens the vault against the overridden config folder', async () => {
     // The premise every assertion below rests on: without this the suite would be testing the default path
-    // Under a different name.
+    // under a different name.
     const configDirectory = await evalInObsidian({
       callback({ app }): string {
         return app.vault.configDir;
@@ -59,8 +59,8 @@ describe('configDirectory override', () => {
 
   it('writes the headless defaults where the overridden vault reads them', async () => {
     // Obsidian ships `settingsPopoutWindow` as `true`, so `false` can only have come from the harness --
-    // Reading it back proves the `app.json` write reached the folder the vault opened (the half fixed on 2026-09-05,
-    // Re-asserted here because this is the only suite that runs under an override end to end).
+    // reading it back proves the `app.json` write reached the folder the vault opened (the half fixed on 2026-09-05,
+    // re-asserted here because this is the only suite that runs under an override end to end).
     const config = await evalInObsidian({
       callback({ app }): Record<string, unknown> {
         const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;

@@ -67,7 +67,7 @@ export function shouldTearDownVaultWindow(params: ShouldTearDownVaultWindowParam
 
   if (isOwnedInstance) {
     // The owned instance is killed wholesale on dispose, and its registry lives
-    // In the isolated user-data config — there is nothing to unregister from.
+    // in the isolated user-data config — there is nothing to unregister from.
     return false;
   }
 
@@ -77,6 +77,6 @@ export function shouldTearDownVaultWindow(params: ShouldTearDownVaultWindowParam
   }
 
   // Plain attach mode — a foreign Obsidian the harness opened a vault in, which
-  // Outlives the run and must be left as it was found.
+  // outlives the run and must be left as it was found.
   return true;
 }
