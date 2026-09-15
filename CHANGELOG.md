@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 13.0.0
+
+- chore(eslint-config): enforce params-options-name-match on src/ too
+- docs(agents): record the five lint rules this repo keeps stricter than the shared config
+- chore(eslint-config): close the measured drift against the shared config
+- chore(deps): drop five brace-expansion overrides whose advisory was backported
+- docs(deps): give the js-yaml pin a check that can see what it guards
+- style(comments): stop capitalized-comments mangling wrapped prose
+- test: run the desktop trusted-input project, which no npm script ran
+- chore(deps): drop the dead markdown-it override
+- fix(trusted-input)!: clear the hover for real, and refuse to resolve when it is not cleared
+
 ## 12.3.0
 
 - feat(eval-cap): export the per-eval cap, and give both transports one constant
