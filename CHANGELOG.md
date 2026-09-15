@@ -23,7 +23,7 @@
 - docs(agents): retire the dangling Current Task pointers
 - docs(release): say the sibling repos have followed onto trusted publishing
 - fix(deps): clear the js-yaml and smol-toml advisories through overrides
-- feat(android): capture the device and raise its soft keyboard (#T967)
+- feat(android): capture the device and raise its soft keyboard
 - fix(scripts): run the script hops through the detected package manager
 
 ## 12.1.0
