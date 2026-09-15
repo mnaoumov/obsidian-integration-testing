@@ -492,19 +492,16 @@ Four details worth keeping:
 - **Only the eval carrying a caller's closure is re-reported.** The desktop transport raises `CdpCommandTimeoutError` (`src/cdp-command-timeout-error.ts`) for *any* timed-out CDP command, and only `evaluate()` translates it. The harness's own `Runtime.evaluate` calls — trust dialog, parent-liveness watchdog, boot probes — time out for reasons that have nothing to do with a test waiting, and matching on the method name would produce the same misdiagnosis pointing the other way.
 - `appium:newCommandTimeout` is read by Appium in **seconds**, not milliseconds. Its constant was named `COMMAND_TIMEOUT_IN_MILLISECONDS` and is now `NEW_COMMAND_TIMEOUT_IN_SECONDS`; the value (300 = five minutes) was always right and only the unit in the name was wrong. It is unrelated to the per-script cap.
 
-## L30. Security overrides (`brace-expansion` GHSA-mh99-v99m-4gvg)
+## L30. Security overrides (`brace-expansion` GHSA-mh99-v99m-4gvg) — RETIRED 2026-09-15
 
-`npm audit` reported 27 high advisories, **all** of them the same root cause: `brace-expansion` [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg) (DoS via unbounded expansion). The fix ships **only** on the `5.x` line, and the advisory's vulnerable range is `<= 5.0.7` — which covers every `1.x` / `2.x` / `3.x` release, so a backport alone would not clear the audit; the advisory metadata itself has to stop covering the legacy lines. Nothing here depends on `brace-expansion` directly: it arrives through `minimatch@3` / `@5` / `@9`, which pin the unpatched `1.x` / `2.x` lines. `npm audit fix` cannot resolve it (its only offer downgrades unrelated packages), so the `overrides` block carries the fix — the same shape `obsidian-dev-utils` uses (see its AGENTS.md "Security overrides"):
+**This set is gone.** Five overrides — `brace-expansion` `^5.0.9`, plus `glob` `^13.0.6`, `readdir-glob` `^3.0.0`, `test-exclude` `^8.0.0` and `tmp` `^0.2.7`, each forced to a major that had moved to `minimatch@^10` — existed only because [GHSA-mh99-v99m-4gvg](https://github.com/advisories/GHSA-mh99-v99m-4gvg) then covered *every* `brace-expansion` line but `5.x`. This section named its own removal condition (*"they go as soon as it does"*), and the condition came true: the fix was **backported**. Published heads are now `1.1.21` / `2.1.7` / `3.0.9` / `5.0.12`, against advisory bounds of `<1.1.17` and, for the follow-up GHSA-rgw5-rvv9-x895, `<1.1.18` / `<2.1.4` / `<5.0.9`.
 
-| Override | Vulnerable path it closes |
-| --- | --- |
-| `glob` → `^13.0.6` | `@jest/reporters`, `jest-config`, `jest-runtime` (`^10.5.0`), `@wdio/config` (`^10.2.2`) and `archiver-utils` (`^10.0.0`) all resolved `glob@10` → `minimatch@9`; `test-exclude@6` pulled `glob@7` → `minimatch@3`. `glob@13` is on `minimatch@^10`, which uses the patched `brace-expansion@5`. |
-| `test-exclude` → `^8.0.0` | `babel-plugin-istanbul@7` pins `test-exclude@^6`, whose own `minimatch@^3` is unpatched. `test-exclude@8` moved to `minimatch@^10`. |
-| `readdir-glob` → `^3.0.0` | `archiver@7` pins `readdir-glob@^1.1.2` → `minimatch@5`. `readdir-glob@3` is on `minimatch@^10`. |
+Measured before deleting them, rather than inferred from the version numbers: this repo's own `package.json` + lockfile in throwaway trees, `npm install --package-lock-only --ignore-scripts`, audits compared on `metadata.vulnerabilities` (never the exit code). **Zero vulnerabilities in every arm** — with all five, without the four, and without all five — both against the existing lockfile and on a fresh resolve. Without them the tree lands on `brace-expansion@5.0.12` at the root plus nested `2.1.7` copies under `@wdio/config`, `archiver-utils`, `readdir-glob` and `test-exclude`; every one is past its own line's bound.
 
-Result: one deduped `brace-expansion@5.0.8` and one `minimatch@10.2.5` in the whole tree, and a clean `npm audit`. Call sites were verified against the new majors rather than assumed — `glob@13` still exports the callable `glob()` plus `glob.sync` / `globSync` / `hasMagic` (what the Jest, WDIO and archiver packages call), `test-exclude@8`'s default export is still a `new TestExclude(...)` with `shouldInstrument()`, and `readdir-glob@3` is still a callable factory emitting `match` / `end`. `glob@13` requires Node `18 || 20 || >=22`.
+Two things worth carrying forward:
 
-**Remove all three** once the advisory stops flagging the legacy lines (test with `npm audit --json` after `npm update`, not just `npm view brace-expansion versions --json`: as of 2026-07-29 the legacy heads are `1.1.17` / `2.1.3` / `3.0.5` and all are still inside the `<= 5.0.7` range, so the maintenance releases that already landed changed nothing). These overrides exist purely for the advisory — they go as soon as it does.
+- **The four caret overrides never belonged to the `pinned-versions.json` exemption they were listed under.** That file waved them through as swept-automatically and therefore *not* advisory-driven; three of the four were advisory-driven, which is exactly why they could outlive their reason with nothing ever firing. A caret override is invisible to both guards — `update-npm-deps.ps1` counts only a non-caret value as a pin, while the overrides sweep floats the caret to the newest publish, so it never goes stale-red either. An advisory-driven override therefore gets a `pinned-versions.json` entry **even when caret-ranged**, which is what **L36**, **L44** and **L55** do.
+- **The `3.x` line is still red at its head** (`GHSA-3jxr-9vmj-r5cp`, `>=3.0.0 <5.0.7` — the fix is a different major, so `3.0.9` cannot reach it). Nothing here resolves a `3.x` today, which is why the audit is clean; a future `minimatch` landing on `3.x` would revive the whole question.
 
 ## L31. Leftover cleanup — sweep at both ends; device unconditional, host age-gated
 
@@ -819,7 +816,7 @@ Both arrive through the docs-site OG-image path (`satori` + `@resvg/resvg-js`). 
 
 **Never take `npm audit fix --force` here** — its remedy is `satori@0.32.0`, a downgrade. **Remove the override** when `satori` declares a range that admits `0.7.5` or later; the `check` in [`pinned-versions.json`](pinned-versions.json) reads that declared range and watches exactly that.
 
-The override is kept **caret-ranged** so `update-npm-deps.ps1` carries it forward, and it is listed in `pinned-versions.json` anyway — the sweep keeps a caret override *current*, but it never reports that the advisory the override answers has gone away, and the override with it. Same arrangement as `brace-expansion` in **L30**.
+The override is kept **caret-ranged** so `update-npm-deps.ps1` carries it forward, and it is listed in `pinned-versions.json` anyway — the sweep keeps a caret override *current*, but it never reports that the advisory the override answers has gone away, and the override with it. Same arrangement as `smol-toml` in **L55**.
 
 ## L45. An idle device is not a connected one — gate the session on a validated network too
 
@@ -1244,7 +1241,7 @@ A mobile store screenshot that shows a text field is dishonest without a keyboar
 
 ## L55. Security overrides (`js-yaml` GHSA-2883-xcg3-v3hh, `smol-toml` GHSA-7w5x-hrqm-74c2)
 
-The 2026-09-10 sweep opened on 11 high advisories from two roots, and both are transitive — nothing here declares either package, so **L30**'s and **L44**'s shape applies again: override the transitive, and record why in [`pinned-versions.json`](pinned-versions.json).
+The 2026-09-10 sweep opened on 11 high advisories from two roots, and both are transitive — nothing here declares either package, so **L36**'s and **L44**'s shape applies again: override the transitive, and record why in [`pinned-versions.json`](pinned-versions.json).
 
 **`js-yaml` — an existing pin that had drifted INTO the vulnerable range.** GHSA-2883-xcg3-v3hh (`maxTotalMergeKeys` does not bound CPU on empty merge sources) covers `4.0.0 – 4.3.1`, and the override was sitting on exactly `4.3.1`. It accounted for 9 of the 11 paths, because every js-yaml consumer here (`astro`, `@astrojs/starlight`, `cosmiconfig` under `@commitlint/load`, `@istanbuljs/load-nyc-config`, `markdownlint-cli2`) resolves through it. The fix is a patch bump to `4.3.2` — the first 4.x release with it — and **not** a move to 5.x: the pin's original reason still holds, js-yaml 5 is ESM-only with no default export, so Astro's `import yaml from 'js-yaml'` makes `docs:build` die before it reads a page. Two independent conditions now hold that pin, and `pinned-versions.json` says both, because a reader who knows only the ESM one would happily bump it back into the advisory range.
 
