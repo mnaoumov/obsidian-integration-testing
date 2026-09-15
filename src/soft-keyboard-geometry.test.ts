@@ -259,6 +259,25 @@ describe('buildSoftKeyboardDiagnosticMessage', () => {
     expect(message).toContain('lift=(no input)');
   });
 
+  /*
+   * A baseline read with no field on screen is the other half of the same case, and it is the one that
+   * decides whether the lift reads as absent or as zero — a zero would pull in the already-up sentence,
+   * which is a claim about a measurement that was never taken.
+   */
+  it('should say the baseline field was gone rather than reading it as a lift of zero', () => {
+    const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshot(0, { inputRect: null }),
+      inputMethodState: 'mInputShown=false',
+      screenshotPath: 'a.png',
+      snapshot: buildSnapshot(50)
+    });
+
+    expect(message).toContain('baselineInputTop=(no input)');
+    expect(message).toContain('inputTop=710');
+    expect(message).toContain('lift=(no input)');
+    expect(message).not.toContain('already up before the first touch');
+  });
+
   it('should say so when the device reported no input_method state at all', () => {
     const message = buildSoftKeyboardDiagnosticMessage({
       baselineSnapshot: buildSnapshot(0),
