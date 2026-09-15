@@ -37,7 +37,7 @@ export interface GenerateNamespaceCallParams {
   /**
   The user function to evaluate inside Obsidian.
    */
-  readonly callback: (...input: never[]) => unknown;
+  callback(this: void, ...input: never[]): unknown;
   /**
   Optional context ID for persistent storage.
    */

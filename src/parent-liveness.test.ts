@@ -50,7 +50,7 @@ interface CreateWatchdogWindowStubOptions {
   /**
   Replacement body for `electronWindow.destroy`.
   */
-  readonly destroyImpl?: () => void;
+  destroyImpl?(this: void): void;
 
   /**
   Makes `require('node:net')` throw, so the bare-`net` fallback is exercised.

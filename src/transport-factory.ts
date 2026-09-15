@@ -360,12 +360,12 @@ interface EmulatorCapture {
   /**
   Returns the captured stdout+stderr tail (bounded to the most recent output).
    */
-  readonly read: () => string;
+  read(this: void): string;
 
   /**
   Freezes the tail. Called once the session is established and the emulator has nothing left to explain.
    */
-  readonly stop: () => void;
+  stop(this: void): void;
 }
 
 /**
@@ -535,6 +535,11 @@ interface ParsePortOwnerPidsParams {
   readonly port: number;
 }
 
+/*
+ * The three readers are declared `this: void` because every producer builds them as closures over the launch's
+ * own state (see `launchProcess`), never as methods on a receiver. Saying so at the declaration is what lets
+ * `emulatorCapture` below forward them unbound without `@typescript-eslint/unbound-method`.
+ */
 interface ProcessLaunch {
   /**
   The spawned process.
@@ -544,17 +549,17 @@ interface ProcessLaunch {
   /**
   Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`.
    */
-  readExitInfo: () => ProcessExitInfo | undefined;
+  readExitInfo(this: void): ProcessExitInfo | undefined;
 
   /**
   Returns the captured stdout+stderr (bounded to the most recent output).
    */
-  readOutput: () => string;
+  readOutput(this: void): string;
 
   /**
   Stops accumulating output. Call once startup has succeeded.
    */
-  stopCapture: () => void;
+  stopCapture(this: void): void;
 }
 
 /**

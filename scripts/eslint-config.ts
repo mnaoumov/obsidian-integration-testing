@@ -284,6 +284,12 @@ function getEslintConfigs(): Linter.Config[] {
       }
     },
     {
+      /*
+       * The build, lint and version scripts are CLI entry points whose output IS their interface, so printing to
+       * stdout is what they are for. Kept as a deliberate local override rather than drift: the shared config in
+       * `obsidian-dev-utils` leaves the rule on everywhere, because nothing in that package prints. The sibling
+       * override in `getUnicornConfigs` turns off `unicorn/no-process-exit` over the same files for the same reason.
+       */
       files: scriptFiles,
       rules: {
         'no-console': 'off'
@@ -517,6 +523,14 @@ function getNoRestrictedSyntaxRulesConfigs(): Linter.Config[] {
             selector: 'TSAsExpression > TSAsExpression'
           },
           {
+            message: 'Do not use `as never`. It silently satisfies type constraints by claiming "this value is of every type" — almost always masks a real type mismatch. Fix the underlying types instead.',
+            selector: 'TSAsExpression > TSNeverKeyword'
+          },
+          {
+            message: 'Do not use `<never>` type assertions. Same reasoning as `as never`.',
+            selector: 'TSTypeAssertion > TSNeverKeyword'
+          },
+          {
             message: 'Do not use _ prefix on methods or functions. The _ prefix is for unused parameters only.',
             selector: 'MethodDefinition[key.name=/^_/]:not([override=true])'
           },
@@ -684,6 +698,10 @@ function getTseslintConfigs(): Linter.Config[] {
       rules: {
         '@typescript-eslint/explicit-function-return-type': 'error',
         '@typescript-eslint/explicit-member-accessibility': 'error',
+        '@typescript-eslint/method-signature-style': ['error', 'method'],
+        '@typescript-eslint/no-floating-promises': ['error', {
+          checkThenables: true
+        }],
         '@typescript-eslint/no-invalid-void-type': ['error', {
           allowAsThisParameter: true
         }],
@@ -727,6 +745,16 @@ function getUnicornConfigs(): Linter.Config[] {
     {
       extends: [unicorn.configs.recommended],
       files: allFiles,
+      /*
+       * Five rules `obsidian-dev-utils` turns off are left ON here, and their ABSENCE from the list below is the
+       * decision: `unicorn/error-message`, `unicorn/no-unreadable-object-destructuring`,
+       * `unicorn/prefer-dom-node-html-methods`, `unicorn/prefer-dom-node-remove` and `unicorn/prefer-global-this`.
+       * Each of the shared config's disables is justified there by a measurement of ITS OWN tree — a `new
+       * Error().stack` that never surfaces its message, an `innerHTML` read, Obsidian's `Component#removeChild`,
+       * a `--fix` cycle against `obsidianmd/no-global-this` — and none of those shapes is reported here. A copy
+       * that is stricter and green is better off than one that pastes in reasons that are false of it, so do not
+       * import these disables the next time the two configs are compared.
+       */
       rules: {
         /*
          * A good rule, but its default prefixes force ungrammatical names: `vaultExists` would become
@@ -908,6 +936,9 @@ function getUnicornConfigs(): Linter.Config[] {
          * registered behind a module-level once-flag. The rule's remedy -- hold the state in a `const` object --
          * renames every read for no behavioral gain. The same shape is standard in tests, where a fixture is
          * assigned from `beforeEach`.
+         *
+         * Wider than the shared config on purpose: `obsidian-dev-utils` turns this off only over its test files,
+         * because the registry/cache/once-guard shapes above are production code HERE and test-only there.
          */
         'unicorn/no-top-level-assignment-in-function': 'off',
         /*
@@ -916,6 +947,9 @@ function getUnicornConfigs(): Linter.Config[] {
          * entry points call `exitIfScriptDisabled()` / `defineObsidianMetadataGlobal()` before anything reads
          * what they set up. Deferring them into a function would mean consumers had to call something extra,
          * which is exactly what these modules exist to avoid.
+         *
+         * `obsidian-dev-utils` leaves this rule ON everywhere; the divergence is this package's import-time
+         * contract, not a stale copy of the shared config.
          */
         'unicorn/no-top-level-side-effects': 'off',
         /*

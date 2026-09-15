@@ -276,7 +276,7 @@ interface WaitForStartupMilestoneParams {
   /**
   Whether the milestone just observed ends this phase.
    */
-  readonly isSatisfied: (milestone: AppStartupMilestone) => boolean;
+  isSatisfied(this: void, milestone: AppStartupMilestone): boolean;
 
   /**
   The phase being waited out, named in the log and in the timeout message.
