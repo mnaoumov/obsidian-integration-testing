@@ -123,7 +123,16 @@ Because the callback runs inside a real Obsidian, undocumented internals like `a
 
 ## Wait longer than one eval may take
 
-A single closure cannot run longer than `CDP`'s ~30 s `Runtime.evaluate` cap, so an operation that takes minutes — a whole plugin or vault bootstrap — cannot simply be awaited inside one callback.
+A single closure cannot run longer than the transport's per-eval cap, so an operation that takes minutes — a whole plugin or vault bootstrap — cannot simply be awaited inside one callback.
+
+The cap is the same 30 s on both transports, and it is exported as `DEFAULT_EVAL_CAP_IN_MILLISECONDS` — **import it rather than writing `30000` into your test**, so a closure you sized against the cap follows it if it ever moves. Everything awaited inside one closure shares that one budget, including every `waitUntil` timeout and every settle `sleep`, so the declared waits have to *sum* to less than the cap rather than merely be individually shorter. An overrun comes back as `EvalCapExceededError`, which names the cap, the transport that enforced it, and the way out.
+
+```ts
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from 'obsidian-integration-testing';
+
+// A budget that stays inside the cap without restating it.
+const attemptTimeoutInMilliseconds = DEFAULT_EVAL_CAP_IN_MILLISECONDS / 4;
+```
 
 `pollInObsidian` moves the waiting to the Node side: an optional `start` closure kicks the work off once, then a short `poll` closure runs repeatedly — each its own well-under-30 s eval — until the Node-side `until` predicate accepts a poll result or the timeout (default `120000` ms, polled every `500` ms) elapses. It replaces the hand-rolled `evalInObsidian` + `sleep` loop, and `contextId` lets `start` stash non-serializable state for `poll` to read.
 

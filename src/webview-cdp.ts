@@ -28,6 +28,12 @@ const ADB_TIMEOUT_IN_MILLISECONDS = 15_000;
 // `adb forward --list` prints three columns: `<deviceId> tcp:<port> localabstract:<socketName>`.
 const FORWARD_LIST_COLUMN_COUNT = 3;
 const DECIMAL_RADIX = 10;
+/*
+ * Bounds one command on THIS side channel — an `Input.dispatchMouseEvent`, a target list. It is not the
+ * per-eval cap and must not be derived from `DEFAULT_EVAL_CAP_IN_MILLISECONDS`: no test closure travels
+ * this socket, and the whole point of the second connection is that it stays free while the Appium session
+ * is busy running one. The shared value is a coincidence.
+ */
 const CDP_COMMAND_TIMEOUT_IN_MILLISECONDS = 30_000;
 const CDP_HOST = '127.0.0.1';
 

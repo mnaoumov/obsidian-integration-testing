@@ -8,12 +8,12 @@ import type { ObsidianAndroidAppiumTransportOptions } from './transport-options.
 
 import {
   DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS,
-  DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS,
   DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
   resolveAppiumStartTimeoutInMilliseconds,
   resolveScriptTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
 
 const BASE_OPTIONS: ObsidianAndroidAppiumTransportOptions = {
   appiumUrl: 'http://localhost:4723',
@@ -43,7 +43,12 @@ describe('resolveScriptTimeoutInMilliseconds', () => {
   // Supplied the same 30s silently, which is what made an overrun read as a broken device.
   it('should default to 30000ms when the option is omitted', () => {
     expect(resolveScriptTimeoutInMilliseconds(BASE_OPTIONS)).toBe(30_000);
-    expect(DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS).toBe(30_000);
+  });
+
+  // The Android default is not merely equal to the shared cap, it IS the shared cap. Asserting the
+  // Identity is what stops the two drifting apart into a coincidence a reader has to guess at.
+  it('should default to the shared per-eval cap', () => {
+    expect(resolveScriptTimeoutInMilliseconds(BASE_OPTIONS)).toBe(DEFAULT_EVAL_CAP_IN_MILLISECONDS);
   });
 
   it('should use the provided value when the option is set', () => {

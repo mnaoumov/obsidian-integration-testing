@@ -133,6 +133,7 @@ export {
   EvalCapExceededError,
   isScriptTimeoutError
 } from './eval-cap-exceeded-error.ts';
+export { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
 export type {
   ClickElementParams,
   ClickMouseParams,

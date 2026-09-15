@@ -4,9 +4,10 @@
  * Node-side "kick off, then poll" helper over {@link evalInObsidian}.
  *
  * A single `evalInObsidian` closure cannot run longer than the transport's
- * per-eval cap — 30s by default on both, and a declared number rather than an
- * inherited one: desktop uses `commandTimeoutInMilliseconds`, Android sends
- * `scriptTimeoutInMilliseconds` as its W3C `timeouts.script` capability. Either
+ * per-eval cap — `DEFAULT_EVAL_CAP_IN_MILLISECONDS` (30s) on both, one shared
+ * declared number rather than an inherited one: desktop enforces it as
+ * `commandTimeoutInMilliseconds`, Android as `scriptTimeoutInMilliseconds`,
+ * which it also sends as its W3C `timeouts.script` capability. Either
  * way an overrun is reported as `EvalCapExceededError`, which names the
  * cap and points here. So a long-running in-Obsidian operation (e.g. a whole
  * plugin/vault bootstrap) cannot be awaited inside one closure. This helper does
