@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 12.3.0
+
+- feat(eval-cap): export the per-eval cap, and give both transports one constant
+- docs(markdown): put every paragraph on one physical line
+- test(soft-keyboard): cover the diagnostic's absent baseline measurement
+- fix(transport): multiplex CDP commands over one message listener per socket
+- refactor(comments): drop the private shorthand from three source sites
+- docs(changelog): drop the tracker reference from the soft-keyboard entry
+- refactor(eslint-rules): bring the shared rule sources back to one copy
+- fix(soft-keyboard)!: verify the keyboard by how far the field moved, not by where it sits
+- fix(scripts): route every local tool hop through the resolved bin shim
+
 ## 12.2.0
 
 - feat(app-config): add a per-test seam for a vault config key
