@@ -51,6 +51,7 @@ import { ConfigDirectoryFallbackError } from './config-directory-fallback-error.
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { resolveElectronCompatibility } from './electron-compatibility.ts';
 import { EvalCapExceededError } from './eval-cap-exceeded-error.ts';
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
 import { exec } from './exec.ts';
 import { log } from './log.ts';
 import { ensureNamespaceBootstrapped } from './namespace-bootstrap.ts';
@@ -106,7 +107,13 @@ export interface DesktopCdpTransportConfig {
 
   /**
    * Timeout in milliseconds for individual CDP commands.
-   * Defaults to `30000`.
+   *
+   * A test's closure travels as one `Runtime.evaluate` command, so this is also
+   * the desktop per-eval cap. The default is `DEFAULT_EVAL_CAP_IN_MILLISECONDS`,
+   * exported from the package root — import it rather than restating the number,
+   * so a closure sized against the cap follows it if it ever moves.
+   *
+   * @default `30000`
    */
   commandTimeoutInMilliseconds?: number;
 
@@ -295,7 +302,6 @@ interface CdpValue {
  */
 type PendingCommand = (response: CdpResponse) => void;
 
-const COMMAND_TIMEOUT_IN_MILLISECONDS = 30_000;
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10_000;
 const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
@@ -384,7 +390,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const {
       cdpHost = 'localhost',
       cdpPort,
-      commandTimeoutInMilliseconds = COMMAND_TIMEOUT_IN_MILLISECONDS,
+      // A test's closure travels as one `Runtime.evaluate` CDP command, so the
+      // Command budget IS the per-eval cap on this transport — hence the shared
+      // Constant rather than a desktop-specific number that happens to match.
+      commandTimeoutInMilliseconds = DEFAULT_EVAL_CAP_IN_MILLISECONDS,
       configDirectory,
       deadBootGraceInMilliseconds = DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS,
       isHarnessOwnedInstance = false,

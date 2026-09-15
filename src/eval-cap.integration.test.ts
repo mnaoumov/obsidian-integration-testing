@@ -25,6 +25,7 @@ import {
 } from 'vitest';
 
 import { EvalCapExceededError } from './eval-cap-exceeded-error.ts';
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
@@ -35,6 +36,13 @@ const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
  */
 const OVER_CAP_SLEEP_IN_MILLISECONDS = 40_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
+
+/*
+ * How far past the cap the report may arrive and still count as the CAP having produced it — the same
+ * tolerance the Android half carries, for the same reason: without it the test would pass on a closure
+ * that merely finished late, which cannot be told from a cap firing on time.
+ */
+const CAP_REPORT_TOLERANCE_IN_MILLISECONDS = 10_000;
 
 describe('the desktop per-eval cap', () => {
   const vault = new TemporaryVault();
@@ -49,6 +57,7 @@ describe('the desktop per-eval cap', () => {
   });
 
   it('should report an over-cap closure as a cap overrun, pointing at pollInObsidian', async () => {
+    const startedAt = Date.now();
     const evaluation = evalInObsidian({
       async callback({ overCapSleepInMilliseconds }): Promise<string> {
         await new Promise((resolve) => {
@@ -65,6 +74,16 @@ describe('the desktop per-eval cap', () => {
     // The two things a reader needs and the old message withheld: which budget ended it, and the way out.
     await expect(evaluation).rejects.toThrow(/desktop \(CDP\)/);
     await expect(evaluation).rejects.toThrow(/pollInObsidian/);
+
+    /*
+     * The desktop half of "both transports share ONE cap". The shared constant is what the transport
+     * defaults its command budget to, so the give-up has to land in the window that constant opens —
+     * and the 40s sleep sits outside it, so a run where the closure was simply allowed to finish, or
+     * where some outer budget expired, fails here rather than passing.
+     */
+    const elapsedInMilliseconds = Date.now() - startedAt;
+    expect(elapsedInMilliseconds).toBeGreaterThanOrEqual(DEFAULT_EVAL_CAP_IN_MILLISECONDS);
+    expect(elapsedInMilliseconds).toBeLessThan(DEFAULT_EVAL_CAP_IN_MILLISECONDS + CAP_REPORT_TOLERANCE_IN_MILLISECONDS);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // The cap must not have eaten the session with the closure: everything after it would otherwise fail

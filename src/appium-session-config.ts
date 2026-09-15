@@ -10,20 +10,12 @@
 
 import type { ObsidianAndroidAppiumTransportOptions } from './transport-options.ts';
 
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
+
 /**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.appiumStartTimeoutInMilliseconds}.
  */
 export const DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS = 180_000;
-
-/**
- * Default for {@link ObsidianAndroidAppiumTransportOptions.scriptTimeoutInMilliseconds}.
- *
- * The same 30s WebDriver would nominally apply, stated here so the cap is a
- * declared number rather than an invisible protocol default — and, since the
- * protocol default was measured not to be applied at all on this driver, the
- * only number that actually bounds an Android eval.
- */
-export const DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 /**
  * Default for {@link ObsidianAndroidAppiumTransportOptions.sessionConnectionRetryTimeoutInMilliseconds}.
@@ -58,13 +50,19 @@ export function resolveAppiumStartTimeoutInMilliseconds(
  * a closure times out: the closure is what should get shorter, with the waiting
  * moved to Node via `pollInObsidian`.
  *
+ * The default is {@link DEFAULT_EVAL_CAP_IN_MILLISECONDS}, the shared per-eval
+ * cap, rather than an Android-specific number: the protocol default WebDriver
+ * would nominally apply was measured not to be applied at all on this driver, so
+ * this is the only number that actually bounds an Android eval — which makes it
+ * the same policy the desktop transport enforces, not a coincidence.
+ *
  * @param options - The Android Appium transport options.
  * @returns The timeout in milliseconds.
  */
 export function resolveScriptTimeoutInMilliseconds(
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
-  return options.scriptTimeoutInMilliseconds ?? DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS;
+  return options.scriptTimeoutInMilliseconds ?? DEFAULT_EVAL_CAP_IN_MILLISECONDS;
 }
 
 /**

@@ -153,6 +153,11 @@ export interface ConnectToCdpOptions {
   /**
    * Timeout in milliseconds for individual CDP commands.
    *
+   * A test's closure travels as one `Runtime.evaluate` command, so this is also
+   * the desktop per-eval cap. The default is `DEFAULT_EVAL_CAP_IN_MILLISECONDS`,
+   * exported from the package root — import it rather than restating the number,
+   * so a closure sized against the cap follows it if it ever moves.
+   *
    * @default `30000`
    */
   readonly commandTimeoutInMilliseconds?: number;

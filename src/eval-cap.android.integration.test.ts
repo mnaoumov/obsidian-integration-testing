@@ -33,8 +33,8 @@ import {
   it
 } from 'vitest';
 
-import { DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS } from './appium-session-config.ts';
 import { EvalCapExceededError } from './eval-cap-exceeded-error.ts';
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
@@ -104,8 +104,8 @@ describe('the Android per-eval cap', () => {
      * Simply allowed to finish, or where some outer budget expired, fails here rather than passing.
      */
     const elapsedInMilliseconds = Date.now() - startedAt;
-    expect(elapsedInMilliseconds).toBeGreaterThanOrEqual(DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS);
-    expect(elapsedInMilliseconds).toBeLessThan(DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS + CAP_REPORT_TOLERANCE_IN_MILLISECONDS);
+    expect(elapsedInMilliseconds).toBeGreaterThanOrEqual(DEFAULT_EVAL_CAP_IN_MILLISECONDS);
+    expect(elapsedInMilliseconds).toBeLessThan(DEFAULT_EVAL_CAP_IN_MILLISECONDS + CAP_REPORT_TOLERANCE_IN_MILLISECONDS);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // A capped eval must not take the session with it, or every later Android test fails for a reason that

@@ -71,7 +71,6 @@ import {
   classifyAppStartupProbe,
   compareAppStartupMilestones
 } from './app-startup-progress.ts';
-import { DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS } from './appium-session-config.ts';
 import {
   decodeBase64Png,
   isPng
@@ -81,6 +80,7 @@ import {
   EvalCapExceededError,
   isScriptTimeoutError
 } from './eval-cap-exceeded-error.ts';
+import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval-cap.ts';
 import { exec } from './exec.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
@@ -220,13 +220,14 @@ const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 /*
  * Extra budget granted to the ONE eval that follows a cap overrun, on top of the cap itself. The
  * abandoned closure keeps running in the guest, and Appium serializes commands per session, so the next
- * command waits out whatever is left of it. Sized at the cap again, which is a pragmatic ceiling rather
- * than a proof: a closure can outrun any number picked here. It does not need to be a proof, because a
- * guest that is still busy after it simply produces another overrun on the next eval, which is granted the
- * grace in turn — so the session recovers over successive evals instead of compounding, and every one of
- * those evals reports the same honest diagnosis.
+ * command waits out whatever is left of it. Sized at the default cap again — derived from it rather than
+ * restated, so the two cannot drift — which is a pragmatic ceiling rather than a proof: a closure can
+ * outrun any number picked here. It does not need to be a proof, because a guest that is still busy after
+ * it simply produces another overrun on the next eval, which is granted the grace in turn — so the session
+ * recovers over successive evals instead of compounding, and every one of those evals reports the same
+ * honest diagnosis.
  */
-const CAP_RECOVERY_GRACE_IN_MILLISECONDS = 30_000;
+const CAP_RECOVERY_GRACE_IN_MILLISECONDS = DEFAULT_EVAL_CAP_IN_MILLISECONDS;
 
 // --- Console capture (Layer 2 of the plugin-load error surfacing) ---
 /**
@@ -362,7 +363,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.platform = config.platform;
     this.appId = config.appId ?? DEFAULT_APP_ID;
     this.appStartTimeoutInMilliseconds = config.appStartTimeoutInMilliseconds ?? DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS;
-    this.scriptTimeoutInMilliseconds = config.scriptTimeoutInMilliseconds ?? DEFAULT_SCRIPT_TIMEOUT_IN_MILLISECONDS;
+    this.scriptTimeoutInMilliseconds = config.scriptTimeoutInMilliseconds ?? DEFAULT_EVAL_CAP_IN_MILLISECONDS;
     this.shouldSweepLeftovers = config.shouldSweepLeftovers ?? true;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? DEFAULT_ANDROID_VAULT_BASE_PATH;
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
