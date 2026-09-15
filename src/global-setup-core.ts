@@ -91,11 +91,11 @@ const setupLocks = new Map<CoreSetupResult, SetupLock>();
 /**
  * Parameters for {@link coreSetup}.
  */
-export interface CoreSetupParams {
+export interface CoreSetupOptions {
   /**
    * Community-plugin ids to enable in the vault **in addition to** the
    * plugin-under-test, after it is enabled. Each id's built files must already be
-   * present under `.obsidian/plugins/<id>/` — seed them via {@link CoreSetupParams.populate}
+   * present under `.obsidian/plugins/<id>/` — seed them via {@link CoreSetupOptions.populate}
    * (e.g. with `buildDemoVaultPopulate`). Enabling goes through the same
    * retry/load-verify path as the plugin-under-test. Composes with
    * `installPlugin: false` (enable extras into an otherwise plugin-less vault).
@@ -303,7 +303,7 @@ interface SweepLeftoversParams {
  * Framework-agnostic global setup logic.
  *
  * Loads `.env` from the project root, creates a transport, creates and registers
- * a temporary vault with Obsidian, and — unless {@link CoreSetupParams.installPlugin}
+ * a temporary vault with Obsidian, and — unless {@link CoreSetupOptions.installPlugin}
  * is `false` — copies the built plugin into the vault and enables it. The
  * plugin-less mode still launches the owned instance and publishes its
  * worker-facing endpoint, so a non-plugin consumer reuses the same attach wiring.
@@ -311,7 +311,7 @@ interface SweepLeftoversParams {
  * @param params - Setup parameters.
  * @returns The setup result containing the temp vault, transport, and resolved options.
  */
-export async function coreSetup(params?: CoreSetupParams): Promise<CoreSetupResult> {
+export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupResult> {
   const projectRoot = findProjectRoot();
   const envFilePath = join(projectRoot, '.env');
   if (existsSync(envFilePath)) {
@@ -479,6 +479,7 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
  * @param configDirectory - The resolved override, or `undefined` for Obsidian's default (a no-op).
  * @returns The map with its config-folder keys redirected, or the original map when there is nothing to move.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `PopulateFilesParams` is one bag shared by `TemporaryVault.populate` and this remap, so no per-owner name can satisfy both.
 export function remapConfigDirectoryKeys(populate: PopulateFilesParams, configDirectory: string | undefined): PopulateFilesParams {
   if (configDirectory === undefined || configDirectory === DEFAULT_CONFIG_DIRECTORY) {
     return populate;
@@ -502,6 +503,7 @@ export function remapConfigDirectoryKeys(populate: PopulateFilesParams, configDi
  * @param options - Consumer-provided transport options.
  * @returns Options with the desktop integration visibility default applied.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export function resolveIntegrationTransportOptions(options?: ObsidianTransportOptions): ObsidianTransportOptions {
   if (options?.type === 'obsidian-android-appium') {
     return options;
@@ -599,7 +601,7 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
 /**
  * Enables extra community plugins (beyond the plugin-under-test) in the registered vault, each through the
  * same {@link enablePluginInVault} path. Each plugin's built files must already be present in the vault (seed
- * them via {@link CoreSetupParams.populate}). A no-op when the list is empty.
+ * them via {@link CoreSetupOptions.populate}). A no-op when the list is empty.
  *
  * @param params - The enable parameters.
  */

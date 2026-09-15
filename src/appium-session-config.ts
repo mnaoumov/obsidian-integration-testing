@@ -35,6 +35,7 @@ export const DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180_000;
  * @returns The timeout in milliseconds.
  */
 export function resolveAppiumStartTimeoutInMilliseconds(
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.appiumStartTimeoutInMilliseconds ?? DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS;
@@ -60,6 +61,7 @@ export function resolveAppiumStartTimeoutInMilliseconds(
  * @returns The timeout in milliseconds.
  */
 export function resolveScriptTimeoutInMilliseconds(
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.scriptTimeoutInMilliseconds ?? DEFAULT_EVAL_CAP_IN_MILLISECONDS;
@@ -78,6 +80,7 @@ export function resolveScriptTimeoutInMilliseconds(
  * @returns The timeout in milliseconds.
  */
 export function resolveSessionConnectionRetryTimeoutInMilliseconds(
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.sessionConnectionRetryTimeoutInMilliseconds ?? DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS;

@@ -25,7 +25,7 @@ import type { ProcessExitInfo } from './process-exit-message.ts';
 /**
  * Parameters for {@link attachProcessCapture}.
  */
-export interface AttachProcessCaptureParams {
+export interface AttachProcessCaptureOptions {
   /**
    * How many characters of the most recent output to keep. Older output is
    * dropped from the front as new output arrives.
@@ -99,7 +99,7 @@ interface StreamWithUnref {
  * @param params - The tail budget, and an optional live-output callback.
  * @returns Readers for the captured output and the exit status.
  */
-export function attachProcessCapture(child: ChildProcess, params: AttachProcessCaptureParams): ProcessCapture {
+export function attachProcessCapture(child: ChildProcess, params: AttachProcessCaptureOptions): ProcessCapture {
   const { maxOutputLengthInCharacters, onChunk } = params;
 
   let capturedOutput = '';

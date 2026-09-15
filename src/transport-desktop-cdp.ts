@@ -432,6 +432,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @returns The raw PNG bytes.
    * @throws Error if CDP returns no image data, or data that is not a PNG.
    */
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `CaptureScreenshotParams` is one bag shared by the `captureScreenshot` of both transports, so no per-owner name can satisfy both.
   public async captureScreenshot(params: CaptureScreenshotParams): Promise<Uint8Array> {
     const ws = await this.ensureConnection(params.cwd);
     const deviceMetricsOverride = buildDeviceMetricsOverride(params);
@@ -516,6 +517,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param options - Evaluation options.
    * @returns The normalized result string.
    */
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `TransportEvalOptions` is one bag shared by the `evaluate` of both transports, so no per-owner name can satisfy both.
   public async evaluate(expression: string, options: TransportEvalOptions): Promise<string> {
     const ws = await this.ensureConnection(options.cwd);
     let response;

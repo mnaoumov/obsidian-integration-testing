@@ -92,6 +92,7 @@ const SOFT_KEYBOARD_SETTING_ON = '1';
  * @param params - The device, the setting and its namespace.
  * @returns A {@link Promise} that resolves once the setting is gone.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `DeviceSettingParams` is one bag shared by the read and delete helpers, so no per-owner name can satisfy both.
 export async function deleteDeviceSetting(params: DeviceSettingParams): Promise<void> {
   await runAdbText({
     commandArguments: buildDeviceSettingsCommandArguments({
@@ -110,6 +111,7 @@ export async function deleteDeviceSetting(params: DeviceSettingParams): Promise<
  * @returns A {@link Promise} that resolves to the setting's value, or the literal `null` when it has never
  *   been written.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `DeviceSettingParams` is one bag shared by the read and delete helpers, so no per-owner name can satisfy both.
 export async function readDeviceSetting(params: DeviceSettingParams): Promise<string> {
   return await runAdbText({
     commandArguments: buildDeviceSettingsCommandArguments({

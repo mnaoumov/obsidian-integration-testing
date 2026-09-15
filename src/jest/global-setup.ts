@@ -60,7 +60,7 @@ setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVau
 export interface CreateSetupOptions {
   /**
    * Community-plugin ids to enable in the vault in addition to the plugin-under-test,
-   * after it is enabled (see {@link CoreSetupParams.enableCommunityPlugins}). Seed each
+   * after it is enabled (see {@link CoreSetupOptions.enableCommunityPlugins}). Seed each
    * plugin's built files via {@link CreateSetupOptions.populate} (e.g. with `buildDemoVaultPopulate`)
    * so the enable finds them on disk.
    */
@@ -72,13 +72,13 @@ export interface CreateSetupOptions {
    * registered, empty vault to `evalInObsidian` against — the owned instance is
    * still launched and its endpoint published to workers, so re-exporting
    * `createSetup({ installPlugin: false })` reuses the same attach wiring with no
-   * plugin copy/enable. See {@link CoreSetupParams.installPlugin}.
+   * plugin copy/enable. See {@link CoreSetupOptions.installPlugin}.
    */
   readonly installPlugin?: boolean;
 
   /**
    * Returns files/folders to write into the vault before Obsidian opens it (see
-   * {@link CoreSetupParams.populate}). A thunk so large fixtures are built lazily,
+   * {@link CoreSetupOptions.populate}). A thunk so large fixtures are built lazily,
    * once, in the setup process.
    *
    * May return a promise, so the map can be built by something that needs the network — notably

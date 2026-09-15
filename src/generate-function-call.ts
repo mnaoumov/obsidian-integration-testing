@@ -73,6 +73,7 @@ interface AppParams {
  * @param params - The parameters, including the `app` instance.
  * @returns A promise that resolves when the layout is ready.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `GenerateFunctionCallParams` is the shared app-plus-arguments bag every serialized callback takes, so no per-owner name can satisfy them all.
 export async function ensureLayoutReady(params: GenerateFunctionCallParams): Promise<void> {
   await new Promise<void>((resolve) => {
     params.app.workspace.onLayoutReady(resolve);
@@ -87,6 +88,7 @@ export async function ensureLayoutReady(params: GenerateFunctionCallParams): Pro
  * @param params - The arguments to pass.
  * @returns A JavaScript expression string.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `Params` is a type parameter of this function rather than a bag type, and the alias above already holds the name the rule derives.
 export function generateFunctionCall<Params>(callback: (params: GenerateFunctionCallParams<Params>) => Promisable<unknown>, params: Params): string {
   const functionExpression = getFunctionExpressionString(callback);
   const serializedParams = jsonWithFunctions(params);

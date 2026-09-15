@@ -96,6 +96,7 @@ export class TemporaryVault {
    * @param path - An explicit vault path. If omitted, a temp directory is created.
    * @param options - Vault options.
    */
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `TemporaryVaultOptions` is re-exported from `index.ts`, so renaming it to `TemporaryVaultConstructorOptions` is a breaking change held for the next major.
   public constructor(path?: string, options?: TemporaryVaultOptions) {
     this.path = path ?? mkdtempSync(join(tmpdir(), TEMP_VAULT_DIR_PREFIX));
     this.#shouldRemoveDirectoryOnDispose = options?.shouldRemoveDirectoryOnDispose ?? path === undefined;
@@ -139,6 +140,7 @@ export class TemporaryVault {
    *
    * @param files - Map of file/folder paths to content.
    */
+  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `PopulateFilesParams` is one bag shared by this method and the config-directory remap in `global-setup-core.ts`, so no per-owner name can satisfy both.
   public populate(files: PopulateFilesParams): void {
     for (const [filePath, content] of Object.entries(files)) {
       const fullPath = join(this.path, filePath);

@@ -65,6 +65,7 @@ type OpenSettingsTabInput = Record<'openParams', OpenSettingsTabParams>;
  * @throws Error if no tab carries {@link OpenSettingsTabParams.tabId}, or if the
  *   tab does not render within the timeout.
  */
+// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `OpenObsidianSettingsTabOptions` is re-exported from `index.ts`, so renaming it to `OpenObsidianSettingsTabParams` is a breaking change held for the next major.
 export async function openObsidianSettingsTab(options: OpenObsidianSettingsTabOptions): Promise<string[]> {
   const {
     tabId,
