@@ -864,6 +864,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     while (!element.matches(':hover') && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
     }
+
+    if (!element.matches(':hover')) {
+      throw new Error(
+        `The pointer was moved to the center of the element, but it never matched \`:hover\` within ${String(INPUT_TIMEOUT_IN_MILLISECONDS)}ms. `
+          + 'Most often the center belongs to something on top of the element, or the element moved after its box was read.'
+      );
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await -- Async to match its mobile-capable siblings and to keep one `Promise<void>` shape across the trusted-input set; the desktop body is genuinely synchronous.
@@ -886,11 +893,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       throwUnsupportedOnMobile('unhoverElement');
     }
 
-    // Move to a point just outside the element's box.
-    // When flush against the viewport's left edge, use just past the right edge.
-    // A full-viewport-width element should use `moveMouse` directly instead.
+    /*
+     * Move to a point just outside the element's box. When flush against the viewport's left edge, use just
+     * past the right edge. A full-viewport-width element should use `moveMouse` directly instead.
+     *
+     * The edge is SNAPPED away from the box before the offset is applied, and that is the whole correctness
+     * of this function. A layout box rarely lands on a whole pixel, and `moveMouse` rounds — so subtracting
+     * one from a fractional left edge rounds straight back onto the element's own pixel column and the
+     * pointer never leaves. Measured on a bar whose `left` was 859.796875: the plain `left - 1` becomes 859
+     * and `:hover` never clears, while `Math.floor(left) - 1` becomes 858 and it clears in 26 ms. Snapping
+     * first means the offset is a whole pixel of real clearance instead of whatever the fraction leaves.
+     */
     const rect = element.getBoundingClientRect();
-    const x = rect.left >= OUTSIDE_OFFSET_IN_PIXELS ? rect.left - OUTSIDE_OFFSET_IN_PIXELS : rect.right + OUTSIDE_OFFSET_IN_PIXELS;
+    const x = rect.left >= OUTSIDE_OFFSET_IN_PIXELS
+      ? Math.floor(rect.left) - OUTSIDE_OFFSET_IN_PIXELS
+      : Math.ceil(rect.right) + OUTSIDE_OFFSET_IN_PIXELS;
     const y = rect.top + rect.height / CENTER_DIVISOR;
     await moveMouse({ x, y });
 
@@ -898,6 +915,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const startTime = Date.now();
     while (element.matches(':hover') && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+
+    if (element.matches(':hover')) {
+      throw new Error(
+        `The pointer was moved outside the element's box, but it still matched \`:hover\` after ${String(INPUT_TIMEOUT_IN_MILLISECONDS)}ms. `
+          + 'An element that spans the full viewport has no point outside its box to move to — use `moveMouse` to a known empty coordinate instead.'
+      );
     }
   }
 

@@ -158,6 +158,61 @@ describe('desktop trusted input', () => {
 
     expect(wasHovered).toBe(true);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  /*
+   * The regression this pair of assertions exists for. A layout box rarely lands on a whole pixel, and
+   * `moveMouse` rounds — so an offset taken from the RAW fractional edge rounds back into the element's own
+   * pixel column and the pointer never leaves. `left` is `24.796875` here for that reason: the old
+   * `left - 1` sends `round(23.796875)` = 24, whose pixel column [24, 25) still overlaps the box, while the
+   * snapped `Math.floor(left) - 1` sends 23 and genuinely clears. Before the snap this burned the whole
+   * 5 000 ms poll and resolved anyway, with the element still `:hover`.
+   */
+  it('should clear a real :hover through unhoverElement even when the box edge is fractional', async () => {
+    const isStillHovered = await evalInObsidian({
+      async callback({ lib }): Promise<boolean> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '80px', left: '24.796875px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        try {
+          await lib.hoverElement({ element: target });
+          await lib.unhoverElement({ element: target });
+          return target.matches(':hover');
+        } finally {
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(isStillHovered).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // A hover that never landed reads to an assertion exactly like one that did — the element still has its
+  // Base style — so an unmet post-condition throws instead of resolving quietly. The overlay is what makes
+  // The failure deterministic: it takes the hit at the target's center, so the target never matches `:hover`.
+  it('should throw from hoverElement when the element never takes the hover', async () => {
+    const message = await evalInObsidian({
+      async callback({ lib }): Promise<string> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483646' });
+        const overlay = document.body.createDiv();
+        overlay.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        try {
+          await lib.hoverElement({ element: target });
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        } finally {
+          overlay.remove();
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(message).toContain('never matched `:hover`');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
 });
 
 /**
