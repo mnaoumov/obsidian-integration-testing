@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 14.0.0
+
+- chore(release): refuse a non-major bump over an unreleased breaking change
+- refactor(types)!: land the deferred public params-options-name-match renames
+- refactor(types)!: take method-signature-style to its `property` default
+
 ## 13.0.0
 
 - chore(eslint-config): enforce params-options-name-match on src/ too
