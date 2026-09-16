@@ -140,7 +140,7 @@ export interface WithAppConfigParams<T> extends SetAppConfigParams {
   /**
    * The work to run while the key holds {@link SetAppConfigParams.value}.
    */
-  callback(this: void): Promise<T>;
+  readonly callback: (this: void) => Promise<T>;
 }
 
 /**

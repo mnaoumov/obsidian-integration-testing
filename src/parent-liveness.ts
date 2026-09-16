@@ -78,7 +78,7 @@ export interface ParentLivenessServer {
    * arriving afterwards is refused, which is the answer a torn-down harness
    * should give.
    */
-  close(): void;
+  close: () => void;
 
   /**
   The loopback port the renderer watchdog should connect back to.

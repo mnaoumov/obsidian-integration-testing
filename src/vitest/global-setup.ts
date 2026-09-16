@@ -66,15 +66,15 @@ export interface CreateSetupOptions {
    * `buildDemoVaultPopulateAsync`, which installs a demo vault's missing community plugins before
    * reading them. A synchronous thunk (e.g. `buildDemoVaultPopulate`) is unchanged.
    */
-  populate?(this: void): PopulateFilesParams | Promise<PopulateFilesParams>;
+  readonly populate?: (this: void) => PopulateFilesParams | Promise<PopulateFilesParams>;
 }
 
 /**
  * A Vitest `globalSetup` module's `setup` / `teardown` pair.
  */
 export interface VitestGlobalSetup {
-  setup(this: void, project: TestProject): Promise<void>;
-  teardown(this: void): Promise<void>;
+  setup: (this: void, project: TestProject) => Promise<void>;
+  teardown: (this: void) => Promise<void>;
 }
 
 /**

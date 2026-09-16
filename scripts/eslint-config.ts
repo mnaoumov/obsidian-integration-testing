@@ -691,7 +691,7 @@ function getTseslintConfigs(): Linter.Config[] {
       rules: {
         '@typescript-eslint/explicit-function-return-type': 'error',
         '@typescript-eslint/explicit-member-accessibility': 'error',
-        '@typescript-eslint/method-signature-style': ['error', 'method'],
+        '@typescript-eslint/method-signature-style': 'error',
         '@typescript-eslint/no-floating-promises': ['error', {
           checkThenables: true
         }],

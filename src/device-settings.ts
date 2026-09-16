@@ -61,7 +61,7 @@ export interface WithSoftKeyboardEnabledParams<T> {
   /**
    * The work to run while the on-screen keyboard is permitted.
    */
-  callback(this: void): Promise<T>;
+  readonly callback: (this: void) => Promise<T>;
 
   /**
    * The device to address.

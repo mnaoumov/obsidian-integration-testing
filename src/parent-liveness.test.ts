@@ -50,7 +50,7 @@ interface CreateWatchdogWindowStubOptions {
   /**
   Replacement body for `electronWindow.destroy`.
   */
-  destroyImpl?(this: void): void;
+  readonly destroyImpl?: () => void;
 
   /**
   Makes `require('node:net')` throw, so the bare-`net` fallback is exercised.
@@ -73,9 +73,9 @@ interface SocketStub {
    *
    * @param event - The event to fire.
    */
-  fire(event: string): void;
+  fire: (event: string) => void;
 
-  on(event: string, listener: () => void): void;
+  on: (event: string, listener: () => void) => void;
 }
 
 /**

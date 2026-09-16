@@ -40,12 +40,12 @@ interface DeviceDouble {
   /**
   Lists the names still present.
   */
-  listNames(this: void): Promise<readonly string[]>;
+  readonly listNames: () => Promise<readonly string[]>;
 
   /**
   Removes one directory, rejecting for the names configured as un-removable.
   */
-  removeDirectory(this: void, path: string): Promise<void>;
+  readonly removeDirectory: (path: string) => Promise<void>;
 }
 
 const mockReaddir = vi.hoisted(() => vi.fn());

@@ -15,8 +15,8 @@ import { TemporaryVault } from './temporary-vault.ts';
 // here targeting the local module that declares `Lib`.
 declare module './eval-in-obsidian.ts' {
   interface Lib {
-    echo(this: void, value: string): string;
-    shout(this: void, value: string): string;
+    echo: (this: void, value: string) => string;
+    shout: (this: void, value: string) => string;
   }
 }
 

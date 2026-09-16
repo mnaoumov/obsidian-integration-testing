@@ -43,7 +43,7 @@ export interface ObsidianTransport {
    *
    * @returns An opaque handle to pass to {@link ObsidianTransport.readConsoleCaptureSince}, or `undefined` when unsupported.
    */
-  beginConsoleCapture?(): Promise<ConsoleCaptureHandle | undefined>;
+  beginConsoleCapture?: () => Promise<ConsoleCaptureHandle | undefined>;
 
   /**
    * Captures a PNG screenshot of the running Obsidian instance.
@@ -58,12 +58,12 @@ export interface ObsidianTransport {
    * @param params - Which window to capture, and the exact size to capture it at.
    * @returns A {@link Promise} that resolves to the raw PNG bytes.
    */
-  captureScreenshot?(params: CaptureScreenshotParams): Promise<Uint8Array>;
+  captureScreenshot?: (params: CaptureScreenshotParams) => Promise<Uint8Array>;
 
   /**
    * Disposes of transport resources (e.g. WebSocket connections, Appium sessions).
    */
-  dispose?(): Promise<void>;
+  dispose?: () => Promise<void>;
 
   /**
    * Synchronous disposal for use in `process.on('exit')` handlers where
@@ -72,7 +72,7 @@ export interface ObsidianTransport {
    * Implementations should perform only synchronous cleanup here (e.g. killing
    * child processes). Async operations like unregistering vaults are skipped.
    */
-  disposeSync?(): void;
+  disposeSync?: () => void;
 
   /**
    * Evaluates a JavaScript expression string inside Obsidian and returns the
@@ -86,7 +86,7 @@ export interface ObsidianTransport {
    * @param options - Evaluation options including the working directory.
    * @returns The raw result string from Obsidian.
    */
-  evaluate(expression: string, options: TransportEvalOptions): Promise<string>;
+  evaluate: (expression: string, options: TransportEvalOptions) => Promise<string>;
 
   /**
    * Whether this transport targets a mobile Obsidian instance.
@@ -104,7 +104,7 @@ export interface ObsidianTransport {
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
-  preflightCheck(vaultPath: string): Promise<void>;
+  preflightCheck: (vaultPath: string) => Promise<void>;
 
   /**
    * Pushes files into a vault directory on the target device.
@@ -115,7 +115,7 @@ export interface ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    * @param files - Map of relative file paths to content buffers.
    */
-  pushFiles?(vaultPath: string, files: Record<string, Uint8Array>): Promise<void>;
+  pushFiles?: (vaultPath: string, files: Record<string, Uint8Array>) => Promise<void>;
 
   /**
    * Reads the native console/error output captured since the matching
@@ -126,7 +126,7 @@ export interface ObsidianTransport {
    * @param handle - The handle returned by {@link ObsidianTransport.beginConsoleCapture} (or `undefined` when capture was unsupported).
    * @returns The captured console/error text, or `undefined` when unsupported or nothing relevant was logged.
    */
-  readConsoleCaptureSince?(handle: ConsoleCaptureHandle | undefined): Promise<string | undefined>;
+  readConsoleCaptureSince?: (handle: ConsoleCaptureHandle | undefined) => Promise<string | undefined>;
 
   /**
    * Registers a vault path so Obsidian can target it.
@@ -142,7 +142,7 @@ export interface ObsidianTransport {
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
-  registerVault(vaultPath: string): Promise<void>;
+  registerVault: (vaultPath: string) => Promise<void>;
 
   /**
    * Unregisters a vault path from the running Obsidian instance.
@@ -152,7 +152,7 @@ export interface ObsidianTransport {
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
-  unregisterVault(vaultPath: string): Promise<void>;
+  unregisterVault: (vaultPath: string) => Promise<void>;
 }
 
 /**

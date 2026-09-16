@@ -42,7 +42,7 @@ async function scheduleInstanceDeath(): Promise<void> {
     /* v8 ignore start -- Evaluated inside Obsidian, not in the coverage-instrumented process. */
     async callback(): Promise<string> {
       interface IntegrationTestingNamespace {
-        destroyCurrentWindow(): Promise<void>;
+        destroyCurrentWindow: () => Promise<void>;
       }
       interface IntegrationTestingHolder {
         __obsidianIntegrationTesting: IntegrationTestingNamespace;

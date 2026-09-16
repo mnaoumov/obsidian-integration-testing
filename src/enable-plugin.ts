@@ -56,7 +56,7 @@ export interface EnablePluginResult {
 }
 
 interface IntegrationTestingErrorToString {
-  errorToString(error: unknown): string;
+  errorToString: (error: unknown) => string;
 }
 
 interface IntegrationTestingHolder {

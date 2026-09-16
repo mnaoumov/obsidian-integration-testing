@@ -85,15 +85,15 @@ export interface CreateSetupOptions {
    * `buildDemoVaultPopulateAsync`, which installs a demo vault's missing community plugins before
    * reading them. A synchronous thunk (e.g. `buildDemoVaultPopulate`) is unchanged.
    */
-  populate?(this: void): PopulateFilesParams | Promise<PopulateFilesParams>;
+  readonly populate?: (this: void) => PopulateFilesParams | Promise<PopulateFilesParams>;
 }
 
 /**
  * A Jest `globalSetup` / `globalTeardown` module's `setup` / `teardown` pair.
  */
 export interface JestGlobalSetup {
-  setup(this: void): Promise<void>;
-  teardown(this: void): Promise<void>;
+  setup: (this: void) => Promise<void>;
+  teardown: (this: void) => Promise<void>;
 }
 
 /**

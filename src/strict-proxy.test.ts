@@ -16,7 +16,7 @@ interface DeepNested {
 }
 
 interface MockTarget {
-  callback(): string;
+  callback: () => string;
   name: string;
   nested: Nested;
 }

@@ -14,7 +14,7 @@ interface AddArguments {
 }
 
 interface TransformArguments {
-  transform(x: number): number;
+  transform: (x: number) => number;
 }
 
 describe('generateFunctionCall', () => {
