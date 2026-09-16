@@ -115,6 +115,15 @@ export interface BootstrapDemoVaultPluginsResult {
 }
 
 /**
+ * Parameters for {@link buildDemoVaultPopulateAsync} — the same bag {@link buildDemoVaultPopulate} takes,
+ * under the name the asynchronous builder derives.
+ *
+ * One declaration serves both builders. It keeps the synchronous builder's name, and this alias gives the
+ * asynchronous one its own, so neither has to be spelled after the other.
+ */
+export type BuildDemoVaultPopulateAsyncParams = BuildDemoVaultPopulateParams;
+
+/**
  * One plugin installed by {@link bootstrapDemoVaultPlugins}.
  */
 export interface InstalledPluginInfo {
@@ -179,11 +188,10 @@ export async function bootstrapDemoVaultPlugins(params: BootstrapDemoVaultPlugin
  * Use this from a global setup's `populate` thunk — both the Vitest and Jest adapters accept a thunk
  * returning a promise — so a fresh clone, a new machine, or CI needs no manual install step.
  *
- * @param params - The same `BuildDemoVaultPopulateParams` the synchronous builder takes.
+ * @param params - The same bag the synchronous builder takes, as {@link BuildDemoVaultPopulateAsyncParams}.
  * @returns The populate map, ready to hand to a global setup's `populate` or `TemporaryVault.populate`.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `BuildDemoVaultPopulateParams` is re-exported from `index.ts`, so renaming it to `BuildDemoVaultPopulateAsyncParams` is a breaking change held for the next major.
-export async function buildDemoVaultPopulateAsync(params: BuildDemoVaultPopulateParams): Promise<PopulateFilesParams> {
+export async function buildDemoVaultPopulateAsync(params: BuildDemoVaultPopulateAsyncParams): Promise<PopulateFilesParams> {
   if (params.injectPlugins !== undefined) {
     await bootstrapDemoVaultPlugins({ demoVaultPath: params.demoVaultPath, injectPlugins: params.injectPlugins });
   }

@@ -54,7 +54,7 @@ export type PopulateFilesParams = Record<string, PopulateFileContent>;
 /**
  * Options for the {@link TemporaryVault} constructor.
  */
-export interface TemporaryVaultOptions {
+export interface TemporaryVaultConstructorOptions {
   /**
    * Whether {@link TemporaryVault.dispose} removes the vault **directory**.
    *
@@ -77,7 +77,7 @@ const RM_RETRY_TIMEOUT_IN_MILLISECONDS = 10_000;
  *
  * A handle **owns** the directory only when it created it. {@link TemporaryVault.dispose} deletes an
  * owned directory and leaves a borrowed one in place — see
- * {@link TemporaryVaultOptions.shouldRemoveDirectoryOnDispose}, which overrides that default.
+ * {@link TemporaryVaultConstructorOptions.shouldRemoveDirectoryOnDispose}, which overrides that default.
  */
 export class TemporaryVault {
   /**
@@ -96,8 +96,7 @@ export class TemporaryVault {
    * @param path - An explicit vault path. If omitted, a temp directory is created.
    * @param options - Vault options.
    */
-  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `TemporaryVaultOptions` is re-exported from `index.ts`, so renaming it to `TemporaryVaultConstructorOptions` is a breaking change held for the next major.
-  public constructor(path?: string, options?: TemporaryVaultOptions) {
+  public constructor(path?: string, options?: TemporaryVaultConstructorOptions) {
     this.path = path ?? mkdtempSync(join(tmpdir(), TEMP_VAULT_DIR_PREFIX));
     this.#shouldRemoveDirectoryOnDispose = options?.shouldRemoveDirectoryOnDispose ?? path === undefined;
   }
@@ -106,7 +105,7 @@ export class TemporaryVault {
    * Unregisters the vault from Obsidian and, when this handle owns the directory, deletes it.
    *
    * The directory is removed only when this instance created it, or when
-   * {@link TemporaryVaultOptions.shouldRemoveDirectoryOnDispose} said so explicitly. That is what
+   * {@link TemporaryVaultConstructorOptions.shouldRemoveDirectoryOnDispose} said so explicitly. That is what
    * makes a handle over a directory somebody else owns — the run's shared setup vault, say, which
    * `getTemporaryVault()` wraps — safe to dispose from a consumer's `afterAll`.
    *
