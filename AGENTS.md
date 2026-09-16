@@ -684,6 +684,23 @@ Two notes for anyone syncing this against `obsidian-dev-utils`' copy, which carr
 
 **If a release ever half-fails here again**, `npm pack` has already written the tarball, so recovery needs no rebuild: `gh release create <version> dist/<tarball> --title v<version> --notes-file <notes>`, the notes being the `CHANGELOG.md` section for that version plus the `**Full Changelog**: <repo>/compare/<prev>...<new>` line `getReleaseNotes` would have produced. `publish-npm.yml` fires on a manually-created release exactly as it would on a scripted one.
 
+### A breaking change may only ship in a major, and the script enforces it -- it still does not infer it
+
+`npm run version` takes the bump as an explicit **argument**, and `getNewVersion` feeds it straight to semver's `inc`. Nothing in the release path ever read a commit footer, so **a `minor` cut over an unreleased `BREAKING CHANGE` was accepted silently**. The footer surfaced exactly once, in the `CHANGELOG.md` draft -- and `updateChangelog` prints only the FIRST LINE of each commit message, so the footer was not even in the draft. The subject's `!` was, but only to a reader who noticed it, and a non-interactive release reviews no draft at all. `main` was carrying four such commits when this was found.
+
+`assertBreakingChangesAreReleasedAsMajor` now sits with `assertGitRepoClean` / `assertGitHubCliInstalled` in the pre-flight, and the single `getNewVersion` call moved **above** the six gates to feed it. That position is the point: the refusal costs two `git` reads rather than a `build` plus a `test:coverage`. Nothing between there and `updateVersionInFiles` touches `package.json`, so resolving the version early cannot change what gets cut.
+
+What counts as breaking is the two forms Conventional Commits defines, read from the **whole** message of every commit in `<last tag>..HEAD` (`git describe --tags --abbrev=0`, the whole history when the repo has no tag): a `!` immediately before the `:` in the subject, or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` at the start of a line. The range is **not** `--first-parent`, deliberately -- unlike the changelog's. A merge subject that drops the `!` its branch commit carried is exactly the case worth catching, and scanning both means a merge and its own commit can each appear in the refusal, which is honest rather than duplicated.
+
+The comparison is against the **resolved** version, never the argument, so `major`, `premajor` and a manual `x.y.z` above the current major are one fact rather than three spellings. The case that makes this more than a one-line comparison is the **prerelease**: a `prerelease` bump on an existing `14.0.0-beta.0` raises no major and must still be allowed, because the raise already happened when the `premajor` was cut. So `isMajorRaise` also passes a current version that is a prerelease whose major already exceeds the last **stable** tagged version -- which is why `getLastReleasedStableVersion` exists alongside `getLastTag`: after a `premajor` the nearest tag IS the prerelease, and asking it whether the major was raised answers nothing.
+
+Two consequences worth knowing:
+
+- **A `0.x` package is held to the same rule.** Semver lets a breaking change ride the minor below `1.0.0`; this does not, because the argument is explicit and `major` is one word away. No repo here is below `1.0.0`, and inventing an escape hatch for none of them would only weaken the guard.
+- **Inferring the bump outright is refused, not deferred.** A `standard-version`-style derivation would take the choice away from the release; this only stops one that is provably wrong. The argument stays explicit.
+
+Both decisions are pure and live in `scripts/helpers/breaking-change.ts`, tested by `breaking-change.test.ts` against the real four-commit `-z` payload that was unreleased on `main` -- `version.ts` runs `await main()` at top level, so nothing can import it to test it, and the git reads are the only thing that stayed there.
+
 ## L38. Settings modal — the popout is the cause; the pre-attach is only a floor (`openSettingsTab`)
 
 `app.setting.open()` on its own does **nothing observable** from a test. `obsidian-backlink-full-path` concluded from exactly this that the settings tab **cannot** be captured and wrote the impossibility down; the diagnosis was right and the conclusion was not. `obsidian-frontmatter-markdown-links` skipped the settings shot too but recorded no reason for it — which is why that shot went just as long without a retry, and is not the same thing as writing an impossibility down.
