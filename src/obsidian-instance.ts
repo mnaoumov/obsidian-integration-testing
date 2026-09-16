@@ -69,7 +69,7 @@ export interface OwnedObsidianInstance {
   /**
   Kills the instance and its entire process tree.
    */
-  kill(): void;
+  kill: () => void;
 
   /**
    * Loopback port the instance's renderer connects back to so it destroys
@@ -90,12 +90,12 @@ export interface OwnedObsidianInstance {
    * another process reads the same facts from the exit marker
    * (`owned-instance-exit-marker.ts`).
    */
-  readExitInfo(): ProcessExitInfo | undefined;
+  readExitInfo: () => ProcessExitInfo | undefined;
 
   /**
   Returns the tail of everything the instance wrote to stdout/stderr.
    */
-  readOutput(): string;
+  readOutput: () => string;
 }
 
 const DEFAULT_CDP_HOST = '127.0.0.1';

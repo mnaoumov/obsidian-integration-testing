@@ -57,7 +57,7 @@ interface ParentLivenessHolder {
  * The subset of the renderer's watchdog socket a test reads.
  */
 interface ParentLivenessSocket {
-  destroy(): void;
+  destroy: () => void;
   localPort?: number;
   readyState?: string;
   remotePort?: number;

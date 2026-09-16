@@ -20,7 +20,7 @@ export interface EnsureLayoutReadyParams {
    * @param params - Parameters including the `app` instance.
    * @returns A promise that resolves when the layout is ready.
    */
-  ensureLayoutReady(params: GenerateFunctionCallParams): Promise<void>;
+  readonly ensureLayoutReady: (params: GenerateFunctionCallParams) => Promise<void>;
 }
 
 /**
@@ -37,7 +37,7 @@ export interface GenerateNamespaceCallParams {
   /**
   The user function to evaluate inside Obsidian.
    */
-  callback(this: void, ...input: never[]): unknown;
+  readonly callback: (...input: never[]) => unknown;
   /**
   Optional context ID for persistent storage.
    */

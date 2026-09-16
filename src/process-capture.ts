@@ -48,12 +48,12 @@ export interface ProcessCapture {
   /**
   Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`.
    */
-  readExitInfo(): ProcessExitInfo | undefined;
+  readExitInfo: () => ProcessExitInfo | undefined;
 
   /**
   Returns the captured stdout+stderr, bounded to the most recent output.
    */
-  readOutput(): string;
+  readOutput: () => string;
 
   /**
    * Stops accumulating output, freezing the tail at what has arrived so far.
@@ -62,7 +62,7 @@ export interface ProcessCapture {
    * The `data` listeners stay attached deliberately, so the pipes keep draining
    * for the rest of the process's life.
    */
-  stopCapture(): void;
+  stopCapture: () => void;
 }
 
 /**
@@ -85,7 +85,7 @@ export interface ProcessOutputChunk {
  * `Readable` alone does not declare.
  */
 interface StreamWithUnref {
-  unref(): void;
+  unref: () => void;
 }
 
 /**

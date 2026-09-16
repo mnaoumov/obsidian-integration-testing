@@ -168,7 +168,7 @@ export interface EvalInObsidianParams<Input extends GenericObject, Result, TCont
   /**
    * The function to evaluate in the Obsidian context.
    */
-  callback(input: CommonArguments & ContextArguments<TContextId> & Input): Promisable<Result>;
+  readonly callback: (input: CommonArguments & ContextArguments<TContextId> & Input) => Promisable<Result>;
 
   /**
    * A {@link ContextId} linking this call to a persistent store on `window`
@@ -262,7 +262,7 @@ export interface Lib {
    *   to hold.
    * @returns A {@link Promise} that resolves once the click has been injected.
    */
-  clickElement(this: void, params: ClickElementParams): Promise<void>;
+  clickElement: (this: void, params: ClickElementParams) => Promise<void>;
 
   /**
    * Clicks at the given web-contents coordinates using **trusted** Electron
@@ -298,7 +298,7 @@ export interface Lib {
    *   press and any modifiers to hold.
    * @returns A {@link Promise} that resolves once the click has been injected.
    */
-  clickMouse(this: void, params: ClickMouseParams): Promise<void>;
+  clickMouse: (this: void, params: ClickMouseParams) => Promise<void>;
 
   /**
    * Creates a note and does not return until its content is verifiably on
@@ -328,7 +328,7 @@ export interface Lib {
    * @returns A {@link Promise} resolving to the created file, once its content
    *   is confirmed.
    */
-  createNote(this: void, params: CreateNoteParams): Promise<TFile>;
+  createNote: (this: void, params: CreateNoteParams) => Promise<TFile>;
 
   /**
    * Moves the mouse pointer to the center of an element using **trusted**
@@ -354,7 +354,7 @@ export interface Lib {
    *   would let a test read an element that is not hovered and pass on whatever
    *   its base style happens to be.
    */
-  hoverElement(this: void, params: HoverElementParams): Promise<void>;
+  hoverElement: (this: void, params: HoverElementParams) => Promise<void>;
 
   /**
    * Moves the mouse pointer to the given web-contents coordinates using a
@@ -380,7 +380,7 @@ export interface Lib {
    * @param params - The web-contents DIP coordinates to move to.
    * @returns A {@link Promise} that resolves once the move has been injected.
    */
-  moveMouse(this: void, params: MoveMouseParams): Promise<void>;
+  moveMouse: (this: void, params: MoveMouseParams) => Promise<void>;
 
   /**
    * Opens Obsidian's settings modal on a given tab, and does not return until
@@ -411,7 +411,7 @@ export interface Lib {
    * @throws Error if no tab carries {@link OpenSettingsTabParams.tabId}, or if
    *   the tab does not render within the timeout.
    */
-  openSettingsTab(this: void, params: OpenSettingsTabParams): Promise<string[]>;
+  openSettingsTab: (this: void, params: OpenSettingsTabParams) => Promise<string[]>;
 
   /**
    * Presses a single key (optionally with modifiers) using **trusted** Electron
@@ -447,7 +447,7 @@ export interface Lib {
    * @returns A {@link Promise} that resolves once the key press has been
    *   injected.
    */
-  pressKey(this: void, params: PressKeyParams): Promise<void>;
+  pressKey: (this: void, params: PressKeyParams) => Promise<void>;
 
   /**
    * Types text into a CodeMirror {@link Editor} using **trusted** Electron
@@ -471,7 +471,7 @@ export interface Lib {
    * @param params - The editor to type into and the text to type.
    * @returns A {@link Promise} that resolves once the keystrokes have settled.
    */
-  typeIntoEditor(this: void, params: TypeIntoEditorParams): Promise<void>;
+  typeIntoEditor: (this: void, params: TypeIntoEditorParams) => Promise<void>;
 
   /**
    * Moves the mouse pointer to a point just outside an element's bounding box
@@ -493,7 +493,7 @@ export interface Lib {
    * @throws When the element keeps matching `:hover`, which is what a
    *   full-viewport element does.
    */
-  unhoverElement(this: void, params: UnhoverElementParams): Promise<void>;
+  unhoverElement: (this: void, params: UnhoverElementParams) => Promise<void>;
 
   /**
    * Polls a predicate until it becomes truthy, or rejects once a bounded
@@ -517,7 +517,7 @@ export interface Lib {
    *   timeout message.
    * @returns A {@link Promise} that resolves once the predicate is truthy.
    */
-  waitUntil(this: void, params: WaitUntilParams): Promise<void>;
+  waitUntil: (this: void, params: WaitUntilParams) => Promise<void>;
 }
 
 /**
@@ -645,7 +645,7 @@ export interface WaitUntilParams {
    *
    * @returns Whether the awaited condition has been met.
    */
-  predicate(this: void): boolean | Promise<boolean>;
+  readonly predicate: (this: void) => boolean | Promise<boolean>;
 
   /**
    * The maximum time to wait before rejecting.
@@ -673,7 +673,6 @@ export interface WaitUntilParams {
 export async function evalInObsidian<Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
   params: EvalInObsidianParams<Input, Result, TContextId>
 ): Promise<Result> {
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- `callback` can be unbound.
   const { callback, contextId, input = {}, shouldSkipPreflightChecks = false, transport: transportOverride, vaultPath } = params;
   const cwd = vaultPath ?? getVaultPath() ?? process.cwd();
 

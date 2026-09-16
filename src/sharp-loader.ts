@@ -29,12 +29,12 @@ export type SharpFactory = (input: Uint8Array) => SharpInstance;
  * One `sharp` pipeline.
  */
 export interface SharpInstance {
-  blur(this: void, sigma: number): SharpInstance;
-  composite(this: void, layers: SharpCompositeLayer[]): SharpInstance;
-  metadata(this: void): Promise<SharpMetadata>;
-  png(this: void): SharpInstance;
-  resize(this: void, width: number, height: number, options?: SharpResizeOptions): SharpInstance;
-  toBuffer(this: void): Promise<Buffer>;
+  blur: (this: void, sigma: number) => SharpInstance;
+  composite: (this: void, layers: SharpCompositeLayer[]) => SharpInstance;
+  metadata: (this: void) => Promise<SharpMetadata>;
+  png: (this: void) => SharpInstance;
+  resize: (this: void, width: number, height: number, options?: SharpResizeOptions) => SharpInstance;
+  toBuffer: (this: void) => Promise<Buffer>;
 }
 
 /**

@@ -17,7 +17,7 @@ export interface PollUntilParams<Result> {
   /**
   Runs one attempt and resolves with its result.
    */
-  attempt(this: void): Promise<Result>;
+  readonly attempt: (this: void) => Promise<Result>;
 
   /**
   Delay between attempts, in milliseconds.
@@ -27,12 +27,12 @@ export interface PollUntilParams<Result> {
   /**
   Returns the current time in milliseconds (injected for deterministic tests).
    */
-  nowInMilliseconds(this: void): number;
+  readonly nowInMilliseconds: (this: void) => number;
 
   /**
   Sleeps for the given number of milliseconds (injected for deterministic tests).
    */
-  sleep(this: void, milliseconds: number): Promise<void>;
+  readonly sleep: (this: void, milliseconds: number) => Promise<void>;
 
   /**
   Total budget before the poll rejects, in milliseconds.
@@ -47,7 +47,7 @@ export interface PollUntilParams<Result> {
   /**
   Whether a given attempt result is acceptable (stops the poll).
    */
-  until(this: void, result: Result): boolean;
+  readonly until: (this: void, result: Result) => boolean;
 }
 
 /**

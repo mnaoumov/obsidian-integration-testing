@@ -268,7 +268,7 @@ interface AppiumTransportWaitForStartupMilestoneParams {
   /**
   Whether the milestone just observed ends this phase.
    */
-  isSatisfied(this: void, milestone: AppStartupMilestone): boolean;
+  readonly isSatisfied: (milestone: AppStartupMilestone) => boolean;
 
   /**
   The phase being waited out, named in the log and in the timeout message.

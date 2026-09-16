@@ -75,14 +75,14 @@ export interface PollInObsidianParams<Input extends GenericObject, PollResult, T
    * ~30s CDP cap): it should read and return a JSON-serializable status, not
    * await the long operation itself.
    */
-  poll(this: void, input: CommonArguments & ContextArguments<TContextId> & Input): Promisable<PollResult>;
+  readonly poll: (this: void, input: CommonArguments & ContextArguments<TContextId> & Input) => Promisable<PollResult>;
 
   /**
    * An optional closure run **once** before polling begins, to kick off the
    * long-running work (fire-and-forget from Node's perspective). Keep it short —
    * start the work and return; do not await it to completion here.
    */
-  start?(this: void, input: CommonArguments & ContextArguments<TContextId> & Input): Promisable<unknown>;
+  readonly start?: (this: void, input: CommonArguments & ContextArguments<TContextId> & Input) => Promisable<unknown>;
 
   /**
    * Total budget before the poll rejects, in milliseconds.
@@ -105,7 +105,7 @@ export interface PollInObsidianParams<Input extends GenericObject, PollResult, T
    * Whether a given `poll` result is acceptable, evaluated in **Node**. Returning
    * `true` resolves {@link pollInObsidian} with that result.
    */
-  until(this: void, result: PollResult): boolean;
+  readonly until: (this: void, result: PollResult) => boolean;
 
   /**
    * The vault path to evaluate against (forwarded to every underlying
