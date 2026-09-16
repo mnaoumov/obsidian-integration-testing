@@ -24,9 +24,9 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 
 /**
- * Options for {@link openObsidianSettingsTab}.
+ * Parameters for {@link openObsidianSettingsTab}.
  */
-export interface OpenObsidianSettingsTabOptions extends OpenSettingsTabParams {
+export interface OpenObsidianSettingsTabParams extends OpenSettingsTabParams {
   /**
    * Override the transport. When omitted, the transport the current test
    * context is driving is used.
@@ -58,21 +58,20 @@ type OpenSettingsTabInput = Record<'openParams', OpenSettingsTabParams>;
  * Close it again from a callback with `app.setting.close()`; re-opening works,
  * because the attach is idempotent.
  *
- * @param options - The tab to open, how long to wait, and transport / vault
+ * @param params - The tab to open, how long to wait, and transport / vault
  *   overrides.
  * @returns A {@link Promise} resolving to the names of the setting rows the tab
  *   rendered.
  * @throws Error if no tab carries {@link OpenSettingsTabParams.tabId}, or if the
  *   tab does not render within the timeout.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `OpenObsidianSettingsTabOptions` is re-exported from `index.ts`, so renaming it to `OpenObsidianSettingsTabParams` is a breaking change held for the next major.
-export async function openObsidianSettingsTab(options: OpenObsidianSettingsTabOptions): Promise<string[]> {
+export async function openObsidianSettingsTab(params: OpenObsidianSettingsTabParams): Promise<string[]> {
   const {
     tabId,
     timeoutInMilliseconds,
     transport,
     vaultPath
-  } = options;
+  } = params;
 
   return await evalInObsidian(normalizeOptionalProperties<EvalInObsidianParams<OpenSettingsTabInput, string[]>>({
     async callback({ lib, openParams }): Promise<string[]> {

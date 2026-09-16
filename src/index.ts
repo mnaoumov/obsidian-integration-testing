@@ -11,8 +11,8 @@ export {
   runAdbTextWithoutDevice
 } from './adb.ts';
 export type {
-  AppConfigParams,
   AppConfigRestore,
+  GetAppConfigParams,
   SetAppConfigParams,
   WithAppConfigParams
 } from './app-config.ts';
@@ -71,6 +71,7 @@ export {
 export type {
   BootstrapDemoVaultPluginsParams,
   BootstrapDemoVaultPluginsResult,
+  BuildDemoVaultPopulateAsyncParams,
   InstalledPluginInfo
 } from './demo-vault-bootstrap.ts';
 export {
@@ -195,7 +196,7 @@ export {
   CATALYST_LATEST,
   PUBLIC_LATEST
 } from './obsidian-version.ts';
-export type { OpenObsidianSettingsTabOptions } from './open-obsidian-settings-tab.ts';
+export type { OpenObsidianSettingsTabParams } from './open-obsidian-settings-tab.ts';
 export { openObsidianSettingsTab } from './open-obsidian-settings-tab.ts';
 export type { OwnedInstanceExitedErrorConstructorParams } from './owned-instance-exited-error.ts';
 export { OwnedInstanceExitedError } from './owned-instance-exited-error.ts';
@@ -234,7 +235,7 @@ export {
 export type {
   PopulateFileContent,
   PopulateFilesParams,
-  TemporaryVaultOptions
+  TemporaryVaultConstructorOptions
 } from './temporary-vault.ts';
 export { TemporaryVault } from './temporary-vault.ts';
 export type {

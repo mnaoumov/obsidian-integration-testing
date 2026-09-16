@@ -60,31 +60,6 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 
 /**
- * Parameters for {@link getAppConfig}, and the shared shape of the writers below.
- */
-export interface AppConfigParams {
-  /**
-   * The vault config key, e.g. `settingsPopoutWindow`. Not narrowed to
-   * `obsidian-typings`' `ConfigItem`: that union omits keys Obsidian really
-   * reads, `settingsPopoutWindow` among them, which is the whole reason a
-   * consumer had to widen the setter by hand.
-   */
-  readonly configKey: string;
-
-  /**
-   * Override the transport. When omitted, the transport the current test
-   * context is driving is used.
-   */
-  readonly transport?: ObsidianTransport;
-
-  /**
-   * The vault whose Obsidian instance to read or write. When omitted, the
-   * current test context's vault is used.
-   */
-  readonly vaultPath?: string;
-}
-
-/**
  * What {@link setAppConfig} captured before it wrote, and all
  * {@link restoreAppConfig} needs to put the key back exactly as it was —
  * including putting it back to *absent*.
@@ -121,9 +96,34 @@ export interface AppConfigRestore {
 }
 
 /**
+ * Parameters for {@link getAppConfig}, and the shared shape of the writers below.
+ */
+export interface GetAppConfigParams {
+  /**
+   * The vault config key, e.g. `settingsPopoutWindow`. Not narrowed to
+   * `obsidian-typings`' `ConfigItem`: that union omits keys Obsidian really
+   * reads, `settingsPopoutWindow` among them, which is the whole reason a
+   * consumer had to widen the setter by hand.
+   */
+  readonly configKey: string;
+
+  /**
+   * Override the transport. When omitted, the transport the current test
+   * context is driving is used.
+   */
+  readonly transport?: ObsidianTransport;
+
+  /**
+   * The vault whose Obsidian instance to read or write. When omitted, the
+   * current test context's vault is used.
+   */
+  readonly vaultPath?: string;
+}
+
+/**
  * Parameters for {@link setAppConfig}.
  */
-export interface SetAppConfigParams extends AppConfigParams {
+export interface SetAppConfigParams extends GetAppConfigParams {
   /**
    * The value to write. `undefined` deletes the key, leaving Obsidian's own
    * default in force.
@@ -187,8 +187,7 @@ interface WriteInput extends GenericObject {
  * @param params - The key to read, and transport / vault overrides.
  * @returns A {@link Promise} resolving to the key's effective value.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Temporary: `AppConfigParams` is re-exported from `index.ts`, so renaming it to `GetAppConfigParams` is a breaking change held for the next major.
-export async function getAppConfig(params: AppConfigParams): Promise<unknown> {
+export async function getAppConfig(params: GetAppConfigParams): Promise<unknown> {
   const {
     configKey,
     transport,
