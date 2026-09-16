@@ -19,13 +19,19 @@ import { createInterface } from 'node:readline/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   inc,
-  prerelease
+  prerelease,
+  rcompare,
+  valid
 } from 'semver';
 
 import {
   assertNonNullable,
   ensureNonNullable
 } from '../src/type-guards.ts';
+import {
+  findBreakingCommitSubjects,
+  isMajorRaise
+} from './helpers/breaking-change.ts';
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
 import { getPackageManagerRunCommand } from './helpers/package-manager.ts';
@@ -66,6 +72,42 @@ async function addUpdatedFilesToGit(newVersion: string): Promise<void> {
   await execFromRoot(['git', 'commit', '-m', `chore: release ${newVersion}`, '--allow-empty'], { isQuiet: true });
 }
 
+/**
+ * Refuses a release that does not raise the major while unreleased commits declare a breaking change.
+ *
+ * Deliberately part of the `assert*` pre-flight rather than a gate: it reads two `git` commands and
+ * decides in seconds, so the refusal arrives before `build` and `test:coverage` rather than after them.
+ *
+ * @param newVersion - The RESOLVED version about to be cut, not the argument the user typed.
+ * @throws If any commit since the last tag is breaking and this release keeps the major. The message
+ * names every offending subject, because the subject is the thing to go and look at.
+ */
+async function assertBreakingChangesAreReleasedAsMajor(newVersion: string): Promise<void> {
+  const lastTag = await getLastTag();
+  const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
+  const rawGitLogOutput = await execFromRoot(`git log ${commitRange} --format=%B -z`, { isQuiet: true });
+  const breakingCommitSubjects = findBreakingCommitSubjects(rawGitLogOutput);
+
+  if (breakingCommitSubjects.length === 0) {
+    return;
+  }
+
+  const packageJson = await readPackageJson();
+  const currentVersion = packageJson.version ?? '';
+  const lastReleasedStableVersion = await getLastReleasedStableVersion();
+
+  if (isMajorRaise({ currentVersion, lastReleasedStableVersion, newVersion })) {
+    return;
+  }
+
+  const subjectList = breakingCommitSubjects.map((subject) => `  - ${subject}`).join('\n');
+  throw new Error(
+    `Refusing to release ${newVersion}: ${String(breakingCommitSubjects.length)} unreleased commit(s) ${lastTag ? `since ${lastTag}` : 'in this repository'} declare a breaking change:\n`
+      + `${subjectList}\n`
+      + `A breaking change must raise the major. Use 'major' or 'premajor', or a manual version above ${currentVersion}'s major -- or drop the breaking declaration from the commit(s).`
+  );
+}
+
 async function assertGitHubCliInstalled(): Promise<void> {
   try {
     await execFromRoot('gh --version', { isQuiet: true });
@@ -95,6 +137,40 @@ async function assertGitRepoClean(): Promise<void> {
   if (stdout) {
     throw new Error(NOT_CLEAN_MESSAGE);
   }
+}
+
+/**
+ * Resolves the highest non-prerelease version ever tagged.
+ *
+ * The prerelease case needs this and cannot use {@link getLastTag}: after a `premajor`, the nearest tag IS
+ * the prerelease, so the question "was the major already raised?" has to be asked against the last STABLE
+ * release instead.
+ *
+ * @returns The highest stable tagged version, or `null` when the package has never had a stable release.
+ */
+async function getLastReleasedStableVersion(): Promise<null | string> {
+  const tagsOutput = await execFromRoot('git tag --list', { isQuiet: true });
+  const stableVersions = tagsOutput
+    .split(/\r?\n/)
+    .map((tag) => valid(tag.trim()))
+    .filter((version): version is string => version !== null && prerelease(version) === null)
+    .sort(rcompare);
+
+  return stableVersions[0] ?? null;
+}
+
+/**
+ * Resolves the nearest tag reachable from `HEAD` — the last release, whatever its branch history.
+ *
+ * @returns The tag name, or an empty string when the repository has no tag yet, in which case the caller
+ * reads the whole history instead.
+ */
+async function getLastTag(): Promise<string> {
+  const lastTag = await execFromRoot('git describe --tags --abbrev=0', {
+    isQuiet: true,
+    shouldIgnoreExitCode: true
+  });
+  return lastTag.trim();
 }
 
 async function getNewVersion(versionUpdateType: string): Promise<string> {
@@ -295,6 +371,13 @@ async function updateVersion(versionUpdateType?: string): Promise<void> {
   await assertGitInstalled();
   await assertGitRepoClean();
   await assertGitHubCliInstalled();
+
+  // Resolved here rather than after the gates, so the breaking-change assertion below can refuse in
+  // seconds instead of after a full `test:coverage`. Nothing between here and `updateVersionInFiles`
+  // touches `package.json`, so resolving it early cannot change what gets cut.
+  const newVersion = await getNewVersion(versionUpdateType);
+  await assertBreakingChangesAreReleasedAsMajor(newVersion);
+
   await npmRun('format:check');
   await npmRun('spellcheck');
   await npmRun('lint:md');
@@ -302,7 +385,6 @@ async function updateVersion(versionUpdateType?: string): Promise<void> {
   await npmRun('lint');
   await npmRun('test:coverage');
 
-  const newVersion = await getNewVersion(versionUpdateType);
   await updateVersionInFiles(newVersion);
   await updateChangelog(newVersion);
   await addUpdatedFilesToGit(newVersion);
