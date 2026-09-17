@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 14.1.0
+
+- chore(nano-staged): merge the .astro lint-staged glob
+- docs(agents): merge the auto-memory pointer repoint
+- chore(eslint-rules): take the five vendored rule sources from upstream
+
 ## 14.0.0
 
 - chore(release): refuse a non-major bump over an unreleased breaking change
