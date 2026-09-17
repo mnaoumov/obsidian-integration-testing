@@ -1052,9 +1052,9 @@ function getUnicornConfigs(): Linter.Config[] {
        * The rule fires on the tail call that follows a type alias. That function recurses in two places — there,
        * and above, fanning out over the members of a union — so turning the tail call into a loop would leave it
        * half recursive and half iterative over the same tree. The suppression lives here rather than on the line
-       * itself because the file is shared byte-for-byte with sibling projects that do not install this plugin,
-       * where a disable directive naming one of its rules is an unresolvable rule reference and fails their lint
-       * outright.
+       * itself because the file is vendored from `obsidian-dev-utils` alongside sibling projects that do not install
+       * this plugin, where a disable directive naming one of its rules is an unresolvable rule reference and fails
+       * their lint outright, so every consumer strips the upstream directive on the way in.
        */
       files: ['scripts/helpers/eslint-rules/no-async-callback-to-unsafe-return.ts'],
       rules: {
