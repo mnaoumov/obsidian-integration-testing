@@ -595,13 +595,25 @@ Two contracts deliberately did NOT change, and must not be "fixed" to match: the
 
 **Never run `--fix` over `unicorn/name-replacements`** without `tsc` + the full suite behind it: its fixer is not reference-aware for enum members, interface members, and parameter properties, and object-literal keys in loosely typed positions are not contextually typed, so a rename can leave a dangling reference the compiler never sees. The vendored ambient declarations under `scripts/helpers/@types/` are exempt from it (and from `prefer-type-literal-last`, which fights `perfectionist/sort-union-types` there in a non-converging fix loop) because their names come from a dependency's published schema.
 
-### The custom rule sources are shared byte-for-byte with four sibling repos
+### The custom rule sources are vendored from `obsidian-dev-utils`, and a sync is a transform
 
-`scripts/helpers/eslint-rules/*.ts` (and `scripts/helpers/check-project-types.ts`, and the vendored `@types/markdownlint-cli2-config-schema.d.ts`) are **one copy living in five places**: here, `obsidian-test-mocks`, `obsidian-typings-crawler`, `typescript-template`, and both `obsidian-typings` release branches. `obsidian-test-mocks`' `main` holds the canonical copy. Change a rule **there** and copy the file out verbatim; do not merge line by line, and do not hand-edit the copy here, or the set silently acquires a sixth variant.
+**`obsidian-dev-utils`' `src/script-utils/linters/eslint-rules/` is the upstream.** A fix is written there; this repo is one of several consumers (`obsidian-test-mocks`, `obsidian-typings-crawler`, `typescript-template` and `obsidian-typings` are the others), each vendoring its own subset. An earlier version of this section called `obsidian-test-mocks` the canonical copy — it is a consumer too, and was itself behind upstream when that was measured. Do not hand-edit a rule source here: change it upstream and take the file across.
 
-**No file in that set may carry an inline `eslint-disable` naming a rule from the local plugin, or from a plugin the siblings do not install.** ESLint fails an entire run with *"Definition for rule was not found"* on an unresolvable rule reference, so a directive that is perfectly valid here breaks lint outright in the repos that do not install that plugin — and it breaks it *there*, where nobody editing this file is looking. `no-async-callback-to-unsafe-return.ts` recurses in two places and trips `unicorn/no-useless-recursion`; the suppression therefore lives in `scripts/eslint-config.ts` as a file-scoped override rather than on the line, and it must stay there.
+**Every shared file in `scripts/helpers/eslint-rules/` is byte-identical to its upstream file after exactly two deltas**, so a sync is a transform plus a `diff`, never a merge:
 
-`scripts/helpers/eslint-rules/obsidian-dev-utils-plugin.ts` is the one file in the folder that is deliberately **not** shared — it is the per-repo registration list, and each repo registers the rules it has. `prefer-noop-async` exists only in `obsidian-test-mocks` and is not carried here.
+```sh
+sed -e "s#'\.\./\.\./\.\./type-guards\.ts'#'../type-guards.ts'#" -e "/eslint-disable-next-line unicorn\//d" \
+  "$UPSTREAM/$f" | diff - "scripts/helpers/eslint-rules/$f"
+```
+
+1. **The `type-guards.ts` import path.** Upstream sits three directories deeper and spells it `../../../type-guards.ts`; here it is `../type-guards.ts`.
+2. **An inline `unicorn/*` disable is stripped, even though this repo installs `eslint-plugin-unicorn`.** Upstream's `no-async-callback-to-unsafe-return.ts` carries an inline `unicorn/no-useless-recursion` disable. Keeping it would be valid *here*, but `obsidian-typings-crawler` and `typescript-template` do not install the plugin, and ESLint fails an entire run with *"Definition for rule was not found"* on an unresolvable rule reference. Stripping it in every consumer keeps the transform identical across all of them — the same choice `obsidian-test-mocks`, which also installs the plugin, made — so the suppression lives in `scripts/eslint-config.ts` as a file-scoped override rather than on the line, and it must stay there.
+
+After those two deltas, all eleven shared files — five rule sources, their five tests and `rule-tester-helper.ts` — diff empty (verified 2026-09-16). Anything the `diff` shows beyond them is drift.
+
+`scripts/helpers/eslint-rules/obsidian-dev-utils-plugin.ts` is the one file in the folder that is deliberately **not** shared — it is the per-repo registration list, naming exactly the rules this repo vendors. Upstream's other rules (`prefer-noop-async`, `require-method-template`, the `manifest-*` family and the rest) are not carried here.
+
+`scripts/helpers/check-project-types.ts` and `scripts/helpers/@types/markdownlint-cli2-config-schema.d.ts` are copied among the same siblings but sit outside that transform. The schema declaration is byte-identical in `obsidian-test-mocks` and `obsidian-typings-crawler`; `check-project-types.ts` was not on 2026-09-16 — two option members spelled as `readonly` function-typed properties here (this repo enforces `@typescript-eslint/method-signature-style` at its `property` default) and as method signatures there.
 
 `tsconfig.eslint-test.json` at the repo root exists solely because `no-async-callback-to-unsafe-return.test.ts` names it as its `defaultProject`; it is seven lines, identical in every sibling, and nothing else reads it.
 
