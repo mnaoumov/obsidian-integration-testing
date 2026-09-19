@@ -15,10 +15,19 @@
  *
  * This is post-processing, deliberately. The capture stays an untouched device
  * frame, and rewording a label needs no re-shoot.
+ *
+ * A caption that is too long for its frame is MEASURED and rejected rather than
+ * drawn. An SVG `<text>` is clipped by its viewport at both ends with no
+ * ellipsis and no error, so an overlong caption ships as a sentence fragment
+ * that looks deliberate — `nabled in Settings - a listening plugin is told` —
+ * and the frame is still exactly the size it should be, so every dimension
+ * assertion downstream still passes. The only feedback anyone ever got was
+ * looking at the PNG. See {@link measureLabelCaption}.
  */
 
 import type { SharpCompositeLayer } from './sharp-loader.ts';
 
+import { readPngDimensions } from './capture-screenshot.ts';
 import { importSharp } from './sharp-loader.ts';
 
 /**
@@ -41,6 +50,13 @@ export interface ComputeLabelBandParams {
  */
 export interface LabelBandGeometry {
   /**
+   * How much horizontal room the caption has, in pixels: the image width less
+   * the margin held clear at each end, so a caption that fits does not read as
+   * though it were about to touch the edge of the frame.
+   */
+  readonly captionRoomInPixels: number;
+
+  /**
    * Font size for the caption, in pixels.
    */
   readonly fontSizeInPixels: number;
@@ -57,12 +73,55 @@ export interface LabelBandGeometry {
 }
 
 /**
+ * What a caption measures against the frame it is destined for.
+ */
+export interface LabelCaptionMeasurement {
+  /**
+   * The room available, in pixels — {@link LabelBandGeometry.captionRoomInPixels}.
+   */
+  readonly captionRoomInPixels: number;
+
+  /**
+   * Whether the caption fits that room.
+   */
+  readonly doesFit: boolean;
+
+  /**
+   * How wide the caption actually renders, in pixels, at the size the band
+   * would draw it.
+   */
+  readonly textWidthInPixels: number;
+}
+
+/**
  * Options for {@link labelScreenshot}.
  */
 export interface LabelScreenshotOptions {
   /**
    * The caption. Keep it to a handful of words: it is read at listing-thumbnail
-   * size, and it is clipped rather than wrapped.
+   * size, and it is neither wrapped nor shrunk to fit — one that does not fit
+   * is REJECTED, with the measured width and the room available. Check a
+   * candidate with {@link measureLabelCaption} before committing to it.
+   */
+  readonly text: string;
+}
+
+/**
+ * Parameters for {@link measureLabelCaption}.
+ */
+export interface MeasureLabelCaptionParams {
+  /**
+   * Height of the image the caption is destined for, in pixels.
+   */
+  readonly imageHeightInPixels: number;
+
+  /**
+   * Width of the image the caption is destined for, in pixels.
+   */
+  readonly imageWidthInPixels: number;
+
+  /**
+   * The caption to measure.
    */
   readonly text: string;
 }
@@ -104,9 +163,67 @@ const MINIMUM_FONT_SIZE_IN_PIXELS = 18;
 const MINIMUM_HEIGHT_RATIO = 0.075;
 
 /**
+ * Margin held clear at EACH end of the caption, as a fraction of image width.
+ *
+ * A caption that ends a pixel inside the frame is legally un-clipped and still
+ * looks wrong, so the room a caption is measured against is the frame less this
+ * at both ends — 48px each side on a 1200px frame.
+ */
+const SIDE_MARGIN_RATIO = 0.04;
+
+/**
  * Divisor that turns a span into its midpoint, for centering the caption.
  */
 const CENTER_DIVISOR = 2;
+
+/**
+ * The caption's typeface and weight, in one place because the band and the
+ * measurement canvas MUST draw with the same ones: a measurement taken in a
+ * different face is not a measurement of the thing that ships.
+ */
+const FONT_FAMILY = 'Segoe UI, Helvetica, Arial, sans-serif';
+
+const FONT_WEIGHT = '600';
+
+const CAPTION_FILL = '#ffffff';
+
+/**
+ * Upper bound on one glyph's advance width, as a multiple of the font size.
+ *
+ * It sizes the off-screen canvas the caption is measured on, and it only ever
+ * needs to be an over-estimate: a canvas too narrow would clip the text being
+ * measured, under-report its width, and reintroduce the exact silent clipping
+ * the measurement exists to catch. No Latin glyph in a proportional sans
+ * advances a full em — an em dash, the widest, is 1.0 — so 1.1 is headroom at
+ * negligible cost (measured prose runs about 0.45 em per character, so the
+ * canvas comes out roughly 2.5x the text).
+ */
+const MAXIMUM_GLYPH_ADVANCE_RATIO = 1.1;
+
+/**
+ * Height of the measurement canvas as a multiple of the font size, so ascenders
+ * and descenders have room and the trim reads the glyphs rather than the edge.
+ */
+const MEASUREMENT_CANVAS_HEIGHT_RATIO = 3;
+
+/**
+ * How far a pixel may differ from the transparent surround before `trim` counts
+ * it as text. Deliberately far lower than `sharp`'s default of 10: the outermost
+ * pixels of an antialiased glyph are very faint, and the default discards them,
+ * under-measuring a caption by a pixel or two at each end.
+ */
+const TRIM_THRESHOLD = 1;
+
+/**
+ * Parameters for {@link buildCaptionTextElement}.
+ */
+interface CaptionTextElementParams {
+  readonly fontSizeInPixels: number;
+  readonly text: string;
+  readonly textAnchor: 'middle' | 'start';
+  readonly xInPixels: number;
+  readonly yInPixels: number;
+}
 
 /**
  * Builds the SVG for the caption band.
@@ -118,14 +235,18 @@ const CENTER_DIVISOR = 2;
  */
 export function buildLabelSvg(text: string, geometry: LabelBandGeometry, imageWidthInPixels: number): string {
   const { fontSizeInPixels, heightInPixels } = geometry;
+  const captionElement = buildCaptionTextElement({
+    fontSizeInPixels,
+    text,
+    textAnchor: 'middle',
+    xInPixels: imageWidthInPixels / CENTER_DIVISOR,
+    yInPixels: heightInPixels / CENTER_DIVISOR
+  });
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${String(imageWidthInPixels)}" height="${String(heightInPixels)}">`
     + `<rect x="0" y="0" width="${String(imageWidthInPixels)}" height="${String(heightInPixels)}" `
     + `fill="#000000" fill-opacity="${String(BAND_OPACITY)}"/>`
-    + `<text x="${String(imageWidthInPixels / CENTER_DIVISOR)}" y="${String(heightInPixels / CENTER_DIVISOR)}" `
-    + `font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="${String(fontSizeInPixels)}" `
-    + 'font-weight="600" fill="#ffffff" text-anchor="middle" dominant-baseline="central">'
-    + `${escapeSvgText(text)}</text></svg>`;
+    + `${captionElement}</svg>`;
 }
 
 /**
@@ -150,8 +271,10 @@ export function computeLabelBand(params: ComputeLabelBandParams): LabelBandGeome
   const captionHeightInPixels = Math.round(fontSizeInPixels * BAND_HEIGHT_RATIO);
   const flooredHeightInPixels = Math.max(captionHeightInPixels, Math.round(imageHeightInPixels * MINIMUM_HEIGHT_RATIO));
   const heightInPixels = Math.min(imageHeightInPixels, flooredHeightInPixels);
+  const sideMarginInPixels = Math.round(imageWidthInPixels * SIDE_MARGIN_RATIO);
 
   return {
+    captionRoomInPixels: imageWidthInPixels - (sideMarginInPixels * CENTER_DIVISOR),
     fontSizeInPixels,
     heightInPixels,
     topInPixels: imageHeightInPixels - heightInPixels
@@ -186,7 +309,7 @@ export function escapeSvgText(text: string): string {
  * @param bytes - The captured PNG.
  * @param options - The caption.
  * @returns A {@link Promise} that resolves to the labeled PNG, the same size as the input.
- * @throws Error if `sharp` is not installed, or the image dimensions cannot be read.
+ * @throws Error if `sharp` is not installed, the image dimensions cannot be read, or the caption is too wide for the frame.
  */
 export async function labelScreenshot(bytes: Uint8Array, options: LabelScreenshotOptions): Promise<Uint8Array> {
   const sharp = await importSharp('labelScreenshot');
@@ -200,6 +323,19 @@ export async function labelScreenshot(bytes: Uint8Array, options: LabelScreensho
   }
 
   const geometry = computeLabelBand({ imageHeightInPixels, imageWidthInPixels });
+  const textWidthInPixels = await measureCaptionWidth(options.text, geometry.fontSizeInPixels);
+
+  if (textWidthInPixels > geometry.captionRoomInPixels) {
+    const overflowInPixels = textWidthInPixels - geometry.captionRoomInPixels;
+    throw new Error(
+      `labelScreenshot: the caption is ${String(overflowInPixels)}px too wide for the frame. `
+        + `It renders ${String(textWidthInPixels)}px at font-size ${String(geometry.fontSizeInPixels)}, and a `
+        + `${String(imageWidthInPixels)}px frame has room for ${String(geometry.captionRoomInPixels)}px. `
+        + 'Shorten it: a caption that does not fit is clipped at BOTH ends, with no ellipsis to show it happened. '
+        + `Caption: ${JSON.stringify(options.text)}`
+    );
+  }
+
   const svg = buildLabelSvg(options.text, geometry, imageWidthInPixels);
   const layer: SharpCompositeLayer = {
     input: Buffer.from(svg),
@@ -213,4 +349,90 @@ export async function labelScreenshot(bytes: Uint8Array, options: LabelScreensho
     .toBuffer();
 
   return new Uint8Array(labeled);
+}
+
+/**
+ * Measures a caption against the frame it is destined for, without drawing
+ * anything.
+ *
+ * This is what {@link labelScreenshot} rejects an overlong caption with, exposed
+ * so a caption can be chosen with the number in hand instead of by capturing a
+ * frame and looking at it.
+ *
+ * @param params - The caption and the dimensions of the image it is for.
+ * @returns A {@link Promise} that resolves to the measurement.
+ * @throws Error if `sharp` is not installed, or either dimension is not a positive number.
+ */
+export async function measureLabelCaption(params: MeasureLabelCaptionParams): Promise<LabelCaptionMeasurement> {
+  const { imageHeightInPixels, imageWidthInPixels, text } = params;
+  const geometry = computeLabelBand({ imageHeightInPixels, imageWidthInPixels });
+  const textWidthInPixels = await measureCaptionWidth(text, geometry.fontSizeInPixels);
+
+  return {
+    captionRoomInPixels: geometry.captionRoomInPixels,
+    doesFit: textWidthInPixels <= geometry.captionRoomInPixels,
+    textWidthInPixels
+  };
+}
+
+/**
+ * Builds the caption's SVG `<text>` element.
+ *
+ * Both the band and the measurement canvas go through here, so the thing that
+ * is measured is drawn with the same face, weight and size as the thing that
+ * ships. Two hand-written copies would be free to drift, and a measurement that
+ * has drifted from the drawing is worse than no measurement at all.
+ *
+ * @param params - The caption, its size, and where to anchor it.
+ * @returns The `<text>` markup.
+ */
+function buildCaptionTextElement(params: CaptionTextElementParams): string {
+  const { fontSizeInPixels, text, textAnchor, xInPixels, yInPixels } = params;
+
+  return `<text x="${String(xInPixels)}" y="${String(yInPixels)}" `
+    + `font-family="${FONT_FAMILY}" font-size="${String(fontSizeInPixels)}" `
+    + `font-weight="${FONT_WEIGHT}" fill="${CAPTION_FILL}" text-anchor="${textAnchor}" dominant-baseline="central">`
+    + `${escapeSvgText(text)}</text>`;
+}
+
+/**
+ * Measures how wide a caption renders at a given size.
+ *
+ * The text is drawn alone on a transparent canvas deliberately wider than it can
+ * possibly need, then `trim`med back to its own ink — the same measurement that
+ * was previously done by hand, once, per caption, by whoever thought to doubt
+ * one. The renderer doing the measuring is the renderer that draws the band, so
+ * the two cannot disagree about a font the host does or does not have.
+ *
+ * @param text - The caption.
+ * @param fontSizeInPixels - The size the band would draw it at.
+ * @returns A {@link Promise} that resolves to the rendered width in pixels.
+ */
+async function measureCaptionWidth(text: string, fontSizeInPixels: number): Promise<number> {
+  // A caption with no ink leaves the canvas uniformly transparent, and `trim`
+  // returns such an image untouched — i.e. reports the whole canvas as text.
+  if (text.trim() === '') {
+    return 0;
+  }
+
+  const sharp = await importSharp('measureLabelCaption');
+  const paddingInPixels = fontSizeInPixels * CENTER_DIVISOR;
+  const canvasWidthInPixels = Math.ceil(fontSizeInPixels * MAXIMUM_GLYPH_ADVANCE_RATIO * text.length) + paddingInPixels;
+  const canvasHeightInPixels = Math.ceil(fontSizeInPixels * MEASUREMENT_CANVAS_HEIGHT_RATIO);
+  const captionElement = buildCaptionTextElement({
+    fontSizeInPixels,
+    text,
+    textAnchor: 'start',
+    xInPixels: fontSizeInPixels,
+    yInPixels: canvasHeightInPixels / CENTER_DIVISOR
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${String(canvasWidthInPixels)}" height="${String(canvasHeightInPixels)}">`
+    + `${captionElement}</svg>`;
+
+  const trimmed = await sharp(new Uint8Array(Buffer.from(svg)))
+    .trim({ threshold: TRIM_THRESHOLD })
+    .png()
+    .toBuffer();
+
+  return readPngDimensions(new Uint8Array(trimmed)).widthInPixels;
 }

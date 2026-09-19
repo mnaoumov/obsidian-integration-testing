@@ -9,11 +9,18 @@ import {
   buildLabelSvg,
   computeLabelBand,
   escapeSvgText,
-  labelScreenshot
+  labelScreenshot,
+  measureLabelCaption
 } from './label-screenshot.ts';
 
 const DESKTOP = { imageHeightInPixels: 800, imageWidthInPixels: 1200 };
 const MOBILE = { imageHeightInPixels: 1600, imageWidthInPixels: 900 };
+
+/**
+ * The caption that shipped clipped at both ends on a 1200px store shot, reading
+ * `nabled in Settings - a listening plugin is told which plugin, and w`.
+ */
+const OVERLONG_CAPTION = 'More Events is enabled in Settings - a listening plugin is told which plugin, and when';
 
 describe('computeLabelBand', () => {
   it('should sit the band flush against the bottom of the image', () => {
@@ -50,6 +57,12 @@ describe('computeLabelBand', () => {
   it('should keep a floor under the caption size on a narrow image', () => {
     const geometry = computeLabelBand({ imageHeightInPixels: 300, imageWidthInPixels: 200 });
     expect(geometry.fontSizeInPixels).toBe(18);
+  });
+
+  it('should hold a margin clear at each end of the caption', () => {
+    // 4% of 1200 is 48px a side; of 900, 36px.
+    expect(computeLabelBand(DESKTOP).captionRoomInPixels).toBe(1104);
+    expect(computeLabelBand(MOBILE).captionRoomInPixels).toBe(828);
   });
 
   it('should reject non-positive dimensions', () => {
@@ -133,6 +146,76 @@ describe('labelScreenshot', () => {
     const labeled = await labelScreenshot(source, { text: 'Links like [a](<b.md>) & such' });
 
     expect(readPngDimensions(labeled)).toStrictEqual({ heightInPixels: 1600, widthInPixels: 900 });
+  });
+
+  it('should refuse a caption too wide for the frame, rather than clipping it at both ends', async () => {
+    const source = await buildSolidPng(1200, 800);
+
+    await expect(labelScreenshot(source, { text: OVERLONG_CAPTION }))
+      .rejects.toThrow(/labelScreenshot: the caption is \d+px too wide for the frame\./);
+  });
+
+  it('should name the measurement, the room and the caption when it refuses one', async () => {
+    const source = await buildSolidPng(1200, 800);
+    const { captionRoomInPixels, textWidthInPixels } = await measureLabelCaption({ ...DESKTOP, text: OVERLONG_CAPTION });
+
+    // A substring match, so the numbers are compared as the message prints
+    // them: what makes the failure actionable is the measurement, not the
+    // wording around it.
+    await expect(labelScreenshot(source, { text: OVERLONG_CAPTION })).rejects.toThrow(
+      `It renders ${String(textWidthInPixels)}px at font-size 41, `
+        + `and a 1200px frame has room for ${String(captionRoomInPixels)}px.`
+    );
+    await expect(labelScreenshot(source, { text: OVERLONG_CAPTION })).rejects.toThrow(JSON.stringify(OVERLONG_CAPTION));
+  });
+});
+
+describe('measureLabelCaption', () => {
+  it('should measure a caption at the size the band would draw it', async () => {
+    const measurement = await measureLabelCaption({ ...DESKTOP, text: 'Full path' });
+
+    expect(measurement.captionRoomInPixels).toBe(1104);
+    expect(measurement.doesFit).toBe(true);
+    // A nine-character caption at font-size 41 is a couple of hundred pixels
+    // wide; the point of the assertion is that something was measured, not the
+    // exact pixel, which is a font the host may or may not have.
+    expect(measurement.textWidthInPixels).toBeGreaterThan(50);
+    expect(measurement.textWidthInPixels).toBeLessThan(measurement.captionRoomInPixels);
+  });
+
+  it('should report the caption that shipped clipped as not fitting', async () => {
+    const measurement = await measureLabelCaption({ ...DESKTOP, text: OVERLONG_CAPTION });
+
+    expect(measurement.doesFit).toBe(false);
+    expect(measurement.textWidthInPixels).toBeGreaterThan(measurement.captionRoomInPixels);
+  });
+
+  it('should scale with the frame, so a bigger frame cannot rescue an overlong caption', async () => {
+    const desktop = await measureLabelCaption({ ...DESKTOP, text: OVERLONG_CAPTION });
+    const doubled = await measureLabelCaption({ imageHeightInPixels: 1600, imageWidthInPixels: 2400, text: OVERLONG_CAPTION });
+
+    // The font size comes from the width, so twice the frame is twice the text
+    // AND twice the room: a caption that does not fit never fits, which is why
+    // the answer is to shorten it rather than to re-shoot wider.
+    const DOUBLED_LOWER = 1.9;
+    const DOUBLED_UPPER = 2.1;
+    expect(doubled.textWidthInPixels).toBeGreaterThan(desktop.textWidthInPixels * DOUBLED_LOWER);
+    expect(doubled.textWidthInPixels).toBeLessThan(desktop.textWidthInPixels * DOUBLED_UPPER);
+    expect(doubled.doesFit).toBe(false);
+  });
+
+  it('should measure a caption with no ink as zero, since trim reports an untouched canvas', async () => {
+    // An all-transparent canvas comes back from `trim` unchanged, which would
+    // otherwise read as a caption exactly as wide as the measuring canvas.
+    const measurement = await measureLabelCaption({ ...DESKTOP, text: ' '.repeat(3) });
+
+    expect(measurement.textWidthInPixels).toBe(0);
+    expect(measurement.doesFit).toBe(true);
+  });
+
+  it('should reject non-positive dimensions, like the geometry it derives', async () => {
+    await expect(measureLabelCaption({ imageHeightInPixels: 800, imageWidthInPixels: 0, text: 'Full path' }))
+      .rejects.toThrow('imageWidthInPixels must be a positive number');
   });
 });
 
