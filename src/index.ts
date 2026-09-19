@@ -175,13 +175,16 @@ export { IntegrationSetupFailedError } from './integration-setup-failed-error.ts
 export type {
   ComputeLabelBandParams,
   LabelBandGeometry,
-  LabelScreenshotOptions
+  LabelCaptionMeasurement,
+  LabelScreenshotOptions,
+  MeasureLabelCaptionParams
 } from './label-screenshot.ts';
 export {
   buildLabelSvg,
   computeLabelBand,
   escapeSvgText,
-  labelScreenshot
+  labelScreenshot,
+  measureLabelCaption
 } from './label-screenshot.ts';
 export type { LibResolver } from './lib-registry.ts';
 export { registerLibResolver } from './lib-registry.ts';

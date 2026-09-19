@@ -35,6 +35,7 @@ export interface SharpInstance {
   png: (this: void) => SharpInstance;
   resize: (this: void, width: number, height: number, options?: SharpResizeOptions) => SharpInstance;
   toBuffer: (this: void) => Promise<Buffer>;
+  trim: (this: void, options: SharpTrimOptions) => SharpInstance;
 }
 
 /**
@@ -50,6 +51,17 @@ export interface SharpMetadata {
  */
 export interface SharpResizeOptions {
   readonly fit: 'cover' | 'fill';
+}
+
+/**
+ * The subset of `sharp`'s trim options the image helpers set.
+ */
+export interface SharpTrimOptions {
+  /**
+   * How far a pixel may differ from the trimmed-away color before it counts as
+   * content.
+   */
+  readonly threshold: number;
 }
 
 /**
