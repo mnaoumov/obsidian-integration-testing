@@ -10,6 +10,10 @@
  * context-resolving entry point, the screenshot counterpart of
  * `evalInObsidian` / `pollInObsidian`: with no arguments at all it captures
  * whatever instance the active project is driving, desktop or mobile.
+ *
+ * It also makes the frame REPRODUCIBLE before taking it, by hiding the vault's
+ * name — see `hide-vault-name.ts` for why a `temp-vault-<random>` bleeds
+ * through the caption band and rewrites a checked-in PNG on every run.
  */
 
 /* v8 ignore start -- Integration-time code (drives a live Obsidian) covered by integration tests, not unit tests. */
@@ -23,6 +27,7 @@ import {
   getTransportOptions,
   getVaultPath
 } from './context-provider.ts';
+import { hideVaultName } from './hide-vault-name.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
@@ -39,6 +44,19 @@ export interface CaptureObsidianScreenshotOptions {
    * geometry.
    */
   readonly heightInPixels?: number;
+
+  /**
+   * Whether to hide the vault's name before capturing, so the frame does not
+   * depend on the random suffix of the harness's temporary vault.
+   *
+   * A default rather than a knob: reproducibility is what a checked-in
+   * screenshot is for, and the row it collapses sits under the caption band,
+   * so nothing a reader sees moves. Turn it off only to photograph the vault
+   * switcher itself.
+   *
+   * @default `true`
+   */
+  readonly shouldHideVaultName?: boolean;
 
   /**
    * Override the transport. When omitted, the transport the current test
@@ -64,6 +82,11 @@ export interface CaptureObsidianScreenshotOptions {
  * Captures a PNG screenshot of the running Obsidian instance, resolving the
  * transport and vault from the current test context.
  *
+ * The vault's name is hidden first, so two runs of the same suite against two
+ * differently-named temporary vaults produce byte-identical PNGs. Pass
+ * {@link CaptureObsidianScreenshotOptions.shouldHideVaultName} as `false` to
+ * photograph it.
+ *
  * @param options - Optional size, transport and vault overrides.
  * @returns A {@link Promise} that resolves to the raw PNG bytes.
  * @throws Error if the active transport cannot capture screenshots.
@@ -71,6 +94,7 @@ export interface CaptureObsidianScreenshotOptions {
 export async function captureObsidianScreenshot(options?: CaptureObsidianScreenshotOptions): Promise<Uint8Array> {
   const {
     heightInPixels,
+    shouldHideVaultName = true,
     transport: transportOverride,
     vaultPath,
     widthInPixels
@@ -81,6 +105,13 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
 
   if (!transport.captureScreenshot) {
     throw new Error('captureObsidianScreenshot: the active transport cannot capture screenshots.');
+  }
+
+  if (shouldHideVaultName) {
+    await hideVaultName({
+      transport,
+      vaultPath: cwd
+    });
   }
 
   return transport.captureScreenshot(normalizeOptionalProperties<CaptureScreenshotParams>({

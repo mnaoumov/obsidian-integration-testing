@@ -162,6 +162,8 @@ export {
   computeFitToCanvas,
   fitScreenshotToCanvas
 } from './fit-screenshot.ts';
+export type { HideVaultNameOptions } from './hide-vault-name.ts';
+export { hideVaultName } from './hide-vault-name.ts';
 export type { IncompatibleInstallerVersionErrorConstructorParams } from './incompatible-installer-version-error.ts';
 export { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 export type {
