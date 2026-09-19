@@ -1061,22 +1061,6 @@ function getUnicornConfigs(): Linter.Config[] {
       }
     },
     {
-      /*
-       * Every file in this folder but the registration list is vendored byte-identical from `obsidian-dev-utils`
-       * (AGENTS.md L34), so a fix written HERE is drift that the next sync's `diff` reports rather than an
-       * improvement -- the fix belongs upstream. `eslint-plugin-unicorn` 75 added these three rules and upstream
-       * has not adopted 75 yet, so all eleven reports are shapes its copies still carry. Delete this block on the
-       * re-sync that takes the corrected sources across; nothing else in the tree needs these three off.
-       */
-      files: ['scripts/helpers/eslint-rules/**'],
-      ignores: ['scripts/helpers/eslint-rules/obsidian-dev-utils-plugin.ts'],
-      rules: {
-        'unicorn/prefer-combined-guards': 'off',
-        'unicorn/prefer-early-return': 'off',
-        'unicorn/prefer-ternary': 'off'
-      }
-    },
-    {
       // Build/lint/version scripts are CLI entry points, where exiting with a status code is the interface.
       files: scriptFiles,
       rules: {
