@@ -1644,3 +1644,16 @@ Every owned desktop instance prints this once, before anything else in the run:
 **Two consequences worth keeping.** A `getLockScope` entry for desktop would serialize runs against a resource no run can obtain and none of them needs — the opposite of what T1299 measured — so the finding is a reason **not** to add one. And the two timeouts that arrived with this line in the same log have another cause; load under three concurrent Electron-plus-Vitest runs is the standing candidate, and it is a question about timing budgets rather than about isolation.
 
 `F:\tmp\claude\T1694\pipe-race-probe.mjs` is the probe, kept out of the repo because it hard-codes this host's Obsidian path.
+
+## L60. The ESLint config is a hand copy of `obsidian-dev-utils`', and every deliberate difference is recorded in `eslint-config-divergences.json`
+
+`scripts/eslint-config.ts` copies that package's shared config rather than resolving it, because this package is its sibling and deliberately carries no dependency on it. A hand copy drifts, and this one did: three refinements landed upstream over eighteen months, and the fix meant to close that reached one of the four copies.
+
+The dependency sweep (`update-npm-deps.ps1`) now compares the two. It resolves both configs with ESLint's own `calculateConfigForFile` — not a regex over the source, whose multi-line values defeat any hand-rolled joiner — at a **matched role**, `scripts/commit.ts` at both ends, and fails on any difference `eslint-config-divergences.json` does not account for. Other roles can be declared in that file's `roles`, naming the file at both ends; they do not correspond by name, since `obsidian-dev-utils`' own `src/**` is a library shipping into the Obsidian renderer and its config there carries an import boundary and a plugin set nothing here has.
+
+Two properties make it usable rather than noisy:
+
+- **It is directional.** Only "upstream enables or refines something this copy does not" is a finding. A rule enabled here and off there is printed as information and never fails — this copy is the stricter one, and upstream's reasons for its own relaxations are measurements about its own tree (`no-top-level-assignment-in-function` is exactly that, in the opposite direction, and is recorded).
+- **Only rules one of the two configs NAMES IN ITS SOURCE are compared.** ESLint merges each rule's `meta.defaultOptions` into the resolved options, so two configs on different ESLint patch versions come back disagreeing about rules neither has ever mentioned — and some of those rules accept no options at all on the older one, so "adopt the other side's value" would demand a config that makes ESLint throw.
+
+The correspondence runs both ways: an entry describing a divergence that no longer exists fails the sweep too. That is what stops the file ageing the way the comments at the call sites did — those comments are still there, and are where each entry's `why` came from.

@@ -1,0 +1,53 @@
+{
+  "comment": [
+    "Every place this package's ESLint config deliberately differs from obsidian-dev-utils' shared config, and why.",
+    "This package is that package's sibling and resolves no dependency on it, so `scripts/eslint-config.ts` is a HAND",
+    "COPY - and a hand copy drifts silently, which it did for eighteen months. update-npm-deps.ps1 compares the two",
+    "configs on every dependency sweep and fails on anything not recorded here.",
+    "The comparison is DIRECTIONAL: only 'obsidian-dev-utils refined something and this copy never took it' is a",
+    "finding. A rule this package enables that obsidian-dev-utils turns off is printed as information and never fails,",
+    "because this copy is then the stricter one and obsidian-dev-utils' reasons for its own relaxations are",
+    "measurements about its own tree.",
+    "A key is the finding's identity exactly as the check prints it: <role>|<rule>|<kind>[|<detail>]. The",
+    "correspondence runs BOTH ways - an entry describing a divergence that no longer exists fails the sweep too, which",
+    "is what stops this file going stale the way the comments at the call sites did. Add `task` when the entry is an",
+    "adoption intended for later rather than a settled decision; it is then re-reported on every run.",
+    "`roles` names the file compared at each end. Only the `script` role is compared by default, because it is the one",
+    "role that plays the same part in both packages."
+  ],
+  "roles": {
+    "script": {
+      "here": "scripts/commit.ts",
+      "odu": "scripts/commit.ts"
+    }
+  },
+  "divergences": {
+    "script|no-console|level": {
+      "why": "The build, lint and version scripts are CLI entry points whose output IS their interface, so printing to stdout is what they are for. obsidian-dev-utils leaves the rule on everywhere because nothing in that package prints."
+    },
+    "script|no-restricted-syntax|option|options[TSAsExpression > TSAsExpression].message": {
+      "why": "Same selector, same severity - the message names this package's own escape hatches (`strictProxy<T>()`, `ensureGenericObject()`), which obsidian-dev-utils does not have and could not name."
+    },
+    "script|obsidian-dev-utils/no-over-cap-wait-in-eval-in-obsidian|level": {
+      "why": "The rule imports `DEFAULT_EVAL_CAP_IN_MILLISECONDS` from THIS package to know the cap it predicts, and it polices a consumer suite's `evalInObsidian` / `pollInObsidian` closures. The harness that defines the cap and implements both transports is not one of those consumers."
+    },
+    "script|obsidian-dev-utils/prefer-noop-async|level": {
+      "why": "This package vendors a five-rule subset of obsidian-dev-utils' custom rules into `scripts/helpers/eslint-rules/`; its plugin file's `rules` map IS that subset. Only `obsidian-test-mocks` vendors this sixth rule, which its own consumer table records."
+    },
+    "script|obsidian-dev-utils/require-component-suffix|level": {
+      "why": "Not vendored - same subset reason. Obsidian `Component` subclasses are a plugin-authoring shape; this package drives Obsidian from outside rather than running inside it."
+    },
+    "script|obsidian-dev-utils/require-method-template|level": {
+      "why": "Not vendored - same subset reason."
+    },
+    "script|unicorn/no-top-level-assignment-in-function|level": {
+      "why": "Module-level state written from a function is this package's registry / cache / once-guard pattern - `setTransportOptionsResolver`, the memoized transport, the once-flagged process-cleanup handler. Wider than the shared config on purpose: obsidian-dev-utils turns it off only over its test files, because those shapes are production code here and test-only there."
+    },
+    "script|unicorn/no-top-level-side-effects|level": {
+      "why": "Module-initialization side effects ARE the contract for this package's entry points: the framework setup modules register their context resolvers at import time, and the script entry points call `exitIfScriptDisabled()` before anything reads what they set up. Deferring them into a function would mean consumers had to call something extra, which is what these modules exist to avoid."
+    },
+    "script|unicorn/prefer-group-by|level": {
+      "why": "`Map.groupBy` is ES2024 and this package's language floor is ES2022, beside the same block's `unicorn/prefer-array-from-async` relaxation for `Array.fromAsync`."
+    }
+  }
+}
