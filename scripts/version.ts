@@ -38,6 +38,7 @@ import {
 import { toChangelogSectionDocument } from './helpers/changelog-section.ts';
 import { spellcheckContent } from './helpers/cspell-content.ts';
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
+import { lintMarkdownContent } from './helpers/markdownlint-content.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
 import { getPackageManagerRunCommand } from './helpers/package-manager.ts';
 import {
@@ -57,14 +58,21 @@ const CHANGELOG_FILE_NAME = 'CHANGELOG.md';
 const DEFAULT_PREID = 'beta';
 
 /*
+One of the two npm scripts whose checks the settled changelog is held to, named in the messages so a reader
+knows which gate they are looking at -- and knows that fixing it here is the same fix as fixing it on the
+branch. Both scripts run over every settle, and a message names whichever of them actually reported
+something.
+*/
+const LINT_MD_SCRIPT_NAME = 'lint:md';
+
+/*
 The workflow that publishes to npm. Its filename is load-bearing twice over: npm's Trusted Publisher
 configuration authorizes a run by this exact name, and this script polls for the run the release starts.
 */
 const PUBLISH_WORKFLOW_FILE_NAME = 'publish-npm.yml';
 
 /*
-The npm script whose check the settled changelog is held to, named in the messages so a reader knows which
-gate they are looking at -- and knows that fixing it here is the same fix as fixing it on the branch.
+The other one. See LINT_MD_SCRIPT_NAME.
 */
 const SPELLCHECK_SCRIPT_NAME = 'spellcheck';
 
@@ -198,6 +206,46 @@ async function composeChangelog(newVersion: string, changelogPath: string): Prom
   }
 
   return newChangeLog;
+}
+
+/**
+ * Runs every check the settled changelog is held to over its NEW section, and returns what they reported.
+ *
+ * Only the new section is checked, and deliberately so -- the reason is on
+ * {@link toChangelogSectionDocument}'s own module.
+ *
+ * BOTH checks run over every settle, and neither short-circuits the other. An author who has a hard-wrapped
+ * line and a coined word is told about both at once, in one round of the review, rather than fixing one and
+ * being sent back for the other.
+ *
+ * @param changelogContent - The full composed `CHANGELOG.md` content.
+ * @param version - The version whose section is about to be published.
+ * @param changelogPath - The absolute path the section is checked AS, which is what makes both checks this
+ * repository's own rather than generic ones.
+ * @returns A {@link Promise} that resolves to the findings, or an empty array when the section is clean.
+ */
+async function getChangelogSectionFindings(changelogContent: string, version: string, changelogPath: string): Promise<ChangelogFinding[]> {
+  const content = toChangelogSectionDocument(changelogContent, version);
+
+  const markdownlintFindings = await lintMarkdownContent({
+    content,
+    filePath: changelogPath
+  });
+  const spellingFindings = await spellcheckContent({
+    content,
+    filePath: changelogPath
+  });
+
+  return [
+    ...markdownlintFindings.map((text) => ({
+      scriptName: LINT_MD_SCRIPT_NAME,
+      text
+    })),
+    ...spellingFindings.map((text) => ({
+      scriptName: SPELLCHECK_SCRIPT_NAME,
+      text
+    }))
+  ];
 }
 
 /**
@@ -360,7 +408,7 @@ async function publishGitHubRelease(newVersion: string): Promise<void> {
  * the author sees what has to change. Empty on the first round.
  * @returns A {@link Promise} that resolves to the reviewed content.
  */
-async function reviewChangelog(newChangeLog: string, findings: string[]): Promise<string> {
+async function reviewChangelog(newChangeLog: string, findings: ChangelogFinding[]): Promise<string> {
   const scratchFolder = await mkdtemp(join(toPosixPath(tmpdir()), 'obsidian-integration-testing-changelog-'));
   const scratchChangelogPath = join(toPosixPath(scratchFolder), CHANGELOG_FILE_NAME);
 
@@ -368,7 +416,7 @@ async function reviewChangelog(newChangeLog: string, findings: string[]): Promis
     await writeFile(scratchChangelogPath, newChangeLog, 'utf-8');
 
     if (findings.length > 0) {
-      console.log(`${CHANGELOG_FILE_NAME} does not pass ${SPELLCHECK_SCRIPT_NAME} yet:\n${findings.join('\n')}`);
+      console.log(`${CHANGELOG_FILE_NAME} does not pass ${toFailedScriptNames(findings)} yet:\n${toFindingLines(findings)}`);
     }
 
     const codeVersion = await execFromRoot('code --version', {
@@ -399,9 +447,9 @@ async function reviewChangelog(newChangeLog: string, findings: string[]): Promis
 }
 
 /**
- * Holds the composed changelog to `spellcheck`'s check until its NEW section passes.
+ * Holds the composed changelog to `lint:md`'s and `spellcheck`'s checks until its NEW section passes both.
  *
- * The check runs on the SETTLED text, so the review sits inside the loop rather than before it: the author is
+ * The checks run on the SETTLED text, so the review sits inside the loop rather than before it: the author is
  * still sitting at the editor, so they are handed the findings and the same scratch copy back. A review that
  * returns byte-identical text is the author declining to fix them, which ends the loop instead of reopening
  * for ever. There is nobody to hand a finding to in a non-interactive release, so that path throws on the
@@ -409,20 +457,22 @@ async function reviewChangelog(newChangeLog: string, findings: string[]): Promis
  *
  * @param newChangeLog - The composed `CHANGELOG.md` content.
  * @param newVersion - The version whose section is about to be published.
- * @param changelogPath - The absolute path the section is checked AS, which is what makes the check this
- * repository's own rather than a generic one.
+ * @param changelogPath - The absolute path the section is checked AS, which is what makes the checks this
+ * repository's own rather than generic ones.
  * @returns A {@link Promise} that resolves to the settled content, ready to be written.
- * @throws If the new section does not pass `spellcheck` and nobody fixes it.
+ * @throws If the new section does not pass `lint:md` and `spellcheck`, and nobody fixes it.
  */
 async function settleChangelog(newChangeLog: string, newVersion: string, changelogPath: string): Promise<string> {
   const isReviewDue = process.stdin.isTTY;
 
   if (!isReviewDue) {
-    console.log(`Non-interactive session detected; the generated ${CHANGELOG_FILE_NAME} is used as-is, and a ${SPELLCHECK_SCRIPT_NAME} finding stops the release rather than opening a review.`);
+    console.log(
+      `Non-interactive session detected; the generated ${CHANGELOG_FILE_NAME} is used as-is, and a ${LINT_MD_SCRIPT_NAME} or ${SPELLCHECK_SCRIPT_NAME} finding stops the release rather than opening a review.`
+    );
   }
 
   let settledChangeLog = newChangeLog;
-  let findings: string[] = [];
+  let findings: ChangelogFinding[] = [];
 
   for (;;) {
     if (isReviewDue) {
@@ -434,10 +484,7 @@ async function settleChangelog(newChangeLog: string, newVersion: string, changel
       settledChangeLog = reviewedChangeLog;
     }
 
-    findings = await spellcheckContent({
-      content: toChangelogSectionDocument(settledChangeLog, newVersion),
-      filePath: changelogPath
-    });
+    findings = await getChangelogSectionFindings(settledChangeLog, newVersion, changelogPath);
 
     if (findings.length === 0) {
       return settledChangeLog;
@@ -450,26 +497,55 @@ async function settleChangelog(newChangeLog: string, newVersion: string, changel
 }
 
 /**
- * Builds the error that stops a release whose new changelog section does not pass `spellcheck`.
+ * Builds the error that stops a release whose new changelog section does not pass `lint:md` or `spellcheck`.
  *
  * It is thrown from the composition step, which is BEFORE anything is written, so the recovery it describes is
  * the whole recovery: there is nothing to revert, and the release re-runs from the top.
  *
- * @param findings - The findings, each one the line `spellcheck`'s own output would have carried.
+ * @param findings - The findings, as {@link getChangelogSectionFindings} collected them.
  * @param version - The version whose section was being published.
  * @returns The error to throw.
  */
-function toChangelogFindingsError(findings: string[], version: string): Error {
+function toChangelogFindingsError(findings: ChangelogFinding[], version: string): Error {
+  const scriptNames = toFailedScriptNames(findings);
+  // The escape hatch belongs to `spellcheck` alone, so it is offered only when `spellcheck` is one of the
+  // scripts that reported. Printing it under a lone `lint:md` failure would send the author to edit
+  // cspell.json over a bare URL, which is the same lie `toFailedScriptNames` exists to avoid.
+  const hasSpellingFindings = findings.some((finding) => finding.scriptName === SPELLCHECK_SCRIPT_NAME);
+  const escapeHatch = hasSpellingFindings ? ' For a word this project really does use, add it to cspell.json instead.' : '';
   return new Error(
-    `The ${version} section of ${CHANGELOG_FILE_NAME} does not pass ${SPELLCHECK_SCRIPT_NAME}:\n`
-      + `${findings.join('\n')}\n`
+    `The ${version} section of ${CHANGELOG_FILE_NAME} does not pass ${scriptNames}:\n`
+      + `${toFindingLines(findings)}\n`
       + 'The changelog is settled before it is written, so this stops the release with the repository untouched'
       + ' and nothing to revert. The line numbers are the ones the written file would have had. Fix the release'
-      + ' notes -- in the commit messages they were generated from, or at the review step -- or, for a word this'
-      + ' project really does use, add it to cspell.json, and re-run the release. Releasing anyway would land the'
-      + ` word on the default branch inside the release commit, where the next ${SPELLCHECK_SCRIPT_NAME} on`
-      + ' anyone\'s branch reports it.'
+      + ' notes -- in the commit messages they were generated from, or at the review step -- and re-run the'
+      + ` release.${escapeHatch} Releasing anyway would land the defect on the default branch inside the release`
+      + ` commit, where the next ${scriptNames} on anyone's branch reports it.`
   );
+}
+
+/**
+ * Names the npm scripts that actually reported something, in the order they ran.
+ *
+ * Naming both unconditionally would be the easy version and would be a lie half the time: a release stopped
+ * by a coined word would tell its author to go and look at `lint:md`, which passed.
+ *
+ * @param findings - The findings to name the scripts of.
+ * @returns The script names, joined for prose -- `lint:md`, `spellcheck`, or `lint:md and spellcheck`.
+ */
+function toFailedScriptNames(findings: ChangelogFinding[]): string {
+  const scriptNames = [LINT_MD_SCRIPT_NAME, SPELLCHECK_SCRIPT_NAME].filter((scriptName) => findings.some((finding) => finding.scriptName === scriptName));
+  return scriptNames.join(' and ');
+}
+
+/**
+ * Renders the findings for a message, each line tagged with the script that reported it.
+ *
+ * @param findings - The findings to render.
+ * @returns The rendered lines, one finding per line.
+ */
+function toFindingLines(findings: ChangelogFinding[]): string {
+  return findings.map((finding) => `[${finding.scriptName}] ${finding.text}`).join('\n');
 }
 
 function toFirstLine(string_: string): string {
@@ -479,9 +555,9 @@ function toFirstLine(string_: string): string {
 /**
  * Settles the release's `CHANGELOG.md` and writes it.
  *
- * Composition, the interactive review and the `spellcheck` check all happen in memory, and the write is the
- * last thing that happens: a section that does not pass leaves the working tree pristine and the release
- * re-runnable, rather than leaving the defect in the file for the release commit to pick up.
+ * Composition, the interactive review and the `lint:md` and `spellcheck` checks all happen in memory, and
+ * the write is the last thing that happens: a section that does not pass leaves the working tree pristine
+ * and the release re-runnable, rather than leaving the defect in the file for the release commit to pick up.
  *
  * @param newVersion - The version whose section is being published.
  */
@@ -624,6 +700,28 @@ async function watchNpmPublishWorkflow(newVersion: string): Promise<void> {
 }
 
 await main();
+
+/**
+ * One finding reported over the settled changelog section, tagged with the npm script whose check produced
+ * it.
+ *
+ * The tag is what lets one message name `lint:md`, `spellcheck` or both, truthfully. Both checks run over
+ * every settle, so an author who has to fix a hard-wrapped line and a coined word fixes them in ONE round of
+ * the review rather than being sent back twice. It is also not decoration on the line itself: the two tools'
+ * output shapes are similar enough to be mistaken for each other, and the fix for one is not the fix for the
+ * other.
+ */
+interface ChangelogFinding {
+  /**
+   * The npm script that would have reported this on the branch.
+   */
+  readonly scriptName: string;
+
+  /**
+   * The reported line, exactly as that script's own output would have carried it.
+   */
+  readonly text: string;
+}
 
 interface EditJsonOptions {
   readonly shouldSkipIfMissing?: boolean;
