@@ -108,16 +108,14 @@ export function resolveElectronCompatibility(params: ResolveElectronCompatibilit
     return { actualElectronVersion: actualElectronVersion ?? null, appVersion, tier: 'unknown' };
   }
 
-  if (compareVersions(actualElectronVersion, minRecommendedElectronVersion) < 0) {
-    return {
+  return compareVersions(actualElectronVersion, minRecommendedElectronVersion) < 0
+    ? {
       actualElectronVersion,
       appVersion,
       message: `Obsidian ${appVersion} runs on Electron ${actualElectronVersion} but recommends Electron `
         + `${minRecommendedElectronVersion} or newer; pin a newer obsidianInstallerVersion for full compatibility.`,
       minRecommendedElectronVersion,
       tier: 'nagged'
-    };
-  }
-
-  return { actualElectronVersion, appVersion, minRecommendedElectronVersion, tier: 'ok' };
+    }
+    : { actualElectronVersion, appVersion, minRecommendedElectronVersion, tier: 'ok' };
 }

@@ -500,11 +500,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   public disposeSync(): void {
     this.disconnect();
-    if (this.ownedConfig) {
-      this.ownedInstance?.kill();
-      if (!didRemoveDirectory(this.ownedConfig.userDataDirectory)) {
-        log(`[cdp-transport] Owned user-data directory not removed synchronously (process may still hold handles): ${this.ownedConfig.userDataDirectory}`);
-      }
+    if (!this.ownedConfig) {
+      return;
+    }
+
+    this.ownedInstance?.kill();
+    if (!didRemoveDirectory(this.ownedConfig.userDataDirectory)) {
+      log(`[cdp-transport] Owned user-data directory not removed synchronously (process may still hold handles): ${this.ownedConfig.userDataDirectory}`);
     }
   }
 
@@ -553,11 +555,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     const resultObject = response.result?.result;
-    if (!resultObject || resultObject.type === 'undefined') {
-      return NO_OUTPUT;
-    }
-
-    return String(resultObject.value);
+    return !resultObject || resultObject.type === 'undefined' ? NO_OUTPUT : String(resultObject.value);
   }
 
   /**
@@ -611,10 +609,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @returns The owned instance's CDP host and port, or `undefined`.
    */
   public getOwnedInstanceEndpoint(): OwnedInstanceEndpoint | undefined {
-    if (!this.ownedConfig || !this.ownedInstance) {
-      return undefined;
-    }
-    return { host: this.cdpHost, port: this.cdpPort };
+    return !this.ownedConfig || !this.ownedInstance ? undefined : { host: this.cdpHost, port: this.cdpPort };
   }
 
   /**
@@ -847,17 +842,15 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private buildOwnedInstanceExitedError(): OwnedInstanceExitedError {
     const exitInfo = this.ownedInstance?.readExitInfo();
-    if (exitInfo) {
-      return new OwnedInstanceExitedError({
+    return exitInfo
+      ? new OwnedInstanceExitedError({
         cdpUrl: this.cdpUrl,
         code: exitInfo.code,
         outputTail: this.ownedInstance?.readOutput(),
         signal: exitInfo.signal,
         spawnError: exitInfo.spawnError
-      });
-    }
-
-    return buildOwnedInstanceExitedErrorFromMarker(this.cdpUrl, readOwnedInstanceExitMarker(this.cdpPort));
+      })
+      : buildOwnedInstanceExitedErrorFromMarker(this.cdpUrl, readOwnedInstanceExitMarker(this.cdpPort));
   }
 
   /**
@@ -1410,10 +1403,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
           returnByValue: true
         });
         const value = response.result?.result?.value;
-        if (typeof value !== 'string') {
-          return undefined;
-        }
-        return JSON.parse(value) as RendererBootObservation;
+        return typeof value === 'string' ? (JSON.parse(value) as RendererBootObservation) : undefined;
       } finally {
         ws.close();
       }
@@ -1759,11 +1749,7 @@ async function getObsidianLaunchCommand(port: number): Promise<string> {
   const exePath = await resolveObsidianExecutable();
   const flag = `--remote-debugging-port=${String(port)}`;
 
-  if (process.platform === 'win32') {
-    return `start "" "${exePath}" ${flag}`;
-  }
-
-  return `"${exePath}" ${flag} &`;
+  return process.platform === 'win32' ? `start "" "${exePath}" ${flag}` : `"${exePath}" ${flag} &`;
 }
 
 /* v8 ignore stop */

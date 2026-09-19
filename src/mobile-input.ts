@@ -267,11 +267,7 @@ export function buildResolveInputExpression(id: string, errorMessage?: string): 
  * @returns Whether this host should perform the injection.
  */
 export function checkInputClaimGranted(result: unknown): boolean {
-  if (typeof result !== 'object' || result === null) {
-    return true;
-  }
-
-  return (result as EvaluateResult).result?.value !== false;
+  return typeof result !== 'object' || result === null || (result as EvaluateResult).result?.value !== false;
 }
 
 /**
@@ -302,11 +298,7 @@ export function codePointOf(text: string): number {
  * @returns The commands to send, in order.
  */
 export function toCdpInputCommands(request: MobileInputRequest): CdpInputCommand[] {
-  if (request.kind === 'key') {
-    return toKeyCommands(request);
-  }
-
-  return toPointerCommands(request);
+  return request.kind === 'key' ? toKeyCommands(request) : toPointerCommands(request);
 }
 
 /**
@@ -382,11 +374,7 @@ function resolveKeyCode(upperCasedCodePoint: number): string {
     return `Key${String.fromCodePoint(upperCasedCodePoint)}`;
   }
 
-  if (upperCasedCodePoint >= DIGIT_ZERO_CODE_POINT && upperCasedCodePoint <= DIGIT_NINE_CODE_POINT) {
-    return `Digit${String.fromCodePoint(upperCasedCodePoint)}`;
-  }
-
-  return '';
+  return upperCasedCodePoint >= DIGIT_ZERO_CODE_POINT && upperCasedCodePoint <= DIGIT_NINE_CODE_POINT ? `Digit${String.fromCodePoint(upperCasedCodePoint)}` : '';
 }
 
 /**
@@ -405,14 +393,10 @@ function toKeyCommands(request: MobileKeyInputRequest): CdpInputCommand[] {
   const base = { code, key: request.key, modifiers, windowsVirtualKeyCode };
 
   const commands: CdpInputCommand[] = [
-    { method: 'Input.dispatchKeyEvent', params: { ...base, type: 'rawKeyDown' } }
+    { method: 'Input.dispatchKeyEvent', params: { ...base, type: 'rawKeyDown' } },
+    ...(text === undefined ? [] : [{ method: 'Input.dispatchKeyEvent', params: { ...base, text, type: 'char' } }]),
+    { method: 'Input.dispatchKeyEvent', params: { ...base, type: 'keyUp' } }
   ];
-
-  if (text !== undefined) {
-    commands.push({ method: 'Input.dispatchKeyEvent', params: { ...base, text, type: 'char' } });
-  }
-
-  commands.push({ method: 'Input.dispatchKeyEvent', params: { ...base, type: 'keyUp' } });
 
   return commands;
 }
@@ -442,10 +426,10 @@ function toKeyCommands(request: MobileKeyInputRequest): CdpInputCommand[] {
 function toPointerCommands(request: MobilePointerInputRequest): CdpInputCommand[] {
   const modifiers = toCdpModifiers(request.modifiers);
 
-  if (request.kind === 'longPress') {
-    // `synthesizeTapGesture` takes no modifier bitmask — CDP's gesture API has no parameter for one — and
-    // A touch screen has no modifier keys to hold during a press, so there is nothing to carry here.
-    return [
+  // `synthesizeTapGesture` takes no modifier bitmask — CDP's gesture API has no parameter for one — and
+  // A touch screen has no modifier keys to hold during a press, so there is nothing to carry here.
+  return request.kind === 'longPress'
+    ? [
       {
         method: 'Input.synthesizeTapGesture',
         params: {
@@ -455,17 +439,15 @@ function toPointerCommands(request: MobilePointerInputRequest): CdpInputCommand[
           y: request.y
         }
       }
+    ]
+    : [
+      {
+        method: 'Input.dispatchTouchEvent',
+        params: { modifiers, touchPoints: [{ x: request.x, y: request.y }], type: 'touchStart' }
+      },
+      {
+        method: 'Input.dispatchTouchEvent',
+        params: { modifiers, touchPoints: [], type: 'touchEnd' }
+      }
     ];
-  }
-
-  return [
-    {
-      method: 'Input.dispatchTouchEvent',
-      params: { modifiers, touchPoints: [{ x: request.x, y: request.y }], type: 'touchStart' }
-    },
-    {
-      method: 'Input.dispatchTouchEvent',
-      params: { modifiers, touchPoints: [], type: 'touchEnd' }
-    }
-  ];
 }

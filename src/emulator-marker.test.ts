@@ -249,10 +249,7 @@ describe('listEmulatorMarkers', () => {
   it('should read every emulator marker and skip other files and unreadable markers', () => {
     mockReaddirSync.mockReturnValue(['4723.appium-server.json', 'obsidian_test.emulator.json', 'broken.emulator.json', 'android.setup.lock']);
     mockReadFileSync.mockImplementation((path) => {
-      if (path === MARKER_PATH) {
-        return JSON.stringify(MARKER);
-      }
-      return '{not json';
+      return path === MARKER_PATH ? JSON.stringify(MARKER) : '{not json';
     });
 
     expect(listEmulatorMarkers()).toStrictEqual([MARKER]);

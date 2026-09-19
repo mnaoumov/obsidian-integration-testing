@@ -285,10 +285,7 @@ describe('dispose', () => {
       callCount++;
       // First call: set deadline. Second call: still within deadline.
       // Third call onward: past deadline.
-      if (callCount <= 2) {
-        return realDateNow();
-      }
-      return realDateNow() + 20_000;
+      return callCount <= 2 ? realDateNow() : realDateNow() + 20_000;
     });
 
     mockRm.mockRejectedValue(new Error('EBUSY'));

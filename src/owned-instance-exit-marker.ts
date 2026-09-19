@@ -187,17 +187,15 @@ function parseMarker(parsed: unknown, port: number): OwnedInstanceExitMarker | u
   const record = parsed as Record<string, unknown>;
   const { code, exitedAtInMilliseconds, outputTail, pid, port: markedPort, signal, spawnError } = record;
 
-  if (typeof exitedAtInMilliseconds !== 'number' || markedPort !== port) {
-    return undefined;
-  }
-
-  return {
-    code: typeof code === 'number' ? code : null,
-    exitedAtInMilliseconds,
-    outputTail: typeof outputTail === 'string' ? outputTail : '',
-    pid: typeof pid === 'number' ? pid : undefined,
-    port,
-    signal: typeof signal === 'string' ? signal as NodeJS.Signals : null,
-    ...(typeof spawnError === 'string' && { spawnError })
-  };
+  return typeof exitedAtInMilliseconds !== 'number' || markedPort !== port
+    ? undefined
+    : {
+      code: typeof code === 'number' ? code : null,
+      exitedAtInMilliseconds,
+      outputTail: typeof outputTail === 'string' ? outputTail : '',
+      pid: typeof pid === 'number' ? pid : undefined,
+      port,
+      signal: typeof signal === 'string' ? signal as NodeJS.Signals : null,
+      ...(typeof spawnError === 'string' && { spawnError })
+    };
 }

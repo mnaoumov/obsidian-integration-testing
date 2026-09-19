@@ -71,12 +71,8 @@ export function shouldTearDownVaultWindow(params: ShouldTearDownVaultWindowParam
     return false;
   }
 
-  if (isHarnessOwnedInstance) {
-    // Attached to someone else's instance: only this transport's own vaults.
-    return isSelfRegistered;
-  }
-
-  // Plain attach mode — a foreign Obsidian the harness opened a vault in, which
-  // outlives the run and must be left as it was found.
-  return true;
+  // When attached to someone else's instance, only this transport's own vaults come down. Otherwise this is
+  // plain attach mode — a foreign Obsidian the harness opened a vault in, which outlives the run and must be
+  // left as it was found.
+  return isHarnessOwnedInstance ? isSelfRegistered : true;
 }

@@ -227,11 +227,7 @@ interface CheckIsRemovableDirectoryParams {
  * @returns `true` when the entry may be removed.
  */
 export function checkIsLeftoverStale(params: CheckIsLeftoverStaleParams): boolean {
-  if (params.maxAgeInMilliseconds === 0) {
-    return true;
-  }
-
-  return params.nowInMilliseconds - params.modifiedAtInMilliseconds >= params.maxAgeInMilliseconds;
+  return params.maxAgeInMilliseconds === 0 || params.nowInMilliseconds - params.modifiedAtInMilliseconds >= params.maxAgeInMilliseconds;
 }
 
 /**

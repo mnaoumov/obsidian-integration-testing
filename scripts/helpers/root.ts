@@ -24,6 +24,7 @@ export function execFromRoot(command: CommandPart[] | string, options: ExecOptio
     throw new Error('Could not find root folder');
   }
 
+  // eslint-disable-next-line unicorn/prefer-ternary -- `exec`'s overloads discriminate on the LITERAL `true` / `false`, so one call passing a `boolean` matches neither and stops compiling.
   if (options.shouldIncludeDetails) {
     return exec(command, { ...options, cwd: root, shouldIncludeDetails: true });
   }

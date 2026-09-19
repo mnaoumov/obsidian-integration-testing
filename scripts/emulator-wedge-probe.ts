@@ -201,11 +201,7 @@ interface FatalTick extends ProbeTick {
  * @returns `true` when the verdict is one the probe stops on.
  */
 function checkIsFatal(tick: ProbeTick): tick is FatalTick {
-  if (tick.verdict === 'alive') {
-    return false;
-  }
-
-  return tick.verdict !== 'guest-unresponsive' || tick.elapsedInMilliseconds >= settleForInMilliseconds;
+  return tick.verdict !== 'alive' && (tick.verdict !== 'guest-unresponsive' || tick.elapsedInMilliseconds >= settleForInMilliseconds);
 }
 
 function delay(durationInMilliseconds: number): Promise<void> {

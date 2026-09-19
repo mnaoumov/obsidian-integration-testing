@@ -191,12 +191,9 @@ export function buildSoftKeyboardDiagnosticMessage(params: BuildSoftKeyboardDiag
   const lines = [
     `raiseSoftKeyboard: the keyboard did not come up. Device framebuffer written to ${params.screenshotPath}.`,
     `page: innerHeight=${String(params.snapshot.innerHeight)} baselineInputTop=${formatMeasurement(baselineTop)} inputTop=${formatMeasurement(currentTop)} lift=${formatMeasurement(lift)}`,
-    `device: ${params.inputMethodState || '(no input_method state reported)'}`
+    `device: ${params.inputMethodState || '(no input_method state reported)'}`,
+    ...(lift === 0 ? ['The field did not move at all. If the device says the keyboard is showing, it was already up before the first touch — this check cannot tell that from a field that never lifts.'] : [])
   ];
-
-  if (lift === 0) {
-    lines.push('The field did not move at all. If the device says the keyboard is showing, it was already up before the first touch — this check cannot tell that from a field that never lifts.');
-  }
 
   return lines.join('\n');
 }
@@ -264,14 +261,12 @@ export function resolveSoftKeyboardTapPoints(params: ResolveSoftKeyboardTapPoint
   const centerYInPixels = Math.round((inputRect.top + inputRect.height / CENTER_DIVISOR) * devicePixelRatio);
   const topOffsetInPixels = Math.round(screenY * devicePixelRatio);
 
-  if (topOffsetInPixels === 0) {
-    return [{ xInPixels, yInPixels: centerYInPixels }];
-  }
-
-  return [
-    { xInPixels, yInPixels: centerYInPixels + topOffsetInPixels },
-    { xInPixels, yInPixels: centerYInPixels }
-  ];
+  return topOffsetInPixels === 0
+    ? [{ xInPixels, yInPixels: centerYInPixels }]
+    : [
+      { xInPixels, yInPixels: centerYInPixels + topOffsetInPixels },
+      { xInPixels, yInPixels: centerYInPixels }
+    ];
 }
 
 /**

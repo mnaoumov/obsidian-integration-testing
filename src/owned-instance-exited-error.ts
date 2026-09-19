@@ -121,19 +121,19 @@ export class OwnedInstanceExitedError extends Error {
  * @returns The error to throw in place of a refused connection.
  */
 export function buildOwnedInstanceExitedErrorFromMarker(cdpUrl: string, marker: OwnedInstanceExitMarker | undefined): OwnedInstanceExitedError {
-  if (!marker) {
-    return new OwnedInstanceExitedError({ cdpUrl });
-  }
-
-  return new OwnedInstanceExitedError({
-    cdpUrl,
-    code: marker.code,
-    exitedAtInMilliseconds: marker.exitedAtInMilliseconds,
-    outputTail: marker.outputTail,
-    pid: marker.pid,
-    signal: marker.signal,
-    spawnError: marker.spawnError
-  });
+  return new OwnedInstanceExitedError(
+    marker
+      ? {
+        cdpUrl,
+        code: marker.code,
+        exitedAtInMilliseconds: marker.exitedAtInMilliseconds,
+        outputTail: marker.outputTail,
+        pid: marker.pid,
+        signal: marker.signal,
+        spawnError: marker.spawnError
+      }
+      : { cdpUrl }
+  );
 }
 
 function buildMessage(params: OwnedInstanceExitedErrorConstructorParams): string {
@@ -149,12 +149,10 @@ function describeExit(params: OwnedInstanceExitedErrorConstructorParams): string
     return `it failed to start (${params.spawnError})`;
   }
 
-  if (params.code === undefined && params.signal === undefined) {
-    return 'it exited at some point during this run, and the harness recorded nothing about how '
-      + '(the run that owns it logs the exit code; a worker sees only what the exit marker preserved)';
-  }
-
-  return `${describeProcess(params)} ${describeReason(params)}${describeWhen(params.exitedAtInMilliseconds)}`;
+  return params.code === undefined && params.signal === undefined
+    ? 'it exited at some point during this run, and the harness recorded nothing about how '
+      + '(the run that owns it logs the exit code; a worker sees only what the exit marker preserved)'
+    : `${describeProcess(params)} ${describeReason(params)}${describeWhen(params.exitedAtInMilliseconds)}`;
 }
 
 function describeProcess(params: OwnedInstanceExitedErrorConstructorParams): string {

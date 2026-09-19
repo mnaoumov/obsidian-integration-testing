@@ -142,11 +142,7 @@ function isNamedProject(value: unknown): value is NamedProject {
 
   const test: unknown = value.test;
 
-  if (typeof test !== 'object' || test === null || !('name' in test)) {
-    return false;
-  }
-
-  return typeof test.name === 'string';
+  return typeof test === 'object' && test !== null && 'name' in test && typeof test.name === 'string';
 }
 
 /**

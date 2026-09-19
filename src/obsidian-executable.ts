@@ -34,11 +34,7 @@ export async function resolveObsidianExecutable(): Promise<string> {
     return await resolveOnWindows();
   }
 
-  if (process.platform === 'darwin') {
-    return resolveOnMacOs();
-  }
-
-  return await resolveOnLinux();
+  return process.platform === 'darwin' ? resolveOnMacOs() : (await resolveOnLinux());
 }
 
 async function findInPath(lookupCommand: string, executableName: string): Promise<string | undefined> {

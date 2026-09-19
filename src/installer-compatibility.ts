@@ -128,8 +128,8 @@ export function resolveInstallerCompatibility(params: ResolveInstallerCompatibil
     };
   }
 
-  if (minRecommendedInstallerVersion !== undefined && compareVersions(installerVersion, minRecommendedInstallerVersion) < 0) {
-    return {
+  return minRecommendedInstallerVersion !== undefined && compareVersions(installerVersion, minRecommendedInstallerVersion) < 0
+    ? {
       appVersion,
       installerVersion,
       message: `Obsidian installer ${installerVersion} runs Obsidian ${appVersion} but is older than the `
@@ -137,14 +137,12 @@ export function resolveInstallerCompatibility(params: ResolveInstallerCompatibil
       minRecommendedInstallerVersion,
       minRunnableInstallerVersion,
       tier: 'nagged'
+    }
+    : {
+      appVersion,
+      installerVersion,
+      minRunnableInstallerVersion,
+      tier: 'ok',
+      ...recommendedFloor
     };
-  }
-
-  return {
-    appVersion,
-    installerVersion,
-    minRunnableInstallerVersion,
-    tier: 'ok',
-    ...recommendedFloor
-  };
 }

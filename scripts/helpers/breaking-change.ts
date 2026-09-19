@@ -122,15 +122,9 @@ export function isMajorRaise(params: IsMajorRaiseParams): boolean {
   const currentMajor = major(currentVersion);
   const newMajor = major(newVersion);
 
-  if (newMajor !== currentMajor) {
-    return newMajor > currentMajor;
-  }
-
-  if (prerelease(currentVersion) === null) {
-    return false;
-  }
-
-  return lastReleasedStableVersion === null || currentMajor > major(lastReleasedStableVersion);
+  return newMajor === currentMajor
+    ? prerelease(currentVersion) !== null && (lastReleasedStableVersion === null || currentMajor > major(lastReleasedStableVersion))
+    : newMajor > currentMajor;
 }
 
 function toSubject(commitMessage: string): string {

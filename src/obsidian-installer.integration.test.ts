@@ -91,9 +91,5 @@ function getExpectedExeSuffix(): string {
     return 'Obsidian.exe';
   }
 
-  if (process.platform === 'darwin') {
-    return join('Obsidian.app', 'Contents', 'MacOS', 'Obsidian');
-  }
-
-  return 'obsidian';
+  return process.platform === 'darwin' ? join('Obsidian.app', 'Contents', 'MacOS', 'Obsidian') : 'obsidian';
 }

@@ -181,11 +181,7 @@ export function selectInstallerDownloadUrl(params: SelectInstallerDownloadUrlPar
     return downloads.exe;
   }
 
-  if (params.platform === 'darwin') {
-    return downloads.dmg;
-  }
-
-  return downloads.tar;
+  return params.platform === 'darwin' ? downloads.dmg : downloads.tar;
 }
 
 /**
@@ -226,9 +222,5 @@ function getPlatformAssetShape(platform: NodeJS.Platform): PlatformInstallerAsse
     return WINDOWS_ASSET_SHAPE;
   }
 
-  if (platform === 'darwin') {
-    return MAC_ASSET_SHAPE;
-  }
-
-  return LINUX_ASSET_SHAPE;
+  return platform === 'darwin' ? MAC_ASSET_SHAPE : LINUX_ASSET_SHAPE;
 }

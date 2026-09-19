@@ -471,11 +471,7 @@ export class AppiumTransport implements ObsidianTransport {
        */
       const result = await this.evaluateWithinCap(`return (${expression})`);
 
-      if (result === undefined || result === null) {
-        return NO_OUTPUT;
-      }
-
-      return result;
+      return result ?? NO_OUTPUT;
     } catch (error: unknown) {
       /*
        * A cap overrun is the one failure here that says nothing about the context: the closure outstayed
@@ -607,11 +603,7 @@ export class AppiumTransport implements ObsidianTransport {
       .join('\n')
       .trim();
 
-    if (!relevant) {
-      return undefined;
-    }
-
-    return relevant.slice(-CONSOLE_CAPTURE_TAIL_MAX_LENGTH);
+    return relevant ? relevant.slice(-CONSOLE_CAPTURE_TAIL_MAX_LENGTH) : undefined;
   }
 
   /**

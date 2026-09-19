@@ -123,10 +123,7 @@ function buildOptions(values: ParsedCliValues): ConnectToCdpOptions {
  */
 function discoverDemoVaultPluginIds(demoVaultPath: string): string[] {
   const pluginsDirectory = join(demoVaultPath, '.obsidian', 'plugins');
-  if (!existsSync(pluginsDirectory)) {
-    return [];
-  }
-  return readdirSync(pluginsDirectory, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  return existsSync(pluginsDirectory) ? readdirSync(pluginsDirectory, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name) : [];
 }
 
 /**
