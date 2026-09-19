@@ -742,6 +742,12 @@ function findProjectRoot(): string {
  * and CDP port), so they no longer contend and need no lock. Only the Android
  * transport, which shares the single emulator and Appium server, must serialize.
  *
+ * Obsidian's CLI pipe is machine-global per user and therefore outside that
+ * isolation, which reads like a reason to give desktop a scope too. Measured, it
+ * is the opposite: the pipe is already held by the developer's own Obsidian, so
+ * no run can win it and a lone run loses it exactly as a parallel one does — and
+ * nothing the harness uses is behind it. See AGENTS.md L59.
+ *
  * @param transportOptions - The resolved transport options.
  * @returns The lock scope string, or `undefined` if no lock is needed.
  */

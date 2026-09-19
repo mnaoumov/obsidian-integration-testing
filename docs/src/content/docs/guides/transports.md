@@ -30,6 +30,18 @@ export default defineConfig({
 });
 ```
 
+### The `CLI server error` line at boot is expected
+
+An owned instance prints this once on startup, on every run:
+
+```text
+[obsidian-instance:stderr] CLI server error: Error: listen EADDRINUSE: address already in use \\.\pipe\obsidian-cli-<username>
+```
+
+Obsidian serves its command-line interface on a named pipe (`\\.\pipe\obsidian-cli-<username>` on Windows, `$XDG_RUNTIME_DIR/.obsidian-cli.sock` elsewhere) whose name depends only on the user, not on the user-data dir. The owned instance always wins its own single-instance lock, so it always tries to serve that pipe — and whatever started first, normally your everyday Obsidian, already holds it.
+
+Losing it costs the run nothing: Obsidian logs the failure and carries on, the harness never issues CLI commands, and every test talks `CDP`. Nothing needs configuring and the line is safe to ignore. It is **not** a symptom of two test runs colliding — a single run with nothing else going on prints it too.
+
 ## Pin an Obsidian version
 
 To run against a specific Obsidian version, set `obsidianVersion` and/or `obsidianInstallerVersion`. Each accepts an explicit `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`. Downloaded asars and installer shells are cached under the system temp directory for reuse.
