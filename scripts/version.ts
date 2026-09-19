@@ -7,9 +7,12 @@ import type {
 
 import { existsSync } from 'node:fs';
 import {
+  mkdtemp,
   readFile,
+  rm,
   writeFile
 } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import {
   join,
   resolve as resolvePosix
@@ -32,6 +35,8 @@ import {
   findBreakingCommitSubjects,
   isMajorRaise
 } from './helpers/breaking-change.ts';
+import { toChangelogSectionDocument } from './helpers/changelog-section.ts';
+import { spellcheckContent } from './helpers/cspell-content.ts';
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
 import { getPackageManagerRunCommand } from './helpers/package-manager.ts';
@@ -43,6 +48,12 @@ import {
 
 exitIfScriptDisabled();
 
+/*
+The one file this script settles, checks and writes. Named rather than repeated, because every message a
+failed settle prints has to name it too.
+*/
+const CHANGELOG_FILE_NAME = 'CHANGELOG.md';
+
 const DEFAULT_PREID = 'beta';
 
 /*
@@ -50,6 +61,12 @@ The workflow that publishes to npm. Its filename is load-bearing twice over: npm
 configuration authorizes a run by this exact name, and this script polls for the run the release starts.
 */
 const PUBLISH_WORKFLOW_FILE_NAME = 'publish-npm.yml';
+
+/*
+The npm script whose check the settled changelog is held to, named in the messages so a reader knows which
+gate they are looking at -- and knows that fixing it here is the same fix as fixing it on the branch.
+*/
+const SPELLCHECK_SCRIPT_NAME = 'spellcheck';
 
 enum VersionUpdateType {
   Invalid = 'invalid',
@@ -140,6 +157,50 @@ async function assertGitRepoClean(): Promise<void> {
 }
 
 /**
+ * Composes the `CHANGELOG.md` the release would publish, in memory and without writing anything.
+ *
+ * The new section is built from the first-parent commit subjects since the version the file's own first
+ * heading names, and the previous sections are carried underneath it unchanged.
+ *
+ * @param newVersion - The version whose section is being composed.
+ * @param changelogPath - The absolute path of `CHANGELOG.md`.
+ * @returns A {@link Promise} that resolves to the full composed content.
+ */
+async function composeChangelog(newVersion: string, changelogPath: string): Promise<string> {
+  const HEADER_LINES_COUNT = 2;
+  let previousChangelogLines: string[];
+  if (existsSync(changelogPath)) {
+    const content = await readFile(changelogPath, 'utf-8');
+    previousChangelogLines = content.split('\n').slice(HEADER_LINES_COUNT);
+    if (previousChangelogLines.at(-1) === '') {
+      previousChangelogLines.pop();
+    }
+  } else {
+    previousChangelogLines = [];
+  }
+
+  const lastTag = (previousChangelogLines[0] ?? '').replaceAll('## ', '');
+  const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
+  const commitMessagesString = await execFromRoot(`git log ${commitRange} --format=%B --first-parent -z`, { isQuiet: true });
+  const commitMessages = commitMessagesString.split('\0').filter(Boolean).map((message) => toFirstLine(message));
+
+  let newChangeLog = `# CHANGELOG\n\n## ${newVersion}\n\n`;
+
+  for (const message of commitMessages) {
+    newChangeLog += `- ${message}\n`;
+  }
+
+  if (previousChangelogLines.length > 0) {
+    newChangeLog += '\n';
+    for (const line of previousChangelogLines) {
+      newChangeLog += `${line}\n`;
+    }
+  }
+
+  return newChangeLog;
+}
+
+/**
  * Resolves the highest non-prerelease version ever tagged.
  *
  * The prerelease case needs this and cannot use {@link getLastTag}: after a `premajor`, the nearest tag IS
@@ -193,7 +254,7 @@ async function getNewVersion(versionUpdateType: string): Promise<string> {
 }
 
 async function getReleaseNotes(newVersion: string): Promise<string> {
-  const changelogPath = resolvePathFromRootSafe('CHANGELOG.md');
+  const changelogPath = resolvePathFromRootSafe(CHANGELOG_FILE_NAME);
   const content = await readFile(changelogPath, 'utf-8');
   const newVersionEscaped = newVersion.replace('.', String.raw`\.`);
   const match = new RegExp(`\n## ${newVersionEscaped}\n\n((.|\n)+?)\n\n##`).exec(content);
@@ -287,66 +348,148 @@ async function publishGitHubRelease(newVersion: string): Promise<void> {
   });
 }
 
+/**
+ * Hands the composed changelog to the user for review on a scratch copy OUTSIDE the repository, and returns
+ * whatever they left behind. The scratch folder is removed even when the review fails.
+ *
+ * The scratch copy is what makes "settled before it is written" possible at all: the review used to edit
+ * `CHANGELOG.md` itself, so by the time anything could check the result it was already in the working tree.
+ *
+ * @param newChangeLog - The composed `CHANGELOG.md` content to hand over for review.
+ * @param findings - The findings the previous round of this review left unfixed, printed above the prompt so
+ * the author sees what has to change. Empty on the first round.
+ * @returns A {@link Promise} that resolves to the reviewed content.
+ */
+async function reviewChangelog(newChangeLog: string, findings: string[]): Promise<string> {
+  const scratchFolder = await mkdtemp(join(toPosixPath(tmpdir()), 'obsidian-integration-testing-changelog-'));
+  const scratchChangelogPath = join(toPosixPath(scratchFolder), CHANGELOG_FILE_NAME);
+
+  try {
+    await writeFile(scratchChangelogPath, newChangeLog, 'utf-8');
+
+    if (findings.length > 0) {
+      console.log(`${CHANGELOG_FILE_NAME} does not pass ${SPELLCHECK_SCRIPT_NAME} yet:\n${findings.join('\n')}`);
+    }
+
+    const codeVersion = await execFromRoot('code --version', {
+      isQuiet: true,
+      shouldIgnoreExitCode: true
+    });
+
+    if (codeVersion) {
+      console.log(`Please update the ${CHANGELOG_FILE_NAME} file. Close Visual Studio Code when you are done...`);
+      await execFromRoot(['code', '-w', scratchChangelogPath], {
+        isQuiet: true,
+        shouldIgnoreExitCode: true
+      });
+    } else {
+      console.log('Could not find Visual Studio Code in your PATH. Using console mode instead.');
+      await createInterface(process.stdin, process.stdout).question(
+        `Please update the ${scratchChangelogPath} file. Press Enter when you are done...`
+      );
+    }
+
+    return await readFile(scratchChangelogPath, 'utf-8');
+  } finally {
+    await rm(scratchFolder, {
+      force: true,
+      recursive: true
+    });
+  }
+}
+
+/**
+ * Holds the composed changelog to `spellcheck`'s check until its NEW section passes.
+ *
+ * The check runs on the SETTLED text, so the review sits inside the loop rather than before it: the author is
+ * still sitting at the editor, so they are handed the findings and the same scratch copy back. A review that
+ * returns byte-identical text is the author declining to fix them, which ends the loop instead of reopening
+ * for ever. There is nobody to hand a finding to in a non-interactive release, so that path throws on the
+ * first one.
+ *
+ * @param newChangeLog - The composed `CHANGELOG.md` content.
+ * @param newVersion - The version whose section is about to be published.
+ * @param changelogPath - The absolute path the section is checked AS, which is what makes the check this
+ * repository's own rather than a generic one.
+ * @returns A {@link Promise} that resolves to the settled content, ready to be written.
+ * @throws If the new section does not pass `spellcheck` and nobody fixes it.
+ */
+async function settleChangelog(newChangeLog: string, newVersion: string, changelogPath: string): Promise<string> {
+  const isReviewDue = process.stdin.isTTY;
+
+  if (!isReviewDue) {
+    console.log(`Non-interactive session detected; the generated ${CHANGELOG_FILE_NAME} is used as-is, and a ${SPELLCHECK_SCRIPT_NAME} finding stops the release rather than opening a review.`);
+  }
+
+  let settledChangeLog = newChangeLog;
+  let findings: string[] = [];
+
+  for (;;) {
+    if (isReviewDue) {
+      const reviewedChangeLog = await reviewChangelog(settledChangeLog, findings);
+      if (findings.length > 0 && reviewedChangeLog === settledChangeLog) {
+        throw toChangelogFindingsError(findings, newVersion);
+      }
+
+      settledChangeLog = reviewedChangeLog;
+    }
+
+    findings = await spellcheckContent({
+      content: toChangelogSectionDocument(settledChangeLog, newVersion),
+      filePath: changelogPath
+    });
+
+    if (findings.length === 0) {
+      return settledChangeLog;
+    }
+
+    if (!isReviewDue) {
+      throw toChangelogFindingsError(findings, newVersion);
+    }
+  }
+}
+
+/**
+ * Builds the error that stops a release whose new changelog section does not pass `spellcheck`.
+ *
+ * It is thrown from the composition step, which is BEFORE anything is written, so the recovery it describes is
+ * the whole recovery: there is nothing to revert, and the release re-runs from the top.
+ *
+ * @param findings - The findings, each one the line `spellcheck`'s own output would have carried.
+ * @param version - The version whose section was being published.
+ * @returns The error to throw.
+ */
+function toChangelogFindingsError(findings: string[], version: string): Error {
+  return new Error(
+    `The ${version} section of ${CHANGELOG_FILE_NAME} does not pass ${SPELLCHECK_SCRIPT_NAME}:\n`
+      + `${findings.join('\n')}\n`
+      + 'The changelog is settled before it is written, so this stops the release with the repository untouched'
+      + ' and nothing to revert. The line numbers are the ones the written file would have had. Fix the release'
+      + ' notes -- in the commit messages they were generated from, or at the review step -- or, for a word this'
+      + ' project really does use, add it to cspell.json, and re-run the release. Releasing anyway would land the'
+      + ` word on the default branch inside the release commit, where the next ${SPELLCHECK_SCRIPT_NAME} on`
+      + ' anyone\'s branch reports it.'
+  );
+}
+
 function toFirstLine(string_: string): string {
   return string_.split(/\r?\n/).filter(Boolean).slice(0, 1).join('');
 }
 
+/**
+ * Settles the release's `CHANGELOG.md` and writes it.
+ *
+ * Composition, the interactive review and the `spellcheck` check all happen in memory, and the write is the
+ * last thing that happens: a section that does not pass leaves the working tree pristine and the release
+ * re-runnable, rather than leaving the defect in the file for the release commit to pick up.
+ *
+ * @param newVersion - The version whose section is being published.
+ */
 async function updateChangelog(newVersion: string): Promise<void> {
-  const HEADER_LINES_COUNT = 2;
-  const changelogPath = resolvePathFromRootSafe('CHANGELOG.md');
-  let previousChangelogLines: string[];
-  if (existsSync(changelogPath)) {
-    const content = await readFile(changelogPath, 'utf-8');
-    previousChangelogLines = content.split('\n').slice(HEADER_LINES_COUNT);
-    if (previousChangelogLines.at(-1) === '') {
-      previousChangelogLines.pop();
-    }
-  } else {
-    previousChangelogLines = [];
-  }
-
-  const lastTag = (previousChangelogLines[0] ?? '').replaceAll('## ', '');
-  const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
-  const commitMessagesString = await execFromRoot(`git log ${commitRange} --format=%B --first-parent -z`, { isQuiet: true });
-  const commitMessages = commitMessagesString.split('\0').filter(Boolean).map((message) => toFirstLine(message));
-
-  let newChangeLog = `# CHANGELOG\n\n## ${newVersion}\n\n`;
-
-  for (const message of commitMessages) {
-    newChangeLog += `- ${message}\n`;
-  }
-
-  if (previousChangelogLines.length > 0) {
-    newChangeLog += '\n';
-    for (const line of previousChangelogLines) {
-      newChangeLog += `${line}\n`;
-    }
-  }
-
-  await writeFile(changelogPath, newChangeLog, 'utf-8');
-
-  if (!process.stdin.isTTY) {
-    console.log('Non-interactive session detected; using the generated CHANGELOG.md as-is.');
-    return;
-  }
-
-  const codeVersion = await execFromRoot('code --version', {
-    isQuiet: true,
-    shouldIgnoreExitCode: true
-  });
-
-  if (codeVersion) {
-    console.log('Please update the CHANGELOG.md file. Close Visual Studio Code when you are done...');
-    await execFromRoot(['code', '-w', changelogPath], {
-      isQuiet: true,
-      shouldIgnoreExitCode: true
-    });
-  } else {
-    console.log('Could not find Visual Studio Code in your PATH. Using console mode instead.');
-    await createInterface(process.stdin, process.stdout).question(
-      'Please update the CHANGELOG.md file. Press Enter when you are done...'
-    );
-  }
+  const changelogPath = resolvePathFromRootSafe(CHANGELOG_FILE_NAME);
+  const newChangeLog = await composeChangelog(newVersion, changelogPath);
+  const settledChangeLog = await settleChangelog(newChangeLog, newVersion, changelogPath);
+  await writeFile(changelogPath, settledChangeLog, 'utf-8');
 }
 
 async function updateVersion(versionUpdateType?: string): Promise<void> {

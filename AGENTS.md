@@ -680,7 +680,7 @@ Lifting the exact `webdriverio` pin would not help either: the newest `@wdio/uti
 
 ## L37. Release — npm publishes from CI through a Trusted Publisher, not from a token
 
-`npm run version <major|minor|patch|premajor|preminor|prepatch|prerelease|x.y.z>` still drives the release from the developer machine: it runs the full gate (`format:check`, `spellcheck`, `lint:md`, `build`, `lint`, `test:coverage`), bumps `package.json` + `package-lock.json`, rewrites `CHANGELOG.md`, commits, tags, pushes, and creates the GitHub release with the `npm pack` tarball attached.
+`npm run version <major|minor|patch|premajor|preminor|prepatch|prerelease|x.y.z>` still drives the release from the developer machine: it runs the full gate (`format:check`, `spellcheck`, `lint:md`, `build`, `lint`, `test:coverage`), bumps `package.json` + `package-lock.json`, settles and writes `CHANGELOG.md` (spellchecked before it is written -- see below), commits, tags, pushes, and creates the GitHub release with the `npm pack` tarball attached.
 
 What it no longer does is publish. It used to read `NPM_TOKEN` out of the gitignored `.env`, write it into the user npmrc via `npm config set //registry.npmjs.org/:_authToken=…`, and run `npm publish --tag …`. That long-lived token is replaced by a **Trusted Publisher** (OIDC): npm exchanges the workflow's short-lived `id-token` for a package-scoped publish credential, so **there is no token to hold and publishing is only possible from CI** — no local fallback exists, by design.
 
@@ -722,6 +722,30 @@ Two consequences worth knowing:
 - **Inferring the bump outright is refused, not deferred.** A `standard-version`-style derivation would take the choice away from the release; this only stops one that is provably wrong. The argument stays explicit.
 
 Both decisions are pure and live in `scripts/helpers/breaking-change.ts`, tested by `breaking-change.test.ts` against the real four-commit `-z` payload that was unreleased on `main` -- `version.ts` runs `await main()` at top level, so nothing can import it to test it, and the git reads are the only thing that stayed there.
+
+### The changelog is settled and spellchecked BEFORE it is written
+
+`updateChangelog` used to write `CHANGELOG.md` first and offer the review on the file itself, which left the new section outside every gate: the six gates run *above* it, so `spellcheck` sees the file as it was and never as it is about to be — **the new section was spellchecked by nothing, ever**. Each bullet is a commit subject verbatim (`git log --format=%B --first-parent`, first line each), and nothing spellchecks a commit subject when it is written, so a coined word lands on `main` inside the `chore: release` commit and the NEXT release aborts on it — in a repo nobody was working on. That is exactly how `repoint` got here (`d8b568e`, settled by teaching `cspell.json` the word). Five sibling repos are still stuck on their own version of it, each with the word already published in an old section.
+
+Composition, review and check now all happen **in memory**, and the write is the last thing that happens:
+
+- `composeChangelog` builds the whole file into a string.
+- `reviewChangelog` hands it over on a **scratch copy outside the repository** (`mkdtemp` under `tmpdir()`, removed even when the review fails). That move is what makes "before it is written" possible at all — the review used to edit the repo's own file, so by the time anything could check the result it was already in the working tree.
+- `settleChangelog` loops: review, then spellcheck the NEW SECTION, break when clean. A review that hands back byte-identical text with findings outstanding is the author declining to fix them, and throws rather than reopening for ever. A non-interactive release has nobody to hand a finding to, so it throws on the first one.
+
+The throw arrives with the repository **untouched** — nothing bumped, nothing staged, nothing tagged, nothing pushed — so the whole recovery is "fix the subject, or teach `cspell.json` the word, and re-run". Contrast the `npm pack` defect above, which fired after the push.
+
+Three details are load-bearing, and all three were measured in `obsidian-dev-utils` first:
+
+- **The NEW section only.** Checking the whole file fails today's release on a word somebody shipped years ago, which is a release nobody can cut without first rewriting history — and that is precisely the state the five stuck repos are in. `toChangelogSectionDocument` wraps the section in `# CHANGELOG` plus its own `## <version>` heading, which is character-for-character the head of the file about to be written, so a reported line number is the written file's own.
+- **`stdin://<absolute posix path>`, with the text on a child's stdin.** The virtual document is attributed to a REAL path inside the repo, so the `cspell.json` beside it — its `words`, its `ignorePaths` — resolves exactly as it would for the written file. A temp file outside the repo would lose all of that. The path has to be POSIX: `stdin://` is parsed as a URL, and a Windows path's backslashes do not survive that.
+- **Shelling out, rather than calling the `lint()` the `cspell` package exports.** That function's `stdin://` reader consumes the HOST process's own `process.stdin` — which the interactive review also uses — so in-process would mean monkey-patching `process.stdin` for the whole process.
+
+A non-zero exit with an **empty** stdout is `cspell` itself failing (an unreadable config, a missing dictionary, a binary that would not start), and it throws, naming the tool's stderr. Returning `[]` there would read as a clean document and let through precisely what the check exists to catch.
+
+`scripts/helpers/cspell-content.ts` and `scripts/helpers/changelog-section.ts` are **ports, not imports** — this repo depends on `obsidian-dev-utils` not at all, so its own copy of the release tooling carries the logic, the same arrangement as `npm-pack.ts` above. The pure half sits in a helper for the same reason `breaking-change.ts` does: `version.ts` runs `await main()` at top level, so nothing can import it to test it. `cspell-content.test.ts` runs the **real** `cspell` rather than a mock, because the only thing worth proving is the thing a mock would replace — that content on no disk is checked with this repo's own configuration. It proves it with a word that exists in no dictionary anywhere except this repo's `cspell.json`.
+
+**The `lint:md` half of the same gap is deliberately not here.** The sibling library holds its settled section to `markdownlint` as well; this repo checks spelling only, and a hard-wrapped or badly-nested changelog line still reaches the file unchecked.
 
 ## L38. Settings modal — the popout is the cause; the pre-attach is only a floor (`openSettingsTab`)
 
