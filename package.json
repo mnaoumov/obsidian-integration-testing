@@ -139,6 +139,7 @@
     "build:compile": "jiti scripts/build-compile.ts",
     "build:lib": "jiti scripts/build-lib.ts",
     "build:types": "jiti scripts/build-types.ts",
+    "check:vendored-eslint-rules": "jiti scripts/check-vendored-eslint-rules.ts",
     "collect:runtime-versions": "jiti scripts/collect-runtime-versions.ts",
     "commit": "jiti scripts/commit.ts",
     "docs:build": "jiti scripts/docs-build.ts",
