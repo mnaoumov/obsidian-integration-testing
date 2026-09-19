@@ -292,6 +292,25 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly shouldAutoStartAppium?: boolean;
 
   /**
+   * Whether a `dist/` older than the sources it was built from fails the run.
+   *
+   * When `true` (the default) the global setup compares `main.js` in the dist
+   * folder it is about to install against the newest file under `src/` (tests
+   * excluded), plus `manifest.json` and `styles.css`, and throws
+   * `StaleBuildError` when the build is older. The check runs before the
+   * emulator is booted, so a stale build costs a `stat` rather than a session.
+   *
+   * Set it to `false` for a project that deliberately tests a shipped artifact.
+   * Doing so downgrades the failure to a warning — it never goes silent, because
+   * a suite that PASSES against a stale build proves nothing and says so to
+   * nobody. For a single run, `OBSIDIAN_TEST_ALLOW_STALE_BUILD=1` does the same
+   * without editing a tracked file, and takes precedence over this option.
+   *
+   * @default `true`
+   */
+  readonly shouldFailOnStaleBuild?: boolean;
+
+  /**
    * Whether the auto-started emulator may resume — and refresh — the AVD's
    * saved boot snapshot.
    *
@@ -536,6 +555,25 @@ export interface ObsidianCdpTransportOptions {
    * @default `false`
    */
   readonly shouldDisableSandbox?: boolean;
+
+  /**
+   * Whether a `dist/` older than the sources it was built from fails the run.
+   *
+   * When `true` (the default) the global setup compares `main.js` in the dist
+   * folder it is about to install against the newest file under `src/` (tests
+   * excluded), plus `manifest.json` and `styles.css`, and throws
+   * `StaleBuildError` when the build is older — before the owned instance is
+   * launched, so a stale build costs a `stat` rather than a boot.
+   *
+   * Set it to `false` for a project that deliberately tests a shipped artifact.
+   * Doing so downgrades the failure to a warning — it never goes silent, because
+   * a suite that PASSES against a stale build proves nothing and says so to
+   * nobody. For a single run, `OBSIDIAN_TEST_ALLOW_STALE_BUILD=1` does the same
+   * without editing a tracked file, and takes precedence over this option.
+   *
+   * @default `true`
+   */
+  readonly shouldFailOnStaleBuild?: boolean;
 
   /**
    * Whether the harness removes the temporary directories earlier runs leaked.

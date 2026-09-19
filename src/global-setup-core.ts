@@ -20,7 +20,9 @@ import {
 } from 'node:fs/promises';
 import {
   basename,
-  join
+  join,
+  relative,
+  sep
 } from 'node:path';
 import process, { loadEnvFile } from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -56,6 +58,12 @@ import {
   acquireSetupLock,
   ANDROID_SETUP_LOCK_SCOPE
 } from './setup-lock.ts';
+import {
+  checkIsBuildStale,
+  findNewestSourceModification,
+  willFailOnStaleBuild
+} from './stale-build-detection.ts';
+import { StaleBuildError } from './stale-build-error.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 import { AppiumTransport } from './transport-appium.ts';
 import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
@@ -156,6 +164,31 @@ export interface CoreSetupResult {
   The transport options that were resolved.
    */
   readonly transportOptions: ObsidianTransportOptions | undefined;
+}
+
+/**
+ * Parameters for {@link assertBuildIsFresh}.
+ */
+interface AssertBuildIsFreshParams {
+  /**
+  Short label for log messages.
+   */
+  readonly label: string;
+
+  /**
+  The project root holding both the sources and the dist folder.
+   */
+  readonly projectRoot: string;
+
+  /**
+  Whether a plugin is being installed at all — a vault that stays empty installs no build to be stale.
+   */
+  readonly shouldInstallPlugin: boolean;
+
+  /**
+  The resolved transport options (source of {@link ObsidianTransportOptions.shouldFailOnStaleBuild}).
+   */
+  readonly transportOptions: ObsidianTransportOptions;
 }
 
 /**
@@ -326,6 +359,10 @@ export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupRes
   // auto-starts Appium (~70 s) only to reach the same conclusion from `transport.isMobile` further down.
   // Neither input needs a device -- the manifest is on disk and the discriminant already says mobile.
   await skipIfDesktopOnly({ label, projectRoot, shouldInstallPlugin, transportOptions });
+
+  // Same place, same reasoning: the newest source and `main.js`'s mtime are both on disk, so a run about to
+  // install yesterday's plugin is refused before an AVD boots rather than after it fails confusingly.
+  await assertBuildIsFresh({ label, projectRoot, shouldInstallPlugin, transportOptions });
 
   const lockScope = getLockScope(transportOptions);
 
@@ -529,6 +566,75 @@ export function resolveIntegrationTransportOptions(options?: ObsidianTransportOp
  * @param transport - The transport instance created during setup.
  * @returns The augmented options, or the original options if not applicable.
  */
+/**
+ * Refuses a run whose built plugin predates its sources, before anything costly has happened.
+ *
+ * A no-op unless a plugin is being installed. Otherwise both inputs are on disk — the newest source and
+ * `main.js`'s mtime — so this runs beside {@link skipIfDesktopOnly}, before the lock, the sweep and the
+ * transport: a mobile run must not boot an AVD (~70-200 s) to reach a verdict a `stat` could give.
+ *
+ * It inherits that function's other discipline too. A missing or unreadable build is **swallowed**, left to
+ * {@link resolveDistPath} and {@link copyPluginIntoVault} to report downstream in their own words, so this
+ * guard cannot change what a no-build run does today. And a project with no `src/` is never called stale —
+ * see {@link checkIsBuildStale}.
+ *
+ * Escaping the failure downgrades it to a warning rather than to silence: the direction this exists for is
+ * the run that PASSES against a stale build, which costs nothing visible and proves nothing.
+ *
+ * @param params - The transport label, project root, transport options and whether a plugin is installed.
+ * @throws {StaleBuildError} When the build is older than its sources and the failure is not escaped.
+ */
+async function assertBuildIsFresh(params: AssertBuildIsFreshParams): Promise<void> {
+  const { label, projectRoot, shouldInstallPlugin, transportOptions } = params;
+
+  if (!shouldInstallPlugin) {
+    return;
+  }
+
+  let distPath: string;
+  let buildModifiedAtInMilliseconds: number;
+  try {
+    distPath = await resolveDistPath(projectRoot);
+    const buildStat = await stat(join(distPath, MAIN_JS));
+    buildModifiedAtInMilliseconds = buildStat.mtimeMs;
+  } catch {
+    return;
+  }
+
+  const newestSource = await findNewestSourceModification(projectRoot);
+  const relativeDistPath = relative(projectRoot, distPath).split(sep).join('/');
+
+  // The `newestSource` test is redundant with the verdict — `checkIsBuildStale` is `false` without one — and
+  // is written out so the narrowing below needs no cast.
+  if (!newestSource || !checkIsBuildStale({ buildModifiedAtInMilliseconds, newestSource })) {
+    log(
+      `[integration-setup:${label}] Build is fresh: ${relativeDistPath}/${MAIN_JS} `
+        + `(${new Date(buildModifiedAtInMilliseconds).toISOString()}) is not older than ${
+          newestSource
+            ? `${newestSource.path} (${new Date(newestSource.modifiedAtInMilliseconds).toISOString()}).`
+            : 'any source — this project has none under src/, so freshness was not provable.'
+        }`
+    );
+    return;
+  }
+
+  const error = new StaleBuildError({
+    buildModifiedAtInMilliseconds,
+    distPath: relativeDistPath,
+    sourceModifiedAtInMilliseconds: newestSource.modifiedAtInMilliseconds,
+    sourcePath: newestSource.path
+  });
+
+  if (willFailOnStaleBuild(transportOptions)) {
+    throw error;
+  }
+
+  // Loud, and never silent: the escape hatch exists for a run that deliberately tests a shipped artifact,
+  // and what that run must not do is forget which one it tested. `description` rather than `message`, so the
+  // remedy is not recited at a reader who has already applied it.
+  log(`[integration-setup:${label}] WARNING: ${error.description} Continuing anyway — the stale-build failure is switched off.`);
+}
+
 function augmentTransportOptions(
   options: ObsidianTransportOptions | undefined,
   transport: ObsidianTransport
@@ -588,7 +694,12 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
 
   const mainJs = join(distPath, MAIN_JS);
   const buildStat = await stat(mainJs);
-  log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}). If outdated, rebuild.`);
+  // "If outdated, rebuild." used to end this line. It was the only thing said about staleness, it was buried
+  // among twenty other setup lines, and nothing compared the timestamp against anything — so a run against a
+  // five-hour-old build read as a defect in the code under test, and a run that PASSED against one said
+  // nothing at all. `assertBuildIsFresh` has already reached a verdict by here; this line only says what was
+  // installed.
+  log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}).`);
 
   await installPluginIntoVault({ configDirectory, distPath, pluginId, vaultPath: temporaryVault.path });
   log(`[integration-setup:${label}] Installed "${pluginId}" into ${configDirectory ?? DEFAULT_CONFIG_DIRECTORY}/plugins (and enabled it there).`);

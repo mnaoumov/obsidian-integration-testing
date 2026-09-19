@@ -232,6 +232,8 @@ export {
   raiseSoftKeyboard,
   tapDevice
 } from './soft-keyboard.ts';
+export type { StaleBuildErrorConstructorParams } from './stale-build-error.ts';
+export { StaleBuildError } from './stale-build-error.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams,

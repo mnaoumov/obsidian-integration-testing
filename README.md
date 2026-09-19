@@ -34,6 +34,8 @@ You also need [Obsidian](https://obsidian.md/download) (the desktop app) install
 
 The global setup expects your built plugin in `dist/dev` or `dist/build` (whichever has a newer `main.js`), with a `manifest.json` at the root of the chosen folder. The setup creates a temporary vault, copies the build into it, and enables the plugin.
 
+That build has to be current: if `main.js` is older than anything under `src/` (tests aside), `manifest.json` or `styles.css`, the setup throws `StaleBuildError` before it launches anything, because a suite run against yesterday's plugin either fails for a reason that looks like your code or — worse — passes while proving nothing. Rebuild, or, to test a shipped artifact deliberately, set `shouldFailOnStaleBuild: false` in the transport options (or `OBSIDIAN_TEST_ALLOW_STALE_BUILD=1` for a single run), which logs a warning and continues.
+
 ### Vitest
 
 ```ts
