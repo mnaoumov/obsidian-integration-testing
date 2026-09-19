@@ -139,27 +139,23 @@ export function exec(command: CommandPart[] | string, options: ExecOption = {}):
     const commandLine = toCommandLine(commandArguments);
 
     const maxCommandLength = getMaxCommandLength();
-    if (commandLine.length > maxCommandLength) {
-      return Promise.reject(
+    return commandLine.length > maxCommandLength
+      ? Promise.reject(
         new Error(
           `Command line is too long (${String(commandLine.length)} chars, max ${String(maxCommandLength)} on ${process.platform}). Consider using ExecArgument with batchedArguments.`
         )
-      );
-    }
-
-    return execString(commandLine, options, commandArguments);
+      )
+      : execString(commandLine, options, commandArguments);
   }
 
   const maxCommandLength = getMaxCommandLength();
-  if (command.length > maxCommandLength) {
-    return Promise.reject(
+  return command.length > maxCommandLength
+    ? Promise.reject(
       new Error(
         `Command line is too long (${String(command.length)} chars, max ${String(maxCommandLength)} on ${process.platform}). Consider using ExecArgument with batchedArguments.`
       )
-    );
-  }
-
-  return execString(command, options);
+    )
+    : execString(command, options);
 }
 
 /**
@@ -350,11 +346,7 @@ async function executeBatches(baseCommand: string, batches: string[][], options:
     }
   }
 
-  if (options.shouldIncludeDetails) {
-    return { exitCode: 0, exitSignal: null, stderr: '', stdout: results.join('\n') };
-  }
-
-  return results.join('\n');
+  return options.shouldIncludeDetails ? { exitCode: 0, exitSignal: null, stderr: '', stdout: results.join('\n') } : results.join('\n');
 }
 
 /**
@@ -491,8 +483,5 @@ function spawnViaShell(command: string, cwd: string, rawArguments?: string[]): C
  * @returns The trimmed string.
  */
 function trimEnd(value: string, suffix: string): string {
-  if (value.endsWith(suffix)) {
-    return value.slice(0, -suffix.length);
-  }
-  return value;
+  return value.endsWith(suffix) ? value.slice(0, -suffix.length) : value;
 }

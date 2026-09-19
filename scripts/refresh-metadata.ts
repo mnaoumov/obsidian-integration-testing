@@ -219,11 +219,7 @@ async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
 async function isCatalystAsarPublished(url: string): Promise<boolean> {
   try {
     const response = await fetch(url, { headers: { 'user-agent': CATALYST_PROBE_USER_AGENT }, method: 'HEAD' });
-    if (!response.ok) {
-      return false;
-    }
-
-    return Number(response.headers.get('content-length') ?? '0') > 0;
+    return response.ok && Number(response.headers.get('content-length') ?? '0') > 0;
   } catch {
     return false;
   }

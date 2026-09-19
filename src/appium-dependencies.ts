@@ -53,11 +53,7 @@ export function checkIsAppiumDriverInstalled(params: CheckIsAppiumDriverInstalle
     return false;
   }
 
-  if (typeof parsed !== 'object' || parsed === null) {
-    return false;
-  }
-
-  return Object.hasOwn(parsed, params.driverName);
+  return typeof parsed === 'object' && parsed !== null && Object.hasOwn(parsed, params.driverName);
 }
 
 /**

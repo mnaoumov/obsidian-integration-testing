@@ -101,16 +101,14 @@ export function resolveAsarFallback(params: ResolveAsarFallbackParams): AsarFall
     };
   }
 
-  if (compareVersions(runningApiVersion, requestedVersion) === 0) {
-    return { requestedVersion, runningApiVersion, tier: 'match' };
-  }
-
-  return {
-    message: `Obsidian was pinned to app version ${requestedVersion} but is actually running ${runningApiVersion} — `
-      + 'the installer silently fell back to its own bundled asar instead of running the pinned version. '
-      + `Pin an obsidianInstallerVersion at or above ${requestedVersion}'s run floor so the pin actually runs.`,
-    requestedVersion,
-    runningApiVersion,
-    tier: 'fallback'
-  };
+  return compareVersions(runningApiVersion, requestedVersion) === 0
+    ? { requestedVersion, runningApiVersion, tier: 'match' }
+    : {
+      message: `Obsidian was pinned to app version ${requestedVersion} but is actually running ${runningApiVersion} — `
+        + 'the installer silently fell back to its own bundled asar instead of running the pinned version. '
+        + `Pin an obsidianInstallerVersion at or above ${requestedVersion}'s run floor so the pin actually runs.`,
+      requestedVersion,
+      runningApiVersion,
+      tier: 'fallback'
+    };
 }

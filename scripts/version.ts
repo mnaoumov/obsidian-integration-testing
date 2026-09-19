@@ -229,11 +229,7 @@ function getVersionUpdateType(versionUpdateType: string): VersionUpdateType {
     }
 
     default: {
-      if (/^\d+\.\d+\.\d+(?:-[\w\d.-]+)?$/.test(versionUpdateType)) {
-        return VersionUpdateType.Manual;
-      }
-
-      return VersionUpdateType.Invalid;
+      return /^\d+\.\d+\.\d+(?:-[\w\d.-]+)?$/.test(versionUpdateType) ? VersionUpdateType.Manual : VersionUpdateType.Invalid;
     }
   }
 }
@@ -592,11 +588,7 @@ async function readPackageJson(cwd?: string): Promise<PackageJson> {
 
 function resolvePathFromRoot(path: string, cwd?: string): null | string {
   const rootFolder = getRootFolder(cwd);
-  if (!rootFolder) {
-    return null;
-  }
-
-  return resolve(rootFolder, path);
+  return rootFolder ? resolve(rootFolder, path) : null;
 }
 
 function resolvePathFromRootSafe(path: string, cwd?: string): string {

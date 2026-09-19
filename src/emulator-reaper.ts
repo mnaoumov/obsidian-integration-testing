@@ -268,11 +268,7 @@ export function parseEmulatorReaperArguments(argv: readonly string[]): EmulatorR
   }
 
   const startedAtInMilliseconds = Number(startedAtText);
-  if (!Number.isSafeInteger(startedAtInMilliseconds) || startedAtInMilliseconds <= 0) {
-    return undefined;
-  }
-
-  return { avdName, startedAtInMilliseconds };
+  return !Number.isSafeInteger(startedAtInMilliseconds) || startedAtInMilliseconds <= 0 ? undefined : { avdName, startedAtInMilliseconds };
 }
 
 /**

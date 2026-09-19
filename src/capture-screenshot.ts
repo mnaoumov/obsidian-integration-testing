@@ -205,9 +205,5 @@ export function readPngDimensions(bytes: Uint8Array): PngDimensions {
  * @returns The decoded marker, or an empty string when the buffer is too short to hold it.
  */
 function readAscii(bytes: Uint8Array, offset: number, length: number): string {
-  if (bytes.length < offset + length) {
-    return '';
-  }
-
-  return Buffer.from(bytes.subarray(offset, offset + length)).toString('ascii');
+  return bytes.length < offset + length ? '' : Buffer.from(bytes.subarray(offset, offset + length)).toString('ascii');
 }

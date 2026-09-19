@@ -196,11 +196,7 @@ export function computeCpuPercent(params: ComputeCpuPercentParams): number | und
   }
 
   const cpuTimeDeltaInSeconds = params.current.cpuTimeInSeconds - params.previous.cpuTimeInSeconds;
-  if (cpuTimeDeltaInSeconds < 0) {
-    return undefined;
-  }
-
-  return (cpuTimeDeltaInSeconds * MILLISECONDS_PER_SECOND * PERCENT_SCALE) / params.intervalInMilliseconds;
+  return cpuTimeDeltaInSeconds < 0 ? undefined : (cpuTimeDeltaInSeconds * MILLISECONDS_PER_SECOND * PERCENT_SCALE) / params.intervalInMilliseconds;
 }
 
 /**
@@ -239,64 +235,40 @@ export function parseBackendSample(sampleOutput: string): BackendSample | undefi
 
   const [pid = NaN, cpuTimeInSeconds = NaN, residentSetSizeInKibibytes = NaN] = fields.map((field) => Number.parseInt(field, RADIX_DECIMAL));
 
-  if (Number.isNaN(pid) || Number.isNaN(cpuTimeInSeconds) || Number.isNaN(residentSetSizeInKibibytes)) {
-    return undefined;
-  }
-
-  return { cpuTimeInSeconds, pid, residentSetSizeInBytes: residentSetSizeInKibibytes * BYTES_PER_KIBIBYTE };
+  return Number.isNaN(pid) || Number.isNaN(cpuTimeInSeconds) || Number.isNaN(residentSetSizeInKibibytes) ? undefined : { cpuTimeInSeconds, pid, residentSetSizeInBytes: residentSetSizeInKibibytes * BYTES_PER_KIBIBYTE };
 }
 
 function buildFailureVerdict(params: BuildProbeReportParams, lastTick: ProbeTick): string[] {
   const seconds = Math.round(lastTick.elapsedInMilliseconds / MILLISECONDS_PER_SECOND);
-  const lines = [`WEDGED: ${lastTick.verdict} after ${String(seconds)}s of uptime.`];
-
-  if (params.diagnosis !== undefined) {
-    lines.push('', params.diagnosis, '');
-  }
-
-  if (lastTick.cpuPercent !== undefined) {
-    lines.push(
-      `The backend was at ${formatPercent(lastTick.cpuPercent)} CPU with ${formatGibibytes(lastTick.freeMemoryInBytes)} free on the host.`,
-      'A backend near 0% is blocked rather than spinning, and a host with memory to spare is not starving it. Both readings point below this harness: at the emulator build, the system image, or the host hypervisor.'
-    );
-  }
-
-  lines.push(
+  return [
+    `WEDGED: ${lastTick.verdict} after ${String(seconds)}s of uptime.`,
+    ...(params.diagnosis === undefined ? [] : ['', params.diagnosis, '']),
+    ...(lastTick.cpuPercent === undefined
+      ? []
+      : [
+        `The backend was at ${formatPercent(lastTick.cpuPercent)} CPU with ${formatGibibytes(lastTick.freeMemoryInBytes)} free on the host.`,
+        'A backend near 0% is blocked rather than spinning, and a host with memory to spare is not starving it. Both readings point below this harness: at the emulator build, the system image, or the host hypervisor.'
+      ]),
     'No emulator flag, AVD setting, newer system image or newer emulator build has fixed this shape where it has been measured. Run this probe on other hardware before spending time anywhere else.'
-  );
-
-  return lines;
+  ];
 }
 
 function buildSurvivalVerdict(params: BuildProbeReportParams, lastTick: ProbeTick): string[] {
   const seconds = Math.round(params.surviveForInMilliseconds / MILLISECONDS_PER_SECOND);
   const answeredCount = params.ticks.filter((tick) => tick.verdict === 'alive').length;
-  const lines = [
+  return [
     `SURVIVED: the guest answered ${String(answeredCount)} of ${String(params.ticks.length)} polls across ${String(seconds)}s of uptime.`,
-    `The backend finished at ${formatPercent(lastTick.cpuPercent)} CPU. This host does not reproduce the wedge.`
+    `The backend finished at ${formatPercent(lastTick.cpuPercent)} CPU. This host does not reproduce the wedge.`,
+    ...(answeredCount < params.ticks.length
+      ? ['The polls it missed were inside the post-boot settle window, where a busy host inflates every adb round-trip; the console served by the emulator process answered throughout, so none of them was the emulator.']
+      : [])
   ];
-
-  if (answeredCount < params.ticks.length) {
-    lines.push(
-      'The polls it missed were inside the post-boot settle window, where a busy host inflates every adb round-trip; the console served by the emulator process answered throughout, so none of them was the emulator.'
-    );
-  }
-
-  return lines;
 }
 
 function formatGibibytes(bytes: number | undefined): string {
-  if (bytes === undefined) {
-    return '?';
-  }
-
-  return `${(bytes / BYTES_PER_GIBIBYTE).toFixed(GIBIBYTE_FRACTION_DIGITS)}GB`;
+  return bytes === undefined ? '?' : `${(bytes / BYTES_PER_GIBIBYTE).toFixed(GIBIBYTE_FRACTION_DIGITS)}GB`;
 }
 
 function formatPercent(percent: number | undefined): string {
-  if (percent === undefined) {
-    return '?';
-  }
-
-  return `${String(Math.round(percent))}%`;
+  return percent === undefined ? '?' : `${String(Math.round(percent))}%`;
 }

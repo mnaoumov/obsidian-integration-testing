@@ -505,15 +505,13 @@ export function remapConfigDirectoryKeys(populate: PopulateFilesParams, configDi
  */
 // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export function resolveIntegrationTransportOptions(options?: ObsidianTransportOptions): ObsidianTransportOptions {
-  if (options?.type === 'obsidian-android-appium') {
-    return options;
-  }
-
-  return {
-    ...options,
-    isObsidianAppVisible: options?.isObsidianAppVisible ?? false,
-    type: 'obsidian-cdp'
-  };
+  return options?.type === 'obsidian-android-appium'
+    ? options
+    : {
+      ...options,
+      isObsidianAppVisible: options?.isObsidianAppVisible ?? false,
+      type: 'obsidian-cdp'
+    };
 }
 
 /**
@@ -693,14 +691,16 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
     }
 
     // Transient cold-boot race (enabled but not loaded, no cause captured): retry.
-    if (attempt < maxAttempts) {
-      const delayInMilliseconds = computeBackoffDelayInMilliseconds(baseDelayInMilliseconds, attempt - 1);
-      log(
-        `[integration-setup:${label}] Plugin "${pluginId}" enabled but not loaded `
-          + `(attempt ${String(attempt)}/${String(maxAttempts)}); retrying in ${String(delayInMilliseconds)}ms...`
-      );
-      await sleep(delayInMilliseconds);
+    if (attempt >= maxAttempts) {
+      continue;
     }
+
+    const delayInMilliseconds = computeBackoffDelayInMilliseconds(baseDelayInMilliseconds, attempt - 1);
+    log(
+      `[integration-setup:${label}] Plugin "${pluginId}" enabled but not loaded `
+        + `(attempt ${String(attempt)}/${String(maxAttempts)}); retrying in ${String(delayInMilliseconds)}ms...`
+    );
+    await sleep(delayInMilliseconds);
   }
 
   /*
@@ -838,10 +838,12 @@ function registerProcessCleanupHandler(): void {
  */
 function releaseSetupLock(result: CoreSetupResult): void {
   const lock = setupLocks.get(result);
-  if (lock) {
-    lock.release();
-    setupLocks.delete(result);
+  if (!lock) {
+    return;
   }
+
+  lock.release();
+  setupLocks.delete(result);
 }
 
 /**

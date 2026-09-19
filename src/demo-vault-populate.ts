@@ -223,14 +223,12 @@ export function resolveMissingInjectedPlugins(params: ResolveMissingInjectedPlug
  * @returns The remedy sentence(s).
  */
 function buildMissingPluginRemedy(demoVaultPath: string, plugin: InjectPluginParams): string {
-  if (plugin.sourceDirectory !== undefined) {
-    return 'It was read from an explicit `sourceDirectory`, which opts it out of the headless bootstrap — '
+  return plugin.sourceDirectory === undefined
+    ? `Install it headlessly with \`npx obsidian-integration-testing bootstrap-demo-vault --demo-vault "${demoVaultPath}"\`, `
+      + 'or switch this setup to `buildDemoVaultPopulateAsync`, which installs missing plugins itself. '
+      + 'Opening demo-vault/ in Obsidian once so demo-vault-helper installs it also works.'
+    : 'It was read from an explicit `sourceDirectory`, which opts it out of the headless bootstrap — '
       + 'build it into that directory, or drop `sourceDirectory` to install it from its published release.';
-  }
-
-  return `Install it headlessly with \`npx obsidian-integration-testing bootstrap-demo-vault --demo-vault "${demoVaultPath}"\`, `
-    + 'or switch this setup to `buildDemoVaultPopulateAsync`, which installs missing plugins itself. '
-    + 'Opening demo-vault/ in Obsidian once so demo-vault-helper installs it also works.';
 }
 
 /**
@@ -277,8 +275,10 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
     map[`${pluginPrefix}/${fileName}`] = readFileSync(join(sourceDirectory, fileName));
   }
 
-  if (data !== undefined) {
-    const dataJson: string = ensureNonNullable(JSON.stringify(data, null, DATA_JSON_INDENT));
-    map[`${pluginPrefix}/${DATA_JSON}`] = `${dataJson}\n`;
+  if (data === undefined) {
+    return;
   }
+
+  const dataJson: string = ensureNonNullable(JSON.stringify(data, null, DATA_JSON_INDENT));
+  map[`${pluginPrefix}/${DATA_JSON}`] = `${dataJson}\n`;
 }

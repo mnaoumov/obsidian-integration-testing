@@ -284,11 +284,7 @@ export function resolveEmulatorMarkerVerdict(params: ResolveEmulatorMarkerVerdic
     return 'stale-marker';
   }
 
-  if (params.marker.ownerPid !== params.currentPid && params.isOwnerAlive) {
-    return 'in-use-by-live-run';
-  }
-
-  return 'harness-leftover';
+  return params.marker.ownerPid !== params.currentPid && params.isOwnerAlive ? 'in-use-by-live-run' : 'harness-leftover';
 }
 
 /**
@@ -311,11 +307,7 @@ export function resolveEmulatorMarkerVerdict(params: ResolveEmulatorMarkerVerdic
 export function selectLiveMarkedPids(marker: EmulatorMarker, liveEmulatorPids: readonly number[]): number[] {
   const livePids = marker.ownedEmulatorPids.filter((pid) => liveEmulatorPids.includes(pid));
   const { preLaunchEmulatorPids } = marker;
-  if (preLaunchEmulatorPids === undefined) {
-    return livePids;
-  }
-
-  return [...livePids, ...liveEmulatorPids.filter((pid) => !preLaunchEmulatorPids.includes(pid) && !livePids.includes(pid))];
+  return preLaunchEmulatorPids === undefined ? livePids : [...livePids, ...liveEmulatorPids.filter((pid) => !preLaunchEmulatorPids.includes(pid) && !livePids.includes(pid))];
 }
 
 /**
@@ -368,23 +360,19 @@ function parseMarker(parsed: unknown, avdName: string): EmulatorMarker | undefin
   const record = parsed as Record<string, unknown>;
   const { avdName: markedAvdName, deviceId, ownedEmulatorPids, ownerPid, preLaunchEmulatorPids, startedAtInMilliseconds } = record;
 
-  if (
-    markedAvdName !== avdName
-    || (deviceId !== undefined && typeof deviceId !== 'string')
-    || typeof ownerPid !== 'number'
-    || typeof startedAtInMilliseconds !== 'number'
-    || !checkIsNumberArray(ownedEmulatorPids)
-    || (preLaunchEmulatorPids !== undefined && !checkIsNumberArray(preLaunchEmulatorPids))
-  ) {
-    return undefined;
-  }
-
-  return {
-    avdName,
-    ...(deviceId !== undefined && { deviceId }),
-    ownedEmulatorPids,
-    ownerPid,
-    ...(preLaunchEmulatorPids !== undefined && { preLaunchEmulatorPids }),
-    startedAtInMilliseconds
-  };
+  return markedAvdName !== avdName
+      || (deviceId !== undefined && typeof deviceId !== 'string')
+      || typeof ownerPid !== 'number'
+      || typeof startedAtInMilliseconds !== 'number'
+      || !checkIsNumberArray(ownedEmulatorPids)
+      || (preLaunchEmulatorPids !== undefined && !checkIsNumberArray(preLaunchEmulatorPids))
+    ? undefined
+    : {
+      avdName,
+      ...(deviceId !== undefined && { deviceId }),
+      ownedEmulatorPids,
+      ownerPid,
+      ...(preLaunchEmulatorPids !== undefined && { preLaunchEmulatorPids }),
+      startedAtInMilliseconds
+    };
 }

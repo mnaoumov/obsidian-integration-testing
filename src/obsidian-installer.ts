@@ -113,11 +113,7 @@ export function detectInstalledShellVersion(exePath: string): string | undefined
     return detectWindowsFileVersion(exePath);
   }
 
-  if (process.platform === 'darwin') {
-    return detectMacBundleVersion(exePath);
-  }
-
-  return detectVersionFromPath(exePath);
+  return process.platform === 'darwin' ? detectMacBundleVersion(exePath) : detectVersionFromPath(exePath);
 }
 
 /**
@@ -376,11 +372,7 @@ function getCachedShellExePath(shellDirectory: string): string {
     return join(shellDirectory, 'Obsidian.exe');
   }
 
-  if (process.platform === 'darwin') {
-    return join(shellDirectory, 'Obsidian.app', 'Contents', 'MacOS', 'Obsidian');
-  }
-
-  return join(shellDirectory, 'obsidian');
+  return process.platform === 'darwin' ? join(shellDirectory, 'Obsidian.app', 'Contents', 'MacOS', 'Obsidian') : join(shellDirectory, 'obsidian');
 }
 
 /**

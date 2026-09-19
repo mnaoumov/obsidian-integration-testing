@@ -100,17 +100,9 @@ export function resolveDeadBootGraceInMilliseconds(
 export function resolveRendererBootState(params: ResolveRendererBootStateParams): RendererBootVerdict {
   const { bodyChildElementCount, hasGraceElapsed, hasWindowApp, isDocumentComplete } = params;
 
-  if (hasWindowApp) {
+  if (hasWindowApp || !hasGraceElapsed) {
     return 'pending';
   }
 
-  if (!hasGraceElapsed) {
-    return 'pending';
-  }
-
-  if (isDocumentComplete && bodyChildElementCount === 0) {
-    return 'dead';
-  }
-
-  return 'pending';
+  return isDocumentComplete && bodyChildElementCount === 0 ? 'dead' : 'pending';
 }

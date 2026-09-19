@@ -96,11 +96,7 @@ export function buildAvdSnapshotDirectoryCandidates(params: BuildAvdSnapshotDire
  * @returns The log line.
  */
 export function buildSnapshotAgeMessage(params: BuildSnapshotAgeMessageParams): string {
-  if (params.savedAt === undefined) {
-    return `Snapshot reuse is enabled for AVD "${params.avdName}", but no \`${DEFAULT_SNAPSHOT_NAME}\` snapshot was found — this run cold-boots and saves one for the next.`;
-  }
-
-  return `Snapshot reuse is enabled for AVD "${params.avdName}": resuming \`${DEFAULT_SNAPSHOT_NAME}\` saved ${params.savedAt.toISOString()}.`;
+  return params.savedAt === undefined ? `Snapshot reuse is enabled for AVD "${params.avdName}", but no \`${DEFAULT_SNAPSHOT_NAME}\` snapshot was found — this run cold-boots and saves one for the next.` : `Snapshot reuse is enabled for AVD "${params.avdName}": resuming \`${DEFAULT_SNAPSHOT_NAME}\` saved ${params.savedAt.toISOString()}.`;
 }
 
 /**
@@ -121,9 +117,5 @@ function joinPath(base: string, ...segments: string[]): string {
  * @returns The AVD home, or `undefined` when `base` is unset.
  */
 function resolveAvdHomeUnder(base: string | undefined): string | undefined {
-  if (base === undefined || base.length === 0) {
-    return undefined;
-  }
-
-  return joinPath(base, ...AVD_HOME_SEGMENTS);
+  return base === undefined || base.length === 0 ? undefined : joinPath(base, ...AVD_HOME_SEGMENTS);
 }

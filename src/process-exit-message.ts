@@ -96,11 +96,7 @@ export interface ProcessExitInfo {
  */
 export function appendProcessOutputTail(message: string, params: AppendProcessOutputTailOptions): string {
   const trimmedOutput = params.output.trim();
-  if (trimmedOutput.length === 0) {
-    return message;
-  }
-
-  return `${message}\n\n${params.outputLabel} (tail):\n${trimmedOutput}`;
+  return trimmedOutput.length === 0 ? message : `${message}\n\n${params.outputLabel} (tail):\n${trimmedOutput}`;
 }
 
 /**
@@ -127,8 +123,5 @@ function resolveReason(exitInfo: ProcessExitInfo): string {
   if (exitInfo.spawnError !== undefined) {
     return `failed to start (${exitInfo.spawnError})`;
   }
-  if (exitInfo.signal !== null) {
-    return `was terminated by signal ${exitInfo.signal}`;
-  }
-  return `exited prematurely with code ${exitInfo.code === null ? '(null)' : String(exitInfo.code)}`;
+  return exitInfo.signal === null ? `exited prematurely with code ${exitInfo.code === null ? '(null)' : String(exitInfo.code)}` : `was terminated by signal ${exitInfo.signal}`;
 }

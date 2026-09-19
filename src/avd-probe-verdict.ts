@@ -164,11 +164,7 @@ const EMULATOR_DEVICE_ID_PATTERN = /^emulator-\d+$/;
  * @returns The summary, or `no devices` when nothing was connected.
  */
 export function buildAvdProbeSummary(results: readonly AvdProbeResult[]): string {
-  if (results.length === 0) {
-    return 'no devices';
-  }
-
-  return results.map((result) => `${result.deviceId}=${result.outcome}`).join(', ');
+  return results.length === 0 ? 'no devices' : results.map((result) => `${result.deviceId}=${result.outcome}`).join(', ');
 }
 
 /**
@@ -263,9 +259,5 @@ export function resolveAvdProbeVerdict(results: readonly AvdProbeResult[]): AvdP
     }
   }
 
-  if (unreadableDeviceIds.length > 0) {
-    return { unreadableDeviceIds, verdict: 'refuse' };
-  }
-
-  return { verdict: 'start-new' };
+  return unreadableDeviceIds.length > 0 ? { unreadableDeviceIds, verdict: 'refuse' } : { verdict: 'start-new' };
 }

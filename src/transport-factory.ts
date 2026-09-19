@@ -891,11 +891,7 @@ class AppiumTransportFactory {
    * @returns A configured Appium transport.
    */
   public async create(options: ObsidianAndroidAppiumTransportOptions): Promise<ObsidianTransport> {
-    if (options.sessionId !== undefined && options.deviceId !== undefined) {
-      return this.attachToExistingSession(options.sessionId, options.deviceId, options);
-    }
-
-    return this.createNewSession(options);
+    return options.sessionId !== undefined && options.deviceId !== undefined ? this.attachToExistingSession(options.sessionId, options.deviceId, options) : this.createNewSession(options);
   }
 
   /**
@@ -1377,16 +1373,14 @@ class AppiumTransportFactory {
     this.log(`Device liveness: ${deviceId} shell=${shellProbe}, console=${consoleProbe} -> ${verdict}.`);
 
     // Unreachable in practice — the verdict is only `'alive'` when the shell answered, which returned above — but it is what narrows the type for the builder.
-    if (verdict === 'alive') {
-      return undefined;
-    }
-
-    return buildEmulatorLivenessMessage({
-      deviceId,
-      emulatorOutput: emulatorCapture?.read() ?? '',
-      probeTimeoutInMilliseconds: DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS,
-      verdict
-    });
+    return verdict === 'alive'
+      ? undefined
+      : buildEmulatorLivenessMessage({
+        deviceId,
+        emulatorOutput: emulatorCapture?.read() ?? '',
+        probeTimeoutInMilliseconds: DEVICE_LIVENESS_TIMEOUT_IN_MILLISECONDS,
+        verdict
+      });
   }
 
   private dumpConnectivity(deviceId: string): Promise<ConnectivityProbeResult> {
@@ -2542,24 +2536,26 @@ class AppiumTransportFactory {
       }
     }
 
-    if (params.emulatorProcess || params.ownedEmulatorPids.length > 0) {
-      if (params.emulatorProcess) {
-        killProcessTree(params.emulatorProcess);
-      }
-      const survivingPids = params.ownedEmulatorPids.filter((pid) => checkIsProcessAlive(pid));
-      for (const pid of survivingPids) {
-        killProcessTreeByPid(pid);
-      }
+    if (!params.emulatorProcess && params.ownedEmulatorPids.length === 0) {
+      return;
+    }
 
-      if (survivingPids.length > 0) {
-        // Keep the marker: nothing here waited to see these die, so the next run must still be able to convict them.
-        this.log(
-          `Auto-started emulator: stop requested and surviving emulator PID(s) [${survivingPids.join(', ')}] killed — sync teardown cannot wait to confirm.`
-        );
-      } else {
-        this.log('Auto-started emulator: stop requested, no process of this run left running.');
-        clearEmulatorMarkerIfStopped(params.avdName);
-      }
+    if (params.emulatorProcess) {
+      killProcessTree(params.emulatorProcess);
+    }
+    const survivingPids = params.ownedEmulatorPids.filter((pid) => checkIsProcessAlive(pid));
+    for (const pid of survivingPids) {
+      killProcessTreeByPid(pid);
+    }
+
+    if (survivingPids.length > 0) {
+      // Keep the marker: nothing here waited to see these die, so the next run must still be able to convict them.
+      this.log(
+        `Auto-started emulator: stop requested and surviving emulator PID(s) [${survivingPids.join(', ')}] killed — sync teardown cannot wait to confirm.`
+      );
+    } else {
+      this.log('Auto-started emulator: stop requested, no process of this run left running.');
+      clearEmulatorMarkerIfStopped(params.avdName);
     }
   }
 

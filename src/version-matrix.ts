@@ -234,10 +234,7 @@ export function buildVersionMatrix(resolvedSpecs: readonly ResolvedVersionSpec[]
 export function formatVersionMatrixEntry(entry: ObsidianVersionMatrixEntry): string {
   const { specs, version } = entry;
   const aliasSpecs = specs.filter((spec) => spec !== version);
-  if (aliasSpecs.length === 0) {
-    return version;
-  }
-  return `${version} (${aliasSpecs.join(', ')})`;
+  return aliasSpecs.length === 0 ? version : `${version} (${aliasSpecs.join(', ')})`;
 }
 
 /**
@@ -316,10 +313,7 @@ export function parseVersionSpecList(raw: string): string[] {
  */
 export function resolveRequestedSpecs(versions: readonly string[] | string | undefined): ResolveRequestedSpecsResult {
   const specs = typeof versions === 'string' ? parseVersionSpecList(versions) : [...versions ?? []];
-  if (specs.length === 0) {
-    return { isDefault: true, specs: [...DEFAULT_OBSIDIAN_VERSION_SPECS] };
-  }
-  return { isDefault: false, specs };
+  return specs.length === 0 ? { isDefault: true, specs: [...DEFAULT_OBSIDIAN_VERSION_SPECS] } : { isDefault: false, specs };
 }
 
 /**
@@ -421,10 +415,7 @@ function formatRunCount(count: number): string {
   if (count === 1) {
     return 'once';
   }
-  if (count === TWICE) {
-    return 'twice';
-  }
-  return `${String(count)} times`;
+  return count === TWICE ? 'twice' : `${String(count)} times`;
 }
 
 /**

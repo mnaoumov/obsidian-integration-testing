@@ -61,10 +61,7 @@ export function bypassStrictProxy<T>(object: T): T {
     return object;
   }
   // eslint-disable-next-line unicorn/no-computed-property-existence-check -- `in` is required, not a shorthand: `object` may be a strict proxy, and only `in` routes through its `has` trap. `Object.hasOwn` would ask the target for an own descriptor and miss the marker.
-  if (!(STRICT_PROXY_TARGET_SYMBOL in object)) {
-    return object;
-  }
-  return object[STRICT_PROXY_TARGET_SYMBOL] as T;
+  return (STRICT_PROXY_TARGET_SYMBOL in object) ? (object[STRICT_PROXY_TARGET_SYMBOL] as T) : object;
 }
 
 // eslint-disable-next-line @typescript-eslint/unified-signatures -- This overload infers T from mockClass; the `unknown` overload below requires explicit T. They cannot be combined.
@@ -152,10 +149,7 @@ function wrapProxy<T>(value: unknown, mockClass?: MockClassRef): T {
       // eslint-disable-next-line unicorn/no-computed-property-existence-check -- Walking the mock's PROTOTYPE CHAIN is the point: a `__` method inherited from a mock base class has to resolve here, and `Object.hasOwn` would only see the leaf class's own members.
       if (mockPrototype && typeof property === 'string' && property.endsWith('__') && property in mockPrototype) {
         const value_: unknown = mockPrototype[property];
-        if (typeof value_ === 'function') {
-          return value_.bind(receiver);
-        }
-        return value_;
+        return typeof value_ === 'function' ? value_.bind(receiver) : value_;
       }
 
       // 3. Passthrough props (symbols, then, toJSON, etc.).

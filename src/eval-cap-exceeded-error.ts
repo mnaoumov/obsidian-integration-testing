@@ -109,11 +109,7 @@ export class EvalCapExceededError extends Error {
  * @returns `true` when the error is a script timeout.
  */
 export function isScriptTimeoutError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return SCRIPT_TIMEOUT_PATTERN.test(error.message) || SCRIPT_TIMEOUT_PATTERN.test(error.name);
+  return error instanceof Error && (SCRIPT_TIMEOUT_PATTERN.test(error.message) || SCRIPT_TIMEOUT_PATTERN.test(error.name));
 }
 
 /**

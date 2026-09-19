@@ -447,11 +447,7 @@ export function tryAcquireSetupLock(params: TryAcquireSetupLockParams): SetupLoc
 function checkIsLockStale(info: LockFileInfo, heartbeatStaleInMilliseconds: number): boolean {
   const silentForInMilliseconds = Date.now() - getLastSeenAtInMilliseconds(info);
 
-  if (info.hostname === hostname()) {
-    return !checkIsProcessAlive(info.pid) || silentForInMilliseconds > heartbeatStaleInMilliseconds;
-  }
-
-  return silentForInMilliseconds > STALE_LOCK_AGE_IN_MILLISECONDS;
+  return info.hostname === hostname() ? !checkIsProcessAlive(info.pid) || silentForInMilliseconds > heartbeatStaleInMilliseconds : silentForInMilliseconds > STALE_LOCK_AGE_IN_MILLISECONDS;
 }
 
 /**
@@ -660,10 +656,7 @@ function formatWaitMessage(params: FormatWaitMessageParams): string {
  * @returns The error code string, or `undefined` if not a coded error.
  */
 function getErrorCode(error: unknown): string | undefined {
-  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
-    return error.code;
-  }
-  return undefined;
+  return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : undefined;
 }
 
 /**

@@ -70,12 +70,10 @@ const UNSET_SETTING_VALUE = 'null';
  * @returns Whether to write the value back or to remove the setting again.
  */
 export function resolveDeviceSettingRestore(previousValue: string): DeviceSettingRestore {
-  if (previousValue === UNSET_SETTING_VALUE) {
-    return { kind: DeviceSettingRestoreKind.Delete };
-  }
-
-  return {
-    kind: DeviceSettingRestoreKind.Write,
-    value: previousValue
-  };
+  return previousValue === UNSET_SETTING_VALUE
+    ? { kind: DeviceSettingRestoreKind.Delete }
+    : {
+      kind: DeviceSettingRestoreKind.Write,
+      value: previousValue
+    };
 }

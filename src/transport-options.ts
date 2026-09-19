@@ -647,9 +647,5 @@ export function checkIsMobileTransport(options: ObsidianTransportOptions): boole
  */
 // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export function resolveOwnedConfigDirectory(options: ObsidianTransportOptions): string | undefined {
-  if (options.type !== 'obsidian-cdp' || options.port !== undefined) {
-    return undefined;
-  }
-
-  return options.configDirectory;
+  return options.type !== 'obsidian-cdp' || options.port !== undefined ? undefined : options.configDirectory;
 }

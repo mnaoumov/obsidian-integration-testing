@@ -94,19 +94,18 @@ export interface EmulatorEnvironment {
  * @returns The argument array to pass to the emulator binary.
  */
 export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): string[] {
-  const emulatorArguments = ['-avd', params.avdName];
-  /*
-   * Both flags or neither: loading without saving is the resume-what-we-never-
-   * wrote combination this file's header exists to rule out.
-   */
-  if (!params.shouldReuseSnapshot) {
-    emulatorArguments.push('-no-snapshot-load', '-no-snapshot-save');
-  }
-  emulatorArguments.push('-dns-server', DNS_SERVER);
-  if (params.isHidden) {
-    emulatorArguments.push('-no-window');
-  }
-  return emulatorArguments;
+  return [
+    '-avd',
+    params.avdName,
+    /*
+     * Both flags or neither: loading without saving is the resume-what-we-never-
+     * wrote combination this file's header exists to rule out.
+     */
+    ...(params.shouldReuseSnapshot ? [] : ['-no-snapshot-load', '-no-snapshot-save']),
+    '-dns-server',
+    DNS_SERVER,
+    ...(params.isHidden ? ['-no-window'] : [])
+  ];
 }
 
 /**
@@ -121,12 +120,10 @@ export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): st
  */
 export function buildEmulatorEnvironment(baseEnvironment: NodeJS.ProcessEnv): EmulatorEnvironment {
   const existingFilter = baseEnvironment[RUST_LOG_VARIABLE_NAME];
-  if (existingFilter !== undefined && existingFilter !== '') {
-    return { environment: { ...baseEnvironment }, isNetsimLogGuarded: false };
-  }
-
-  return {
-    environment: { ...baseEnvironment, [RUST_LOG_VARIABLE_NAME]: NETSIM_LOG_FILTER },
-    isNetsimLogGuarded: true
-  };
+  return existingFilter !== undefined && existingFilter !== ''
+    ? { environment: { ...baseEnvironment }, isNetsimLogGuarded: false }
+    : {
+      environment: { ...baseEnvironment, [RUST_LOG_VARIABLE_NAME]: NETSIM_LOG_FILTER },
+      isNetsimLogGuarded: true
+    };
 }

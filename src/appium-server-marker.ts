@@ -88,11 +88,7 @@ export interface WriteAppiumServerMarkerParams {
  * @returns `true` when an earlier run of this harness started the server now listening.
  */
 export function checkIsHarnessOwnedAppiumServer(marker: AppiumServerMarker | undefined): boolean {
-  if (!marker) {
-    return false;
-  }
-
-  return checkIsProcessAlive(marker.pid);
+  return marker !== undefined && checkIsProcessAlive(marker.pid);
 }
 
 /**
@@ -182,16 +178,14 @@ function parseMarker(parsed: unknown, port: number): AppiumServerMarker | undefi
   const record = parsed as Record<string, unknown>;
   const { pid, port: markedPort, startedAtInMilliseconds, stopAttemptedAtInMilliseconds } = record;
 
-  if (typeof pid !== 'number' || typeof startedAtInMilliseconds !== 'number' || markedPort !== port) {
-    return undefined;
-  }
-
-  return {
-    pid,
-    port,
-    startedAtInMilliseconds,
-    ...(typeof stopAttemptedAtInMilliseconds === 'number' && { stopAttemptedAtInMilliseconds })
-  };
+  return typeof pid !== 'number' || typeof startedAtInMilliseconds !== 'number' || markedPort !== port
+    ? undefined
+    : {
+      pid,
+      port,
+      startedAtInMilliseconds,
+      ...(typeof stopAttemptedAtInMilliseconds === 'number' && { stopAttemptedAtInMilliseconds })
+    };
 }
 
 function writeMarker(marker: AppiumServerMarker): void {

@@ -314,10 +314,7 @@ function getEslintImportResolverTypescriptConfigs(): Linter.Config[] {
 
 function getGitIgnoreConfigs(): Linter.Config[] {
   const gitignorePath = join(getRootFolder() ?? '', '.gitignore');
-  if (!existsSync(gitignorePath)) {
-    return [];
-  }
-  return [includeIgnoreFile(gitignorePath)];
+  return existsSync(gitignorePath) ? [includeIgnoreFile(gitignorePath)] : [];
 }
 
 function getImportXConfigs(): Linter.Config[] {
@@ -875,12 +872,12 @@ function getUnicornConfigs(): Linter.Config[] {
           }
         ],
         /*
-         * The next six rules all suggest an API newer than this project's `lib` (`ES2022`), so following any of
-         * them fails to compile. The target is not arbitrary: `metadata.json` in this repo records
-         * `ecmaScriptVersion: "ES2022"` for installer 1.1.9, the oldest one still able to run current Obsidian,
-         * and this harness has to keep working against it. Each is off at the config level rather than annotated
-         * per site, because none can ever be satisfied while that floor holds. Revisit them together if the
-         * floor moves.
+         * Every rule carrying a back-reference to this note suggests an API newer than this project's `lib`
+         * (`ES2022`), so following any of them fails to compile. The target is not arbitrary: `metadata.json` in
+         * this repo records `ecmaScriptVersion: "ES2022"` for installer 1.1.9, the oldest one still able to run
+         * current Obsidian, and this harness has to keep working against it. Each is off at the config level
+         * rather than annotated per site, because none can ever be satisfied while that floor holds. Revisit
+         * them together if the floor moves.
          *
          * `Array#toReversed` and `Array#toSorted` are ES2023.
          */
@@ -980,6 +977,8 @@ function getUnicornConfigs(): Linter.Config[] {
          * pattern.
          */
         'unicorn/prefer-await': 'off',
+        // `Map.groupBy` is ES2024. See the ES2022 floor note above.
+        'unicorn/prefer-group-by': 'off',
         /*
          * Iterator helpers (`Iterator#some` and friends) are ES2025, so this belongs with `no-array-reverse` and
          * `no-array-sort` above: the same ES2022 floor rules it out, and the same note applies -- revisit them
@@ -1059,6 +1058,22 @@ function getUnicornConfigs(): Linter.Config[] {
       files: ['scripts/helpers/eslint-rules/no-async-callback-to-unsafe-return.ts'],
       rules: {
         'unicorn/no-useless-recursion': 'off'
+      }
+    },
+    {
+      /*
+       * Every file in this folder but the registration list is vendored byte-identical from `obsidian-dev-utils`
+       * (AGENTS.md L34), so a fix written HERE is drift that the next sync's `diff` reports rather than an
+       * improvement -- the fix belongs upstream. `eslint-plugin-unicorn` 75 added these three rules and upstream
+       * has not adopted 75 yet, so all eleven reports are shapes its copies still carry. Delete this block on the
+       * re-sync that takes the corrected sources across; nothing else in the tree needs these three off.
+       */
+      files: ['scripts/helpers/eslint-rules/**'],
+      ignores: ['scripts/helpers/eslint-rules/obsidian-dev-utils-plugin.ts'],
+      rules: {
+        'unicorn/prefer-combined-guards': 'off',
+        'unicorn/prefer-early-return': 'off',
+        'unicorn/prefer-ternary': 'off'
       }
     },
     {

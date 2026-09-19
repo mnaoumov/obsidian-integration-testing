@@ -488,10 +488,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const fullArguments = { ...params.input, app: this.app, context, lib, obsidianModule };
       try {
         const result = await params.callback(fullArguments);
-        if (result === undefined) {
-          return JSON.stringify({ type: 'undefined' });
-        }
-        return JSON.stringify({ value: result });
+        return result === undefined ? JSON.stringify({ type: 'undefined' }) : JSON.stringify({ value: result });
       } catch (evalError) {
         return JSON.stringify({ type: 'error', value: this.errorToString(evalError) });
       }
@@ -999,10 +996,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       message: `the "${tabId}" settings tab to render`,
       predicate: () => {
         const currentTab = setting.activeTab;
-        if (!currentTab) {
-          return false;
-        }
-        return currentTab.id === tabId && currentTab.containerEl.childElementCount > 0;
+        return !!currentTab && currentTab.id === tabId && currentTab.containerEl.childElementCount > 0;
       },
       timeoutInMilliseconds
     });

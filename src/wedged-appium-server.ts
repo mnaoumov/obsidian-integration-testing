@@ -268,11 +268,7 @@ export function resolveWedgedAppiumServerRemedy(params: ResolveWedgedAppiumServe
     return { reason: 'auto-start-disabled', remedy: 'report' };
   }
 
-  if (!params.isHarnessOwnedServer) {
-    return { reason: 'foreign-server', remedy: 'report' };
-  }
-
-  return { reason: 'harness-owned', remedy: 'restart' };
+  return params.isHarnessOwnedServer ? { reason: 'harness-owned', remedy: 'restart' } : { reason: 'foreign-server', remedy: 'report' };
 }
 
 function describeServer(params: BuildWedgedAppiumServerMessageParams): string {
@@ -285,11 +281,7 @@ function describeServer(params: BuildWedgedAppiumServerMessageParams): string {
 }
 
 function formatAge(ageInMilliseconds: number): string {
-  if (ageInMilliseconds < MILLISECONDS_PER_MINUTE) {
-    return `${String(Math.round(ageInMilliseconds / MILLISECONDS_PER_SECOND))}s`;
-  }
-
-  return `${String(Math.round(ageInMilliseconds / MILLISECONDS_PER_MINUTE))}min`;
+  return ageInMilliseconds < MILLISECONDS_PER_MINUTE ? `${String(Math.round(ageInMilliseconds / MILLISECONDS_PER_SECOND))}s` : `${String(Math.round(ageInMilliseconds / MILLISECONDS_PER_MINUTE))}min`;
 }
 
 function readReadyFlag(parsed: unknown): boolean | undefined {
