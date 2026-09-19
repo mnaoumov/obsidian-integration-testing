@@ -8,6 +8,14 @@
  * dedicated `--remote-debugging-port`. Because Electron's single-instance lock
  * is keyed to the user-data dir, the owned instance runs in parallel with the
  * user's own Obsidian. Confirmed by the Phase 0 spike (see the project plan).
+ *
+ * Winning that lock is also why every owned instance takes Obsidian's
+ * first-instance path and tries to serve the CLI on a pipe whose name is
+ * machine-global per user, and so logs `CLI server error: ... EADDRINUSE` when
+ * anything else — normally the developer's own Obsidian — got there first. That
+ * line is expected on every such run, not a sign of two runs contending, and
+ * nothing the harness does goes through the pipe. AGENTS.md L59 has the
+ * measurement.
  */
 
 /* v8 ignore start -- Integration-time process management covered by integration tests, not unit tests. */
