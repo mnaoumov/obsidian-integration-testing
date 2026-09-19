@@ -43,11 +43,18 @@ const tasks: Record<string, string[]> = {
   ],
   /*
    * The vendored ESLint rule sources, which are hand-copies of `obsidian-dev-utils`' and are supposed to be
-   * the same bytes. Running last is what makes this useful rather than merely present: `lint:fix` and
-   * `format` above rewrite a staged copy in place, which is one of the three ways these files drift, so the
-   * check has to read what is about to be committed rather than what was staged. The key sorts to last here
-   * on its own — perfectionist puts a recursive glob after the single-segment ones — so that order is
-   * enforced rather than merely typed in.
+   * the same bytes. `lint:fix` and `format` above rewrite a staged copy in place, which is one of the three
+   * ways these files drift, so this check has to read what is about to be committed — and where its key
+   * sits cannot buy that. **nano-staged builds one task group per pattern and runs the groups with
+   * `Promise.all`** (measured against nano-staged 1.0.2, 2026-09-19), so this group RACES `lint:fix` rather
+   * than following it; sequencing exists within a single key's command list and nowhere else, which is why
+   * `lint:fix` then `format` under one key really is ordered. Key order here is only what perfectionist
+   * sorts it to, and says nothing about when anything runs.
+   *
+   * So the ordering is not enforced, it is made IRRELEVANT: the gate reads its subject out of the git index
+   * rather than off disk (`scripts/helpers/git-content.ts`), which is the same bytes whether `lint:fix` has
+   * run or not. Moving this key, or letting a future nano-staged order the groups differently, changes
+   * nothing.
    *
    * It takes no filenames: the glob is only what decides whether it runs at all, so an ordinary commit
    * touching no vendored file fetches nothing.
