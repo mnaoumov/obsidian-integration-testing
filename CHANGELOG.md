@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 16.0.0
+
+- feat(label-screenshot)!: make the caption band opaque, so nothing under it reaches the frame
+
 ## 15.0.0
 
 - fix(check-vendored-eslint-rules): read this repo's side from the git index, not the working tree
