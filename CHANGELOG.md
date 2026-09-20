@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 15.0.0
+
+- fix(check-vendored-eslint-rules): read this repo's side from the git index, not the working tree
+- feat(capture-obsidian-screenshot): hide the vault name, so a captured frame does not depend on which temporary vault the run got
+- feat(label-screenshot)!: measure the caption, and refuse one too wide instead of clipping it
+- feat(setup)!: fail a run whose dist predates its sources, before the transport exists
+- docs(agents): state the L59 findings without private tracker labels
+- chore(lint): record the deliberate ESLint-config divergences from obsidian-dev-utils
+- docs(lint): state the unicorn arm's reason in a form that is true in every consumer
+- chore(lint): gate the vendored rule sources against upstream
+- chore(release): hold the settled changelog section to lint:md too
+- chore(lint): re-sync the vendored rule sources and drop the three-rule override
+- chore(release): spellcheck the settled changelog section before it is written
+- fix(lint): clear eslint-plugin-unicorn 75's 137 findings so `lint` is green again
+- chore(cspell): teach the dictionary repoint, which the 14.1.0 changelog uses
+- docs: settle what the CLI-pipe EADDRINUSE at boot means
+- chore: update libs
+
 ## 14.1.0
 
 - chore(nano-staged): merge the .astro lint-staged glob
