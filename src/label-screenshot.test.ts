@@ -104,6 +104,15 @@ describe('buildLabelSvg', () => {
     expect(svg).toContain('x="600"');
   });
 
+  it('should draw the band fully opaque, written out rather than left to the SVG default', () => {
+    const geometry = computeLabelBand(DESKTOP);
+    const svg = buildLabelSvg('Full path', geometry, DESKTOP.imageWidthInPixels);
+    // The band COVERS the bottom chrome, so the attribute is the decision
+    // written down. `fill-opacity` defaults to 1 anyway; omitting it would leave
+    // the band opaque by accident of the format, with nothing to assert on.
+    expect(svg).toContain('fill-opacity="1"');
+  });
+
   it('should embed the caption escaped', () => {
     const geometry = computeLabelBand(DESKTOP);
     const svg = buildLabelSvg('a & b', geometry, DESKTOP.imageWidthInPixels);
@@ -120,7 +129,7 @@ describe('labelScreenshot', () => {
     expect(readPngDimensions(labeled)).toStrictEqual({ heightInPixels: 800, widthInPixels: 1200 });
   });
 
-  it('should darken the bottom band and leave the rest of the frame alone', async () => {
+  it('should COVER the bottom band, leaving nothing of the frame under it, and leave the rest alone', async () => {
     const source = await buildSolidPng(1200, 800);
     const labeled = await labelScreenshot(source, { text: 'Full path' });
 
@@ -133,12 +142,21 @@ describe('labelScreenshot', () => {
 
     const geometry = computeLabelBand(DESKTOP);
     const STRONG_RED = 200;
-    const DARKENED = 120;
+    // A row inside the band and above the glyphs, so the caption's own ink is
+    // not mistaken for the source showing through.
+    const CLEAR_BAND_ROW_OFFSET = 5;
 
     // Above the band the source red survives untouched.
     expect(redAt(600, geometry.topInPixels - 20)).toBeGreaterThan(STRONG_RED);
-    // Inside the band it is dimmed by the overlay.
-    expect(redAt(20, geometry.topInPixels + 20)).toBeLessThan(DARKENED);
+
+    // Inside it, EVERY column is the band's own black rather than a dimmed
+    // version of the frame: the band covers, so what the bottom chrome held is
+    // gone rather than attenuated. At 0.94 each of these read about 6 % of the
+    // source instead — invisible to a reader and a pixel diff apiece.
+    const bandRowY = geometry.topInPixels + CLEAR_BAND_ROW_OFFSET;
+    const survivingColumns = Array.from({ length: info.width }, (_unused, x) => x)
+      .filter((x) => redAt(x, bandRowY) !== 0);
+    expect(survivingColumns).toStrictEqual([]);
   });
 
   it('should survive a caption containing SVG-hostile characters', async () => {
