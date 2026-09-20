@@ -142,12 +142,26 @@ const FONT_SIZE_RATIO = 0.034;
 const BAND_HEIGHT_RATIO = 2.2;
 
 /**
- * Opacity of the band. Near-opaque on purpose: the band exists partly to COVER
- * the chrome along the bottom of the frame, and at 0.82 a status bar legibly
- * bled through behind the caption, which looked like a mistake rather than a
- * design.
+ * Opacity of the band. Fully opaque, and that is a decision rather than a
+ * default: the band's job is to COVER the chrome along the bottom of the frame,
+ * so nothing underneath it may reach the captured frame at all.
+ *
+ * It was 0.94, a value chosen only because 0.82 let a status bar legibly bleed
+ * through behind the caption and look like a mistake rather than a design.
+ * Nothing in that argued for 0.94 over full opacity. What 0.94 does is attenuate
+ * whatever is under the band to about 6 % brightness — invisible to a reader,
+ * and still 349 differing pixels to a diff, measured on a temporary vault's name
+ * rendering under the band of a 1200x800 desktop frame. Any value below 1 holds
+ * that channel open for every varying thing the bottom chrome can carry — a
+ * clock, a word count, a sync indicator — on a frame nobody has captured yet.
+ *
+ * Written into the emitted SVG explicitly, even though 1 is what `fill-opacity`
+ * defaults to. Dropping the attribute would leave this constant unused and take
+ * the decision away with it: the band would then be opaque by accident of the
+ * format rather than on purpose, with nothing named to read and nothing to
+ * assert on.
  */
-const BAND_OPACITY = 0.94;
+const BAND_OPACITY = 1;
 
 const MINIMUM_FONT_SIZE_IN_PIXELS = 18;
 
