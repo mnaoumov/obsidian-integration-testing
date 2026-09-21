@@ -68,7 +68,9 @@ interface IntegrationTestingHolder {
  *
  * Monkey-patches `app.plugins.loadPlugin` to intercept errors before
  * Obsidian's `enablePlugin` try-catch swallows them. The original method
- * is always restored in a `finally` block.
+ * is restored in a `finally` block — but only while the patch this function
+ * installed is still the one in place, so a plugin that patched the same slot
+ * during its own load keeps its patch.
  *
  * Designed to be passed as the `callback` argument to {@link evalInObsidian}.
  *
@@ -108,6 +110,12 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgu
       throw error;
     }
   };
+  /*
+   * Read the wrapper back so the `finally` can tell "still ours" from "someone patched over us". Assigning
+   * it through `app.plugins.loadPlugin` rather than declaring it standalone is what types its `this`.
+   */
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- Reading back the patch just installed, to restore it conditionally.
+  const ourLoadPlugin = app.plugins.loadPlugin;
 
   /*
    * Layer 1 — capture the renderer console + uncaught errors for the duration of
@@ -138,14 +146,16 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgu
   }
   const origConsoleError = console.error;
   const origConsoleWarn = console.warn;
-  console.error = (...input: unknown[]): void => {
+  function ourConsoleError(...input: unknown[]): void {
     recordConsole(...input);
     origConsoleError.apply(console, input);
-  };
-  console.warn = (...input: unknown[]): void => {
+  }
+  function ourConsoleWarn(...input: unknown[]): void {
     recordConsole(...input);
     origConsoleWarn.apply(console, input);
-  };
+  }
+  console.error = ourConsoleError;
+  console.warn = ourConsoleWarn;
   function onWindowError(event: ErrorEvent): void {
     capturedConsole.push(event.error instanceof Error ? formatArgument(event.error) : event.message);
   }
@@ -158,10 +168,25 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgu
   try {
     await app.plugins.enablePluginAndSave(pluginId);
   } finally {
-    // eslint-disable-next-line require-atomic-updates -- Intentional restore of monkey-patch.
-    app.plugins.loadPlugin = origLoadPlugin;
-    console.error = origConsoleError;
-    console.warn = origConsoleWarn;
+    /*
+     * Restore ONLY what this function installed. The plugin under test loads INSIDE the `try` above, so its
+     * `onload` runs before this line — and a plugin that monkey-patches any of these three slots there writes
+     * an own property over ours (the shape `monkey-around` produces). An unconditional restore puts back the
+     * value read before that plugin existed, deleting its patch with no error and no warning; `loadPlugin` is
+     * the only complete seam for observing `app.plugins.plugins` move, so a plugin reaching for it is ordinary
+     * rather than exotic. The guard is `monkey-around`'s own uninstaller discipline (`if (obj[method] ===
+     * wrapper)`): when someone patched over us, leaving the chain alone is the correct no-op — our wrapper is
+     * still in it, one level down, and unwinds when that plugin unpatches.
+     */
+    if (app.plugins.loadPlugin === ourLoadPlugin) {
+      app.plugins.loadPlugin = origLoadPlugin;
+    }
+    if (console.error === ourConsoleError) {
+      console.error = origConsoleError;
+    }
+    if (console.warn === ourConsoleWarn) {
+      console.warn = origConsoleWarn;
+    }
     globalThis.removeEventListener('error', onWindowError);
     globalThis.removeEventListener('unhandledrejection', onUnhandledRejection);
   }
