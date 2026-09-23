@@ -77,7 +77,8 @@ const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
 // cost that dominates an Android run — and these files are serialized within it anyway.
 const ANDROID_TEST_FILES = [
   'src/mobile-trusted-input.android.integration.test.ts',
-  'src/eval-cap.android.integration.test.ts'
+  'src/eval-cap.android.integration.test.ts',
+  'src/headless-vault-config.android.integration.test.ts'
 ];
 
 // Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
