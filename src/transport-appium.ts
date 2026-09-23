@@ -217,6 +217,7 @@ const DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS = 180_000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
+const ADB_MARKER_READ_TIMEOUT_IN_MILLISECONDS = 30_000;
 /*
  * Extra budget granted to the ONE eval that follows a cap overrun, on top of the cap itself. The
  * abandoned closure keeps running in the guest, and Appium serializes commands per session, so the next
@@ -610,7 +611,11 @@ export class AppiumTransport implements ObsidianTransport {
    * Registers a vault on mobile by pushing files and configuring localStorage.
    *
    * The registration flow:
-   * 1. Push a minimal `.obsidian/app.json` to the device so Obsidian recognizes the vault
+   * 1. Push a minimal `.obsidian/app.json` to the device so Obsidian recognizes the vault —
+   *    **unless one is already there**, which is the usual case, since `register` pushes the
+   *    whole vault first and that carries the run's real `app.json` across. See
+   *    {@link pushObsidianMarker}: the marker is a truncating overwrite, so pushing it
+   *    unconditionally destroyed the headless defaults it had just been handed.
    * 2. Switch to the WebView context
    * 3. Add the vault to localStorage (`mobile-external-vaults`, `mobile-selected-vault`,
    *    `enable-plugin-<path>`)
@@ -955,6 +960,39 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Answers whether the device already holds a usable `app.json` at the given path.
+   *
+   * Reads the file rather than testing for it, for the reason
+   * {@link pushObsidianMarker} spells out: only output that parses as a JSON
+   * **object** counts as present, so a merged stderr, an empty file, or a read that
+   * failed outright all answer `false` and let the caller push. Never throws — a
+   * probe that cannot answer is an answer of `false`.
+   *
+   * @param remoteMarker - The device-side `app.json` path.
+   * @returns `true` when the device holds an `app.json` that parses as a JSON object.
+   */
+  private async hasDeviceAppJson(remoteMarker: string): Promise<boolean> {
+    let output: string;
+    try {
+      output = await exec(['adb', '-s', this.deviceId, 'shell', 'cat', remoteMarker], {
+        isQuiet: true,
+        shouldIgnoreExitCode: true,
+        timeoutInMilliseconds: ADB_MARKER_READ_TIMEOUT_IN_MILLISECONDS
+      });
+    } catch (error: unknown) {
+      log(`[appium-transport] Could not read ${remoteMarker} (treating it as absent): ${errorToString(error)}`);
+      return false;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(output);
+      return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Probes the WebView once for how far Obsidian's startup has got.
    *
    * A probe that throws is reported as `undefined` rather than propagated: the
@@ -980,18 +1018,54 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
-   * Pushes the minimal `.obsidian/app.json` vault marker via `adb push`.
+   * Pushes the minimal `.obsidian/app.json` vault marker via `adb push` — but
+   * only over a device that has not got one already.
    *
    * `browser.pushFile` (WebDriver base64) is an order of magnitude slower on a
    * cold or loaded emulator — measured at 9–21s per call for this 2-byte marker,
    * versus sub-second over `adb`. This mirrors {@link pushFiles}, which switched
    * to `adb` for the same reason. `mkdir -p` guarantees the parent directory.
    *
+   * ### Why it has to skip rather than always push
+   *
+   * `adb push` is a **truncating overwrite**, not a merge, and the marker is `{}`.
+   * `register` runs {@link pushFiles} first, which tars the whole host vault —
+   * dotfiles included — so by the time this runs the device is already holding the
+   * real `app.json` `ensureHeadlessVaultConfig` wrote for this run. Pushing the
+   * marker over it threw `alwaysUpdateLinks: true` away one call after it arrived,
+   * and Obsidian then opened the vault with the shipped default (off): every
+   * Android rename that touched links stopped on the interactive *"Update links?"*
+   * sheet, hanging the singleton `FileManager.updateQueue` behind it. That is the
+   * rename wall `src/headless-vault-config.ts` exists to remove, live on Android
+   * only, from 6.0.0 (when this push arrived) to 16.0.1. It cost two projects
+   * several runs apiece, and it surfaced as `EvalCapExceededError` naming the
+   * transport cap, which sends the reader after the waiting rather than the sheet.
+   *
+   * The marker exists solely to make Obsidian **recognize** the directory as a
+   * vault, and a real `app.json` does that better than `{}` does. So an existing
+   * one is left exactly as it is.
+   *
+   * ### Why the probe is `cat` and not the teardown's `ls -d`
+   *
+   * `adb shell` merges the device's stderr into stdout on a legacy shell protocol,
+   * and `ls`'s failure message *contains the path it was asked about* — so an
+   * `includes(path)` test can read **absent** as **present**, skip the push, and
+   * leave a genuinely unmarked vault that Obsidian will not open. Reading the file
+   * instead makes the ambiguity harmless: an error message does not parse as a JSON
+   * object, so anything unexpected falls through to the push, which is exactly the
+   * behaviour this replaces.
+   *
    * @param deviceVaultPath - The device-side vault directory path.
    */
   private async pushObsidianMarker(deviceVaultPath: string): Promise<void> {
-    const localMarker = join(tmpdir(), `obsidian-marker-${randomUUID()}.json`);
     const remoteMarker = `${deviceVaultPath}/.obsidian/app.json`;
+
+    if (await this.hasDeviceAppJson(remoteMarker)) {
+      log(`[appium-transport] Vault marker already on the device, leaving it as it is: ${remoteMarker}`);
+      return;
+    }
+
+    const localMarker = join(tmpdir(), `obsidian-marker-${randomUUID()}.json`);
 
     try {
       await writeFile(localMarker, '{}', 'utf-8');

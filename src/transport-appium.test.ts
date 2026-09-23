@@ -202,6 +202,75 @@ describe('AppiumTransport.registerVault', () => {
     expect(command.at(-1)).toBe('/sdcard/Documents/my-vault/.obsidian');
   });
 
+  // The defect this suite exists to keep fixed: `register` pushes the whole vault — the run's real
+  // `app.json`, headless defaults and all — and then `registerVault` used to `adb push` the 2-byte
+  // `{}` marker straight over it. `adb push` truncates, so `alwaysUpdateLinks: true` was destroyed one
+  // call after it arrived, and every Android rename that touched links stopped on the interactive
+  // "Update links?" sheet. Nothing here asserted it, on either side: the host-side write is proved
+  // against a mocked `node:fs`, and the Android integration suites asserted nothing about `app.json`.
+  it('should NOT push the marker over an app.json the device already has', async () => {
+    mockExec.mockReset().mockImplementation((command: string | string[]) => {
+      return Array.isArray(command) && command.includes('cat') ? Promise.resolve('{"alwaysUpdateLinks":true,"settingsPopoutWindow":false}') : Promise.resolve('');
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    const pushCall = mockExec.mock.calls.find((call) => {
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('push');
+    });
+
+    expect(pushCall).toBeUndefined();
+  });
+
+  it('should read the device-side app.json before deciding whether to push the marker', async () => {
+    await transport.registerVault('/tmp/my-vault');
+
+    const catCall = mockExec.mock.calls.find((call) => {
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('cat');
+    });
+
+    expect(catCall).toBeDefined();
+    const command = ensureNonNullable(catCall)[0] as string[];
+    expect(command).toContain('emulator-5554');
+    expect(command.at(-1)).toBe('/sdcard/Documents/my-vault/.obsidian/app.json');
+  });
+
+  // Why the probe reads the file instead of testing for it. `adb shell` merges the device's stderr
+  // into stdout on a legacy shell protocol, and the failure message names the very path it was asked
+  // about — so a `ls -d` + `includes(path)` probe reports a MISSING marker as present, skips the push
+  // and leaves a vault Obsidian will not open. Output that does not parse has to mean "push".
+  it('should still push the marker when the probe comes back as an error message naming the path', async () => {
+    mockExec.mockReset().mockImplementation((command: string | string[]) => {
+      return Array.isArray(command) && command.includes('cat') ? Promise.resolve('cat: /sdcard/Documents/my-vault/.obsidian/app.json: No such file or directory\n') : Promise.resolve('');
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    const pushCall = mockExec.mock.calls.find((call) => {
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('push');
+    });
+
+    expect(pushCall).toBeDefined();
+  });
+
+  it('should still push the marker when the probe throws outright', async () => {
+    mockExec.mockReset().mockImplementation((command: string | string[]) => {
+      return Array.isArray(command) && command.includes('cat') ? Promise.reject(new Error('Command timed out after 30000ms')) : Promise.resolve('');
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    const pushCall = mockExec.mock.calls.find((call) => {
+      const command = call[0];
+      return Array.isArray(command) && command[0] === 'adb' && command.includes('push');
+    });
+
+    expect(pushCall).toBeDefined();
+  });
+
   it('should switch to WebView context before configuring localStorage', async () => {
     await transport.registerVault('/tmp/my-vault');
 
