@@ -723,6 +723,96 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     );
   }
 
+  // Describes an element for an error message: its tag and classes, which is what a reader greps for.
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
+  function describeElement(element: Element | null): string {
+    const classNames = [...(element?.classList ?? [])].map((className) => `.${className}`).join('');
+    const suffix = classNames ? ` ${classNames}` : '';
+    return element ? `<${element.tagName.toLowerCase()}${suffix}>` : 'nothing';
+  }
+
+  // The finite animations and transitions now moving the element or any ancestor of it. An infinite one (a
+  // spinner) never ends, so waiting on it would only ever time out, and it is left out.
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
+  function getMovingAnimations(element: Element): Animation[] {
+    return typeof document.getAnimations === 'function'
+      ? document.getAnimations().filter((animation) => {
+        const effect = animation.effect;
+        const isActive = animation.playState === 'running' || animation.pending;
+        const isOnElementOrAncestor = effect instanceof KeyframeEffect && effect.target instanceof Element && effect.target.contains(element);
+        return isActive && isOnElementOrAncestor && effect.getComputedTiming().endTime !== Infinity;
+      })
+      : [];
+  }
+
+  /*
+   * Waits until nothing is moving the element, so a mobile tap lands where the element will be rather than
+   * where it was. The tap is injected from the host and reaches the page ~1 s after this returns, which is
+   * long enough for a sliding modal to carry its controls away from the point that was read.
+   *
+   * The signal is the ANIMATIONS, not the rect. Measured on the `obsidian_test` emulator (2026-09-24):
+   * Obsidian Mobile opens a modal at `translateY(115px)` with a `transform` transition that reports
+   * `running` while the box does not move at all — for ~100 ms normally, and for over 1.5 s on the first
+   * modal after a boot. A rule of "the rect has held still" is satisfied throughout that hold, at the wrong
+   * point. The rect is still required to hold across two reads, for layout that moves without animating.
+   */
+  async function waitForElementToSettle(element: HTMLElement): Promise<void> {
+    const startTime = Date.now();
+    let previousRectKey = '';
+
+    for (;;) {
+      const rect = element.getBoundingClientRect();
+      const rectKey = `${String(rect.left)},${String(rect.top)},${String(rect.width)},${String(rect.height)}`;
+      const movingAnimations = getMovingAnimations(element);
+
+      if (movingAnimations.length === 0 && rectKey === previousRectKey) {
+        return;
+      }
+
+      if (Date.now() - startTime >= INPUT_TIMEOUT_IN_MILLISECONDS) {
+        const reasons = movingAnimations.map((animation) => {
+          const effect = animation.effect as KeyframeEffect;
+          let name = 'animation';
+          if (animation instanceof CSSTransition) {
+            name = `transition of \`${animation.transitionProperty}\``;
+          } else if (animation instanceof CSSAnimation) {
+            name = `animation \`${animation.animationName}\``;
+          }
+          return `a ${name} on ${describeElement(effect.target)}`;
+        });
+        const cause = reasons.length > 0 ? `${reasons.join(', ')} was running` : 'its box kept changing';
+        throw new Error(
+          `\`clickElement\` did not tap ${describeElement(element)}: it was still moving after ${String(INPUT_TIMEOUT_IN_MILLISECONDS)}ms (${cause}). `
+            + 'A tap aimed at it now would land where it used to be.'
+        );
+      }
+
+      previousRectKey = rectKey;
+      await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+
+  /*
+   * Refuses to tap a point that belongs to something else. A trusted tap goes to whatever is on top, so a
+   * covered element would otherwise have its cover tapped instead — `.modal-bg`, say, which closes the
+   * modal — while `clickElement` resolved as though it had clicked.
+   */
+  function assertCenterHitsElement(element: HTMLElement, rect: DOMRect): void {
+    const CENTER_DIVISOR = 2;
+    const x = rect.left + rect.width / CENTER_DIVISOR;
+    const y = rect.top + rect.height / CENTER_DIVISOR;
+    const hitElement = document.elementFromPoint(x, y);
+    if (hitElement && element.contains(hitElement)) {
+      return;
+    }
+
+    throw new Error(
+      `\`clickElement\` did not tap ${describeElement(element)}: the point at its center (${String(Math.round(x))}, ${String(Math.round(y))}) belongs to `
+        + `${describeElement(hitElement)}, so the tap would land there instead. `
+        + 'Wait until the element is on top, or use `clickMouse` to tap that point deliberately.'
+    );
+  }
+
   // Maps Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
   // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
   // Shared by every trusted-input helper, so a key press and a click cannot disagree on `'Mod'`.
@@ -813,9 +903,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     const { button = 'left', element, modifiers = [] } = clickParams;
 
+    if (checkIsMobile()) {
+      await waitForElementToSettle(element);
+    }
+
     // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`, and equal CDP's
     // page coordinates in the mobile WebView — so neither path needs a device-pixel conversion.
     const rect = element.getBoundingClientRect();
+
+    if (checkIsMobile()) {
+      assertCenterHitsElement(element, rect);
+    }
+
     await clickMouse({
       button,
       modifiers,
