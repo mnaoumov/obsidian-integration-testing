@@ -13,11 +13,32 @@
 
 /**
  * A layer passed to `sharp`'s `composite`.
+ *
+ * The input is either bytes to draw — an SVG, a PNG — or a block `sharp` creates
+ * on the spot, which is how a flat fill is composited without building an image
+ * for it first.
  */
 export interface SharpCompositeLayer {
-  readonly input: Buffer;
+  readonly input: Buffer | SharpCreateInput;
   readonly left: number;
   readonly top: number;
+}
+
+/**
+ * A solid block of color, created by `sharp` rather than supplied as bytes.
+ */
+export interface SharpCreateInput {
+  readonly create: SharpCreateSpec;
+}
+
+/**
+ * The block `sharp` is asked to create: a rectangle of one flat color.
+ */
+export interface SharpCreateSpec {
+  readonly background: SharpRgbColor;
+  readonly channels: number;
+  readonly height: number;
+  readonly width: number;
 }
 
 /**
@@ -31,10 +52,12 @@ export type SharpFactory = (input: Uint8Array) => SharpInstance;
 export interface SharpInstance {
   blur: (this: void, sigma: number) => SharpInstance;
   composite: (this: void, layers: SharpCompositeLayer[]) => SharpInstance;
+  ensureAlpha: (this: void) => SharpInstance;
   metadata: (this: void) => Promise<SharpMetadata>;
   png: (this: void) => SharpInstance;
+  raw: (this: void) => SharpInstance;
   resize: (this: void, width: number, height: number, options?: SharpResizeOptions) => SharpInstance;
-  toBuffer: (this: void) => Promise<Buffer>;
+  toBuffer: SharpToBuffer;
   trim: (this: void, options: SharpTrimOptions) => SharpInstance;
 }
 
@@ -47,10 +70,59 @@ export interface SharpMetadata {
 }
 
 /**
+ * The geometry raw pixels have to be read with — without it they are a flat run of bytes.
+ */
+export interface SharpRawInfo {
+  readonly channels: number;
+  readonly height: number;
+  readonly width: number;
+}
+
+/**
+ * A frame's raw pixels and the geometry they have to be read with.
+ */
+export interface SharpRawResult {
+  readonly data: Uint8Array;
+  readonly info: SharpRawInfo;
+}
+
+/**
  * The subset of `sharp`'s resize options the image helpers set.
  */
 export interface SharpResizeOptions {
   readonly fit: 'cover' | 'fill';
+}
+
+/**
+ * Asks `toBuffer` for the pixels AND the geometry they are to be read with.
+ *
+ * Literal `true` rather than `boolean`, so the overload that returns
+ * {@link SharpRawResult} is only selected when the geometry is genuinely coming
+ * back — a `false` would resolve to bare bytes with the width silently missing.
+ */
+export interface SharpResolveWithObjectOptions {
+  readonly resolveWithObject: true;
+}
+
+/**
+ * A color as `sharp` names its channels.
+ */
+export interface SharpRgbColor {
+  readonly b: number;
+  readonly g: number;
+  readonly r: number;
+}
+
+/**
+ * `sharp`'s `toBuffer`, in the two shapes the image helpers call it in.
+ *
+ * Written as an overloaded call signature rather than a union return, because
+ * which one comes back is decided by the argument and a caller should not have
+ * to narrow a result it already knows the shape of.
+ */
+export interface SharpToBuffer {
+  (this: void): Promise<Buffer>;
+  (this: void, options: SharpResolveWithObjectOptions): Promise<SharpRawResult>;
 }
 
 /**

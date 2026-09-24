@@ -205,6 +205,20 @@ export type { OpenObsidianSettingsTabParams } from './open-obsidian-settings-tab
 export { openObsidianSettingsTab } from './open-obsidian-settings-tab.ts';
 export type { OwnedInstanceExitedErrorConstructorParams } from './owned-instance-exited-error.ts';
 export { OwnedInstanceExitedError } from './owned-instance-exited-error.ts';
+export type {
+  BuildStatusBarBandFailureMessageParams,
+  PaintOutStatusBarOptions,
+  ResolveStatusBarBandParams,
+  StatusBarBandColor,
+  StatusBarBandVerdict
+} from './paint-out-status-bar.ts';
+export {
+  buildStatusBarBandFailureMessage,
+  DEFAULT_STATUS_BAR_EDGE_MARGIN_IN_PIXELS,
+  DEFAULT_STATUS_BAR_SAMPLE_INSET_IN_PIXELS,
+  paintOutStatusBar,
+  resolveStatusBarBand
+} from './paint-out-status-bar.ts';
 export type { PollInObsidianParams } from './poll-in-obsidian.ts';
 export { pollInObsidian } from './poll-in-obsidian.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';

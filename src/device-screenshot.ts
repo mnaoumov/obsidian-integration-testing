@@ -12,7 +12,9 @@
  * `adb exec-out screencap -p` reads the framebuffer instead, which is the same
  * route the trusted-input passes already use. The trade is deliberate and worth
  * writing down at every call site: a device capture carries the status-bar clock
- * and battery, so it is **not byte-reproducible** the way a page capture is.
+ * and battery, so it is **not byte-reproducible as captured** the way a page
+ * capture is. `paintOutStatusBar` is what makes one — it removes the band those
+ * live in — and a frame that is going to be committed has to go through it.
  * Reach for this only for the shots that need the keyboard; leave the rest on
  * `captureObsidianScreenshot`.
  */
