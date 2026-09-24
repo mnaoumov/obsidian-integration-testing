@@ -15,7 +15,10 @@
 
 /* v8 ignore start -- Integration-time emulator management covered by the Android integration suite, not unit tests. */
 
-import type { ChildProcess } from 'node:child_process';
+import type {
+  ChildProcess,
+  ExecFileException
+} from 'node:child_process';
 
 import { execFile } from 'node:child_process';
 import process from 'node:process';
@@ -36,6 +39,10 @@ import {
   resolveEmulatorMarkerVerdict,
   selectLiveMarkedPids
 } from './emulator-marker.ts';
+import {
+  buildHostProcessQueryMessage,
+  resolveHostProcessQueryOutcome
+} from './host-process-query-verdict.ts';
 import {
   killProcessTree,
   killProcessTreeByPid
@@ -60,13 +67,35 @@ export const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
 export const ADB_DUMPSYS_MAX_BUFFER_IN_BYTES = 8_388_608;
 
 /*
- * 30s, not the 10s a `tasklist` costs on an idle host: this query runs in the
+ * 120s, not the ~1s a `tasklist` costs on an idle host: this query runs in the
  * same post-boot contention window that inflates every `adb` round-trip 25-50x
- * (L45), and the first end-to-end run overran a 10s budget there — silently
- * disarming the teardown escalation. Sized like `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS`,
- * for the same reason.
+ * (L45), and it is the most contention-sensitive call the harness makes — it
+ * walks every process on the host, so it pays the host's slowdown ~540 times
+ * over.
+ *
+ * The two earlier numbers were both guesses, and both were too small. 10s was
+ * overrun on the first end-to-end run. 30s then failed **every** Android run
+ * from one host (measured 2026-09-20 across three runs and two AVDs), each time
+ * killing the child at ~30s with nothing on stderr — the shape that reads as an
+ * unexplained spawn failure and silently disarms the escalation.
+ *
+ * So this one is measured instead. Traced with no budget at all during an
+ * emulator boot on that host (2026-09-23, n=40): p50 2.9s, p75 4.4s, p90 17.8s,
+ * p95 29.1s, max **92.2s**. Every one of the 40 completed the full ~530-row
+ * listing and exited within 55ms of its last row, so none of them was hung —
+ * the cost is spread across the rows, in 1.0-2.7s pauses on individual
+ * processes. 30s therefore cut off the top 2.5% of a distribution whose tail
+ * reaches 92s, and a real run — which boots the emulator, starts Appium,
+ * installs the app and runs Vitest at once — is more contended than that trace.
+ *
+ * 120s is ~1.3x the worst observed call, and costs nothing at the median. If it
+ * is ever overrun again, raising it is the wrong answer: the fix is then to stop
+ * asking for a whole-host listing at all — either filter the query to the
+ * emulator image names `emulator-backend.ts` already knows, or derive ownership
+ * from the launcher `ChildProcess` this harness spawned rather than from a
+ * difference between two host-wide snapshots.
  */
-export const HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS = 30_000;
+export const HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 const EMULATOR_ESCALATED_STOP_TIMEOUT_IN_MILLISECONDS = 5000;
 const EMULATOR_STOP_POLL_INTERVAL_IN_MILLISECONDS = 500;
@@ -165,6 +194,32 @@ interface EmulatorReclaimerWaitForEmulatorStoppedParams {
 }
 
 /**
+ * Everything one host process listing left behind, kept together so the
+ * classification sees the whole picture.
+ *
+ * `execFile`'s callback discards nothing here — not stderr, and not a *failed*
+ * call's partial stdout. The old code kept only `error.message`, which for
+ * `execFile` is `Command failed: <cmd>` plus stderr, so a killed child (empty
+ * stderr) produced a line naming the command and nothing else.
+ */
+interface HostProcessQueryResult {
+  /**
+  `execFile`'s error, or `null` when the listing succeeded.
+   */
+  readonly error: ExecFileException | null;
+
+  /**
+  Whatever the child wrote to stderr.
+   */
+  readonly standardError: string;
+
+  /**
+  Whatever the child wrote to stdout — a partial listing when the call failed part-way.
+   */
+  readonly standardOutput: string;
+}
+
+/**
  * Finds, stops and verifies the harness's emulators, reporting through the
  * caller's log so each caller keeps its own prefix.
  */
@@ -213,31 +268,58 @@ export class EmulatorReclaimer {
    * one that did not run — never as an empty list a caller could read as "no
    * emulator is running".
    *
+   * Exactly **one** line is logged, from `host-process-query-verdict.ts`, and it
+   * names which way the query failed. The predecessor logged two contradictory
+   * ones for a single failure — `could not list host processes` immediately
+   * followed by `listed no processes` — because a failed call resolved `''`,
+   * which then parsed to zero rows and tripped the zero-row check as well.
+   *
+   * A failed call's **partial** stdout is parsed but never returned: the owned
+   * PID set is the difference between two listings, so a truncated one would
+   * both miss a process this run owns and claim one it does not — and killing a
+   * process the run does not own is the one thing **L46** forbids. Its row count
+   * goes into the log instead, as the evidence that the command was working.
+   *
    * @returns The host's processes, or `undefined` when the listing failed.
    */
   public async queryHostProcesses(): Promise<ProcessListEntry[] | undefined> {
     const query = buildHostProcessQuery();
-    const output = await new Promise<string>((resolve) => {
+    const startedAtInMilliseconds = Date.now();
+    const result = await new Promise<HostProcessQueryResult>((resolve) => {
       execFile(
         query.command,
         query.commandArguments,
         { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
-        (error, stdout) => {
-          if (error) {
-            this.log(`Warning: could not list host processes (\`${query.command}\`): ${error.message}`);
-          }
-          resolve(error ? '' : stdout);
+        (error, stdout, stderr) => {
+          resolve({ error, standardError: stderr, standardOutput: stdout });
         }
       );
     });
 
-    const processes = parseHostProcessList(output);
-    if (processes.length === 0) {
-      this.log(`Warning: \`${query.command}\` listed no processes.`);
-      return undefined;
+    const processes = parseHostProcessList(result.standardOutput);
+    const outcome = resolveHostProcessQueryOutcome({
+      errorCode: result.error?.code ?? null,
+      hasFailed: result.error !== null,
+      isKilled: result.error?.killed ?? false,
+      rowCount: processes.length,
+      standardError: result.standardError
+    });
+
+    const message = buildHostProcessQueryMessage({
+      command: [query.command, ...query.commandArguments].join(' '),
+      elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+      exitCode: typeof result.error?.code === 'number' ? result.error.code : null,
+      outcome,
+      partialRowCount: processes.length,
+      signal: result.error?.signal ?? null,
+      standardError: result.standardError,
+      timeoutInMilliseconds: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
+    });
+    if (message !== undefined) {
+      this.log(message);
     }
 
-    return processes;
+    return outcome === 'listed' ? processes : undefined;
   }
 
   /**

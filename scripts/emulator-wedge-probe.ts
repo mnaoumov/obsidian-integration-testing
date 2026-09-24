@@ -85,6 +85,7 @@ import {
   buildEmulatorLivenessMessage,
   resolveEmulatorLivenessVerdict
 } from '../src/emulator-liveness.ts';
+import { HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS } from '../src/emulator-reclaim.ts';
 import { errorToString } from '../src/error-to-string.ts';
 import { killProcessTreeByPid } from '../src/kill-process-tree.ts';
 import {
@@ -131,7 +132,6 @@ const DEFAULT_SETTLE_FOR_IN_SECONDS = 60;
  */
 const DEFAULT_SURVIVE_FOR_IN_SECONDS = 300;
 const EXIT_CODE_FAILED = 1;
-const HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS = 30_000;
 const KIBIBYTES_PER_MEBIBYTE = 1024;
 const LARGEST_PROCESS_LIST_IN_MEBIBYTES = 10;
 const LIVENESS_ATTEMPT_COUNT = 2;
@@ -308,6 +308,12 @@ async function resolveVerdict(deviceId: string): Promise<EmulatorLivenessVerdict
 /**
  * Runs one host query, returning empty output rather than throwing.
  *
+ * Takes the transport's own `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` rather
+ * than a local copy of it. This probe exists to measure the contended window
+ * that budget is sized for, so a private duplicate is the one value here that
+ * must never drift from it — and the copy it replaced was still the 30s that
+ * window is now measured to outrun.
+ *
  * @param command - The command.
  * @param commandArguments - Its arguments.
  * @returns The stdout, or an empty string when the query failed.
@@ -405,8 +411,9 @@ async function runProbe(): Promise<void> {
  *
  * **The PID is resolved once by the caller, and that is a measurement decision
  * rather than a performance tweak.** A full process listing is expensive on
- * Windows — the same slowness `transport-factory.ts` records overrunning a 10s
- * budget — and a first draft of this probe that re-listed on every tick spaced
+ * Windows — the same slowness `emulator-reclaim.ts` records overrunning first a
+ * 10s and then a 30s budget, measured during a boot at a p50 of 2.9s and a max
+ * of 92.2s — and a first draft of this probe that re-listed on every tick spaced
  * its own samples 27s apart, on a 5s poll interval. That reports the moment of a
  * wedge to a resolution far coarser than the wedge itself, which is the one
  * number the table exists to carry. Given the PID, a tick costs one small
