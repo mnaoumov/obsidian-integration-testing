@@ -42,6 +42,7 @@ import type {
   HostProcessQueryResult
 } from './emulator-reclaim.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
+import type { LaunchedDeviceCandidate } from './launched-device-selection.ts';
 import type { BuildPortOwnerQueryMessageParams } from './port-owner-query-verdict.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
@@ -148,6 +149,10 @@ import {
   killProcessTree,
   killProcessTreeByPid
 } from './kill-process-tree.ts';
+import {
+  resolveLaunchedDevice,
+  splitNewDevices
+} from './launched-device-selection.ts';
 import {
   HARNESS_TEMP_DIR_NAME,
   OWNED_USER_DATA_DIR_PREFIX,
@@ -1636,7 +1641,7 @@ class AppiumTransportFactory {
      */
     let actualDeviceId: string;
     try {
-      actualDeviceId = await this.waitForNewDevice(deviceIdsBefore, emulator, timeouts, (deviceId) => {
+      actualDeviceId = await this.waitForNewDevice(avdName, deviceIdsBefore, emulator, timeouts, (deviceId) => {
         this.recordEmulatorLaunchDevice({ avdName, deviceId, launchedAtInMilliseconds });
       });
     } catch (error: unknown) {
@@ -3171,6 +3176,11 @@ class AppiumTransportFactory {
    * Waits for the emulator this run launched to produce a device, and for that
    * device to become usable.
    *
+   * Only an emulator serving `avdName` is taken: a handset, or another emulator,
+   * that comes online during the boot is logged and ignored — see
+   * `launched-device-selection.ts`.
+   *
+   * @param avdName - The AVD this run launched.
    * @param deviceIdsBefore - The devices connected before the launch.
    * @param emulator - The launcher, polled for an early exit.
    * @param timeouts - The two post-boot readiness budgets.
@@ -3178,6 +3188,7 @@ class AppiumTransportFactory {
    * @returns The new device's id.
    */
   private async waitForNewDevice(
+    avdName: string,
     deviceIdsBefore: string[],
     emulator: ProcessLaunch,
     timeouts: DeviceReadinessTimeouts,
@@ -3188,13 +3199,49 @@ class AppiumTransportFactory {
     );
     const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS;
 
-    while (Date.now() < deadline) {
-      const currentIds = await this.getConnectedDeviceIds();
-      const newIds = currentIds.filter((id) => !deviceIdsBefore.includes(id));
+    /*
+     * Each device is reported once, not on every poll. A device ruled out stays
+     * ruled out: a handset never becomes an emulator, and an emulator serving
+     * another AVD is not going to start serving this one.
+     */
+    const ignoredDeviceIds = new Set<string>();
 
-      if (newIds.length > 0) {
-        const actualDeviceId = newIds[0] ?? '';
-        this.log(`Device ${actualDeviceId} appeared in ADB, waiting for boot to complete...`);
+    while (Date.now() < deadline) {
+      const { emulatorDeviceIds, nonEmulatorDeviceIds } = splitNewDevices({
+        connectedDeviceIds: await this.getConnectedDeviceIds(),
+        deviceIdsBefore
+      });
+
+      for (const deviceId of nonEmulatorDeviceIds) {
+        if (ignoredDeviceIds.has(deviceId)) {
+          continue;
+        }
+
+        ignoredDeviceIds.add(deviceId);
+        this.log(`Device ${deviceId} came online during the emulator boot but is not an emulator; ignoring it.`);
+      }
+
+      const candidates: LaunchedDeviceCandidate[] = [];
+      for (const deviceId of emulatorDeviceIds) {
+        if (!ignoredDeviceIds.has(deviceId)) {
+          candidates.push({ deviceId, probedAvdName: await this.probeAvdName(deviceId) });
+        }
+      }
+
+      const launched = resolveLaunchedDevice({ avdName, candidates });
+
+      for (const deviceId of launched.otherAvdDeviceIds) {
+        ignoredDeviceIds.add(deviceId);
+        this.log(`Device ${deviceId} came online during the emulator boot but serves another AVD, not "${avdName}"; ignoring it.`);
+      }
+
+      if (launched.unansweredDeviceIds.length > 0) {
+        this.log(`Device(s) ${launched.unansweredDeviceIds.join(', ')} did not say which AVD they serve yet; asking again on the next poll.`);
+      }
+
+      if (launched.deviceId !== undefined) {
+        const actualDeviceId = launched.deviceId;
+        this.log(`Device ${actualDeviceId} appeared in ADB, serving AVD "${avdName}"; waiting for boot to complete...`);
         onDeviceAppeared(actualDeviceId);
         await this.waitForBoot(actualDeviceId, deadline, emulator);
         await this.waitForDeviceReady(actualDeviceId, timeouts);
