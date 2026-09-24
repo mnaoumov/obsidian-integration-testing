@@ -141,7 +141,7 @@ describe('buildAvdProbeSummary', () => {
 });
 
 describe('buildUnreadableDevicesMessage', () => {
-  it('should name the single device, the budget, the collision and the recovery', () => {
+  it('should name the single device, both channels, the budget, the collision and the recovery', () => {
     const message = buildUnreadableDevicesMessage({
       avdName: AVD_NAME,
       probeTimeoutInMilliseconds: PROBE_TIMEOUT_IN_MILLISECONDS,
@@ -149,11 +149,24 @@ describe('buildUnreadableDevicesMessage', () => {
     });
 
     expect(message).toContain('AVD "obsidian_test"');
-    expect(message).toContain('device emulator-5554 did not answer');
+    expect(message).toContain('device emulator-5554 identified itself over neither');
+    expect(message).toContain('`adb -s emulator-5554 shell getprop ro.boot.qemu.avd_name`');
     expect(message).toContain('`adb -s emulator-5554 emu avd name`');
     expect(message).toContain('within 5000ms');
     expect(message).toContain('Running multiple emulators with the same AVD');
-    expect(message).toContain('`adb kill-server`');
+  });
+
+  it('should warn that an unreadable device most likely belongs to another run, rather than telling the reader to kill it', () => {
+    const message = buildUnreadableDevicesMessage({
+      avdName: AVD_NAME,
+      probeTimeoutInMilliseconds: PROBE_TIMEOUT_IN_MILLISECONDS,
+      unreadableDeviceIds: ['emulator-5554']
+    });
+
+    expect(message).toContain('most likely ANOTHER run');
+    expect(message).toContain('destroys work this run cannot see');
+    expect(message).toContain('only once you know the device is yours');
+    expect(message).not.toContain('Kill the unresponsive device');
   });
 
   it('should pluralize for several devices, without naming a per-device command', () => {
@@ -163,8 +176,11 @@ describe('buildUnreadableDevicesMessage', () => {
       unreadableDeviceIds: ['emulator-5554', 'emulator-5556']
     });
 
-    expect(message).toContain('devices emulator-5554, emulator-5556 did not answer');
+    expect(message).toContain('devices emulator-5554, emulator-5556 identified themselves over neither');
+    expect(message).toContain('`adb -s <device> shell getprop ro.boot.qemu.avd_name`');
     expect(message).toContain('`adb -s <device> emu avd name`');
-    expect(message).toContain('Kill the unresponsive devices');
+    expect(message).toContain('most likely OTHER runs');
+    expect(message).toContain('killing them');
+    expect(message).toContain('only once you know the devices are yours');
   });
 });

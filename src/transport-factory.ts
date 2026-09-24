@@ -31,6 +31,10 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { AppiumServerMarker } from './appium-server-marker.ts';
+import type {
+  AvdNameChannel,
+  AvdNameChannelAnswer
+} from './avd-name-channel.ts';
 import type { AvdProbeResult } from './avd-probe-verdict.ts';
 import type { EmulatorLivenessProbeOutcome } from './emulator-liveness.ts';
 import type { HostCommandQuery } from './emulator-reclaim.ts';
@@ -75,6 +79,13 @@ import {
   checkAvdExists,
   listAvailableAvds
 } from './avd-list.ts';
+import {
+  buildAvdNameChannelArguments,
+  describeAdbCommand,
+  FIRST_AVD_NAME_CHANNEL,
+  parseAvdNameAnswer,
+  resolveNextAvdNameChannel
+} from './avd-name-channel.ts';
 import {
   buildAvdProbeSummary,
   buildUnreadableDevicesMessage,
@@ -918,6 +929,31 @@ class AppiumTransportFactory {
         this.log(message);
       },
       startedAtInMilliseconds
+    });
+  }
+
+  /**
+   * Asks one device for its AVD name over one channel.
+   *
+   * Reports *whether the command came back* alongside what it printed, because
+   * the sequencing in `avd-name-channel.ts` turns on that difference: a channel
+   * that answered an empty property is alive and worth asking again with the
+   * other key, while one that never came back is not.
+   *
+   * @param deviceId - The device to ask.
+   * @param channel - The channel to ask it over.
+   * @returns What that channel answered.
+   */
+  private askDeviceForAvdName(deviceId: string, channel: AvdNameChannel): Promise<AvdNameChannelAnswer> {
+    return new Promise((resolve) => {
+      execFile(
+        'adb',
+        buildAvdNameChannelArguments({ channel, deviceId }),
+        { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          resolve(error ? { didRespond: false, reportedAvdName: '' } : { didRespond: true, reportedAvdName: parseAvdNameAnswer(stdout) });
+        }
+      );
     });
   }
 
@@ -1895,37 +1931,49 @@ class AppiumTransportFactory {
   }
 
   /**
-   * Reads one emulator's AVD name from its console, retrying once.
+   * Reads one emulator's AVD name, over the guest property first and its
+   * console only as a fallback, retrying the whole sequence once.
    *
-   * The retry is what makes the refusal proportionate: the probe's whole budget
-   * is 5s, and a second look costs less than a colliding launch does. What it
-   * must never do is report a non-answer as an answer — the discarded `_error`
-   * this replaces resolved `''`, which compared unequal to the wanted AVD and so
-   * read as a definite "some other AVD".
+   * The retry is what makes the refusal proportionate: each attempt's budget is
+   * 5s, and a second look costs less than a colliding launch does. What it must
+   * never do is report a non-answer as an answer — the discarded `_error` this
+   * replaces resolved `''`, which compared unequal to the wanted AVD and so read
+   * as a definite "some other AVD".
+   *
+   * **Which channel it asks is the other half.** The console is a separate TCP
+   * port that wedges on its own, so keying the refusal on it made one
+   * unresponsive emulator — routinely another project's — block every Android
+   * run on the machine. The property travels `adbd`, the channel this run needs
+   * anyway; see `avd-name-channel.ts`.
    *
    * @param deviceId - The emulator to ask.
-   * @returns The AVD name it answered, or `undefined` when it did not answer.
+   * @returns The AVD name it answered, or `undefined` when no channel answered.
    */
   private async probeAvdName(deviceId: string): Promise<string | undefined> {
-    for (let attempt = 1; attempt <= AVD_PROBE_ATTEMPT_COUNT; attempt++) {
-      const answer = await new Promise<string | undefined>((resolve) => {
-        execFile(
-          'adb',
-          ['-s', deviceId, 'emu', 'avd', 'name'],
-          { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS },
-          (error, stdout) => {
-            resolve(error ? undefined : stdout.split('\n', 1)[0]?.trim());
-          }
-        );
-      });
+    const propertyCommand = describeAdbCommand(buildAvdNameChannelArguments({ channel: FIRST_AVD_NAME_CHANNEL, deviceId }));
+    const consoleCommand = describeAdbCommand(buildAvdNameChannelArguments({ channel: 'console', deviceId }));
 
-      if (answer !== undefined && answer.length > 0) {
-        return answer;
+    for (let attempt = 1; attempt <= AVD_PROBE_ATTEMPT_COUNT; attempt++) {
+      let channel: AvdNameChannel | undefined = FIRST_AVD_NAME_CHANNEL;
+
+      while (channel !== undefined) {
+        const answer = await this.askDeviceForAvdName(deviceId, channel);
+
+        if (answer.reportedAvdName.length > 0) {
+          if (channel !== FIRST_AVD_NAME_CHANNEL) {
+            this.log(`Device ${deviceId} answered \`${describeAdbCommand(buildAvdNameChannelArguments({ channel, deviceId }))}\`.`);
+          }
+
+          return answer.reportedAvdName;
+        }
+
+        channel = resolveNextAvdNameChannel({ channel, didChannelRespond: answer.didRespond });
       }
 
       if (attempt < AVD_PROBE_ATTEMPT_COUNT) {
         this.log(
-          `Device ${deviceId} did not answer \`adb -s ${deviceId} emu avd name\` within ${String(ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS)}ms; retrying once.`
+          `Device ${deviceId} identified itself over neither \`${propertyCommand}\` nor \`${consoleCommand}\` `
+            + `within ${String(ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS)}ms each; retrying once.`
         );
       }
     }

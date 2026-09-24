@@ -38,6 +38,17 @@ export interface RunAdbParams {
    * The device to address, as `adb devices` lists it.
    */
   readonly deviceId: string;
+
+  /**
+   * How long to give the call before killing it, in milliseconds.
+   *
+   * Omitted — the default — the call waits indefinitely, which is right for the
+   * capture helpers: a screencap of a big framebuffer is slow, not stuck. A
+   * caller that is *identifying* a device it may not own passes one, because
+   * there the whole point is to give up on a wedged guest rather than hang the
+   * run behind it.
+   */
+  readonly timeoutInMilliseconds?: number | undefined;
 }
 
 /**
@@ -58,7 +69,7 @@ export async function runAdbBinary(params: RunAdbParams): Promise<Uint8Array> {
   const commandArguments = ['-s', params.deviceId, ...params.commandArguments];
 
   return await new Promise((resolve, reject) => {
-    execFile('adb', commandArguments, { encoding: 'buffer', maxBuffer: OUTPUT_MAX_BUFFER_IN_BYTES }, (error, stdout) => {
+    execFile('adb', commandArguments, { encoding: 'buffer', maxBuffer: OUTPUT_MAX_BUFFER_IN_BYTES, timeout: params.timeoutInMilliseconds }, (error, stdout) => {
       if (error) {
         reject(new Error(`Failed to run 'adb ${commandArguments.join(' ')}': ${error.message}. Is ADB installed and in PATH?`));
         return;

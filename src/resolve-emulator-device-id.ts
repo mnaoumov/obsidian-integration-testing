@@ -11,6 +11,7 @@
 
 /* v8 ignore start -- Integration-time code (shells out to a real device) covered by integration tests, not unit tests. */
 
+import type { AvdNameChannel } from './avd-name-channel.ts';
 import type { EmulatorDeviceCandidate } from './emulator-device-id.ts';
 
 import { listOnlineDeviceIds } from './adb-device-list.ts';
@@ -18,7 +19,14 @@ import {
   runAdbText,
   runAdbTextWithoutDevice
 } from './adb.ts';
+import {
+  buildAvdNameChannelCommand,
+  FIRST_AVD_NAME_CHANNEL,
+  parseAvdNameAnswer,
+  resolveNextAvdNameChannel
+} from './avd-name-channel.ts';
 import { selectEmulatorDeviceId } from './emulator-device-id.ts';
+import { ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS } from './emulator-reclaim.ts';
 
 /**
  * Parameters for {@link resolveEmulatorDeviceId}.
@@ -61,6 +69,12 @@ export async function resolveEmulatorDeviceId(params: ResolveEmulatorDeviceIdPar
 /**
  * Asks every online emulator which AVD it was started from.
  *
+ * **A device that will not identify itself is listed with an empty name, not
+ * thrown over.** It is somebody else's wedged emulator far more often than it is
+ * this caller's, and failing the whole lookup over it is precisely the
+ * machine-wide interlock `avd-name-channel.ts` exists to undo — the wanted
+ * emulator, sitting right beside it and answering perfectly, is still found.
+ *
  * @returns A {@link Promise} that resolves to one entry per running emulator.
  */
 async function listEmulatorDeviceCandidates(): Promise<EmulatorDeviceCandidate[]> {
@@ -69,13 +83,50 @@ async function listEmulatorDeviceCandidates(): Promise<EmulatorDeviceCandidate[]
 
   const candidates: EmulatorDeviceCandidate[] = [];
   for (const deviceId of deviceIds) {
-    // `adb emu avd name` answers with the name and then `OK`, each on its own line.
-    const output = await runAdbText({ commandArguments: ['emu', 'avd', 'name'], deviceId });
-    const avdName = output.split('\n', 1)[0]?.trim() ?? '';
-    candidates.push({ avdName, deviceId });
+    candidates.push({ avdName: await probeAvdName(deviceId), deviceId });
   }
 
   return candidates;
+}
+
+/**
+ * Asks one emulator which AVD it was started from, over each channel in turn.
+ *
+ * The guest property comes first because it travels `adbd` — the channel this
+ * lookup needs anyway — while the console is a separate port that wedges on its
+ * own; see `avd-name-channel.ts`. Every call is bounded, so one unresponsive
+ * device costs a timeout rather than the whole lookup.
+ *
+ * @param deviceId - The emulator to ask.
+ * @returns A {@link Promise} that resolves to the AVD name, or `''` when no channel identified it.
+ */
+async function probeAvdName(deviceId: string): Promise<string> {
+  let channel: AvdNameChannel | undefined = FIRST_AVD_NAME_CHANNEL;
+
+  while (channel !== undefined) {
+    let didChannelRespond = true;
+    let reportedAvdName = '';
+
+    try {
+      reportedAvdName = parseAvdNameAnswer(
+        await runAdbText({
+          commandArguments: buildAvdNameChannelCommand(channel),
+          deviceId,
+          timeoutInMilliseconds: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS
+        })
+      );
+    } catch {
+      didChannelRespond = false;
+    }
+
+    if (reportedAvdName.length > 0) {
+      return reportedAvdName;
+    }
+
+    channel = resolveNextAvdNameChannel({ channel, didChannelRespond });
+  }
+
+  return '';
 }
 
 /* v8 ignore stop */
