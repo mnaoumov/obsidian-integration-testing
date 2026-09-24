@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 17.0.0
+
+- fix(android): merge confirming a showing keyboard before pressing KEYCODE_BACK
+- fix(android): merge adopting only the emulator that serves the launched AVD
+- test(android): merge raiseSoftKeyboard emptying and restore coverage
+- fix(android): merge host-query failure reporting for the port-owner query and wedge probe
+- perf(android): list only emulator processes on Windows
+- docs(contributing): name main as the PR base branch
+- fix(screenshots): put an already-up soft keyboard down before raiseSoftKeyboard measures
+- docs(agents): point L47 at the channel change it no longer describes
+- fix(android): identify an emulator over adb, not over its console
+- feat(screenshots): make a device frame committable - paint the status bar out, and touch an empty field
+- fix(emulator-reclaim): measure the host process listing's budget, and report which way it failed
+- fix(transport-appium): stop the vault marker overwriting the app.json register just pushed
+- fix(enable-plugin): restore a patched slot only while our own patch is still in it
+
 ## 16.0.0
 
 - feat(label-screenshot)!: make the caption band opaque, so nothing under it reaches the frame
