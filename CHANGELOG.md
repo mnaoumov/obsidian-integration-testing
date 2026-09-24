@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 17.0.1
+
+- fix(android): merge waiting for clickElement's target to stop moving
+
 ## 17.0.0
 
 - fix(android): merge confirming a showing keyboard before pressing KEYCODE_BACK
