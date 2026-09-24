@@ -8,6 +8,7 @@ import type { SoftKeyboardViewportSnapshot } from './soft-keyboard-geometry.ts';
 
 import {
   buildSoftKeyboardDiagnosticMessage,
+  checkIsInputMethodShown,
   checkIsSoftKeyboardUp,
   DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS,
   parseInputMethodState,
@@ -175,6 +176,38 @@ describe('resolveSoftKeyboardTapPoints', () => {
   });
 });
 
+describe('checkIsInputMethodShown', () => {
+  it('should read mInputShown=true as a showing keyboard', () => {
+    expect(checkIsInputMethodShown('mShowRequested=true | mInputShown=true | mHaveConnection=true')).toBe(true);
+  });
+
+  it('should read it at the start and at the end of the state', () => {
+    expect(checkIsInputMethodShown('mInputShown=true')).toBe(true);
+    expect(checkIsInputMethodShown('mShowRequested=true mInputShown=true')).toBe(true);
+  });
+
+  it('should read mInputShown=false as no keyboard', () => {
+    expect(checkIsInputMethodShown('mShowRequested=false | mInputShown=false | mHaveConnection=true')).toBe(false);
+  });
+
+  /*
+   * mIsInputViewShown is the IME's own view, which can linger while the IME is hidden; the question is
+   * whether the IME is shown, which is mInputShown alone.
+   */
+  it('should not read a different field that happens to say shown', () => {
+    expect(checkIsInputMethodShown('mInputShown=false mIsInputViewShown=true')).toBe(false);
+  });
+
+  it('should match the whole token only', () => {
+    expect(checkIsInputMethodShown('mInputShown=true1')).toBe(false);
+    expect(checkIsInputMethodShown('xmInputShown=true')).toBe(false);
+  });
+
+  it('should read an empty state as no keyboard', () => {
+    expect(checkIsInputMethodShown('')).toBe(false);
+  });
+});
+
 describe('parseInputMethodState', () => {
   it('should keep only the fields that say whether the IME is showing', () => {
     const dumpsysOutput = [
@@ -221,22 +254,37 @@ describe('buildSoftKeyboardDiagnosticMessage', () => {
   });
 
   /*
-   * The lift is the verdict, so a lift of zero is the one number worth a sentence: it is also what an
-   * already-up keyboard looks like, which is the case this check cannot see and the reader can.
+   * The lift is the verdict, so a lift of zero is the one number worth a sentence. It used to be a hint
+   * that the keyboard might have been up already; raiseSoftKeyboard now puts such a keyboard down before it
+   * measures, so the sentence states what is left — and which half is left depends on the device.
    */
-  it('should spell out what a lift of zero could also mean', () => {
+  it('should say a zero lift under a showing keyboard means the keyboard did not lift the field', () => {
     const message = buildSoftKeyboardDiagnosticMessage({
       baselineSnapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP),
-      inputMethodState: 'mInputShown=true',
+      inputMethodState: 'mInputShown=true | mIsInputViewShown=true',
       screenshotPath: 'a.png',
       snapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP)
     });
 
     expect(message).toContain('lift=0');
-    expect(message).toContain('already up before the first touch');
+    expect(message).toContain('not a keyboard left up by an earlier call');
+    expect(message).toContain('the touch raised one and it did not lift this field');
+    expect(message).not.toContain('If the device says');
   });
 
-  it('should not raise the already-up possibility when the field did move', () => {
+  it('should say a zero lift with no keyboard showing means the touch raised none', () => {
+    const message = buildSoftKeyboardDiagnosticMessage({
+      baselineSnapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP),
+      inputMethodState: 'mInputShown=false',
+      screenshotPath: 'a.png',
+      snapshot: buildSnapshotAtTop(MEASURED_CENTERED_MODAL_TOP)
+    });
+
+    expect(message).toContain('not a keyboard left up by an earlier call');
+    expect(message).toContain('the touch raised none');
+  });
+
+  it('should not make the zero-lift statement when the field did move', () => {
     const message = buildSoftKeyboardDiagnosticMessage({
       baselineSnapshot: buildSnapshot(0),
       inputMethodState: 'mInputShown=true',
@@ -244,7 +292,7 @@ describe('buildSoftKeyboardDiagnosticMessage', () => {
       snapshot: buildSnapshot(50)
     });
 
-    expect(message).not.toContain('already up before the first touch');
+    expect(message).not.toContain('did not move at all');
   });
 
   it('should say the field was gone rather than printing a number for it', () => {
@@ -275,7 +323,7 @@ describe('buildSoftKeyboardDiagnosticMessage', () => {
     expect(message).toContain('baselineInputTop=(no input)');
     expect(message).toContain('inputTop=710');
     expect(message).toContain('lift=(no input)');
-    expect(message).not.toContain('already up before the first touch');
+    expect(message).not.toContain('did not move at all');
   });
 
   it('should say so when the device reported no input_method state at all', () => {

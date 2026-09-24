@@ -168,6 +168,12 @@ export const DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS = 100;
 const INPUT_METHOD_STATE_REG_EXP = /mInputShown|mIsInputViewShown|mHaveConnection|mShowRequested/;
 
 /**
+ * The flag `dumpsys input_method` sets while an IME is showing, as a whole token — so neither a value that
+ * merely starts with `true` nor a longer field name ending in `mInputShown` can match.
+ */
+const INPUT_SHOWN_REG_EXP = /(?:^|[\s|])mInputShown=true(?:$|[\s|])/;
+
+/**
  * How many equal parts the field is split into to find its centre.
  */
 const CENTER_DIVISOR = 2;
@@ -178,7 +184,7 @@ const CENTER_DIVISOR = 2;
  * A bare "the keyboard did not come up" is unreadable — what the reader needs is what the page saw and what
  * the device thought, side by side, because the two disagreeing is the whole diagnosis. The page's half is
  * the lift and the two tops it came from, since the lift is the verdict; a lift of zero gets a sentence of
- * its own, being the one reading that an already-up keyboard also produces.
+ * its own, saying what is left once an already-up keyboard has been ruled out.
  *
  * @param params - The evidence gathered before the first touch and after the last one.
  * @returns The message, ready to throw.
@@ -192,10 +198,26 @@ export function buildSoftKeyboardDiagnosticMessage(params: BuildSoftKeyboardDiag
     `raiseSoftKeyboard: the keyboard did not come up. Device framebuffer written to ${params.screenshotPath}.`,
     `page: innerHeight=${String(params.snapshot.innerHeight)} baselineInputTop=${formatMeasurement(baselineTop)} inputTop=${formatMeasurement(currentTop)} lift=${formatMeasurement(lift)}`,
     `device: ${params.inputMethodState || '(no input_method state reported)'}`,
-    ...(lift === 0 ? ['The field did not move at all. If the device says the keyboard is showing, it was already up before the first touch — this check cannot tell that from a field that never lifts.'] : [])
+    ...(lift === 0 ? [buildZeroLiftStatement(params.inputMethodState)] : [])
   ];
 
   return lines.join('\n');
+}
+
+/**
+ * Decides whether the device reports an IME showing, from `dumpsys input_method`.
+ *
+ * This is the DEVICE's answer, and it is the one `raiseSoftKeyboard` asks before it measures anything:
+ * nothing in the page reports the keyboard, and the geometric proof in {@link checkIsSoftKeyboardUp}
+ * cannot see a keyboard that was already up when its baseline was read. It is deliberately NOT the proof
+ * that a raise worked — a device reports `mInputShown=true` just as readily for an IME drawn over a field
+ * that never moved, which is exactly the unproved frame the geometric delta exists to refuse.
+ *
+ * @param inputMethodState - The fields {@link parseInputMethodState} returned.
+ * @returns Whether the device says an IME is showing.
+ */
+export function checkIsInputMethodShown(inputMethodState: string): boolean {
+  return INPUT_SHOWN_REG_EXP.test(inputMethodState);
 }
 
 /**
@@ -211,7 +233,9 @@ export function buildSoftKeyboardDiagnosticMessage(params: BuildSoftKeyboardDiag
  * that from a centred modal with no keyboard — both read as "clear of the bottom and not moving" — and of
  * the two possible wrong answers, a loud `false` is the one worth keeping: it fails a capture rather than
  * silently returning a screenshot of a keyboard that is not there. Read the baseline with the keyboard
- * down, which is what `raiseSoftKeyboard` does.
+ * down. `raiseSoftKeyboard` guarantees that itself: it asks the device ({@link checkIsInputMethodShown})
+ * and puts a showing keyboard down before it reads the baseline, so every call proves its own lift rather
+ * than taking the device's word for one.
  *
  * @param params - The geometry before and after the touch, and how far the field must have lifted.
  * @returns Whether the field lifted far enough to have made room for a keyboard.
@@ -267,6 +291,26 @@ export function resolveSoftKeyboardTapPoints(params: ResolveSoftKeyboardTapPoint
       { xInPixels, yInPixels: centerYInPixels + topOffsetInPixels },
       { xInPixels, yInPixels: centerYInPixels }
     ];
+}
+
+/**
+ * Says what a lift of zero means, now that `raiseSoftKeyboard` puts down any keyboard already showing
+ * before it reads its baseline.
+ *
+ * It used to be a hint — "if the device says the keyboard is showing, it was already up" — printed under an
+ * error whose own device line often said exactly that. The helper has since taken that cause away, so the
+ * sentence states what is left rather than guessing at what might be.
+ *
+ * @param inputMethodState - The fields {@link parseInputMethodState} returned after the last touch.
+ * @returns The statement.
+ */
+function buildZeroLiftStatement(inputMethodState: string): string {
+  const cause = checkIsInputMethodShown(inputMethodState)
+    ? 'The device says a keyboard is showing now, so the touch raised one and it did not lift this field.'
+    : 'The device says no keyboard is showing, so the touch raised none.';
+
+  return 'The field did not move at all. No keyboard was up when the baseline was read — raiseSoftKeyboard puts down '
+    + `one the device reports showing before it measures — so this is not a keyboard left up by an earlier call. ${cause}`;
 }
 
 /**
