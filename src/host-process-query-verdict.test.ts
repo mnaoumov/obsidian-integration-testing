@@ -295,6 +295,13 @@ describe('buildHostProcessQueryMessage', () => {
     );
   });
 
+  // The wedge probe reuses the classifier, and a failure costs it a `?` tick rather than a teardown escalation.
+  it('should close the line with a caller-supplied consequence in place of the teardown one', () => {
+    expect(buildHostProcessQueryMessage({ ...buildParams('crashed', { exitCode: 1 }), consequence: 'This tick prints `?`.' })).toBe(
+      `Warning: \`${COMMAND}\` died after 30.1s without explaining itself (exit 1, nothing on stderr, 0 process(es) listed) — it did not refuse the request, since it always explains a refusal on stderr. Suspect a crash or an interfering security product, and try the command by hand. This tick prints \`?\`.`
+    );
+  });
+
   it('should throw rather than invent a line for an outcome it does not recognize', () => {
     expect(() => buildHostProcessQueryMessage(buildParams(castTo<HostProcessQueryOutcome>('probably-fine')))).toThrow('Unhandled value: probably-fine');
   });

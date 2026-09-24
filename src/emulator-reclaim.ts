@@ -173,6 +173,32 @@ export interface HostCommandQuery {
   readonly commandArguments: string[];
 }
 
+/**
+ * Everything one host process listing left behind, kept together so the
+ * classification sees the whole picture.
+ *
+ * `execFile`'s callback discards nothing here — not stderr, and not a *failed*
+ * call's partial stdout. The old code kept only `error.message`, which for
+ * `execFile` is `Command failed: <cmd>` plus stderr, so a killed child (empty
+ * stderr) produced a line naming the command and nothing else.
+ */
+export interface HostProcessQueryResult {
+  /**
+  `execFile`'s error, or `null` when the listing succeeded.
+   */
+  readonly error: ExecFileException | null;
+
+  /**
+  Whatever the child wrote to stderr.
+   */
+  readonly standardError: string;
+
+  /**
+  Whatever the child wrote to stdout — a partial listing when the call failed part-way.
+   */
+  readonly standardOutput: string;
+}
+
 interface EmulatorReclaimerCheckIsEmulatorGoneParams {
   /**
   The device the emulator serves, or `undefined` when none ever appeared — the PIDs are then the only proof.
@@ -200,32 +226,6 @@ interface EmulatorReclaimerWaitForEmulatorStoppedParams {
   How long to wait for the emulator to disappear, in milliseconds.
    */
   readonly timeoutInMilliseconds: number;
-}
-
-/**
- * Everything one host process listing left behind, kept together so the
- * classification sees the whole picture.
- *
- * `execFile`'s callback discards nothing here — not stderr, and not a *failed*
- * call's partial stdout. The old code kept only `error.message`, which for
- * `execFile` is `Command failed: <cmd>` plus stderr, so a killed child (empty
- * stderr) produced a line naming the command and nothing else.
- */
-interface HostProcessQueryResult {
-  /**
-  `execFile`'s error, or `null` when the listing succeeded.
-   */
-  readonly error: ExecFileException | null;
-
-  /**
-  Whatever the child wrote to stderr.
-   */
-  readonly standardError: string;
-
-  /**
-  Whatever the child wrote to stdout — a partial listing when the call failed part-way.
-   */
-  readonly standardOutput: string;
 }
 
 /**

@@ -82,6 +82,11 @@ export interface BuildHostProcessQueryMessageParams {
   readonly command: string;
 
   /**
+  What the failure costs the caller, closing the line. Defaults to the teardown consequence, which is what the harness's own listing loses; the wedge probe states what *it* loses instead.
+   */
+  readonly consequence?: string | undefined;
+
+  /**
   How long the call took before it ended, in milliseconds.
    */
   readonly elapsedInMilliseconds: number;
@@ -123,7 +128,12 @@ export interface BuildHostProcessQueryMessageParams {
  * `listed` is the only success. The rest are distinct failures on purpose: they
  * need different fixes, and the line they used to share named none of them.
  */
-export type HostProcessQueryOutcome = 'crashed' | 'listed' | 'not-found' | 'output-overran' | 'refused' | 'timed-out' | 'zero-rows';
+export type HostProcessQueryOutcome = 'listed' | 'zero-rows' | HostQueryFailure;
+
+/**
+ * The ways a host query can fail, shared by every query that classifies its ending.
+ */
+export type HostQueryFailure = 'crashed' | 'not-found' | 'output-overran' | 'refused' | 'timed-out';
 
 /**
  * Parameters for {@link resolveHostProcessQueryOutcome}.
@@ -161,6 +171,11 @@ export interface ResolveHostProcessQueryOutcomeParams {
 }
 
 /**
+ * Parameters for {@link resolveHostQueryFailure}.
+ */
+export type ResolveHostQueryFailureParams = Pick<ResolveHostProcessQueryOutcomeParams, 'errorCode' | 'isKilled' | 'standardError'>;
+
+/**
  * Builds the single line the listing logs for an outcome.
  *
  * One line, never two: the contradictory pair in this file's header is the
@@ -172,7 +187,7 @@ export interface ResolveHostProcessQueryOutcomeParams {
  */
 export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessageParams): string | undefined {
   const cost = `after ${formatDuration(params.elapsedInMilliseconds)}`;
-  const consequence = 'Teardown falls back to `adb devices` alone and has no PID to escalate to.';
+  const consequence = params.consequence ?? 'Teardown falls back to `adb devices` alone and has no PID to escalate to.';
 
   switch (params.outcome) {
     case 'crashed': {
@@ -203,6 +218,48 @@ export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessag
 }
 
 /**
+ * Renders a millisecond duration for a log line.
+ *
+ * @param durationInMilliseconds - The duration.
+ * @returns Whole milliseconds under a second, and seconds to one decimal above it.
+ */
+export function formatDuration(durationInMilliseconds: number): string {
+  return durationInMilliseconds < MILLISECONDS_PER_SECOND
+    ? `${String(durationInMilliseconds)}ms`
+    : `${(durationInMilliseconds / MILLISECONDS_PER_SECOND).toFixed(1)}s`;
+}
+
+/**
+ * Renders a child's exit code, in the base a reader can look it up in.
+ *
+ * @param exitCode - The exit code, or `null` when the child was killed before exiting.
+ * @returns The code in hex when it is an `NTSTATUS` failure, in decimal otherwise.
+ */
+export function formatExitCode(exitCode: null | number): string {
+  if (exitCode === null) {
+    return 'unknown';
+  }
+
+  return exitCode >= NTSTATUS_FAILURE_FLOOR ? `0x${exitCode.toString(HEXADECIMAL_RADIX).toUpperCase()}` : String(exitCode);
+}
+
+/**
+ * Renders what the command said when it refused, as one sentence.
+ *
+ * `tasklist` ends its own `ERROR: …` with a period and a `\r\r\n`, so quoting it
+ * verbatim and adding the sentence break this line needs produced `recognized..`
+ * — the terminator is supplied only when the tool did not supply one.
+ *
+ * @param standardError - Whatever the child wrote to stderr.
+ * @returns The refusal, trimmed, ending in exactly one period.
+ */
+export function formatRefusal(standardError: string): string {
+  const refusal = standardError.trim();
+
+  return refusal.endsWith('.') ? refusal : `${refusal}.`;
+}
+
+/**
  * Decides how the listing ended, from what `execFile` reported.
  *
  * The order of the branches is the order of specificity: the two failures Node
@@ -222,6 +279,21 @@ export function resolveHostProcessQueryOutcome(params: ResolveHostProcessQueryOu
     return params.rowCount === 0 && !params.hasReportedNoMatch ? 'zero-rows' : 'listed';
   }
 
+  return resolveHostQueryFailure(params);
+}
+
+/**
+ * Decides which way a host query that **did** fail failed.
+ *
+ * Split out of {@link resolveHostProcessQueryOutcome} so a sibling query whose
+ * success rules differ — the port-owner query, where zero owners is an answer —
+ * can share one definition of each failure without inheriting `listed` and
+ * `zero-rows`.
+ *
+ * @param params - What `execFile` reported for the failed call.
+ * @returns The failure outcome.
+ */
+export function resolveHostQueryFailure(params: ResolveHostQueryFailureParams): HostQueryFailure {
   if (params.errorCode === 'ENOENT') {
     return 'not-found';
   }
@@ -236,46 +308,4 @@ export function resolveHostProcessQueryOutcome(params: ResolveHostProcessQueryOu
 
   // `tasklist` and `ps` both explain a refusal on stderr, so silence means the child never got to object.
   return params.standardError.trim() === '' ? 'crashed' : 'refused';
-}
-
-/**
- * Renders a millisecond duration for a log line.
- *
- * @param durationInMilliseconds - The duration.
- * @returns Whole milliseconds under a second, and seconds to one decimal above it.
- */
-function formatDuration(durationInMilliseconds: number): string {
-  return durationInMilliseconds < MILLISECONDS_PER_SECOND
-    ? `${String(durationInMilliseconds)}ms`
-    : `${(durationInMilliseconds / MILLISECONDS_PER_SECOND).toFixed(1)}s`;
-}
-
-/**
- * Renders a child's exit code, in the base a reader can look it up in.
- *
- * @param exitCode - The exit code, or `null` when the child was killed before exiting.
- * @returns The code in hex when it is an `NTSTATUS` failure, in decimal otherwise.
- */
-function formatExitCode(exitCode: null | number): string {
-  if (exitCode === null) {
-    return 'unknown';
-  }
-
-  return exitCode >= NTSTATUS_FAILURE_FLOOR ? `0x${exitCode.toString(HEXADECIMAL_RADIX).toUpperCase()}` : String(exitCode);
-}
-
-/**
- * Renders what the command said when it refused, as one sentence.
- *
- * `tasklist` ends its own `ERROR: …` with a period and a `\r\r\n`, so quoting it
- * verbatim and adding the sentence break this line needs produced `recognized..`
- * — the terminator is supplied only when the tool did not supply one.
- *
- * @param standardError - Whatever the child wrote to stderr.
- * @returns The refusal, trimmed, ending in exactly one period.
- */
-function formatRefusal(standardError: string): string {
-  const refusal = standardError.trim();
-
-  return refusal.endsWith('.') ? refusal : `${refusal}.`;
 }
