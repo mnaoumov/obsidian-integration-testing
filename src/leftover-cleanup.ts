@@ -196,7 +196,7 @@ export interface SweepHostLeftoversResult {
 }
 
 /**
- * Parameters for {@link checkIsRemovableDir}.
+ * Parameters for {@link checkIsRemovableDirectory}.
  */
 interface CheckIsRemovableDirectoryParams {
   /**
