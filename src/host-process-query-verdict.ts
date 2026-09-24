@@ -140,6 +140,11 @@ export interface ResolveHostProcessQueryOutcomeParams {
   readonly hasFailed: boolean;
 
   /**
+  Whether a **filtered** query affirmatively reported that nothing matched (`checkIsNoMatchReported`) — the one way an empty answer is an answer.
+   */
+  readonly hasReportedNoMatch: boolean;
+
+  /**
   `execFile`'s `error.killed`: whether the budget expired and the child was killed.
    */
   readonly isKilled: boolean;
@@ -189,7 +194,7 @@ export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessag
       return `Warning: \`${params.command}\` did not finish within its ${formatDuration(params.timeoutInMilliseconds)} budget and was killed ${cost}${params.signal === null ? '' : ` (${params.signal})`}, having listed ${String(params.partialRowCount)} process(es) by then — so it was working, not refusing, and the budget is what ran out. The partial listing is discarded rather than used: the owned set is a *difference* between two listings, and a truncated one on either side would both miss a process this run owns and claim one it does not. ${consequence}`;
     }
     case 'zero-rows': {
-      return `Warning: \`${params.command}\` exited cleanly ${cost} but its output parsed to no processes, which a running host cannot be. Treating it as a failed query. ${consequence}`;
+      return `Warning: \`${params.command}\` exited cleanly ${cost} but its output parsed to no processes and carried no no-match notice — a whole-host listing cannot be empty on a running host, and a filtered one says so when nothing matches. Treating it as a failed query. ${consequence}`;
     }
     default: {
       return assertNever(params.outcome);
@@ -210,8 +215,11 @@ export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessag
  */
 export function resolveHostProcessQueryOutcome(params: ResolveHostProcessQueryOutcomeParams): HostProcessQueryOutcome {
   if (!params.hasFailed) {
-    // A host always has processes, so a clean exit that parses to nothing is a failed query however it exited.
-    return params.rowCount === 0 ? 'zero-rows' : 'listed';
+    /*
+     * A host always has processes, so a whole-host listing that parses to nothing is a failed query however it
+     * exited. A filtered one may legitimately match nothing — but only when it says so; silence is still a failure.
+     */
+    return params.rowCount === 0 && !params.hasReportedNoMatch ? 'zero-rows' : 'listed';
   }
 
   if (params.errorCode === 'ENOENT') {

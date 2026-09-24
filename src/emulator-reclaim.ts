@@ -23,13 +23,17 @@ import type {
 import { execFile } from 'node:child_process';
 import process from 'node:process';
 
-import type { ProcessListEntry } from './emulator-backend.ts';
+import type {
+  EmulatorProcessQuery,
+  ProcessListEntry
+} from './emulator-backend.ts';
 import type { EmulatorMarker } from './emulator-marker.ts';
 
 import { checkIsDeviceListed } from './adb-device-list.ts';
 import {
-  parsePosixProcessList,
-  parseWindowsTaskList,
+  buildEmulatorProcessQueries,
+  checkIsNoMatchReported,
+  parseEmulatorProcessQueryOutput,
   selectEmulatorBackendPids
 } from './emulator-backend.ts';
 import {
@@ -67,11 +71,11 @@ export const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
 export const ADB_DUMPSYS_MAX_BUFFER_IN_BYTES = 8_388_608;
 
 /*
- * 120s, not the ~1s a `tasklist` costs on an idle host: this query runs in the
- * same post-boot contention window that inflates every `adb` round-trip 25-50x
- * (L45), and it is the most contention-sensitive call the harness makes — it
- * walks every process on the host, so it pays the host's slowdown ~540 times
- * over.
+ * 120s, not the ~1s a whole-host `tasklist` costs on an idle host: this query
+ * runs in the same post-boot contention window that inflates every `adb`
+ * round-trip 25-50x (L45), and as a whole-host listing it was the most
+ * contention-sensitive call the harness made — it walked every process on the
+ * host, so it paid the host's slowdown ~540 times over.
  *
  * The two earlier numbers were both guesses, and both were too small. 10s was
  * overrun on the first end-to-end run. 30s then failed **every** Android run
@@ -88,12 +92,17 @@ export const ADB_DUMPSYS_MAX_BUFFER_IN_BYTES = 8_388_608;
  * reaches 92s, and a real run — which boots the emulator, starts Appium,
  * installs the app and runs Vitest at once — is more contended than that trace.
  *
- * 120s is ~1.3x the worst observed call, and costs nothing at the median. If it
- * is ever overrun again, raising it is the wrong answer: the fix is then to stop
- * asking for a whole-host listing at all — either filter the query to the
- * emulator image names `emulator-backend.ts` already knows, or derive ownership
- * from the launcher `ChildProcess` this harness spawned rather than from a
- * difference between two host-wide snapshots.
+ * 120s is ~1.3x the worst observed call, and costs nothing at the median.
+ *
+ * **That tail belonged to the whole-host listing, which Windows no longer
+ * makes.** The query is now filtered to the emulator image names
+ * (`buildEmulatorProcessQueries`), and the filtered call skips the per-process
+ * work the tail was made of: with every core saturated it never exceeded 505ms
+ * where the whole-host call stalled for 120.9s. The budget stays at 120s as a
+ * ceiling rather than a forecast — it costs nothing when the call is fast, and
+ * POSIX still lists the whole host. If a filtered call ever overruns it, the
+ * next step is not a fifth number but deriving ownership without a process
+ * listing at all.
  */
 export const HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS = 120_000;
 
@@ -261,65 +270,44 @@ export class EmulatorReclaimer {
   }
 
   /**
-   * Lists every process on the host.
+   * Lists the host's emulator processes — every process whose image name could
+   * be the launcher or a QEMU backend, and on POSIX every process on the host.
    *
-   * A host always has processes, so a listing that parses to **zero** rows is a
-   * failed query however it exited, and comes back as `undefined` exactly like
-   * one that did not run — never as an empty list a caller could read as "no
-   * emulator is running".
+   * On Windows this is two **filtered** `tasklist` calls rather than one
+   * whole-host listing (`buildEmulatorProcessQueries` carries the measurement
+   * that made the switch), run in parallel. A filtered call may legitimately
+   * find nothing, but only when it says so: a clean exit with neither a row nor
+   * `tasklist`'s own no-match notice is still a failed query, and comes back as
+   * `undefined` exactly like one that did not run — never as an empty list a
+   * caller could read as "no emulator is running".
    *
-   * Exactly **one** line is logged, from `host-process-query-verdict.ts`, and it
-   * names which way the query failed. The predecessor logged two contradictory
-   * ones for a single failure — `could not list host processes` immediately
-   * followed by `listed no processes` — because a failed call resolved `''`,
-   * which then parsed to zero rows and tripped the zero-row check as well.
+   * Each failed call logs **one** line, from `host-process-query-verdict.ts`,
+   * naming which way it failed. The predecessor logged two contradictory ones
+   * for a single failure — `could not list host processes` immediately followed
+   * by `listed no processes` — because a failed call resolved `''`, which then
+   * parsed to zero rows and tripped the zero-row check as well.
    *
-   * A failed call's **partial** stdout is parsed but never returned: the owned
-   * PID set is the difference between two listings, so a truncated one would
-   * both miss a process this run owns and claim one it does not — and killing a
-   * process the run does not own is the one thing **L46** forbids. Its row count
-   * goes into the log instead, as the evidence that the command was working.
+   * **If any call fails, the whole answer is `undefined`**, and a failed call's
+   * partial stdout is parsed but never returned: the owned PID set is the
+   * difference between two answers, so a half answer — one image name's
+   * processes without the other's, or a truncated listing — would both miss a
+   * process this run owns and claim one it does not, and killing a process the
+   * run does not own is the one thing **L46** forbids. The row count goes into
+   * the log instead, as the evidence that the command was working.
    *
-   * @returns The host's processes, or `undefined` when the listing failed.
+   * @returns The host's emulator processes, or `undefined` when a query failed.
    */
-  public async queryHostProcesses(): Promise<ProcessListEntry[] | undefined> {
-    const query = buildHostProcessQuery();
-    const startedAtInMilliseconds = Date.now();
-    const result = await new Promise<HostProcessQueryResult>((resolve) => {
-      execFile(
-        query.command,
-        query.commandArguments,
-        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
-        (error, stdout, stderr) => {
-          resolve({ error, standardError: stderr, standardOutput: stdout });
-        }
-      );
-    });
-
-    const processes = parseHostProcessList(result.standardOutput);
-    const outcome = resolveHostProcessQueryOutcome({
-      errorCode: result.error?.code ?? null,
-      hasFailed: result.error !== null,
-      isKilled: result.error?.killed ?? false,
-      rowCount: processes.length,
-      standardError: result.standardError
-    });
-
-    const message = buildHostProcessQueryMessage({
-      command: [query.command, ...query.commandArguments].join(' '),
-      elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
-      exitCode: typeof result.error?.code === 'number' ? result.error.code : null,
-      outcome,
-      partialRowCount: processes.length,
-      signal: result.error?.signal ?? null,
-      standardError: result.standardError,
-      timeoutInMilliseconds: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
-    });
-    if (message !== undefined) {
-      this.log(message);
+  public async queryEmulatorProcesses(): Promise<ProcessListEntry[] | undefined> {
+    const answers = await Promise.all(buildEmulatorProcessQueries(process.platform).map((query) => this.runEmulatorProcessQuery(query)));
+    const processes: ProcessListEntry[] = [];
+    for (const answer of answers) {
+      if (answer === undefined) {
+        return undefined;
+      }
+      processes.push(...answer);
     }
 
-    return outcome === 'listed' ? processes : undefined;
+    return processes;
   }
 
   /**
@@ -342,7 +330,7 @@ export class EmulatorReclaimer {
       return;
     }
 
-    const processes = await this.queryHostProcesses();
+    const processes = await this.queryEmulatorProcesses();
     if (processes === undefined) {
       // Without a listing every marker would read as stale, and deleting them would leave the leftovers impossible to convict.
       this.log(`Cannot judge ${String(markers.length)} emulator marker(s) without a host process listing; leaving them for a later run.`);
@@ -514,6 +502,52 @@ export class EmulatorReclaimer {
   }
 
   /**
+   * Runs one of the emulator process queries and classifies how it ended.
+   *
+   * @param query - The query.
+   * @returns Its parsed rows, or `undefined` when it failed.
+   */
+  private async runEmulatorProcessQuery(query: EmulatorProcessQuery): Promise<ProcessListEntry[] | undefined> {
+    const startedAtInMilliseconds = Date.now();
+    const result = await new Promise<HostProcessQueryResult>((resolve) => {
+      execFile(
+        query.command,
+        [...query.commandArguments],
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout, stderr) => {
+          resolve({ error, standardError: stderr, standardOutput: stdout });
+        }
+      );
+    });
+
+    const processes = parseEmulatorProcessQueryOutput({ output: result.standardOutput, query });
+    const outcome = resolveHostProcessQueryOutcome({
+      errorCode: result.error?.code ?? null,
+      hasFailed: result.error !== null,
+      hasReportedNoMatch: checkIsNoMatchReported({ output: result.standardOutput, query }),
+      isKilled: result.error?.killed ?? false,
+      rowCount: processes.length,
+      standardError: result.standardError
+    });
+
+    const message = buildHostProcessQueryMessage({
+      command: [query.command, ...query.commandArguments].join(' '),
+      elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+      exitCode: typeof result.error?.code === 'number' ? result.error.code : null,
+      outcome,
+      partialRowCount: processes.length,
+      signal: result.error?.signal ?? null,
+      standardError: result.standardError,
+      timeoutInMilliseconds: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
+    });
+    if (message !== undefined) {
+      this.log(message);
+    }
+
+    return outcome === 'listed' ? processes : undefined;
+  }
+
+  /**
    * Polls until this run's emulator is gone, or the budget elapses.
    *
    * @param params - The device, the PIDs this run owns, and the budget.
@@ -537,17 +571,6 @@ export class EmulatorReclaimer {
 }
 
 /**
- * Builds the platform's "list every process" query.
- *
- * @returns The command and arguments to run.
- */
-function buildHostProcessQuery(): HostCommandQuery {
-  return process.platform === 'win32'
-    ? { command: 'tasklist', commandArguments: ['/FO', 'CSV', '/NH'] }
-    : { command: 'ps', commandArguments: ['-eo', 'pid=,comm='] };
-}
-
-/**
  * Names the emulator a marker describes, for the log.
  *
  * @param marker - The marker.
@@ -557,16 +580,6 @@ function describeMarkedEmulator(marker: EmulatorMarker): string {
   return marker.deviceId === undefined
     ? `AVD "${marker.avdName}" (no device: it was still booting when it was recorded)`
     : `AVD "${marker.avdName}" on device ${marker.deviceId}`;
-}
-
-/**
- * Parses a host process listing with the platform's parser.
- *
- * @param output - Raw stdout of {@link buildHostProcessQuery}'s command.
- * @returns The listed processes.
- */
-function parseHostProcessList(output: string): ProcessListEntry[] {
-  return process.platform === 'win32' ? parseWindowsTaskList(output) : parsePosixProcessList(output);
 }
 
 /* v8 ignore stop */
