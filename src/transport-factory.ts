@@ -119,8 +119,7 @@ import { spawnEmulatorReaper } from './emulator-reaper.ts';
 import {
   ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS,
   ADB_DUMPSYS_MAX_BUFFER_IN_BYTES,
-  EmulatorReclaimer,
-  HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
+  EmulatorReclaimer
 } from './emulator-reclaim.ts';
 import {
   buildAvdSnapshotDirectoryCandidates,
@@ -277,6 +276,17 @@ const NETWORK_READY_POLL_INTERVAL_IN_MILLISECONDS = 2000;
 const NEW_COMMAND_TIMEOUT_IN_SECONDS = 300;
 // The W3C default, restated for the same reason as the implicit wait above.
 const PAGE_LOAD_TIMEOUT_IN_MILLISECONDS = 300_000;
+/*
+ * The port query's own budget, held apart from the whole-host process listing's
+ * even though both run in the same contended window. It used to borrow
+ * `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS`, which was fine while that was
+ * also 30s — but that one was raised to 120s on a measurement of `tasklist`
+ * walking ~540 processes, and `netstat -ano` / `lsof -ti` does nothing of the
+ * kind. Inheriting a 4x rise on somebody else's evidence is how a budget stops
+ * meaning anything, and this one gates the teardown escalation for the Appium
+ * server rather than the emulator.
+ */
+const PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS = 30_000;
 const SERVER_INSTALL_TIMEOUT_IN_MILLISECONDS = 120_000;
 const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 /*
@@ -1760,12 +1770,18 @@ class AppiumTransportFactory {
    * failing the run it is cleaning up for. **It says so, loudly** — an empty set
    * that means "no backend to own" and one that means "the query failed" are
    * otherwise the same log line, and the second silently disarms the escalation.
-   * That is not hypothetical: the first end-to-end run of this code logged
+   *
+   * That is not hypothetical, and it has now happened twice for the same reason:
+   * the budget was a guess. The first end-to-end run of this code logged
    * `owned emulator PIDs: []` for a launch whose backend was demonstrably there,
-   * because `tasklist` overran a 10s budget on a host the wedged emulator had
+   * because `tasklist` overran a **10s** budget on a host the wedged emulator had
    * already slowed to the point where every `adb` call was timing out too — the
-   * same contention **L45** sizes `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` for, and
-   * the same "wrong budget silently disables the check" shape.
+   * same contention **L45** sizes `ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS` for. Its
+   * replacement, 30s, then did the same thing on **every** Android run from one
+   * host. `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` carries the measurement
+   * that replaced the guessing, and `host-process-query-verdict.ts` carries the
+   * reporting that makes the next overrun say which failure it was instead of
+   * printing a bare `Command failed:` with nothing after it.
    *
    * A host always has processes, so a listing that parses to **zero** rows is a
    * failed query however it exited, and is reported like one.
@@ -1816,7 +1832,7 @@ class AppiumTransportFactory {
       execFile(
         query.command,
         query.commandArguments,
-        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS },
         (error, stdout) => {
           // `lsof` exits non-zero when nothing holds the port, which is a legitimate empty answer.
           resolve(parsePortOwnerPids({ output: error ? '' : stdout, port }));
@@ -2058,7 +2074,7 @@ class AppiumTransportFactory {
    * Worth its own write because the console shutdown is the only stop that
    * releases the AVD's `multiinstance.lock` (**L46**), and it needs a device to
    * talk to. Deliberately **no** host process listing here: that query is
-   * budgeted at {@link HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS} for exactly
+   * budgeted at `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` (120s) for exactly
    * this contended window, and spending it inside the boot path would eat the
    * readiness budgets that follow. The backend PIDs arrive with the success
    * write, one listing, as before.
