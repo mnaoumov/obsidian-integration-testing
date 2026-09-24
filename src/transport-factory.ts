@@ -1826,7 +1826,7 @@ class AppiumTransportFactory {
    * @returns The emulator PIDs not in `knownPids`.
    */
   private async listEmulatorBackendPids(knownPids: readonly number[]): Promise<number[]> {
-    const processes = await this.emulators.queryHostProcesses();
+    const processes = await this.emulators.queryEmulatorProcesses();
     if (processes === undefined) {
       this.log(
         'Warning: the host process listing failed, so this run cannot identify the emulator backend it owns. Teardown will fall back to `adb devices` alone and will have no PID to escalate to.'
@@ -2778,7 +2778,7 @@ class AppiumTransportFactory {
       return [];
     }
 
-    const processes = await this.emulators.queryHostProcesses();
+    const processes = await this.emulators.queryEmulatorProcesses();
     if (processes === undefined) {
       this.log(`Cannot tell whether AVD "${avdName}" is a leftover this harness started without a host process listing; reusing it without taking it over.`);
       return [];

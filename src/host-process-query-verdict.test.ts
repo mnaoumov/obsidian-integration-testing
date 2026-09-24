@@ -74,6 +74,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: null,
       hasFailed: false,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 528,
       standardError: ''
@@ -88,16 +89,44 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: null,
       hasFailed: false,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 0,
       standardError: ''
     })).toBe('zero-rows');
   });
 
+  /*
+   * A filtered `tasklist` that matches nothing exits 0 and says so on stdout —
+   * the one empty answer that is an answer.
+   */
+  it('should report a clean call that parsed nothing but reported no match as listed', () => {
+    expect(resolveHostProcessQueryOutcome({
+      errorCode: null,
+      hasFailed: false,
+      hasReportedNoMatch: true,
+      isKilled: false,
+      rowCount: 0,
+      standardError: ''
+    })).toBe('listed');
+  });
+
+  it('should not let a no-match notice rescue a call that failed', () => {
+    expect(resolveHostProcessQueryOutcome({
+      errorCode: null,
+      hasFailed: true,
+      hasReportedNoMatch: true,
+      isKilled: true,
+      rowCount: 0,
+      standardError: ''
+    })).toBe('timed-out');
+  });
+
   it('should report a command that never ran as not-found', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: 'ENOENT',
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 0,
       standardError: ''
@@ -108,6 +137,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 0,
       standardError: ''
@@ -124,6 +154,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: null,
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: true,
       rowCount: 297,
       standardError: ''
@@ -134,6 +165,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: 1,
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 0,
       standardError: 'ERROR: The search filter cannot be recognized.\r\r\n'
@@ -150,6 +182,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: 3_221_225_477,
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 0,
       standardError: ''
@@ -160,6 +193,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: 1,
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: false,
       rowCount: 0,
       standardError: '  \r\n  '
@@ -170,6 +204,7 @@ describe('resolveHostProcessQueryOutcome', () => {
     expect(resolveHostProcessQueryOutcome({
       errorCode: 'ENOENT',
       hasFailed: true,
+      hasReportedNoMatch: false,
       isKilled: true,
       rowCount: 0,
       standardError: ''
@@ -256,7 +291,7 @@ describe('buildHostProcessQueryMessage', () => {
 
   it('should call a clean call that listed nothing a failed query', () => {
     expect(buildHostProcessQueryMessage(buildParams('zero-rows', { elapsedInMilliseconds: 900 }))).toBe(
-      `Warning: \`${COMMAND}\` exited cleanly after 900ms but its output parsed to no processes, which a running host cannot be. Treating it as a failed query. ${CONSEQUENCE}`
+      `Warning: \`${COMMAND}\` exited cleanly after 900ms but its output parsed to no processes and carried no no-match notice — a whole-host listing cannot be empty on a running host, and a filtered one says so when nothing matches. Treating it as a failed query. ${CONSEQUENCE}`
     );
   });
 

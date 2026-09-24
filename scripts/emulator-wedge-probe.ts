@@ -77,8 +77,8 @@ import {
   buildEmulatorEnvironment
 } from '../src/emulator-arguments.ts';
 import {
-  parsePosixProcessList,
-  parseWindowsTaskList,
+  buildEmulatorProcessQueries,
+  parseEmulatorProcessQueryOutput,
   selectEmulatorBackendPids
 } from '../src/emulator-backend.ts';
 import {
@@ -216,8 +216,8 @@ function delay(durationInMilliseconds: number): Promise<void> {
  * @returns The PID, or `undefined` when no backend is listed.
  */
 async function findBackendPid(): Promise<number | undefined> {
-  const hostProcesses = await listHostProcesses();
-  return hostProcesses.find((entry) => toBaseName(entry.name).startsWith(QEMU_BACKEND_NAME_PREFIX))?.pid;
+  const emulatorProcesses = await listEmulatorProcesses();
+  return emulatorProcesses.find((entry) => toBaseName(entry.name).startsWith(QEMU_BACKEND_NAME_PREFIX))?.pid;
 }
 
 /**
@@ -232,22 +232,21 @@ async function findBackendPid(): Promise<number | undefined> {
  * @returns The remaining emulator backend PIDs.
  */
 async function listEmulatorBackendPids(knownPids: readonly number[]): Promise<number[]> {
-  return selectEmulatorBackendPids({ knownPids, processes: await listHostProcesses() });
+  return selectEmulatorBackendPids({ knownPids, processes: await listEmulatorProcesses() });
 }
 
 /**
- * Lists every process on the host, with the platform's own query and parser.
+ * Lists the host's emulator processes, with the same queries and parser the
+ * transport uses — filtered to the emulator image names on Windows.
  *
- * @returns The listed processes, or none when the query failed.
+ * @returns The listed processes; a query that failed contributes none.
  */
-async function listHostProcesses(): Promise<ProcessListEntry[]> {
-  const isWindows = process.platform === 'win32';
-  const query = isWindows
-    ? { command: 'tasklist', commandArguments: ['/FO', 'CSV', '/NH'] }
-    : { command: 'ps', commandArguments: ['-eo', 'pid=,comm='] };
-  const output = await runHostQuery(query.command, query.commandArguments);
+async function listEmulatorProcesses(): Promise<ProcessListEntry[]> {
+  const answers = await Promise.all(
+    buildEmulatorProcessQueries(process.platform).map(async (query) => parseEmulatorProcessQueryOutput({ output: await runHostQuery(query.command, query.commandArguments), query }))
+  );
 
-  return isWindows ? parseWindowsTaskList(output) : parsePosixProcessList(output);
+  return answers.flat();
 }
 
 /**

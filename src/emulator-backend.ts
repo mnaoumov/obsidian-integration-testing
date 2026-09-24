@@ -26,6 +26,56 @@
  */
 
 /**
+ * Parameters for {@link checkIsNoMatchReported}.
+ */
+export interface CheckIsNoMatchReportedParams {
+  /**
+  The query's stdout.
+   */
+  readonly output: string;
+
+  /**
+  The query that produced it.
+   */
+  readonly query: EmulatorProcessQuery;
+}
+
+/**
+ * One command that lists (some of) the host's emulator processes.
+ */
+export interface EmulatorProcessQuery {
+  /**
+  The executable.
+   */
+  readonly command: string;
+
+  /**
+  Its arguments.
+   */
+  readonly commandArguments: readonly string[];
+
+  /**
+  Whether the command asks only for emulator image names rather than for every process on the host — which is what makes an empty answer legitimate.
+   */
+  readonly isFiltered: boolean;
+}
+
+/**
+ * Parameters for {@link parseEmulatorProcessQueryOutput}.
+ */
+export interface ParseEmulatorProcessQueryOutputParams {
+  /**
+  The query's stdout.
+   */
+  readonly output: string;
+
+  /**
+  The query that produced it.
+   */
+  readonly query: EmulatorProcessQuery;
+}
+
+/**
  * One process from a host process listing.
  */
 export interface ProcessListEntry {
@@ -60,12 +110,82 @@ export interface SelectEmulatorBackendPidsParams {
  * including the `-headless` suffix `-no-window` runs produce.
  */
 const EMULATOR_BACKEND_NAME_PATTERN = /^(?:emulator|emulator64-[\w.-]+|qemu-system-[\w.-]+)$/;
+/**
+ * The image-name prefixes `tasklist` is asked for — every name
+ * `EMULATOR_BACKEND_NAME_PATTERN` accepts starts with one of them.
+ *
+ * One call per prefix, because `tasklist`'s `/FI` clauses are ANDed: there is
+ * no way to OR two image names in a single call.
+ */
+const EMULATOR_IMAGE_NAME_PREFIXES = ['emulator', 'qemu-system'] as const;
+
+/**
+ * The notice `tasklist` prints on stdout, with exit 0, when a filter matched
+ * nothing: `INFO: No tasks are running which match the specified criteria.`
+ * Only the `INFO:` prefix is matched; a localized Windows that words it
+ * differently reads as a silent empty answer, which is reported as a failed
+ * query — the safe direction, since a failed query kills nothing.
+ */
+const TASK_LIST_NO_MATCH_NOTICE_PATTERN = /^INFO: /m;
 const EXECUTABLE_SUFFIX_PATTERN = /\.exe$/;
 const RADIX_DECIMAL = 10;
 /**
  * Only the image name and the PID are read, so the split stops after them.
  */
 const TASK_LIST_FIELDS_READ = 2;
+
+/**
+ * Builds the commands that list the host's emulator processes.
+ *
+ * **On Windows the query is filtered to the emulator image names, and that is a
+ * measured decision.** A whole-host `tasklist` does per-process work for every
+ * row, so it pays the host's contention once per process: during an emulator
+ * boot it measured p50 2.9s and max 92.2s over ~530 rows, and with every core
+ * saturated one call stalled for 120.9s — until the load exited — where the
+ * filtered call never exceeded 505ms (2026-09-23, n=8 each). The per-row cost is
+ * work the filter skips, so the filtered query does not inherit it.
+ *
+ * **On POSIX the whole-host `ps` is kept.** It reads `/proc` and was never
+ * measured slow, and a whole-host listing keeps the invariant that zero rows
+ * means a failed query — which `pgrep`'s exit 1 on no match would muddy.
+ *
+ * @param platform - The host platform, e.g. `process.platform`.
+ * @returns The queries to run; their parsed rows together are the answer.
+ */
+export function buildEmulatorProcessQueries(platform: NodeJS.Platform): EmulatorProcessQuery[] {
+  return platform === 'win32'
+    ? EMULATOR_IMAGE_NAME_PREFIXES.map((prefix) => ({
+      command: 'tasklist',
+      commandArguments: ['/FO', 'CSV', '/NH', '/FI', `IMAGENAME eq ${prefix}*`],
+      isFiltered: true
+    }))
+    : [{ command: 'ps', commandArguments: ['-eo', 'pid=,comm='], isFiltered: false }];
+}
+
+/**
+ * Checks whether a query affirmatively reported that nothing matched.
+ *
+ * Only a **filtered** query can say that: a whole-host listing always has rows,
+ * so an empty one is never an answer. A filtered query that printed nothing at
+ * all is not an answer either — silence and "no emulator is running" must stay
+ * distinguishable, or a failed query reads as a host with no emulator on it.
+ *
+ * @param params - The query and its stdout.
+ * @returns Whether the query's output carries its own no-match notice.
+ */
+export function checkIsNoMatchReported(params: CheckIsNoMatchReportedParams): boolean {
+  return params.query.isFiltered && TASK_LIST_NO_MATCH_NOTICE_PATTERN.test(params.output);
+}
+
+/**
+ * Parses the output of one of {@link buildEmulatorProcessQueries}' commands.
+ *
+ * @param params - The query and its stdout.
+ * @returns One entry per parsable row, in listed order.
+ */
+export function parseEmulatorProcessQueryOutput(params: ParseEmulatorProcessQueryOutputParams): ProcessListEntry[] {
+  return params.query.command === 'tasklist' ? parseWindowsTaskList(params.output) : parsePosixProcessList(params.output);
+}
 
 /**
  * Parses `ps -eo pid=,comm=` output.

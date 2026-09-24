@@ -4,7 +4,12 @@ import {
   it
 } from 'vitest';
 
+import type { EmulatorProcessQuery } from './emulator-backend.ts';
+
 import {
+  buildEmulatorProcessQueries,
+  checkIsNoMatchReported,
+  parseEmulatorProcessQueryOutput,
   parsePosixProcessList,
   parseWindowsTaskList,
   selectEmulatorBackendPids
@@ -138,3 +143,78 @@ describe('selectEmulatorBackendPids', () => {
     expect(selectEmulatorBackendPids({ knownPids: [], processes: [] })).toEqual([]);
   });
 });
+
+/**
+ * What `tasklist` prints, with exit 0, when a filter matched nothing — captured
+ * from this host on 2026-09-23.
+ */
+const TASK_LIST_NO_MATCH_OUTPUT = 'INFO: No tasks are running which match the specified criteria.\r\n';
+
+describe('buildEmulatorProcessQueries', () => {
+  it('should ask tasklist for each emulator image-name prefix on Windows', () => {
+    expect(buildEmulatorProcessQueries('win32')).toEqual([
+      { command: 'tasklist', commandArguments: ['/FO', 'CSV', '/NH', '/FI', 'IMAGENAME eq emulator*'], isFiltered: true },
+      { command: 'tasklist', commandArguments: ['/FO', 'CSV', '/NH', '/FI', 'IMAGENAME eq qemu-system*'], isFiltered: true }
+    ]);
+  });
+
+  it('should keep the whole-host ps listing on POSIX', () => {
+    expect(buildEmulatorProcessQueries('linux')).toEqual([
+      { command: 'ps', commandArguments: ['-eo', 'pid=,comm='], isFiltered: false }
+    ]);
+  });
+
+  /*
+   * The filter and the selection are two spellings of one set of names. A
+   * backend the filter never asks for is a backend no run can ever own, so every
+   * name the selection accepts must start with a prefix the filter asks for.
+   */
+  it('should ask for every image name the backend selection accepts', () => {
+    const prefixes = buildEmulatorProcessQueries('win32').map((query) => (query.commandArguments.at(-1) ?? '').replace('IMAGENAME eq ', '').replace('*', ''));
+    const names = ['emulator.exe', 'emulator64-x86_64.exe', 'qemu-system-x86_64.exe', 'qemu-system-x86_64-headless.exe'];
+
+    for (const name of names) {
+      expect(selectEmulatorBackendPids({ knownPids: [], processes: [{ name, pid: 1 }] })).toEqual([1]);
+      expect(prefixes.some((prefix) => name.startsWith(prefix))).toBe(true);
+    }
+  });
+});
+
+describe('checkIsNoMatchReported', () => {
+  it('should recognize tasklist\'s no-match notice on a filtered query', () => {
+    expect(checkIsNoMatchReported({ output: TASK_LIST_NO_MATCH_OUTPUT, query: getFirstQuery('win32') })).toBe(true);
+  });
+
+  it('should not read silence as a no-match answer', () => {
+    expect(checkIsNoMatchReported({ output: '', query: getFirstQuery('win32') })).toBe(false);
+  });
+
+  it('should never let a whole-host listing answer "none"', () => {
+    expect(checkIsNoMatchReported({ output: TASK_LIST_NO_MATCH_OUTPUT, query: getFirstQuery('linux') })).toBe(false);
+  });
+});
+
+describe('parseEmulatorProcessQueryOutput', () => {
+  it('should parse a tasklist answer as CSV', () => {
+    expect(parseEmulatorProcessQueryOutput({ output: TASK_LIST_OUTPUT, query: getFirstQuery('win32') })).toHaveLength(3);
+  });
+
+  it('should parse the no-match notice to no rows', () => {
+    expect(parseEmulatorProcessQueryOutput({ output: TASK_LIST_NO_MATCH_OUTPUT, query: getFirstQuery('win32') })).toEqual([]);
+  });
+
+  it('should parse a ps answer as columns', () => {
+    expect(parseEmulatorProcessQueryOutput({ output: '  42 qemu-system-x86_64\n', query: getFirstQuery('linux') })).toEqual([
+      { name: 'qemu-system-x86_64', pid: 42 }
+    ]);
+  });
+});
+
+function getFirstQuery(platform: NodeJS.Platform): EmulatorProcessQuery {
+  const [query] = buildEmulatorProcessQueries(platform);
+  if (!query) {
+    throw new Error(`No emulator process query for ${platform}.`);
+  }
+
+  return query;
+}
