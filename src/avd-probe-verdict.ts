@@ -26,11 +26,23 @@
  * to answer it — a wedged emulator times out every `adb` call — which is the
  * condition under which a colliding launch does the most damage.
  *
+ * **What the probe ASKS moved since; what it decides did not.** The question
+ * now travels the guest property over `adbd` first and the emulator console only
+ * as a fallback (`avd-name-channel.ts`), because keying a machine-wide refusal
+ * on the console alone let one wedged emulator — usually another project's —
+ * stop every Android run on the host. The four outcomes and the three verdicts
+ * here are unchanged: silence is still not a skip, it is simply far rarer.
+ *
  * Kept separate from the integration-only `transport-factory` (excluded from
  * unit tests) so the classification stays unit-testable — the factory itself
  * shells out to `adb`.
  */
 
+import {
+  buildAvdNameChannelArguments,
+  describeAdbCommand,
+  FIRST_AVD_NAME_CHANNEL
+} from './avd-name-channel.ts';
 import { assertNever } from './type-guards.ts';
 
 /**
@@ -147,9 +159,10 @@ export interface ClassifyAvdProbeParams {
  *
  * Only such a device can collide with this run's launch, so only such a device's
  * silence is worth refusing over. A physical handset (an arbitrary serial) or a
- * TCP-attached device answers `adb … emu avd name` with an error however healthy
- * it is; reading that as "did not answer" would block every run on a host with a
- * phone plugged in, which is a worse defect than the one this module fixes.
+ * TCP-attached device carries no `qemu` AVD property and errors on `adb … emu
+ * avd name` however healthy it is; reading either as "did not answer" would
+ * block every run on a host with a phone plugged in, which is a worse defect
+ * than the one this module fixes.
  */
 const EMULATOR_DEVICE_ID_PATTERN = /^emulator-\d+$/;
 
@@ -186,14 +199,22 @@ export function buildUnreadableDevicesMessage(params: BuildUnreadableDevicesMess
   const isSingle = params.unreadableDeviceIds.length === 1;
 
   const subject = isSingle ? `device ${deviceList}` : `devices ${deviceList}`;
-  const command = isSingle ? `adb -s ${deviceList} emu avd name` : 'adb -s <device> emu avd name';
+  const deviceLabel = isSingle ? deviceList : '<device>';
+  const propertyCommand = describeAdbCommand(buildAvdNameChannelArguments({ channel: FIRST_AVD_NAME_CHANNEL, deviceId: deviceLabel }));
+  const consoleCommand = describeAdbCommand(buildAvdNameChannelArguments({ channel: 'console', deviceId: deviceLabel }));
   const holder = isSingle ? 'it is' : 'one of them is';
-  const remedy = isSingle ? 'Kill the unresponsive device' : 'Kill the unresponsive devices';
+  const identified = isSingle ? 'identified itself' : 'identified themselves';
+  const owner = isSingle ? 'A device this run cannot read is most likely ANOTHER run\'s' : 'Devices this run cannot read are most likely OTHER runs\'';
+  const killing = isSingle ? 'killing it' : 'killing them';
+  const ownership = isSingle ? 'the device is yours' : 'the devices are yours';
+  const otherRun = isSingle ? 'that run' : 'those runs';
 
-  return `AVD "${params.avdName}": ${subject} did not answer \`${command}\` within ${String(params.probeTimeoutInMilliseconds)}ms (retried once), `
+  return `AVD "${params.avdName}": ${subject} ${identified} over neither \`${propertyCommand}\` (the guest property, over adbd) `
+    + `nor \`${consoleCommand}\` (the emulator's own console) within ${String(params.probeTimeoutInMilliseconds)}ms each (retried once), `
     + `so this run cannot tell whether ${holder} already serving that AVD. Starting an emulator anyway would collide `
     + '(`FATAL | Running multiple emulators with the same AVD is an experimental feature`), which the emulator reports only to its own stdout. '
-    + `${remedy}, or run \`adb kill-server\`, then retry.`;
+    + `${owner}: ${killing}, or running \`adb kill-server\`, destroys work this run cannot see, so do that only once you know ${ownership}. `
+    + `Otherwise wait for ${otherRun} to finish, and retry once \`adb devices\` no longer lists it.`;
 }
 
 /**
