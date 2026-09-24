@@ -33,7 +33,7 @@ import {
 } from './vault-registry.ts';
 
 /**
- * Content value for a single entry in a {@link PopulateFiles} map.
+ * Content value for a single entry in a {@link PopulateFilesParams} map.
  *
  * - `string` — text file (written as UTF-8).
  * - `Uint8Array` — binary file (written as raw bytes; `Buffer` is accepted

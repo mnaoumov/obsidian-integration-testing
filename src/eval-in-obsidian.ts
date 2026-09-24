@@ -60,7 +60,7 @@ interface EvalValueEnvelope {
 const NO_OUTPUT = '(no output)';
 
 /**
- * Parameters for {@link CommonArguments.clickElement}.
+ * Parameters for {@link Lib.clickElement}.
  */
 export interface ClickElementParams {
   /**
@@ -87,7 +87,7 @@ export interface ClickElementParams {
 }
 
 /**
- * Parameters for {@link CommonArguments.clickMouse}.
+ * Parameters for {@link Lib.clickMouse}.
  */
 export interface ClickMouseParams {
   /**
@@ -146,7 +146,7 @@ export interface CommonArguments {
 }
 
 /**
- * Parameters for {@link CommonArguments.createNote}.
+ * Parameters for {@link Lib.createNote}.
  */
 export interface CreateNoteParams {
   /**
@@ -211,7 +211,7 @@ export interface EvalInObsidianParams<Input extends GenericObject, Result, TCont
 export type GenericObject = Record<string, unknown>;
 
 /**
- * Parameters for {@link CommonArguments.hoverElement}.
+ * Parameters for {@link Lib.hoverElement}.
  */
 export interface HoverElementParams {
   /**
@@ -539,7 +539,7 @@ export interface Lib {
 export type MouseButton = 'left' | 'middle' | 'right';
 
 /**
- * Parameters for {@link CommonArguments.moveMouse}.
+ * Parameters for {@link Lib.moveMouse}.
  */
 export interface MoveMouseParams {
   /**
@@ -579,7 +579,7 @@ export interface OpenSettingsTabParams {
 }
 
 /**
- * Parameters for {@link CommonArguments.pressKey}.
+ * Parameters for {@link Lib.pressKey}.
  */
 export interface PressKeyParams {
   /**
@@ -588,7 +588,7 @@ export interface PressKeyParams {
    * (`'Up'` / `'Down'` / `'Left'` / `'Right'`), or a printable character
    * (`'a'`, `'1'`). The produced character (when the key inserts text) is the
    * literal `key` value; case-correct text belongs to
-   * {@link CommonArguments.typeIntoEditor}, not a key-press primitive.
+   * {@link Lib.typeIntoEditor}, not a key-press primitive.
    */
   readonly key: string;
 
@@ -604,7 +604,7 @@ export interface PressKeyParams {
 }
 
 /**
- * Parameters for {@link CommonArguments.typeIntoEditor}.
+ * Parameters for {@link Lib.typeIntoEditor}.
  */
 export interface TypeIntoEditorParams {
   /**
@@ -614,14 +614,14 @@ export interface TypeIntoEditorParams {
   readonly editor: Editor;
 
   /**
-   * The text to type. Each code point is pressed via {@link CommonArguments.pressKey}
+   * The text to type. Each code point is pressed via {@link Lib.pressKey}
    * (a trusted `keyDown` → `char` → `keyUp`), exactly as a real user typing.
    */
   readonly text: string;
 }
 
 /**
- * Parameters for {@link CommonArguments.unhoverElement}.
+ * Parameters for {@link Lib.unhoverElement}.
  */
 export interface UnhoverElementParams {
   /**
@@ -634,7 +634,7 @@ export interface UnhoverElementParams {
 }
 
 /**
- * Parameters for {@link CommonArguments.waitUntil}.
+ * Parameters for {@link Lib.waitUntil}.
  */
 export interface WaitUntilParams {
   /**
