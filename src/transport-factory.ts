@@ -37,8 +37,12 @@ import type {
 } from './avd-name-channel.ts';
 import type { AvdProbeResult } from './avd-probe-verdict.ts';
 import type { EmulatorLivenessProbeOutcome } from './emulator-liveness.ts';
-import type { HostCommandQuery } from './emulator-reclaim.ts';
+import type {
+  HostCommandQuery,
+  HostProcessQueryResult
+} from './emulator-reclaim.ts';
 import type { InstallerCompatibility } from './installer-compatibility.ts';
+import type { BuildPortOwnerQueryMessageParams } from './port-owner-query-verdict.ts';
 import type { ProcessExitInfo } from './process-exit-message.ts';
 import type {
   DesktopCdpTransportConfig,
@@ -167,6 +171,11 @@ import {
 import { compareVersions } from './obsidian-version.ts';
 import { readOwnedInstanceExitMarker } from './owned-instance-exit-marker.ts';
 import { buildOwnedInstanceExitedErrorFromMarker } from './owned-instance-exited-error.ts';
+import {
+  buildPortOwnerQueryMessage,
+  normalizeSyncExecError,
+  resolvePortOwnerQueryOutcome
+} from './port-owner-query-verdict.ts';
 import {
   parsePosixLsofPids,
   parseWindowsNetstatPids
@@ -1859,22 +1868,49 @@ class AppiumTransportFactory {
    * nothing, while a socket still answering on the port is direct evidence of
    * what survived.
    *
+   * A query that failed still yields an empty list — the escalation is
+   * best-effort — but it is never silent: `lsof`'s own "nothing holds the port"
+   * is an answer, while a timeout or a crash is logged by name, because an
+   * empty list from either disarms the escalation without saying so.
+   *
    * @param port - The port to query.
-   * @returns The listening PIDs, or an empty list when the query could not be run.
+   * @returns The listening PIDs, or an empty list when nothing holds the port or the query failed.
    */
-  private listPortOwnerPids(port: number): Promise<number[]> {
+  private async listPortOwnerPids(port: number): Promise<number[]> {
     const query = buildPortOwnerQuery(port);
-    return new Promise<number[]>((resolve) => {
+    const startedAtInMilliseconds = Date.now();
+    const result = await new Promise<HostProcessQueryResult>((resolve) => {
       execFile(
         query.command,
         query.commandArguments,
         { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS },
-        (error, stdout) => {
-          // `lsof` exits non-zero when nothing holds the port, which is a legitimate empty answer.
-          resolve(parsePortOwnerPids({ output: error ? '' : stdout, port }));
+        (error, stdout, stderr) => {
+          resolve({ error, standardError: stderr, standardOutput: stdout });
         }
       );
     });
+
+    const outcome = resolvePortOwnerQueryOutcome({
+      errorCode: result.error?.code ?? null,
+      hasFailed: result.error !== null,
+      isKilled: result.error?.killed ?? false,
+      platform: process.platform,
+      standardError: result.standardError,
+      standardOutput: result.standardOutput
+    });
+    this.logPortOwnerQueryFailure({
+      command: [query.command, ...query.commandArguments].join(' '),
+      elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+      exitCode: typeof result.error?.code === 'number' ? result.error.code : null,
+      outcome,
+      port,
+      signal: result.error?.signal ?? null,
+      standardError: result.standardError,
+      timeoutInMilliseconds: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS
+    });
+
+    // The only failed call that still answered is `lsof`'s silent "nothing holds the port", which has no PIDs to parse.
+    return result.error === null ? parsePortOwnerPids({ output: result.standardOutput, port }) : [];
   }
 
   /**
@@ -1886,11 +1922,14 @@ class AppiumTransportFactory {
    * exit handler for half a minute on a contended host. Giving up loses the
    * escalation, which the sync path's log already admits it cannot confirm.
    *
+   * A failure is classified and logged the same way as the async path's.
+   *
    * @param port - The port to query.
-   * @returns The listening PIDs, or an empty list when the query could not be run in time.
+   * @returns The listening PIDs, or an empty list when nothing holds the port or the query failed.
    */
   private listPortOwnerPidsSync(port: number): number[] {
     const query = buildPortOwnerQuery(port);
+    const startedAtInMilliseconds = Date.now();
     try {
       const output = execFileSync(query.command, query.commandArguments, {
         encoding: 'utf-8',
@@ -1898,13 +1937,36 @@ class AppiumTransportFactory {
         timeout: SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS
       });
       return parsePortOwnerPids({ output, port });
-    } catch {
+    } catch (error) {
+      const failure = normalizeSyncExecError(error);
+      this.logPortOwnerQueryFailure({
+        command: [query.command, ...query.commandArguments].join(' '),
+        elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+        exitCode: failure.exitCode,
+        outcome: resolvePortOwnerQueryOutcome({ ...failure, hasFailed: true, platform: process.platform }),
+        port,
+        signal: failure.signal,
+        standardError: failure.standardError,
+        timeoutInMilliseconds: SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS
+      });
       return [];
     }
   }
 
   private log(message: string): void {
     log(`[transport-factory:${this.type}] ${message}`);
+  }
+
+  /**
+   * Logs the port-owner query's failure, if it failed.
+   *
+   * @param params - The outcome and what the child left behind.
+   */
+  private logPortOwnerQueryFailure(params: BuildPortOwnerQueryMessageParams): void {
+    const message = buildPortOwnerQueryMessage(params);
+    if (message !== undefined) {
+      this.log(message);
+    }
   }
 
   /**

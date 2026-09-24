@@ -61,6 +61,7 @@ import type {
   EmulatorLivenessProbeOutcome,
   EmulatorLivenessVerdict
 } from '../src/emulator-liveness.ts';
+import type { HostProcessQueryResult } from '../src/emulator-reclaim.ts';
 import type {
   BackendSample,
   ProbeTick
@@ -78,6 +79,7 @@ import {
 } from '../src/emulator-arguments.ts';
 import {
   buildEmulatorProcessQueries,
+  checkIsNoMatchReported,
   parseEmulatorProcessQueryOutput,
   selectEmulatorBackendPids
 } from '../src/emulator-backend.ts';
@@ -87,6 +89,10 @@ import {
 } from '../src/emulator-liveness.ts';
 import { HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS } from '../src/emulator-reclaim.ts';
 import { errorToString } from '../src/error-to-string.ts';
+import {
+  buildHostProcessQueryMessage,
+  resolveHostProcessQueryOutcome
+} from '../src/host-process-query-verdict.ts';
 import { killProcessTreeByPid } from '../src/kill-process-tree.ts';
 import {
   buildProbeReport,
@@ -154,6 +160,10 @@ const PROCESS_LIST_MAX_BUFFER_IN_BYTES = LARGEST_PROCESS_LIST_IN_MEBIBYTES * KIB
  * has nothing to do with the wedge.
  */
 const QEMU_BACKEND_NAME_PREFIX = 'qemu-system-';
+/**
+ * The exit code `ps -p` uses, with nothing on either stream, for a PID that is not running.
+ */
+const SILENT_NOTHING_FOUND_EXIT_CODE = 1;
 
 exitIfScriptDisabled();
 
@@ -192,6 +202,51 @@ try {
  */
 interface FatalTick extends ProbeTick {
   readonly verdict: Exclude<EmulatorLivenessVerdict, 'alive'>;
+}
+
+/**
+ * A host command and its arguments, as both the emulator listing and the backend sample build them.
+ */
+interface ProbeHostQuery {
+  /**
+  The command.
+   */
+  readonly command: string;
+
+  /**
+  Its arguments.
+   */
+  readonly commandArguments: readonly string[];
+}
+
+/**
+ * Parameters for {@link runHostQuery}.
+ */
+interface RunHostQueryParams {
+  /**
+  What a failure costs this probe, closing the warning line.
+   */
+  readonly consequence: string;
+
+  /**
+  Counts the rows the output parsed to — the partial evidence a failed call leaves behind.
+   */
+  readonly countRows: (this: void, output: string) => number;
+
+  /**
+  Whether an empty answer is one the query affirmatively gave, rather than silence.
+   */
+  readonly hasReportedNoMatch: (this: void, output: string) => boolean;
+
+  /**
+  Whether a silent exit 1 — nothing on either stream — is the command's own "found nothing" rather than a crash. True of `ps -p` for a PID that has gone.
+   */
+  readonly isSilentExitOneAnAnswer?: boolean | undefined;
+
+  /**
+  The command and its arguments.
+   */
+  readonly query: ProbeHostQuery;
 }
 
 /**
@@ -243,7 +298,15 @@ async function listEmulatorBackendPids(knownPids: readonly number[]): Promise<nu
  */
 async function listEmulatorProcesses(): Promise<ProcessListEntry[]> {
   const answers = await Promise.all(
-    buildEmulatorProcessQueries(process.platform).map(async (query) => parseEmulatorProcessQueryOutput({ output: await runHostQuery(query.command, query.commandArguments), query }))
+    buildEmulatorProcessQueries(process.platform).map(async (query) => {
+      const output = await runHostQuery({
+        consequence: 'This listing contributes no processes, so the backend may go unsampled and not be killed, for a reason that is not its absence.',
+        countRows: (text) => parseEmulatorProcessQueryOutput({ output: text, query }).length,
+        hasReportedNoMatch: (text) => checkIsNoMatchReported({ output: text, query }),
+        query
+      });
+      return output === undefined ? [] : parseEmulatorProcessQueryOutput({ output, query });
+    })
   );
 
   return answers.flat();
@@ -305,7 +368,7 @@ async function resolveVerdict(deviceId: string): Promise<EmulatorLivenessVerdict
 }
 
 /**
- * Runs one host query, returning empty output rather than throwing.
+ * Runs one host query and classifies how it ended, the way the transport does.
  *
  * Takes the transport's own `HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS` rather
  * than a local copy of it. This probe exists to measure the contended window
@@ -313,21 +376,59 @@ async function resolveVerdict(deviceId: string): Promise<EmulatorLivenessVerdict
  * must never drift from it — and the copy it replaced was still the 30s that
  * window is now measured to outrun.
  *
- * @param command - The command.
- * @param commandArguments - Its arguments.
- * @returns The stdout, or an empty string when the query failed.
+ * **A failure is printed, never swallowed.** This used to resolve `''` for any
+ * error, so a tick whose query was killed and a tick whose backend genuinely
+ * could not be sampled both printed `?` — and the contended window this probe
+ * measures is exactly when its own query is likeliest to be killed. The line
+ * comes from the same classifier the transport's listing uses
+ * (`host-process-query-verdict.ts`), so the two name a failure identically.
+ *
+ * @param params - The query, how to read its output, and what a failure costs.
+ * @returns The stdout, or `undefined` when the query failed.
  */
-function runHostQuery(command: string, commandArguments: readonly string[]): Promise<string> {
-  return new Promise((resolve) => {
+async function runHostQuery(params: RunHostQueryParams): Promise<string | undefined> {
+  const startedAtInMilliseconds = Date.now();
+  const result = await new Promise<HostProcessQueryResult>((resolve) => {
     execFile(
-      command,
-      [...commandArguments],
+      params.query.command,
+      [...params.query.commandArguments],
       { maxBuffer: PROCESS_LIST_MAX_BUFFER_IN_BYTES, timeout: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS },
-      (error, stdout) => {
-        resolve(error ? '' : stdout);
+      (error, stdout, stderr) => {
+        resolve({ error, standardError: stderr, standardOutput: stdout });
       }
     );
   });
+
+  const rowCount = params.countRows(result.standardOutput);
+  const isSilentExitOne = result.error?.code === SILENT_NOTHING_FOUND_EXIT_CODE
+    && !(result.error.killed ?? false)
+    && result.standardError.trim() === ''
+    && result.standardOutput.trim() === '';
+  const outcome = resolveHostProcessQueryOutcome({
+    errorCode: result.error?.code ?? null,
+    hasFailed: result.error !== null && !(isSilentExitOne && (params.isSilentExitOneAnAnswer ?? false)),
+    hasReportedNoMatch: params.hasReportedNoMatch(result.standardOutput),
+    isKilled: result.error?.killed ?? false,
+    rowCount,
+    standardError: result.standardError
+  });
+
+  const message = buildHostProcessQueryMessage({
+    command: [params.query.command, ...params.query.commandArguments].join(' '),
+    consequence: params.consequence,
+    elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+    exitCode: typeof result.error?.code === 'number' ? result.error.code : null,
+    outcome,
+    partialRowCount: rowCount,
+    signal: result.error?.signal ?? null,
+    standardError: result.standardError,
+    timeoutInMilliseconds: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
+  });
+  if (message !== undefined) {
+    console.warn(message);
+  }
+
+  return outcome === 'listed' ? result.standardOutput : undefined;
 }
 
 /**
@@ -444,7 +545,15 @@ async function sampleBackend(pid: number | undefined): Promise<BackendSample | u
     }
     : { command: 'ps', commandArguments: ['-p', String(backend.pid), '-o', 'pid=,cputimes=,rss='] };
 
-  return parseBackendSample(await runHostQuery(query.command, query.commandArguments));
+  const output = await runHostQuery({
+    consequence: 'This tick prints `?` because the sample query failed, not because the backend could not be found.',
+    countRows: (text) => parseBackendSample(text) === undefined ? 0 : 1,
+    // A backend that has exited prints nothing, and that silence is the answer rather than a failed query.
+    hasReportedNoMatch: () => true,
+    isSilentExitOneAnAnswer: true,
+    query
+  });
+  return output === undefined ? undefined : parseBackendSample(output);
 }
 
 /**
