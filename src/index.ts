@@ -238,6 +238,7 @@ export type {
 } from './soft-keyboard-geometry.ts';
 export {
   buildSoftKeyboardDiagnosticMessage,
+  checkIsInputMethodShown,
   checkIsSoftKeyboardUp,
   DEFAULT_MINIMUM_KEYBOARD_HEIGHT_IN_PIXELS,
   parseInputMethodState,

@@ -22,6 +22,21 @@
  *    unrepresentable rather than merely corrected: the delta of the baseline
  *    against itself is zero, so the first iteration always taps.
  *
+ *    **A keyboard ALREADY up is put down first**, because a delta cannot see
+ *    one: the field has already lifted, so it reads as a field that never moved.
+ *    That was every frame after the first of a suite that takes several — the
+ *    keyboard left up by one frame, or brought back by Obsidian focusing the
+ *    next modal's field, made the next baseline already-lifted (measured
+ *    2026-09-20: frames 2-5 each failed `lift=0` beside `mInputShown=true`,
+ *    each framebuffer showing a correctly lifted field under a fully drawn
+ *    keyboard). The alternative was to accept `lift=0` whenever the device says
+ *    a keyboard is showing, and it was refused: that is a frame the helper did
+ *    not prove, which is the vacuous pass the delta was introduced to end,
+ *    re-opened by a different door. So the device is asked, a showing IME is
+ *    retracted with `KEYCODE_BACK`, and the lift is proved as before. It has to
+ *    happen HERE, not after the previous capture: lowering it there was tried,
+ *    and the IME came back on its own before the next baseline was read.
+ *
  * 4. **That touch draws a selection handle when it lands inside TEXT**, and a
  *    device capture photographs it. Chromium shows the insertion handle on a tap
  *    into text and none on a tap into an EMPTY editable, and a value written by
@@ -57,6 +72,7 @@ import { captureDeviceScreenshot } from './device-screenshot.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 import {
   buildSoftKeyboardDiagnosticMessage,
+  checkIsInputMethodShown,
   checkIsSoftKeyboardUp,
   parseInputMethodState,
   resolveSoftKeyboardTapPoints
@@ -143,6 +159,20 @@ const DEFAULT_DIAGNOSTICS_DIRECTORY = join(process.cwd(), 'dist', 'screenshots')
 const KEYBOARD_SETTLE_DELAY_IN_MILLISECONDS = 1500;
 
 /**
+ * How long the IME takes to finish animating out after `KEYCODE_BACK`, measured in the capture suite this
+ * was moved out of.
+ */
+const KEYBOARD_RETRACT_DELAY_IN_MILLISECONDS = 900;
+
+/**
+ * How many times `KEYCODE_BACK` is pressed before a keyboard that will not go down is reported.
+ *
+ * Two, because the first press can land while the IME is still animating UP from the focus that raised
+ * it, and an IME mid-animation swallows the key without retracting.
+ */
+const KEYBOARD_RETRACT_ATTEMPT_COUNT = 2;
+
+/**
  * What a field holds, and whether it is one this can put back.
  */
 interface FieldContent {
@@ -164,10 +194,13 @@ interface FieldContent {
  * Call it inside `withSoftKeyboardEnabled` — the device setting alone does not raise the keyboard, and this
  * touch alone cannot while the setting suppresses it.
  *
- * **Call it with the keyboard DOWN.** The first read is the baseline every later read is compared against,
- * so a keyboard that is already up leaves the field nothing to lift by and this throws. That is the
- * deliberate trade for working on a centred modal as well as a bottom-anchored one — see
- * {@link checkIsSoftKeyboardUp}.
+ * **A keyboard that is already up is put DOWN first.** The first geometry read is the baseline every later
+ * read is compared against, so a keyboard already up would leave the field nothing to lift by and read as
+ * one that never came. The device is asked before anything else, and a showing IME is retracted with
+ * `KEYCODE_BACK` — asked FIRST because, with no IME showing, that key reaches the app and closes the very
+ * modal the frame is about to photograph. So the helper is safe to call once per frame of a multi-frame
+ * suite, and every call still proves its own lift. The other answer — accepting a zero lift whenever the
+ * device reports a keyboard — was refused, because it accepts a frame the helper did not prove.
  *
  * **The field is EMPTIED for the touch and written back afterwards**, because a touch that lands inside
  * text draws Chromium's selection handle and the framebuffer photographs it — see
@@ -183,11 +216,13 @@ interface FieldContent {
  *
  * @param params - The device, the field to touch, and how far it must lift.
  * @returns A {@link Promise} that resolves to the geometry read once the keyboard is up.
- * @throws Error if the field never matched, if it holds text this cannot empty and put back, or if it
- *   never lifted — the last after writing the device framebuffer and the device's own `input_method`
- *   state to the diagnostics directory.
+ * @throws Error if a keyboard already up would not go down, if the field never matched, if it holds text
+ *   this cannot empty and put back, or if it never lifted — the last after writing the device framebuffer
+ *   and the device's own `input_method` state to the diagnostics directory.
  */
 export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promise<SoftKeyboardViewportSnapshot> {
+  await lowerSoftKeyboardIfShown(params);
+
   const textToRestore = await emptyFieldForTouch(params);
 
   try {
@@ -233,14 +268,9 @@ async function buildFailureMessage(
   const screenshotPath = join(diagnosticsDirectory, 'keyboard-not-raised.png');
   writeFileSync(screenshotPath, await captureDeviceScreenshot({ deviceId: params.deviceId }));
 
-  const dumpsysOutput = await runAdbText({
-    commandArguments: ['shell', 'dumpsys', 'input_method'],
-    deviceId: params.deviceId
-  });
-
   return buildSoftKeyboardDiagnosticMessage({
     baselineSnapshot,
-    inputMethodState: parseInputMethodState(dumpsysOutput),
+    inputMethodState: await readInputMethodState(params),
     screenshotPath,
     snapshot
   });
@@ -281,6 +311,42 @@ async function emptyFieldForTouch(params: RaiseSoftKeyboardParams): Promise<null
 }
 
 /**
+ * Puts the keyboard down when the device reports one showing, so the baseline read next is one the touch
+ * can lift the field from.
+ *
+ * @param params - The device to ask.
+ * @returns A {@link Promise} that resolves once no keyboard is showing.
+ * @throws Error if a keyboard is still showing after {@link KEYBOARD_RETRACT_ATTEMPT_COUNT} presses of
+ *   `KEYCODE_BACK` — the raise that follows could prove nothing, and its own failure would blame a keyboard
+ *   that never came when the truth is one that never left.
+ */
+async function lowerSoftKeyboardIfShown(params: RaiseSoftKeyboardParams): Promise<void> {
+  let inputMethodState = await readInputMethodState(params);
+
+  for (let attempt = 0; attempt < KEYBOARD_RETRACT_ATTEMPT_COUNT; attempt++) {
+    if (!checkIsInputMethodShown(inputMethodState)) {
+      return;
+    }
+
+    await runAdbText({
+      commandArguments: ['shell', 'input', 'keyevent', 'KEYCODE_BACK'],
+      deviceId: params.deviceId
+    });
+    await sleep(KEYBOARD_RETRACT_DELAY_IN_MILLISECONDS);
+    inputMethodState = await readInputMethodState(params);
+  }
+
+  if (checkIsInputMethodShown(inputMethodState)) {
+    throw new Error(
+      `raiseSoftKeyboard: a keyboard was already up and did not go down after ${String(KEYBOARD_RETRACT_ATTEMPT_COUNT)} presses of `
+        + 'KEYCODE_BACK, so the lift that proves a raise could not be measured. The field would read as one that never '
+        + `moved under a keyboard that is plainly showing.
+device: ${inputMethodState}`
+    );
+  }
+}
+
+/**
  * Reads what the field holds, and whether it is one whose value can be written back.
  *
  * @param params - The field to read.
@@ -302,6 +368,21 @@ async function readFieldContent(params: RaiseSoftKeyboardParams): Promise<FieldC
     input: { inputSelector: params.inputSelector },
     ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })
   });
+}
+
+/**
+ * Asks the device what its IME is doing — the only place that knows, since nothing in the page reports it.
+ *
+ * @param params - The device to ask.
+ * @returns A {@link Promise} that resolves to the fields {@link parseInputMethodState} keeps.
+ */
+async function readInputMethodState(params: RaiseSoftKeyboardParams): Promise<string> {
+  const dumpsysOutput = await runAdbText({
+    commandArguments: ['shell', 'dumpsys', 'input_method'],
+    deviceId: params.deviceId
+  });
+
+  return parseInputMethodState(dumpsysOutput);
 }
 
 /**
