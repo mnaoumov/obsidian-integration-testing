@@ -173,6 +173,16 @@ const KEYBOARD_RETRACT_DELAY_IN_MILLISECONDS = 900;
 const KEYBOARD_RETRACT_ATTEMPT_COUNT = 2;
 
 /**
+ * How long a keyboard reported showing is watched before `KEYCODE_BACK` is pressed at it.
+ *
+ * One retract animation: an IME already on its way down — the modal that raised it has just closed — is
+ * still reported showing by a read taken at the start of its retract, and is gone by the end of it. Pressing
+ * at the first read then lands the key on the app instead, which closes the modal the frame is about to
+ * photograph. Two reads that agree across this window say the keyboard is staying up.
+ */
+const KEYBOARD_SHOWN_CONFIRMATION_DELAY_IN_MILLISECONDS = KEYBOARD_RETRACT_DELAY_IN_MILLISECONDS;
+
+/**
  * What a field holds, and whether it is one this can put back.
  */
 interface FieldContent {
@@ -277,6 +287,22 @@ async function buildFailureMessage(
 }
 
 /**
+ * Whether anything in the page matches the field's selector.
+ *
+ * @param params - The field to look for.
+ * @returns A {@link Promise} that resolves to whether it matched.
+ */
+async function checkIsFieldPresent(params: RaiseSoftKeyboardParams): Promise<boolean> {
+  return await evalInObsidian({
+    callback({ inputSelector }): boolean {
+      return document.querySelector(inputSelector) !== null;
+    },
+    input: { inputSelector: params.inputSelector },
+    ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })
+  });
+}
+
+/**
  * Empties the field the touch is about to land on, and reports what to write back.
  *
  * @param params - The field to empty, and whether to empty it at all.
@@ -314,11 +340,23 @@ async function emptyFieldForTouch(params: RaiseSoftKeyboardParams): Promise<null
  * Puts the keyboard down when the device reports one showing, so the baseline read next is one the touch
  * can lift the field from.
  *
- * @param params - The device to ask.
+ * **A keyboard is pressed at only once it has been reported showing TWICE, one retract animation apart.**
+ * `KEYCODE_BACK` is retracted by the IME only while the IME is up; once it has gone, the key reaches the
+ * app, and Obsidian closes the modal on screen — the one the caller is about to photograph. A keyboard
+ * already on its way down (the modal that raised it has just closed, and the caller opened a fresh one
+ * straight after) is still reported showing at the start of its retract, so pressing at the first read
+ * raced it. It is watched for one retract animation first, and a keyboard that went down on its own is
+ * left alone.
+ *
+ * **And a press that reached the app anyway is named as that.** The field is looked up before the press
+ * and after it; one that matched before and not after was closed by the key, and saying so beats the
+ * `nothing matches` that the raise would otherwise report a step later, about a selector that was right.
+ *
+ * @param params - The device to ask, and the field that must survive the press.
  * @returns A {@link Promise} that resolves once no keyboard is showing.
  * @throws Error if a keyboard is still showing after {@link KEYBOARD_RETRACT_ATTEMPT_COUNT} presses of
  *   `KEYCODE_BACK` — the raise that follows could prove nothing, and its own failure would blame a keyboard
- *   that never came when the truth is one that never left.
+ *   that never came when the truth is one that never left — or if a press closed the field's own UI.
  */
 async function lowerSoftKeyboardIfShown(params: RaiseSoftKeyboardParams): Promise<void> {
   let inputMethodState = await readInputMethodState(params);
@@ -328,11 +366,30 @@ async function lowerSoftKeyboardIfShown(params: RaiseSoftKeyboardParams): Promis
       return;
     }
 
+    await sleep(KEYBOARD_SHOWN_CONFIRMATION_DELAY_IN_MILLISECONDS);
+    inputMethodState = await readInputMethodState(params);
+
+    if (!checkIsInputMethodShown(inputMethodState)) {
+      return;
+    }
+
+    const isFieldPresentBeforePress = await checkIsFieldPresent(params);
     await runAdbText({
       commandArguments: ['shell', 'input', 'keyevent', 'KEYCODE_BACK'],
       deviceId: params.deviceId
     });
     await sleep(KEYBOARD_RETRACT_DELAY_IN_MILLISECONDS);
+
+    if (isFieldPresentBeforePress && !await checkIsFieldPresent(params)) {
+      throw new Error(
+        'raiseSoftKeyboard: KEYCODE_BACK, pressed to put down a keyboard the device reported showing, reached the app instead and '
+          + `closed the UI holding "${params.inputSelector}" — it matched before the press and matches nothing after it. The `
+          + 'keyboard went down between the last read and the press. Let the previous keyboard settle before opening the UI '
+          + `to raise it on.
+device before the press: ${inputMethodState}`
+      );
+    }
+
     inputMethodState = await readInputMethodState(params);
   }
 

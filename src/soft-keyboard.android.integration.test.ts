@@ -95,6 +95,17 @@ const KEYBOARD_SETTLE_TIMEOUT_IN_MILLISECONDS = 10_000;
 const KEYBOARD_SETTLE_POLL_INTERVAL_IN_MILLISECONDS = 250;
 
 /**
+ * The gaps between closing a modal with the keyboard up and opening a fresh one, straddling the ~1s the device
+ * goes on reporting the retracting keyboard as showing.
+ */
+const RETRACT_RACE_GAPS_IN_MILLISECONDS = [600, 750, 900, 1050, 1200];
+
+/*
+ * Six raises, each up to ~15s with the retract confirmation, the touch settle and the evals around them.
+ */
+const RETRACT_RACE_TEST_TIMEOUT_IN_MILLISECONDS = 240_000;
+
+/**
  * What the probe field recorded about itself.
  */
 interface FieldLog {
@@ -114,7 +125,7 @@ interface FieldLog {
  */
 interface ProbeContext {
   inputValues: string[];
-  modal: Modal;
+  modal?: Modal;
   touchValues: string[];
 }
 
@@ -135,57 +146,11 @@ describe('raiseSoftKeyboard on Android', () => {
 
   beforeEach(async () => {
     contextId = new ContextId<ProbeContext>();
-    await evalInObsidian({
-      callback({ app, context, inputClass, obsidianModule, queryText }): void {
-        class ProbeModal extends obsidianModule.SuggestModal<string> {
-          public override getSuggestions(query: string): string[] {
-            return ['alpha', 'beta', 'note'].filter((suggestion) => suggestion.includes(query));
-          }
-
-          public override onChooseSuggestion(): void {
-            // The suite never chooses; the modal exists only to hold the field.
-          }
-
-          public override renderSuggestion(suggestion: string, el: HTMLElement): void {
-            el.setText(suggestion);
-          }
-        }
-
-        const modal = new ProbeModal(app);
-        modal.open();
-        modal.inputEl.addClass(inputClass);
-
-        context.inputValues = [];
-        context.touchValues = [];
-        context.modal = modal;
-
-        modal.inputEl.addEventListener('touchstart', () => {
-          context.touchValues.push(modal.inputEl.value);
-        }, { passive: true });
-
-        // Written by script and announced, so the suggester renders rows for it — the state a capture
-        // suite raises the keyboard over. Recorded only from here on, so the log holds the harness's writes.
-        modal.inputEl.value = queryText;
-        modal.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-
-        modal.inputEl.addEventListener('input', () => {
-          context.inputValues.push(modal.inputEl.value);
-        });
-      },
-      contextId,
-      input: { inputClass: PROBE_INPUT_CLASS, queryText: QUERY_TEXT },
-      vaultPath: vault.path
-    });
+    await openProbeModal();
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   afterEach(async () => {
-    await evalInObsidian({
-      callback({ context }): void {
-        context.modal.close();
-      },
-      contextId,
-      vaultPath: vault.path
-    });
+    await closeProbeModal();
     await contextId.dispose(vault.path);
     await waitForKeyboardToSettleDown();
   }, TEST_TIMEOUT_IN_MILLISECONDS);
@@ -274,6 +239,97 @@ describe('raiseSoftKeyboard on Android', () => {
     expect(log.inputValues).toEqual([]);
     expect(await readFieldValue()).toBe(QUERY_TEXT);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The race the lowering step used to lose. A modal closed with the keyboard up takes the keyboard down
+  // with it, but the device goes on reporting `mInputShown=true` for about a second first (measured
+  // 2026-09-24: true at 1.2s after the close, false by 1.8s). A fresh modal opened inside that window focuses
+  // its field without a touch, so the keyboard does not come back — and a raise that pressed KEYCODE_BACK at
+  // its first read landed the key on the app once the IME had gone, closing the fresh modal before its touch.
+  //
+  // The gaps between the close and the open straddle that window. It is a race, so no single gap is certain
+  // to hit it: against the unfixed helper, 3 of 35 raises over gaps of 600-1200ms failed with
+  // `nothing matches ".soft-keyboard-probe-input"`, the signature first seen on 2026-09-23, while the fixed
+  // helper passed 20 of 20. At that rate five raises catch a regression in roughly one run of three, so a
+  // green run here proves little on its own, and a red one with that signature is this race.
+  it('should raise on a fresh modal opened while the previous modal\'s keyboard is going down', async () => {
+    await withSoftKeyboardEnabled({
+      callback: async () => {
+        await raiseSoftKeyboard({ deviceId, inputSelector: PROBE_INPUT_SELECTOR, vaultPath: vault.path });
+
+        for (const gapInMilliseconds of RETRACT_RACE_GAPS_IN_MILLISECONDS) {
+          await closeProbeModal();
+          await sleep(gapInMilliseconds);
+          await openProbeModal();
+          await raiseSoftKeyboard({ deviceId, inputSelector: PROBE_INPUT_SELECTOR, vaultPath: vault.path });
+        }
+      },
+      deviceId
+    });
+    const log = await readFieldLog();
+
+    // The last fresh modal survived the lowering step and took its own touch into its emptied field.
+    expect(log.touchValues.length).toBeGreaterThan(0);
+    expect(log.touchValues.every((value) => value === '')).toBe(true);
+    expect(log.inputValues).toEqual(['', QUERY_TEXT]);
+    expect(await readFieldValue()).toBe(QUERY_TEXT);
+  }, RETRACT_RACE_TEST_TIMEOUT_IN_MILLISECONDS);
+
+  async function closeProbeModal(): Promise<void> {
+    await evalInObsidian({
+      callback({ context }): void {
+        context.modal?.close();
+      },
+      contextId,
+      vaultPath: vault.path
+    });
+  }
+
+  /**
+   * Opens the probe modal with its field seeded, and makes it the one the log and the teardown follow.
+   */
+  async function openProbeModal(): Promise<void> {
+    await evalInObsidian({
+      callback({ app, context, inputClass, obsidianModule, queryText }): void {
+        class ProbeModal extends obsidianModule.SuggestModal<string> {
+          public override getSuggestions(query: string): string[] {
+            return ['alpha', 'beta', 'note'].filter((suggestion) => suggestion.includes(query));
+          }
+
+          public override onChooseSuggestion(): void {
+            // The suite never chooses; the modal exists only to hold the field.
+          }
+
+          public override renderSuggestion(suggestion: string, el: HTMLElement): void {
+            el.setText(suggestion);
+          }
+        }
+
+        const modal = new ProbeModal(app);
+        modal.open();
+        modal.inputEl.addClass(inputClass);
+
+        context.inputValues = [];
+        context.touchValues = [];
+        context.modal = modal;
+
+        modal.inputEl.addEventListener('touchstart', () => {
+          context.touchValues.push(modal.inputEl.value);
+        }, { passive: true });
+
+        // Written by script and announced, so the suggester renders rows for it — the state a capture
+        // suite raises the keyboard over. Recorded only from here on, so the log holds the harness's writes.
+        modal.inputEl.value = queryText;
+        modal.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+        modal.inputEl.addEventListener('input', () => {
+          context.inputValues.push(modal.inputEl.value);
+        });
+      },
+      contextId,
+      input: { inputClass: PROBE_INPUT_CLASS, queryText: QUERY_TEXT },
+      vaultPath: vault.path
+    });
+  }
 
   async function readFieldLog(): Promise<FieldLog> {
     return await evalInObsidian({
