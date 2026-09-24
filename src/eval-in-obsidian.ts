@@ -258,6 +258,18 @@ export interface Lib {
    * the renderer cannot produce a trusted event itself — so a missing `await`
    * would let the assertion run before the click landed.
    *
+   * **On mobile it waits for the element to stop moving, and refuses a covered
+   * one.** The tap reaches the page about a second after its point is read,
+   * and Obsidian Mobile slides a modal in with a `transform` transition that
+   * can hold for over a second, so a point read too early is where the
+   * control *used to be*. So the mobile path first waits (up to 5 s) until no finite
+   * animation or transition runs on the element or any ancestor and its box
+   * has held across two reads, then checks with `elementFromPoint` that the
+   * center belongs to the element. It throws a named error in either case
+   * rather than tapping, because a trusted tap goes to whatever is on top and
+   * would otherwise land on it silently. Use {@link Lib.clickMouse} to tap a
+   * point deliberately, covered or not. Desktop is unchanged.
+   *
    * @param params - The element to click, the button to press and any modifiers
    *   to hold.
    * @returns A {@link Promise} that resolves once the click has been injected.

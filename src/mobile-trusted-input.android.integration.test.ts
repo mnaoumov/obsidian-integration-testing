@@ -35,12 +35,35 @@ const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**
+ * How many freshly opened modals the sliding-modal test taps. More than one, because the hold before the
+ * slide varies between modals, and the first one after a boot is the slowest.
+ */
+const MODAL_TAP_ROUND_COUNT = 3;
+
+/**
+ * What the covered-element test reports back: the error `clickElement` raised, and whether the cover
+ * received the tap anyway.
+ */
+interface CoveredTapResult {
+  readonly errorMessage: string;
+  readonly wasOverlayTapped: boolean;
+}
+
+/**
  * What the long-press test reports back: the events that reached the pressed element, and the menu the
  * press produced.
  */
 interface LongPressResult {
   readonly events: ObservedEvent[];
   readonly menuItems: string[];
+}
+
+/**
+ * What one round of the sliding-modal test reports back.
+ */
+interface ModalTapResult {
+  readonly clickCount: number;
+  readonly wasModalOpen: boolean;
 }
 
 /**
@@ -194,7 +217,10 @@ describe('mobile trusted input', () => {
         });
 
         try {
-          await lib.clickElement({ element: target });
+          // `clickMouse`, not `clickElement`: the element-relative helper refuses a covered target outright
+          // (next test), so only the raw coordinate tap still reaches the hit test being proved here.
+          const rect = target.getBoundingClientRect();
+          await lib.clickMouse({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
           return wasClicked;
         } finally {
           target.remove();
@@ -205,6 +231,83 @@ describe('mobile trusted input', () => {
     });
 
     expect(wasCoveredElementClicked).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // A covered target used to be a SILENT miss: the tap went to the cover and `clickElement` resolved as if it
+  // had clicked. It now refuses before tapping anything, and says what is on top.
+  it('should refuse to tap a covered element, naming what covers it', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<CoveredTapResult> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '1' });
+
+        const overlay = document.body.createDiv('oit-probe-overlay');
+        overlay.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        let wasOverlayTapped = false;
+        overlay.addEventListener('pointerdown', () => {
+          wasOverlayTapped = true;
+        });
+
+        try {
+          await lib.clickElement({ element: target });
+          return { errorMessage: '', wasOverlayTapped };
+        } catch (error) {
+          return { errorMessage: error instanceof Error ? error.message : String(error), wasOverlayTapped };
+        } finally {
+          target.remove();
+          overlay.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.errorMessage).toContain('.oit-probe-overlay');
+    expect(result.wasOverlayTapped).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The shape that motivated the settle wait. Obsidian Mobile opens a modal shifted down, with a `transform`
+  // transition that can hold it there — measured at over 1.5 s on the first modal after a boot — and the tap
+  // reaches the page ~1 s after it is aimed. A caller that clicked a control the moment its modal was open
+  // tapped where the control USED to be, which is usually `.modal-bg`, which closes the modal.
+  //
+  // So this clicks with no wait of its own, over several fresh modals, and asserts every tap landed.
+  it('should tap a control in a modal that is still sliding in', async () => {
+    const results = await evalInObsidian({
+      async callback({ app, lib, modalCount, obsidianModule }): Promise<ModalTapResult[]> {
+        const rounds: ModalTapResult[] = [];
+        for (let round = 0; round < modalCount; round++) {
+          const modal = new obsidianModule.Modal(app);
+          let clickCount = 0;
+          let wasModalOpen = true;
+          modal.onClose = (): void => {
+            wasModalOpen = false;
+          };
+          const button = modal.contentEl.createEl('button', { text: 'Press' });
+          button.addEventListener('click', () => {
+            clickCount++;
+          });
+
+          modal.open();
+          try {
+            await lib.clickElement({ element: button });
+            await lib.waitUntil({
+              message: 'the tap on the modal button to produce a click, or to close the modal',
+              predicate: () => clickCount > 0 || !wasModalOpen
+            });
+            rounds.push({ clickCount, wasModalOpen });
+          } finally {
+            modal.close();
+          }
+        }
+
+        return rounds;
+      },
+      input: { modalCount: MODAL_TAP_ROUND_COUNT },
+      vaultPath: vault.path
+    });
+
+    expect(results).toStrictEqual(Array.from({ length: MODAL_TAP_ROUND_COUNT }, () => ({ clickCount: 1, wasModalOpen: true })));
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // The test whose absence let a broken long-press ship. `button: 'right'` used to be a dispatched touch
