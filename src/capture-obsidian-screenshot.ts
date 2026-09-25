@@ -16,6 +16,10 @@
  * through the caption band and rewrites a checked-in PNG on every run — and by
  * hiding the focused element's blinking caret for the length of the capture —
  * see `hide-caret.ts` for why that is a transparent caret and not a blur.
+ *
+ * And it refuses a frame whose theme has changed since `applyObsidianTheme` set
+ * it — see `apply-obsidian-theme.ts` for the config reload that silently turns a
+ * dark capture run light.
  */
 
 /* v8 ignore start -- Integration-time code (drives a live Obsidian) covered by integration tests, not unit tests. */
@@ -25,6 +29,7 @@ import process from 'node:process';
 import type { CaptureScreenshotParams } from './capture-screenshot.ts';
 import type { ObsidianTransport } from './transport.ts';
 
+import { assertObsidianThemeUnchanged } from './apply-obsidian-theme.ts';
 import {
   getTransportOptions,
   getVaultPath
@@ -76,6 +81,20 @@ export interface CaptureObsidianScreenshotOptions {
   readonly shouldHideVaultName?: boolean;
 
   /**
+   * Whether to refuse the frame when the body is no longer in the theme
+   * `applyObsidianTheme` last applied.
+   *
+   * A theme lost after it was applied fails nothing on its own: the frame is
+   * simply shot in the other theme and written over the committed one. Refusing
+   * turns that into a named error. Nothing is checked when no theme was applied
+   * through `applyObsidianTheme`. Turn it off only for a frame that changes the
+   * theme on purpose.
+   *
+   * @default `true`
+   */
+  readonly shouldVerifyTheme?: boolean;
+
+  /**
    * Override the transport. When omitted, the transport the current test
    * context is driving is used.
    */
@@ -105,17 +124,21 @@ export interface CaptureObsidianScreenshotOptions {
  * photograph it. The focused element's caret is hidden for the capture too, and
  * restored after it, so a frame with a focused field does not alternate between
  * two blink phases; {@link CaptureObsidianScreenshotOptions.shouldHideCaret}
+ * turns that off. A frame whose body has left the theme `applyObsidianTheme`
+ * applied is refused; {@link CaptureObsidianScreenshotOptions.shouldVerifyTheme}
  * turns that off.
  *
  * @param options - Optional size, transport and vault overrides.
  * @returns A {@link Promise} that resolves to the raw PNG bytes.
- * @throws Error if the active transport cannot capture screenshots.
+ * @throws Error if the active transport cannot capture screenshots, or if the
+ *   theme has changed since `applyObsidianTheme` applied it.
  */
 export async function captureObsidianScreenshot(options?: CaptureObsidianScreenshotOptions): Promise<Uint8Array> {
   const {
     heightInPixels,
     shouldHideCaret = true,
     shouldHideVaultName = true,
+    shouldVerifyTheme = true,
     transport: transportOverride,
     vaultPath,
     widthInPixels
@@ -126,6 +149,14 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
 
   if (!transport.captureScreenshot) {
     throw new Error('captureObsidianScreenshot: the active transport cannot capture screenshots.');
+  }
+
+  if (shouldVerifyTheme) {
+    await assertObsidianThemeUnchanged({
+      action: 'capture a screenshot',
+      transport,
+      vaultPath: cwd
+    });
   }
 
   if (shouldHideVaultName) {
