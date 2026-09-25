@@ -186,6 +186,7 @@ interface FieldLog {
 interface ProbeContext {
   inputValues: string[];
   modal?: Modal;
+  stackedModal?: Modal;
   touchValues: string[];
 }
 
@@ -296,6 +297,46 @@ describe('raiseSoftKeyboard on Android', () => {
 
     expect(log.touchValues.length).toBeGreaterThan(0);
     expect(log.touchValues.every((value) => value === QUERY_TEXT)).toBe(true);
+    expect(log.inputValues).toEqual([]);
+    expect(await readFieldValue()).toBe(QUERY_TEXT);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // Two fields matching one selector split the raise in two: every step addresses the FIRST match, and the
+  // device's touch lands on the one drawn on top, the LAST. The harness then emptied one field while the touch
+  // landed inside the other one's text, and Chromium drew its insertion handle into the frame. Measured
+  // 2026-09-25 with modals opened without closing the previous one: every raise after the first drew the handle,
+  // and the field log showed the touch arriving at the seeded text. The raise now refuses before it touches.
+  it('should refuse a selector that matches more than one field, before touching either', async () => {
+    await evalInObsidian({
+      callback({ app, context, inputClass, obsidianModule, queryText }): void {
+        const stacked = new obsidianModule.Modal(app);
+        stacked.open();
+        stacked.contentEl.createEl('input', { cls: inputClass, value: queryText });
+        context.stackedModal = stacked;
+      },
+      contextId,
+      input: { inputClass: PROBE_INPUT_CLASS, queryText: QUERY_TEXT },
+      vaultPath: vault.path
+    });
+
+    try {
+      await expect(withSoftKeyboardEnabled({
+        callback: async () => await raiseSoftKeyboard({ deviceId, inputSelector: PROBE_INPUT_SELECTOR, vaultPath: vault.path }),
+        deviceId
+      })).rejects.toThrow(`raiseSoftKeyboard: "${PROBE_INPUT_SELECTOR}" matches 2 elements`);
+    } finally {
+      await evalInObsidian({
+        callback({ context }): void {
+          context.stackedModal?.close();
+        },
+        contextId,
+        vaultPath: vault.path
+      });
+    }
+
+    const log = await readFieldLog();
+
+    expect(log.touchValues).toEqual([]);
     expect(log.inputValues).toEqual([]);
     expect(await readFieldValue()).toBe(QUERY_TEXT);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
