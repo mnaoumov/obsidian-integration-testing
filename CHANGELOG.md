@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 17.2.0
+
+- feat(soft-keyboard): merge parking the caret at offset 0 so Gboard's strip is always its toolbar
+
 ## 17.1.1
 
 - fix(soft-keyboard): merge holding the written-back text until the IME stops undoing it
