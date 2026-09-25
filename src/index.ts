@@ -162,6 +162,11 @@ export {
   computeFitToCanvas,
   fitScreenshotToCanvas
 } from './fit-screenshot.ts';
+export type {
+  HiddenCaret,
+  HideCaretOptions
+} from './hide-caret.ts';
+export { hideCaret } from './hide-caret.ts';
 export type { HideVaultNameOptions } from './hide-vault-name.ts';
 export { hideVaultName } from './hide-vault-name.ts';
 export type { IncompatibleInstallerVersionErrorConstructorParams } from './incompatible-installer-version-error.ts';
