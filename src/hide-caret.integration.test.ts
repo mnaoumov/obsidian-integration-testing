@@ -36,14 +36,6 @@ const CAPTURE_SPACING_IN_MILLISECONDS = 170;
 // regardless; a window still changing after that fails the series, visibly.
 const SETTLE_ATTEMPT_LIMIT = 10;
 
-// The largest per-channel difference that does NOT count as a change. A frame
-// carrying a modal or a suggester over the workspace occasionally renders its
-// soft shadows one value off — measured: ~240 pixels, every one by exactly 1,
-// in about 1 capture in 30, with the caret shown and hidden alike. That is a
-// separate channel from the caret, which is drawn at full contrast, so it is
-// tolerated here rather than allowed to fail a case about something else.
-const RASTER_NOISE_CHANNEL_DELTA = 1;
-
 const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 const CAPTURE_SERIES_TIMEOUT_IN_MILLISECONDS = 120_000;
 
@@ -206,9 +198,8 @@ async function captureRaw(options: CaptureOptions): Promise<SharpRawResult> {
  *
  * @param options - Whether to hide the caret.
  * @returns A {@link Promise} that resolves to, per frame in capture order, the
- *   number of pixels that changed against the first frame by more than
- *   {@link RASTER_NOISE_CHANNEL_DELTA}, so a failure shows WHICH frames differed
- *   and by how much.
+ *   number of pixels that changed against the first frame, so a failure shows
+ *   WHICH frames differed and by how much.
  */
 async function captureSeries(options: CaptureOptions): Promise<number[]> {
   let previous = await captureRaw({ shouldHideCaret: true });
@@ -232,8 +223,12 @@ async function captureSeries(options: CaptureOptions): Promise<number[]> {
 }
 
 /**
- * Counts the pixels whose channels differ by more than
- * {@link RASTER_NOISE_CHANNEL_DELTA} between two frames of the same size.
+ * Counts the pixels that differ at all between two frames of the same size.
+ *
+ * Exact, with no per-channel tolerance: the owned instance rasterizes on the
+ * CPU (`deterministic-raster.ts`), so the soft shadows of the modal and the
+ * suggester no longer come back one value off now and then, and a tolerance
+ * here would only hide that channel reopening.
  *
  * @param first - One frame.
  * @param second - The other.
@@ -244,7 +239,7 @@ function countChangedPixels(first: SharpRawResult, second: SharpRawResult): numb
   let changedPixelCount = 0;
   for (let offset = 0; offset < first.data.length; offset += channels) {
     for (let channel = 0; channel < channels; channel++) {
-      if (Math.abs((first.data[offset + channel] ?? 0) - (second.data[offset + channel] ?? 0)) > RASTER_NOISE_CHANNEL_DELTA) {
+      if (first.data[offset + channel] !== second.data[offset + channel]) {
         changedPixelCount++;
         break;
       }

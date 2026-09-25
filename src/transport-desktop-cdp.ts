@@ -48,6 +48,7 @@ import {
 import { CdpCommandTimeoutError } from './cdp-command-timeout-error.ts';
 import { resolveAsarFallbackAction } from './compatibility-options.ts';
 import { ConfigDirectoryFallbackError } from './config-directory-fallback-error.ts';
+import { DETERMINISTIC_RASTER_LAUNCH_FLAGS } from './deterministic-raster.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { resolveElectronCompatibility } from './electron-compatibility.ts';
 import { EvalCapExceededError } from './eval-cap-exceeded-error.ts';
@@ -1484,6 +1485,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         cdpHost: this.cdpHost,
         exePath: config.exePath,
         extraArguments: [
+          ...DETERMINISTIC_RASTER_LAUNCH_FLAGS,
           ...resolveOwnedHiddenLaunchArguments(this.isObsidianAppVisible),
           ...resolveSandboxLaunchArguments(this.shouldDisableSandbox)
         ],

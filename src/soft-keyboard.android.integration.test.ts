@@ -147,9 +147,10 @@ const STRIP_ROUND_COUNT = 10;
 const STRIP_CAPTURE_DELAY_IN_MILLISECONDS = 1500;
 
 /**
- * How far a channel may differ between two frames before the pixel counts as changed. Modal soft shadows
- * rasterize one value off now and then (see the caret suite's own copy of this tolerance); the strip's
- * glyphs differ at full contrast, so this cannot hide them.
+ * How far a channel may differ between two frames before the pixel counts as changed. The probe modal's
+ * soft shadow was seen one value off now and then on the device framebuffer, which the desktop-only
+ * raster flag in `deterministic-raster.ts` does not reach; the strip's glyphs differ at full contrast, so
+ * this cannot hide them.
  */
 const RASTER_NOISE_CHANNEL_DELTA = 1;
 

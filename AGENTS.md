@@ -23,7 +23,7 @@ All entry points are under the `obsidian-integration-testing` package; `…/` be
 
 Framework-agnostic core logic lives in `src/global-setup-core.ts`. Framework adapters (`src/vitest/`, `src/jest/`) are thin wrappers that delegate to the core and bridge context to test workers using framework-native mechanisms (vitest `inject`/`provide`, jest `globalThis`).
 
-Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`, `leftover-cleanup`, `process-capture`, `owned-instance-exit-marker`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18 — as is `OwnedInstanceExitedError` (`owned-instance-exited-error.ts`) — see L50.
+Internal modules (`exec`, `function-expression`, `json-with-functions`, `type-guards`, `obsidian-config`, `obsidian-version`, `obsidian-version-switch`, `obsidian-installer`, `installer-asset`, `obsidian-instance`, `kill-process-tree`, `renderer-boot-detection`, `compatibility-options`, `leftover-cleanup`, `process-capture`, `owned-instance-exit-marker`, `deterministic-raster`) are not re-exported. `RendererFailedToInitializeError` (`renderer-failed-to-initialize-error.ts`) **is** exported — see L18 — as is `OwnedInstanceExitedError` (`owned-instance-exited-error.ts`) — see L50.
 
 The desktop owned-instance lifecycle lives in `transport-desktop-cdp.ts` (mode: own vs. attach), with `obsidian-instance.ts` (launch + free port + kill), `obsidian-version*.ts` (asar version resolution/download/cache), and `obsidian-installer.ts` (shell version detect/download/extract — it resolves the installer asset by querying the release's real asset list via the GitHub API and picking the platform-correct name with the pure, unit-tested `installer-asset.ts`, tolerating the historical dot-vs-hyphen separator rename, with a both-separator templated fallback when the API is unavailable). `transport-factory.ts` resolves the owned-instance config (shell exe + asar + temp user-data dir) from the version knobs.
 
@@ -1793,4 +1793,29 @@ Error: AVD "obsidian_test": device emulator-5570 did not answer `adb -s emulator
 - **The regression test proves both halves, and needed three corrections to do it.** `src/hide-caret.integration.test.ts` takes eight captures with the caret shown and eight with it hidden, for an input and for an editor, and counts the pixels each frame changes against the first. The shown series is the control: it must change, or the hidden series' agreement proves nothing. With the hide disabled, both stability cases fail, at 17 changed pixels for the input and 21 for the editor, and so does the restore case.
   - **A fresh editor tab draws one more, different frame before it holds still.** That read exactly like a caret, so each series starts only once two caret-hidden captures agree.
   - **A modal torn out of the DOM instead of closed stays on Obsidian's books.** The editor opened after it held focus without ever blinking, so the editor's control passed vacuously. Closing it through `Modal.close()` fixed that.
-  - **A byte comparison fails for a reason that has nothing to do with the caret.** A 15-run soak failed 4 runs on byte equality. The odd frame showed up with the caret shown and hidden alike, about 1 capture in 30. It differed from its neighbors in about 240 pixels, all in the modal's and the suggester's soft shadows, and every one by exactly 1 in a channel. The test therefore counts a pixel as changed only past a per-channel delta of 1. After that change the suite passed 15 of 15. The caret draws at full contrast, so that tolerance cannot hide it. **This shadow noise is a reproducibility channel of its own, and the caret fix does not close it:** a consumer suite that commits a PNG of a frame with a modal will still see that frame rewritten now and then.
+  - **A byte comparison fails for a reason that has nothing to do with the caret.** A 15-run soak failed 4 runs on byte equality. The odd frame showed up with the caret shown and hidden alike, about 1 capture in 30. It differed from its neighbors in about 240 pixels, all in the modal's and the suggester's soft shadows, and every one by exactly 1 in a channel. The test counted a pixel as changed only past a per-channel delta of 1 for a while. That noise was a reproducibility channel of its own, which the caret fix did not close. **L69** closed it, and the suite compares exactly again.
+
+## L69. Sized desktop captures re-rasterize every time, so the owned instance rasterizes on the CPU
+
+A sized desktop capture (`widthInPixels` / `heightInPixels`) pins the viewport with `Emulation.setDeviceMetricsOverride` and clears the override afterwards, so every capture makes Chromium rasterize the page again at the new size. With GPU rasterization on, that is not deterministic. The soft `box-shadow` of a modal and of a suggester sometimes came back one value off in a single channel, a few hundred pixels at a time, with nothing visibly different. A consumer that committed a PNG of such a frame had it rewritten now and then, and **L68**'s caret suite needed a per-channel tolerance to stay green.
+
+Measured on 2026-09-25 against a 1200x800 frame with a modal and a suggester open, the caret hidden, 300 captures per row:
+
+| Launch | Distinct frames (count of each) |
+| --- | --- |
+| default | 3 (253 / 39 / 8) |
+| `--disable-partial-raster` | 3 (201 / 83 / 16) |
+| `--force-color-profile=srgb` | 3 (209 / 78 / 13) |
+| no size override at all | 1 (300) |
+| `--disable-gpu` | 1 (300) |
+| `--disable-gpu-rasterization` | 1 (299), plus the very first capture |
+
+The noisy frames were scattered through the whole series, so it is not a settle problem. The rate here was about 1 capture in 6, higher than the 1 in 30 first reported. The same few alternatives recurred, which fits a rasterizer choosing between a small set of tile schedules rather than random noise.
+
+- **The fix is `DETERMINISTIC_RASTER_LAUNCH_FLAGS`** (`src/deterministic-raster.ts`), `--disable-gpu-rasterization`, passed to every **owned** launch ahead of the visibility and sandbox switches. A 1000-capture soak with it gave 999 identical frames. The one exception was the very first capture after the modal opened, which is the settle frame **L68**'s series already waits out. Twelve runs of the caret suite then passed with an exact comparison, where fifteen runs of byte comparison had failed four before.
+- **Not `--disable-gpu`.** It is stable too, but it also moves compositing to software. Rasterizing on the CPU is the narrower change, and it cost no capture time in the soak (about 24 s per 300 captures either way).
+- **Dropping the size override was not an option.** Unsized captures were stable too, but a capture at a fixed size is what the size options exist for.
+- **Owned instances only.** An attached Obsidian was launched by someone else, so its switches are not the harness's to choose, and its sized captures can still vary.
+- **Retrying until two consecutive captures agree was considered and refused.** Within one override the page rasterizes once, so two captures agreeing only proves that one rasterization happened. It does not choose between the alternatives.
+- **Consequence for consumers: a one-time change of committed desktop PNGs.** A CPU-rasterized frame is not byte-identical to the GPU-rasterized one it replaces: the probe frame went from one digest to a different stable one. A consumer re-capturing after upgrading sees its desktop frames rewritten once, and never again after that.
+- **Android is unaffected.** A device capture reads the emulator's framebuffer (**L54**), which these switches do not reach. `soft-keyboard.android.integration.test.ts` keeps its own per-channel tolerance for that reason.
