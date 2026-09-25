@@ -23,6 +23,15 @@ export {
   withAppConfig
 } from './app-config.ts';
 export type {
+  ApplyObsidianThemeParams,
+  AssertObsidianThemeUnchangedParams,
+  ObsidianTheme
+} from './apply-obsidian-theme.ts';
+export {
+  applyObsidianTheme,
+  assertObsidianThemeUnchanged
+} from './apply-obsidian-theme.ts';
+export type {
   AsarFallback,
   AsarFallbackTier,
   ResolveAsarFallbackParams
