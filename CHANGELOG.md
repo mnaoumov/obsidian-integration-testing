@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 17.1.0
+
+- feat(screenshot): merge hiding the focused element's caret for each capture
+
 ## 17.0.2
 
 - chore(cspell): teach repointing
