@@ -233,6 +233,11 @@ export {
   paintOutStatusBar,
   resolveStatusBarBand
 } from './paint-out-status-bar.ts';
+export type {
+  PinnedWindowFocus,
+  PinWindowFocusOptions
+} from './pin-window-focus.ts';
+export { pinWindowFocus } from './pin-window-focus.ts';
 export type { PollInObsidianParams } from './poll-in-obsidian.ts';
 export { pollInObsidian } from './poll-in-obsidian.ts';
 export { RendererFailedToInitializeError } from './renderer-failed-to-initialize-error.ts';

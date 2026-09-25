@@ -15,7 +15,10 @@
  * name — see `hide-vault-name.ts` for why a `temp-vault-<random>` bleeds
  * through the caption band and rewrites a checked-in PNG on every run — and by
  * hiding the focused element's blinking caret for the length of the capture —
- * see `hide-caret.ts` for why that is a transparent caret and not a blur.
+ * see `hide-caret.ts` for why that is a transparent caret and not a blur —
+ * and by drawing the window focused whether or not the OS gave it focus — see
+ * `pin-window-focus.ts` for the title bar that otherwise darkens one run in
+ * five.
  *
  * And it refuses a frame whose theme has changed since `applyObsidianTheme` set
  * it — see `apply-obsidian-theme.ts` for the config reload that silently turns a
@@ -37,6 +40,7 @@ import {
 import { hideCaret } from './hide-caret.ts';
 import { hideVaultName } from './hide-vault-name.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
+import { pinWindowFocus } from './pin-window-focus.ts';
 import { getOrCreateTransport } from './transport-factory.ts';
 
 /**
@@ -79,6 +83,21 @@ export interface CaptureObsidianScreenshotOptions {
    * @default `true`
    */
   readonly shouldHideVaultName?: boolean;
+
+  /**
+   * Whether to draw the window as focused while capturing, so the frame does
+   * not depend on whether the operating system gave the window foreground
+   * focus that run.
+   *
+   * Obsidian darkens the title bar of an unfocused window, and a freshly
+   * launched one is routinely refused the foreground. The `is-focused` class is
+   * added for the capture and handed back to Obsidian afterwards; the window's
+   * real focus is never touched. Turn it off only to photograph the unfocused
+   * chrome itself, and expect such a frame to differ between runs.
+   *
+   * @default `true`
+   */
+  readonly shouldPinWindowFocus?: boolean;
 
   /**
    * Whether to refuse the frame when the body is no longer in the theme
@@ -124,7 +143,9 @@ export interface CaptureObsidianScreenshotOptions {
  * photograph it. The focused element's caret is hidden for the capture too, and
  * restored after it, so a frame with a focused field does not alternate between
  * two blink phases; {@link CaptureObsidianScreenshotOptions.shouldHideCaret}
- * turns that off. A frame whose body has left the theme `applyObsidianTheme`
+ * turns that off. The window is drawn focused whether or not the OS gave it
+ * focus; {@link CaptureObsidianScreenshotOptions.shouldPinWindowFocus} turns
+ * that off. A frame whose body has left the theme `applyObsidianTheme`
  * applied is refused; {@link CaptureObsidianScreenshotOptions.shouldVerifyTheme}
  * turns that off.
  *
@@ -138,6 +159,7 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
     heightInPixels,
     shouldHideCaret = true,
     shouldHideVaultName = true,
+    shouldPinWindowFocus = true,
     shouldVerifyTheme = true,
     transport: transportOverride,
     vaultPath,
@@ -173,6 +195,13 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
     })
     : undefined;
 
+  const pinnedWindowFocus = shouldPinWindowFocus
+    ? await pinWindowFocus({
+      transport,
+      vaultPath: cwd
+    })
+    : undefined;
+
   try {
     return await transport.captureScreenshot(normalizeOptionalProperties<CaptureScreenshotParams>({
       cwd,
@@ -180,6 +209,7 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
       widthInPixels
     }));
   } finally {
+    await pinnedWindowFocus?.restore();
     await hiddenCaret?.restore();
   }
 }
