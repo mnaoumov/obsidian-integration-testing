@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 17.0.2
+
+- chore(cspell): teach repointing
+- fix(android): merge hit-testing clickElement's target in its own shadow root
+- docs: merge repointing dead {@link} targets
+
 ## 17.0.1
 
 - fix(android): merge waiting for clickElement's target to stop moving
