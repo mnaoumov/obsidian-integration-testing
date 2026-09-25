@@ -51,6 +51,18 @@
  *    so the capture straight after showed the placeholder. The field is re-read until it holds, and written
  *    again when it does not.
  *
+ * 5. **Gboard's suggestion strip is a second race, and parking the caret at offset 0 ends it.** With the
+ *    keyboard up, Gboard draws either its toolbar (apps, stickers, GIF, clipboard, settings, theme, mic) or word
+ *    predictions for the text before the caret. The touch landed on the emptied field, which gets the toolbar,
+ *    and the write-back puts the caret at the end of the text, which gets predictions — once Gboard hears about
+ *    it, which is a matter of timing. The predictions themselves come from the keyboard's learned dictionary
+ *    and differ between runs. So a capture showed one of two strips, and two different sets of predictions
+ *    when it showed the second. Suggestions cannot be switched off from the page: Obsidian's `.prompt-input`
+ *    already carries `spellcheck="false"`, and the IME already receives `TYPE_TEXT_FLAG_NO_SUGGESTIONS`
+ *    (`inputType=0x2080a1`). Gboard still predicts (measured 2026-09-25). With the caret at offset 0 there is
+ *    no text before it, which is the empty-field state, so whichever way the race goes, the strip is the
+ *    toolbar. See `shouldPinKeyboardToolbar`.
+ *
  * The geometry that decides whether it worked is unit-tested in
  * `soft-keyboard-geometry`; everything here drives a real device, so the whole
  * module is integration-time code.
@@ -136,6 +148,31 @@ export interface RaiseSoftKeyboardParams {
   readonly shouldEmptyFieldForTouch?: boolean;
 
   /**
+   * Whether to park the caret at offset 0 once the keyboard is up, so Gboard's suggestion strip shows its
+   * toolbar rather than word predictions.
+   *
+   * **On by default, because the strip is otherwise a race between two states, and one of them varies.**
+   * Gboard shows its toolbar while nothing sits before the caret, and predictions for the word before it
+   * otherwise. The touch lands on the emptied field (toolbar). The write-back leaves the caret after the text
+   * (predictions), but only once Gboard has processed that update. And the predictions come from the
+   * keyboard's learned dictionary, so they differ from one run to the next. With the caret at offset 0 both
+   * outcomes of the race are the toolbar: measured 2026-09-25, six raises with the caret parked all gave
+   * byte-identical strip rows showing the toolbar, while the same field with the caret at the end showed
+   * `multiple` / `multiples` / `multiplex`.
+   *
+   * Turning suggestions off does not do this. Obsidian's prompt input already has `spellcheck="false"`,
+   * and the IME already receives `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, yet Gboard still predicts.
+   *
+   * Only an `<input>` or a `<textarea>` is parked; any other field is left as it is. The caret is visible at
+   * offset 0 unless the capture hides it, which a device capture has to ask for with `hideCaret`.
+   *
+   * Turning it off leaves the caret where the write-back or the touch put it.
+   *
+   * @default true
+   */
+  readonly shouldPinKeyboardToolbar?: boolean;
+
+  /**
    * The vault to read the geometry from. When omitted, the current test context's vault is used.
    */
   readonly vaultPath?: string;
@@ -191,6 +228,17 @@ const KEYBOARD_RETRACT_ATTEMPT_COUNT = 2;
 const KEYBOARD_SHOWN_CONFIRMATION_DELAY_IN_MILLISECONDS = KEYBOARD_RETRACT_DELAY_IN_MILLISECONDS;
 
 /**
+ * How many times the caret is parked at offset 0 before a caret that will not stay there is reported.
+ */
+const CARET_PARK_ATTEMPT_COUNT = 3;
+
+/**
+ * How long a parked caret is left before it is read back — long enough for the IME to answer the selection
+ * change, which is what would move it again.
+ */
+const CARET_PARK_CONFIRMATION_DELAY_IN_MILLISECONDS = 300;
+
+/**
  * What a field holds, and whether it is one this can put back.
  */
 interface FieldContent {
@@ -204,6 +252,21 @@ interface FieldContent {
    * The text the field currently holds.
    */
   readonly text: string;
+}
+
+/**
+ * Where a field's caret is, as the selection offsets an `<input>` or a `<textarea>` reports.
+ */
+interface FieldSelection {
+  /**
+   * Where the selection ends.
+   */
+  readonly selectionEnd: null | number;
+
+  /**
+   * Where the selection starts.
+   */
+  readonly selectionStart: null | number;
 }
 
 /**
@@ -224,6 +287,10 @@ interface FieldContent {
  * text draws Chromium's selection handle and the framebuffer photographs it — see
  * {@link RaiseSoftKeyboardParams.shouldEmptyFieldForTouch}, which turns that off.
  *
+ * **The caret is then parked at offset 0**, so Gboard's suggestion strip is its toolbar rather than word
+ * predictions that race the write-back and vary between runs — see
+ * {@link RaiseSoftKeyboardParams.shouldPinKeyboardToolbar}, which turns that off.
+ *
  * **The geometry returned is read with the field still empty**, and the text is written back after it.
  * That is the state the proven capture suites assert against, and it is deliberate rather than
  * incidental: the baseline is read AFTER the field is emptied, so the lift is measured between two reads
@@ -236,8 +303,9 @@ interface FieldContent {
  * @returns A {@link Promise} that resolves to the geometry read once the keyboard is up.
  * @throws Error if a keyboard already up would not go down, if the field never matched, if it holds text
  *   this cannot empty and put back, if it never lifted — after writing the device framebuffer and the
- *   device's own `input_method` state to the diagnostics directory — or if the text written back would not
- *   stay in the field. A write-back the IME undoes is written again until it holds; see `restoreFieldText`.
+ *   device's own `input_method` state to the diagnostics directory — if the text written back would not
+ *   stay in the field, or if the caret would not stay at offset 0. A write-back the IME undoes is written
+ *   again until it holds; see `restoreFieldText`.
  */
 export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promise<SoftKeyboardViewportSnapshot> {
   await lowerSoftKeyboardIfShown(params);
@@ -260,6 +328,10 @@ export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promis
 
   if (textToRestore !== null) {
     await restoreFieldText(params, textToRestore);
+  }
+
+  if (params.shouldPinKeyboardToolbar !== false) {
+    await parkCaretAtStart(params);
   }
 
   return snapshot;
@@ -459,6 +531,57 @@ device: ${inputMethodState}`
 }
 
 /**
+ * Parks the field's caret at offset 0, and does not return until it has stayed there.
+ *
+ * Read back after {@link CARET_PARK_CONFIRMATION_DELAY_IN_MILLISECONDS}, and parked again when it moved: the IME
+ * answers a selection change, and a caret it moved back to the end would bring the predictions back with it.
+ *
+ * @param params - The field whose caret to park.
+ * @returns A {@link Promise} that resolves once the caret has stayed at offset 0, or at once for a field that
+ *   is not an `<input>` or a `<textarea>`.
+ * @throws Error if the caret did not stay at offset 0 after {@link CARET_PARK_ATTEMPT_COUNT} attempts.
+ */
+async function parkCaretAtStart(params: RaiseSoftKeyboardParams): Promise<void> {
+  const selections: (FieldSelection | null)[] = [];
+
+  for (let attempt = 0; attempt < CARET_PARK_ATTEMPT_COUNT; attempt++) {
+    const isParked = await evalInObsidian({
+      callback({ inputSelector }): boolean {
+        const element = document.querySelector(inputSelector);
+
+        if (!(element instanceof HTMLInputElement) && !(element instanceof HTMLTextAreaElement)) {
+          return false;
+        }
+
+        element.setSelectionRange(0, 0);
+        return true;
+      },
+      input: { inputSelector: params.inputSelector },
+      ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })
+    });
+
+    if (!isParked) {
+      return;
+    }
+
+    await sleep(CARET_PARK_CONFIRMATION_DELAY_IN_MILLISECONDS);
+    const selection = await readFieldSelection(params);
+    selections.push(selection);
+
+    if (selection?.selectionStart === 0 && selection.selectionEnd === 0) {
+      return;
+    }
+  }
+
+  throw new Error(
+    `raiseSoftKeyboard: the caret parked at offset 0 in "${params.inputSelector}" did not stay there, so Gboard's `
+      + `strip would show word predictions rather than its toolbar. ${String(CARET_PARK_ATTEMPT_COUNT)} attempt(s); `
+      + `the field read ${JSON.stringify(selections)}. Pass shouldPinKeyboardToolbar: false to leave the caret alone.
+device: ${await readInputMethodState(params)}`
+  );
+}
+
+/**
  * Reads what the field holds, and whether it is one whose value can be written back.
  *
  * @param params - The field to read.
@@ -476,6 +599,26 @@ async function readFieldContent(params: RaiseSoftKeyboardParams): Promise<FieldC
       const canWrite = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
 
       return { canWrite, text: canWrite ? element.value : element.textContent };
+    },
+    input: { inputSelector: params.inputSelector },
+    ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })
+  });
+}
+
+/**
+ * Reads where the field's caret is.
+ *
+ * @param params - The field to read.
+ * @returns A {@link Promise} that resolves to the selection, or `null` when nothing writable matched.
+ */
+async function readFieldSelection(params: RaiseSoftKeyboardParams): Promise<FieldSelection | null> {
+  return await evalInObsidian({
+    callback({ inputSelector }): FieldSelection | null {
+      const element = document.querySelector(inputSelector);
+
+      return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+        ? { selectionEnd: element.selectionEnd, selectionStart: element.selectionStart }
+        : null;
     },
     input: { inputSelector: params.inputSelector },
     ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })

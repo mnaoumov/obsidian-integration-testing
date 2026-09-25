@@ -3,7 +3,8 @@
  *
  * The integration coverage for `raiseSoftKeyboard`'s field emptying (**L54**, **L65**): the field is emptied
  * for the touch that raises the keyboard, and its text is written back afterwards — including when the raise
- * fails — unless `shouldEmptyFieldForTouch: false` asks for the field to be touched as it stands.
+ * fails — unless `shouldEmptyFieldForTouch: false` asks for the field to be touched as it stands — and the
+ * caret parked at offset 0 afterwards, so Gboard's suggestion strip is the same toolbar on every raise.
  *
  * Every line of `src/soft-keyboard.ts` is inside a `v8 ignore` block, and until this file the touching had
  * only ever been proved from a consumer's capture suite. The emptying is the step that most needs proving
@@ -25,7 +26,10 @@
 
 import type { Modal } from 'obsidian';
 
-import { mkdtempSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync
+} from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,11 +44,16 @@ import {
   it
 } from 'vitest';
 
+import type { SharpRawResult } from './sharp-loader.ts';
+
 import { runAdbText } from './adb.ts';
 import { ContextId } from './context-id.ts';
+import { captureDeviceScreenshot } from './device-screenshot.ts';
 import { withSoftKeyboardEnabled } from './device-settings.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { hideCaret } from './hide-caret.ts';
 import { resolveEmulatorDeviceId } from './resolve-emulator-device-id.ts';
+import { importSharp } from './sharp-loader.ts';
 import {
   checkIsInputMethodShown,
   parseInputMethodState
@@ -122,6 +131,43 @@ const POST_RAISE_OBSERVATION_DELAY_IN_MILLISECONDS = 1500;
 const HOLD_TEST_TIMEOUT_IN_MILLISECONDS = 480_000;
 
 /**
+ * The text the strip test seeds: a word Gboard has plenty of predictions for (`multiple` / `multiples` /
+ * `multiplex`), so a strip showing predictions cannot pass for one showing the toolbar.
+ */
+const STRIP_QUERY_TEXT = 'multiple';
+
+/**
+ * How many raise+capture rounds the strip has to hold still across.
+ */
+const STRIP_ROUND_COUNT = 10;
+
+/**
+ * How long after a raise returns the strip is photographed — about what a capture suite waits.
+ */
+const STRIP_CAPTURE_DELAY_IN_MILLISECONDS = 1500;
+
+/**
+ * How far a channel may differ between two frames before the pixel counts as changed. Modal soft shadows
+ * rasterize one value off now and then (see the caret suite's own copy of this tolerance); the strip's
+ * glyphs differ at full contrast, so this cannot hide them.
+ */
+const RASTER_NOISE_CHANNEL_DELTA = 1;
+
+/*
+ * Ten raises, each up to ~15s, plus a keyboard settle, the capture delay and the capture per raise.
+ */
+const STRIP_TEST_TIMEOUT_IN_MILLISECONDS = 480_000;
+
+/**
+ * What the suite keeps in the renderer between evals: the modal to close, and the log the field writes.
+ */
+interface ChangedRows {
+  readonly firstRow: number;
+  readonly lastRow: number;
+  readonly pixelCount: number;
+}
+
+/**
  * What the probe field recorded about itself.
  */
 interface FieldLog {
@@ -136,9 +182,6 @@ interface FieldLog {
   readonly touchValues: string[];
 }
 
-/**
- * What the suite keeps in the renderer between evals: the modal to close, and the log the field writes.
- */
 interface ProbeContext {
   inputValues: string[];
   modal?: Modal;
@@ -315,6 +358,83 @@ describe('raiseSoftKeyboard on Android', () => {
     expect(heldValues).toEqual(HOLD_QUERIES);
   }, HOLD_TEST_TIMEOUT_IN_MILLISECONDS);
 
+  // Gboard's suggestion strip is either its toolbar or word predictions for the text before the caret, and the
+  // raise used to leave that to a race: the touch lands on the emptied field (toolbar), and the write-back leaves
+  // the caret after the text (predictions) once Gboard hears about it. The predictions also vary between runs,
+  // because they come from the keyboard's learned dictionary. Parking the caret at offset 0 makes both outcomes
+  // the toolbar. The lower half of the frame holds the lifted field (caret hidden) and the whole keyboard, so
+  // every round has to photograph it the same, down to rasterization noise of one value per channel.
+  it('should show the same keyboard strip on every raise', async () => {
+    const frames: Uint8Array[] = [];
+    const selectionStarts: (null | number)[] = [];
+    const sharp = await importSharp('soft-keyboard.android.integration.test');
+
+    await withSoftKeyboardEnabled({
+      callback: async () => {
+        for (let round = 0; round < STRIP_ROUND_COUNT; round++) {
+          await closeProbeModal();
+          await waitForKeyboardToSettleDown();
+          await openProbeModal(STRIP_QUERY_TEXT);
+          await raiseSoftKeyboard({ deviceId, inputSelector: PROBE_INPUT_SELECTOR, vaultPath: vault.path });
+          selectionStarts.push(await readSelectionStart());
+
+          const hiddenCaret = await hideCaret({ vaultPath: vault.path });
+          try {
+            await sleep(STRIP_CAPTURE_DELAY_IN_MILLISECONDS);
+            frames.push(await captureDeviceScreenshot({ deviceId }));
+          } finally {
+            await hiddenCaret.restore();
+          }
+        }
+      },
+      deviceId
+    });
+
+    expect(selectionStarts).toEqual(Array.from({ length: STRIP_ROUND_COUNT }, () => 0));
+
+    const [firstFrame] = frames;
+    if (!firstFrame) {
+      throw new Error('No frame was captured.');
+    }
+
+    const first = await sharp(firstFrame).raw().toBuffer({ resolveWithObject: true });
+    const differences: string[] = [];
+    let framesDirectory = '';
+
+    for (const [index, frame] of frames.entries()) {
+      const current = await sharp(frame).raw().toBuffer({ resolveWithObject: true });
+      const changedRows = findChangedRows(first, current, Math.floor(first.info.height / 2));
+
+      if (!changedRows) {
+        continue;
+      }
+
+      framesDirectory ||= mkdtempSync(join(tmpdir(), 'soft-keyboard-strip-'));
+      writeFileSync(join(framesDirectory, 'frame-0.png'), firstFrame);
+      writeFileSync(join(framesDirectory, `frame-${String(index)}.png`), frame);
+      differences.push(`frame ${String(index)}: ${String(changedRows.pixelCount)} pixel(s) in rows ${String(changedRows.firstRow)}-${String(changedRows.lastRow)}`);
+    }
+
+    expect(differences, `frames differing from frame 0, kept in ${framesDirectory}`).toEqual([]);
+  }, STRIP_TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The opt-out leaves the caret where the write-back put it: after the text.
+  it('should leave the caret after the text when shouldPinKeyboardToolbar is false', async () => {
+    await withSoftKeyboardEnabled({
+      callback: async () =>
+        await raiseSoftKeyboard({
+          deviceId,
+          inputSelector: PROBE_INPUT_SELECTOR,
+          shouldPinKeyboardToolbar: false,
+          vaultPath: vault.path
+        }),
+      deviceId
+    });
+
+    expect(await readSelectionStart()).toBe(QUERY_TEXT.length);
+    expect(await readFieldValue()).toBe(QUERY_TEXT);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
   async function closeProbeModal(): Promise<void> {
     await evalInObsidian({
       callback({ context }): void {
@@ -407,6 +527,17 @@ describe('raiseSoftKeyboard on Android', () => {
     throw new Error(`The keyboard was still up ${String(KEYBOARD_SETTLE_TIMEOUT_IN_MILLISECONDS)}ms after the probe modal closed.`);
   }
 
+  async function readSelectionStart(): Promise<null | number> {
+    return await evalInObsidian({
+      callback({ inputSelector }): null | number {
+        const element = document.querySelector(inputSelector);
+        return element instanceof HTMLInputElement ? element.selectionStart : null;
+      },
+      input: { inputSelector: PROBE_INPUT_SELECTOR },
+      vaultPath: vault.path
+    });
+  }
+
   async function readFieldValue(): Promise<null | string> {
     return await evalInObsidian({
       callback({ inputSelector }): null | string {
@@ -418,3 +549,33 @@ describe('raiseSoftKeyboard on Android', () => {
     });
   }
 });
+
+/**
+ * Finds the pixels below `fromRow` whose channels differ by more than {@link RASTER_NOISE_CHANNEL_DELTA}
+ * between two frames of the same size, and the rows they span.
+ *
+ * @param first - One frame.
+ * @param second - The other.
+ * @param fromRow - The first row compared.
+ * @returns The rows and count of changed pixels, or `null` when none changed.
+ */
+function findChangedRows(first: SharpRawResult, second: SharpRawResult, fromRow: number): ChangedRows | null {
+  const { channels, width } = first.info;
+  let firstRow = -1;
+  let lastRow = -1;
+  let pixelCount = 0;
+
+  for (let offset = fromRow * width * channels; offset < first.data.length; offset += channels) {
+    for (let channel = 0; channel < channels; channel++) {
+      if (Math.abs((first.data[offset + channel] ?? 0) - (second.data[offset + channel] ?? 0)) > RASTER_NOISE_CHANNEL_DELTA) {
+        const row = Math.floor(offset / (width * channels));
+        firstRow = firstRow === -1 ? row : firstRow;
+        lastRow = row;
+        pixelCount++;
+        break;
+      }
+    }
+  }
+
+  return pixelCount === 0 ? null : { firstRow, lastRow, pixelCount };
+}
