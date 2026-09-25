@@ -739,10 +739,27 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       ? document.getAnimations().filter((animation) => {
         const effect = animation.effect;
         const isActive = animation.playState === 'running' || animation.pending;
-        const isOnElementOrAncestor = effect instanceof KeyframeEffect && effect.target instanceof Element && effect.target.contains(element);
+        const isOnElementOrAncestor = effect instanceof KeyframeEffect && effect.target instanceof Element
+          && checkIsShadowIncludingInclusiveAncestor(effect.target, element);
         return isActive && isOnElementOrAncestor && effect.getComputedTiming().endTime !== Infinity;
       })
       : [];
+  }
+
+  // `Node.contains` stops at a shadow root, so a host sliding in would not count as moving an element inside
+  // its shadow tree. This walks up through each shadow root to its host, the ancestry the layout follows.
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
+  function checkIsShadowIncludingInclusiveAncestor(ancestor: Node, node: Node): boolean {
+    let current: Node | null = node;
+    while (current) {
+      if (current === ancestor) {
+        return true;
+      }
+
+      current = current instanceof ShadowRoot ? current.host : current.parentNode;
+    }
+
+    return false;
   }
 
   /*
@@ -796,12 +813,18 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    * Refuses to tap a point that belongs to something else. A trusted tap goes to whatever is on top, so a
    * covered element would otherwise have its cover tapped instead — `.modal-bg`, say, which closes the
    * modal — while `clickElement` resolved as though it had clicked.
+   *
+   * The hit test is asked of the element's OWN tree. `document.elementFromPoint` retargets a hit inside a
+   * shadow root to the shadow host, which the element does not contain, so every shadow-DOM target used to
+   * be refused however unobstructed it was. A `ShadowRoot` answers `elementFromPoint` retargeted to its own
+   * tree instead, and a light-DOM cover over the host is still not inside the element, so it still refuses.
    */
   function assertCenterHitsElement(element: HTMLElement, rect: DOMRect): void {
     const CENTER_DIVISOR = 2;
     const x = rect.left + rect.width / CENTER_DIVISOR;
     const y = rect.top + rect.height / CENTER_DIVISOR;
-    const hitElement = document.elementFromPoint(x, y);
+    const root = element.getRootNode();
+    const hitElement = (root instanceof ShadowRoot ? root : document).elementFromPoint(x, y);
     if (hitElement && element.contains(hitElement)) {
       return;
     }

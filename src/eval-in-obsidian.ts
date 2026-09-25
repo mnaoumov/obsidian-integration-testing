@@ -265,7 +265,8 @@ export interface Lib {
    * control *used to be*. So the mobile path first waits (up to 5 s) until no finite
    * animation or transition runs on the element or any ancestor and its box
    * has held across two reads, then checks with `elementFromPoint` that the
-   * center belongs to the element. It throws a named error in either case
+   * center belongs to the element (asked of the element's own root, so a
+   * target inside a shadow root is hit-tested in its own tree). It throws a named error in either case
    * rather than tapping, because a trusted tap goes to whatever is on top and
    * would otherwise land on it silently. Use {@link Lib.clickMouse} to tap a
    * point deliberately, covered or not. Desktop is unchanged.

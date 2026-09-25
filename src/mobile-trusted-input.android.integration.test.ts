@@ -266,6 +266,72 @@ describe('mobile trusted input', () => {
     expect(result.wasOverlayTapped).toBe(false);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
+  // `document.elementFromPoint` retargets a hit inside a shadow root to its host, which the target does not
+  // contain, so the covered-target refusal used to refuse EVERY shadow-DOM target — eruda's console, for one.
+  it('should tap an unobstructed element inside a shadow root', async () => {
+    const clickCount = await evalInObsidian({
+      async callback({ lib }): Promise<number> {
+        const host = document.body.createDiv();
+        host.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+        const shadowRoot = host.attachShadow({ mode: 'open' });
+        const target = host.createDiv();
+        target.setCssStyles({ height: '80px', width: '160px' });
+        shadowRoot.append(target);
+
+        let count = 0;
+        target.addEventListener('click', () => {
+          count++;
+        });
+
+        try {
+          await lib.clickElement({ element: target });
+          await lib.waitUntil({ message: 'the tap on the shadow-DOM target to produce a click', predicate: () => count > 0 });
+          return count;
+        } finally {
+          host.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(clickCount).toBe(1);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should still refuse a shadow-DOM element whose host a light-DOM element covers', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<CoveredTapResult> {
+        const host = document.body.createDiv();
+        host.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '1' });
+        const shadowRoot = host.attachShadow({ mode: 'open' });
+        const target = host.createDiv();
+        target.setCssStyles({ height: '80px', width: '160px' });
+        shadowRoot.append(target);
+
+        const overlay = document.body.createDiv('oit-probe-overlay');
+        overlay.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        let wasOverlayTapped = false;
+        overlay.addEventListener('pointerdown', () => {
+          wasOverlayTapped = true;
+        });
+
+        try {
+          await lib.clickElement({ element: target });
+          return { errorMessage: '', wasOverlayTapped };
+        } catch (error) {
+          return { errorMessage: error instanceof Error ? error.message : String(error), wasOverlayTapped };
+        } finally {
+          host.remove();
+          overlay.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.errorMessage).toContain('.oit-probe-overlay');
+    expect(result.wasOverlayTapped).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
   // The shape that motivated the settle wait. Obsidian Mobile opens a modal shifted down, with a `transform`
   // transition that can hold it there — measured at over 1.5 s on the first modal after a boot — and the tap
   // reaches the page ~1 s after it is aimed. A caller that clicked a control the moment its modal was open
