@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 17.1.1
+
+- fix(soft-keyboard): merge holding the written-back text until the IME stops undoing it
+
 ## 17.1.0
 
 - feat(screenshot): merge hiding the focused element's caret for each capture
