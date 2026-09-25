@@ -301,13 +301,15 @@ interface FieldSelection {
  *
  * @param params - The device, the field to touch, and how far it must lift.
  * @returns A {@link Promise} that resolves to the geometry read once the keyboard is up.
- * @throws Error if a keyboard already up would not go down, if the field never matched, if it holds text
+ * @throws Error if the selector matches more than one element — the harness would empty one field while the
+ *   touch landed on another — if a keyboard already up would not go down, if the field never matched, if it holds text
  *   this cannot empty and put back, if it never lifted — after writing the device framebuffer and the
  *   device's own `input_method` state to the diagnostics directory — if the text written back would not
  *   stay in the field, or if the caret would not stay at offset 0. A write-back the IME undoes is written
  *   again until it holds; see `restoreFieldText`.
  */
 export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promise<SoftKeyboardViewportSnapshot> {
+  await assertFieldIsUnambiguous(params);
   await lowerSoftKeyboardIfShown(params);
 
   const textToRestore = await emptyFieldForTouch(params);
@@ -348,6 +350,41 @@ export async function tapDevice(params: TapDeviceParams): Promise<void> {
     commandArguments: ['shell', 'input', 'tap', String(params.point.xInPixels), String(params.point.yInPixels)],
     deviceId: params.deviceId
   });
+}
+
+/**
+ * Refuses a selector that matches more than one element, before anything is touched.
+ *
+ * Every step of the raise addresses the field through `document.querySelector`, which is the FIRST match in
+ * document order: the emptying, the geometry the tap point comes from, the write-back and the caret park. The
+ * device's touch lands on whatever is drawn on top at that point, which for two stacked modals is the LAST
+ * one. So the harness emptied one field and the touch landed inside the other one's text, and Chromium drew
+ * its insertion handle into the frame. That is the defect the emptying exists to prevent, arriving with no
+ * error. Measured 2026-09-25: a probe that opened each fresh `SuggestModal` without closing the previous
+ * one drew the handle on every raise after the first.
+ *
+ * @param params - The field to look for.
+ * @returns A {@link Promise} that resolves when the selector matches at most one element. No match is left to
+ *   the geometry read, which reports it with its own message.
+ * @throws Error if the selector matches more than one element.
+ */
+async function assertFieldIsUnambiguous(params: RaiseSoftKeyboardParams): Promise<void> {
+  const matchCount = await evalInObsidian({
+    callback({ inputSelector }): number {
+      return document.querySelectorAll(inputSelector).length;
+    },
+    input: { inputSelector: params.inputSelector },
+    ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })
+  });
+
+  if (matchCount > 1) {
+    throw new Error(
+      `raiseSoftKeyboard: "${params.inputSelector}" matches ${String(matchCount)} elements, so the field the harness empties and `
+        + 'measures (the first match) need not be the one the touch lands on (the one drawn on top). A touch that lands inside '
+        + 'the other field\'s text draws a selection handle, which a device capture photographs. Close the UI left behind, '
+        + 'or pass a selector that matches only the field to raise the keyboard on.'
+    );
+  }
 }
 
 /**
