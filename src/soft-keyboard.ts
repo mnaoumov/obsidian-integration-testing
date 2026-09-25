@@ -46,6 +46,11 @@
  *    and nothing in this module's own documentation of the touch hinted at it.
  *    See `shouldEmptyFieldForTouch`.
  *
+ *    **And the text written back has to be HELD, not just written.** The IME's input connection started from
+ *    the emptied field, and about one time in five it wrote that empty state back over the harness's write,
+ *    so the capture straight after showed the placeholder. The field is re-read until it holds, and written
+ *    again when it does not.
+ *
  * The geometry that decides whether it worked is unit-tested in
  * `soft-keyboard-geometry`; everything here drives a real device, so the whole
  * module is integration-time code.
@@ -61,6 +66,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import type { HoldFieldTextResult } from './field-text-hold.ts';
 import type {
   ElementRect,
   SoftKeyboardTapPoint,
@@ -70,6 +76,8 @@ import type {
 import { runAdbText } from './adb.ts';
 import { captureDeviceScreenshot } from './device-screenshot.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { holdFieldText } from './field-text-hold.ts';
+import { log } from './log.ts';
 import {
   buildSoftKeyboardDiagnosticMessage,
   checkIsInputMethodShown,
@@ -227,23 +235,34 @@ interface FieldContent {
  * @param params - The device, the field to touch, and how far it must lift.
  * @returns A {@link Promise} that resolves to the geometry read once the keyboard is up.
  * @throws Error if a keyboard already up would not go down, if the field never matched, if it holds text
- *   this cannot empty and put back, or if it never lifted — the last after writing the device framebuffer
- *   and the device's own `input_method` state to the diagnostics directory.
+ *   this cannot empty and put back, if it never lifted — after writing the device framebuffer and the
+ *   device's own `input_method` state to the diagnostics directory — or if the text written back would not
+ *   stay in the field. A write-back the IME undoes is written again until it holds; see `restoreFieldText`.
  */
 export async function raiseSoftKeyboard(params: RaiseSoftKeyboardParams): Promise<SoftKeyboardViewportSnapshot> {
   await lowerSoftKeyboardIfShown(params);
 
   const textToRestore = await emptyFieldForTouch(params);
 
+  let snapshot: SoftKeyboardViewportSnapshot;
+
   try {
-    return await tapUntilKeyboardIsUp(params);
-  } finally {
+    snapshot = await tapUntilKeyboardIsUp(params);
+  } catch (error) {
     // Restored even when the raise failed: a caller that is about to read its own diagnostic should not
-    // also have to discover that its query is gone.
+    // also have to discover that its query is gone. Best-effort, so the raise's own error is the one thrown.
     if (textToRestore !== null) {
-      await writeFieldText(params, textToRestore);
+      await holdFieldTextBestEffort(params, textToRestore);
     }
+
+    throw error;
   }
+
+  if (textToRestore !== null) {
+    await restoreFieldText(params, textToRestore);
+  }
+
+  return snapshot;
 }
 
 /**
@@ -334,6 +353,42 @@ async function emptyFieldForTouch(params: RaiseSoftKeyboardParams): Promise<null
   await writeFieldText(params, '');
 
   return content.text;
+}
+
+/**
+ * Holds the text in the field without ever throwing — the restore on a raise that already failed.
+ *
+ * @param params - The field to write.
+ * @param text - What it must hold.
+ * @returns A {@link Promise} that resolves once the hold has run, whatever it found.
+ */
+async function holdFieldTextBestEffort(params: RaiseSoftKeyboardParams, text: string): Promise<void> {
+  try {
+    await holdTextInField(params, text);
+  } catch {
+    // The raise's own failure is what the caller needs to see; a field that is gone as well adds nothing to it.
+  }
+}
+
+/**
+ * Writes the text into the field and holds it there, per {@link holdFieldText}.
+ *
+ * @param params - The field to write.
+ * @param text - What it must hold.
+ * @returns A {@link Promise} that resolves to what the hold found.
+ */
+async function holdTextInField(params: RaiseSoftKeyboardParams, text: string): Promise<HoldFieldTextResult> {
+  return await holdFieldText({
+    expectedText: text,
+    async readText(): Promise<null | string> {
+      const content = await readFieldContent(params);
+      return content?.text ?? null;
+    },
+    sleep,
+    async writeText(value: string): Promise<void> {
+      await writeFieldText(params, value);
+    }
+  });
 }
 
 /**
@@ -473,6 +528,42 @@ async function readSoftKeyboardViewport(params: RaiseSoftKeyboardParams): Promis
     input: { inputSelector: params.inputSelector },
     ...(params.vaultPath !== undefined && { vaultPath: params.vaultPath })
   });
+}
+
+/**
+ * Writes the emptied field's text back, and does not return until it has stayed there.
+ *
+ * **Writing it once is not enough.** The touch that raised the keyboard landed on the EMPTY field, so the
+ * IME's input connection started from an empty field, and about one time in five a later update from it wrote
+ * that empty state back over this write (measured 2026-09-25 in `obsidian-alias-quick-switcher`'s capture
+ * suite: 2 of 10 frames showed the placeholder, while the Gboard strip still offered the word that had been
+ * written). The capture taken straight after photographed the empty field, and nothing said so. So the field is
+ * re-read until several reads agree, and written again whenever one does not.
+ *
+ * @param params - The field to write, and the device to ask about its IME when the text will not hold.
+ * @param text - What the field held before it was emptied.
+ * @returns A {@link Promise} that resolves once the text has held.
+ * @throws Error if the text did not hold after every rewrite, or the field went away — naming every read and
+ *   the device's `input_method` state, rather than returning with the field silently empty.
+ */
+async function restoreFieldText(params: RaiseSoftKeyboardParams, text: string): Promise<void> {
+  const result = await holdTextInField(params, text);
+
+  if (result.writeCount > 1) {
+    log(
+      `[soft-keyboard] The text written back into "${params.inputSelector}" was lost ${String(result.writeCount - 1)} time(s) `
+        + `and written again; reads: ${JSON.stringify(result.readTexts)}.`
+    );
+  }
+
+  if (!result.isHeld) {
+    throw new Error(
+      `raiseSoftKeyboard: the text written back into "${params.inputSelector}" after the touch did not stay there. `
+        + `Expected ${JSON.stringify(text)}; ${String(result.writeCount)} write(s), and the field read `
+        + `${JSON.stringify(result.readTexts)}. A capture taken now would show the field without its text.
+device: ${await readInputMethodState(params)}`
+    );
+  }
 }
 
 /**

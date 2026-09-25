@@ -106,6 +106,22 @@ const RETRACT_RACE_GAPS_IN_MILLISECONDS = [600, 750, 900, 1050, 1200];
 const RETRACT_RACE_TEST_TIMEOUT_IN_MILLISECONDS = 240_000;
 
 /**
+ * The queries a consumer's capture suite lost the write-back on, each asked twice so one run takes enough
+ * raises to see a one-in-five loss: ten raises all holding at that rate happens about one run in nine.
+ */
+const HOLD_QUERIES = ['Charlie', 'Alpha/Delta/Echo', 'Delta', 'Delta/Echo', 'Alpha/Delta/India'].flatMap((query) => [query, query]);
+
+/**
+ * How long after a raise returns the field is read back — about what a device capture takes to be written.
+ */
+const POST_RAISE_OBSERVATION_DELAY_IN_MILLISECONDS = 1500;
+
+/*
+ * Ten raises, each up to ~15s, plus a keyboard settle and the observation delay per raise.
+ */
+const HOLD_TEST_TIMEOUT_IN_MILLISECONDS = 480_000;
+
+/**
  * What the probe field recorded about itself.
  */
 interface FieldLog {
@@ -274,6 +290,31 @@ describe('raiseSoftKeyboard on Android', () => {
     expect(await readFieldValue()).toBe(QUERY_TEXT);
   }, RETRACT_RACE_TEST_TIMEOUT_IN_MILLISECONDS);
 
+  // The write-back has to SURVIVE the IME, not merely be made. The touch that raises the keyboard lands on the
+  // emptied field, so the IME's input connection starts from an empty field; about one frame in five (measured
+  // 2026-09-25 in a consumer's capture suite, on these queries) its later update wrote that empty state back
+  // over the harness's write, and the capture taken straight after showed the placeholder. The raise now holds
+  // the text until it stays put, so the field must still carry each query well after the raise returned.
+  it('should keep the written-back text after the keyboard settles, raise after raise', async () => {
+    const heldValues: (null | string)[] = [];
+
+    await withSoftKeyboardEnabled({
+      callback: async () => {
+        for (const query of HOLD_QUERIES) {
+          await closeProbeModal();
+          await waitForKeyboardToSettleDown();
+          await openProbeModal(query);
+          await raiseSoftKeyboard({ deviceId, inputSelector: PROBE_INPUT_SELECTOR, vaultPath: vault.path });
+          await sleep(POST_RAISE_OBSERVATION_DELAY_IN_MILLISECONDS);
+          heldValues.push(await readFieldValue());
+        }
+      },
+      deviceId
+    });
+
+    expect(heldValues).toEqual(HOLD_QUERIES);
+  }, HOLD_TEST_TIMEOUT_IN_MILLISECONDS);
+
   async function closeProbeModal(): Promise<void> {
     await evalInObsidian({
       callback({ context }): void {
@@ -287,7 +328,7 @@ describe('raiseSoftKeyboard on Android', () => {
   /**
    * Opens the probe modal with its field seeded, and makes it the one the log and the teardown follow.
    */
-  async function openProbeModal(): Promise<void> {
+  async function openProbeModal(seededText = QUERY_TEXT): Promise<void> {
     await evalInObsidian({
       callback({ app, context, inputClass, obsidianModule, queryText }): void {
         class ProbeModal extends obsidianModule.SuggestModal<string> {
@@ -326,7 +367,7 @@ describe('raiseSoftKeyboard on Android', () => {
         });
       },
       contextId,
-      input: { inputClass: PROBE_INPUT_CLASS, queryText: QUERY_TEXT },
+      input: { inputClass: PROBE_INPUT_CLASS, queryText: seededText },
       vaultPath: vault.path
     });
   }
