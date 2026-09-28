@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 17.3.0
+
+- feat(trusted-input): merge delivering input to a popout window, not always the main one
+- fix(soft-keyboard): merge refusing a field selector that matches more than one element
+- fix(capture): merge drawing the window focused whether or not the OS gave it focus
+- feat(capture): merge applying the theme with an immediate save, and refusing a frame in the wrong theme
+- fix(capture): merge rasterizing owned instances on the CPU so sized captures stop varying
+
 ## 17.2.0
 
 - feat(soft-keyboard): merge parking the caret at offset 0 so Gboard's strip is always its toolbar
