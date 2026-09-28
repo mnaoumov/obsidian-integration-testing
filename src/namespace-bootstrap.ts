@@ -293,6 +293,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     workspace?: WorkspaceLike;
   }
 
+  // `Editor.cm` is declared always-present as a CodeMirror 6 `EditorView`; the probe tolerates an editor
+  // whose `cm` has no `dom`.
+  interface EditorLike {
+    cm?: EditorViewLike;
+  }
+
+  interface EditorViewLike {
+    dom?: Node;
+  }
+
   type CurrentWebContents = ReturnType<Window['electron']['remote']['getCurrentWebContents']>;
 
   // The Electron modifier-key names `sendInputEvent` accepts (e.g. 'meta', 'control', 'shift', 'alt').
@@ -647,6 +657,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     const { editor, text } = typeParams;
     const valueBeforeTyping = editor.getValue();
+    const targetWindow = getEditorWindow(editor);
 
     // Focus the editor and place the caret at the end of the document.
     editor.focus();
@@ -659,7 +670,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Typing is pressing each character key in turn: `pressKey` injects the same trusted
     // `keyDown` -> `char` -> `keyUp` a real user produces — text lands only if the editor holds focus.
     for (const char of text) {
-      await pressKey({ key: char });
+      await pressKey({ key: char, window: targetWindow });
     }
 
     // Poll until the document reflects the input or the timeout elapses, instead of a fixed settle.
@@ -733,7 +744,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   // The finite animations and transitions now moving the element or any ancestor of it. An infinite one (a
   // spinner) never ends, so waiting on it would only ever time out, and it is left out.
-  // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
   function getMovingAnimations(element: Element): Animation[] {
     return typeof document.getAnimations === 'function'
       ? document.getAnimations().filter((animation) => {
@@ -748,7 +758,6 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   // `Node.contains` stops at a shadow root, so a host sliding in would not count as moving an element inside
   // its shadow tree. This walks up through each shadow root to its host, the ancestry the layout follows.
-  // eslint-disable-next-line unicorn/consistent-function-scoping -- It cannot move to the outer scope: this whole function is serialized via `toString()` and may not reference anything outside itself (L15).
   function checkIsShadowIncludingInclusiveAncestor(ancestor: Node, node: Node): boolean {
     let current: Node | null = node;
     while (current) {
@@ -836,6 +845,67 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     );
   }
 
+  /*
+   * The Electron web contents trusted input is injected into. Every Obsidian window, the main one and each
+   * popout, is its own web contents, and `remote.getCurrentWebContents()` answers for the window whose
+   * `electron` bridge it is called through. So asking the TARGET window's own bridge is what aims the input
+   * there; asking the main window's always delivered it to the main window, whatever the caller meant.
+   * Measured on Obsidian 1.14: a popout's `electron.remote.getCurrentWebContents()` is the popout's (id 2
+   * beside the main window's 1), and a key sent through it fires `keydown` in the popout only.
+   */
+  function getTargetWebContents(targetWindow: undefined | Window): CurrentWebContents {
+    if (targetWindow === undefined || checkIsMainWindow(targetWindow)) {
+      return globalThis.electron.remote.getCurrentWebContents();
+    }
+
+    const { electron } = targetWindow as Partial<Pick<Window, 'electron'>>;
+    if (!electron) {
+      throw new Error(
+        'Trusted input cannot reach this window: it has no Electron bridge (`window.electron`). '
+          + 'Pass an Obsidian window, the main one or a popout (`leaf.view.containerEl.win`), not an iframe\'s.'
+      );
+    }
+
+    return electron.remote.getCurrentWebContents();
+  }
+
+  function checkIsMainWindow(targetWindow: Window): boolean {
+    return targetWindow === getMainWindow();
+  }
+
+  function getMainWindow(): Window {
+    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `globalThis` IS the main window in the renderer; the cast only gives it the `Window` type.
+    return globalThis as unknown as Window;
+  }
+
+  // The window that owns an element, which is the window its viewport coordinates belong to.
+  function getElementWindow(element: Element): Window {
+    return element.ownerDocument.defaultView ?? getMainWindow();
+  }
+
+  // The window that owns an editor's DOM, so typing into an editor in a popout goes to that popout.
+  // `cm` is declared always-present, but a pre-CodeMirror-6 editor has no `dom` on it, and every Obsidian
+  // that old predates popouts, so the main window is the right answer there.
+  function getEditorWindow(editor: TypeIntoEditorParams['editor']): Window {
+    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: probes an optional-member view of `Editor.cm`, which old versions lack in this shape.
+    const editorDom = (editor as unknown as EditorLike).cm?.dom;
+    return editorDom?.ownerDocument?.defaultView ?? getMainWindow();
+  }
+
+  // Obsidian Mobile has no popout windows, so a window other than the main one names somewhere the input
+  // cannot go. Delivering it to the main window instead would be the silent misdirection this parameter
+  // exists to end.
+  function assertMainWindowOnMobile(helperName: string, targetWindow: undefined | Window): void {
+    if (targetWindow === undefined || checkIsMainWindow(targetWindow)) {
+      return;
+    }
+
+    throw new Error(
+      `\`${helperName}\` was given a window other than the main one, and Obsidian Mobile has no popout windows. `
+        + 'Omit `window` on mobile.'
+    );
+  }
+
   // Maps Obsidian's `Modifier` names to Electron's lowercase `sendInputEvent` modifier names.
   // Names 'Meta', 'Alt', 'Shift' lowercase directly; 'Ctrl' -> 'control'; 'Mod' resolves per-platform.
   // Shared by every trusted-input helper, so a key press and a click cannot disagree on `'Mod'`.
@@ -875,12 +945,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const SINGLE_CLICK_COUNT = 1;
 
     const { button = 'left', modifiers = [], x, y } = clickParams;
+    const targetWindow = clickParams.window;
 
     const electronModifiers = toElectronModifiers(modifiers);
     const roundedX = Math.round(x);
     const roundedY = Math.round(y);
 
     if (checkIsMobile()) {
+      assertMainWindowOnMobile('clickMouse', targetWindow);
+
       // Touch has no buttons. A left click is a tap; a right click is the long-press that opens Obsidian
       // Mobile's context menu, so it is hidden behind the same name rather than a separate helper. A
       // middle click has no gesture at all, and inventing one would be worse than saying so.
@@ -897,7 +970,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       return;
     }
 
-    const webContents = globalThis.electron.remote.getCurrentWebContents();
+    const webContents = getTargetWebContents(targetWindow);
 
     // A trusted click is mouseMove -> mouseDown -> mouseUp at one point.
     // Chromium synthesizes the `click` (or `contextmenu`) DOM event from that sequence.
@@ -925,6 +998,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const CENTER_DIVISOR = 2;
 
     const { button = 'left', element, modifiers = [] } = clickParams;
+    // The rect is in the viewport of the window that owns the element, so the click goes to that window.
+    const targetWindow = getElementWindow(element);
 
     if (checkIsMobile()) {
       await waitForElementToSettle(element);
@@ -941,6 +1016,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     await clickMouse({
       button,
       modifiers,
+      window: targetWindow,
       x: rect.left + rect.width / CENTER_DIVISOR,
       y: rect.top + rect.height / CENTER_DIVISOR
     });
@@ -948,15 +1024,17 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   async function pressKey(pressParams: PressKeyParams): Promise<void> {
     const { key, modifiers = [] } = pressParams;
+    const targetWindow = pressParams.window;
 
     const electronModifiers = toElectronModifiers(modifiers);
 
     if (checkIsMobile()) {
+      assertMainWindowOnMobile('pressKey', targetWindow);
       await requestHostInput({ key, kind: 'key', modifiers: electronModifiers });
       return;
     }
 
-    const webContents = globalThis.electron.remote.getCurrentWebContents();
+    const webContents = getTargetWebContents(targetWindow);
 
     // A trusted key press is keyDown -> char -> keyUp: keyDown fires `keydown`, char fires
     // `keypress`/`beforeinput`/`input`, keyUp fires `keyup` — the full real key pipeline.
@@ -976,7 +1054,11 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     // Viewport coords equal web-contents DIP coords for the full-window `BrowserWindow`.
     const rect = element.getBoundingClientRect();
-    await moveMouse({ x: rect.left + rect.width / CENTER_DIVISOR, y: rect.top + rect.height / CENTER_DIVISOR });
+    await moveMouse({
+      window: getElementWindow(element),
+      x: rect.left + rect.width / CENTER_DIVISOR,
+      y: rect.top + rect.height / CENTER_DIVISOR
+    });
 
     // Poll until the real `:hover` state has actually taken, instead of a fixed settle.
     const startTime = Date.now();
@@ -998,7 +1080,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       throwUnsupportedOnMobile('moveMouse');
     }
 
-    const webContents = globalThis.electron.remote.getCurrentWebContents();
+    const webContents = getTargetWebContents(moveParams.window);
     webContents.sendInputEvent({ type: 'mouseMove', x: Math.round(moveParams.x), y: Math.round(moveParams.y) });
   }
 
@@ -1028,7 +1110,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       ? Math.floor(rect.left) - OUTSIDE_OFFSET_IN_PIXELS
       : Math.ceil(rect.right) + OUTSIDE_OFFSET_IN_PIXELS;
     const y = rect.top + rect.height / CENTER_DIVISOR;
-    await moveMouse({ x, y });
+    await moveMouse({ window: getElementWindow(element), x, y });
 
     // Poll until the real `:hover` state has actually cleared, instead of a fixed settle.
     const startTime = Date.now();
