@@ -21,12 +21,12 @@ The trusted helpers flow through the real input pipeline, so text lands **only i
 | Helper                                         | Purpose                                                                                                                                                                                                                          |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typeIntoEditor({ editor, text })`             | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                                  |
-| `pressKey({ key, modifiers })`                 | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
+| `pressKey({ key, modifiers, window })`         | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
 | `hoverElement({ element })`                    | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`. **Throws** if it never does.                                                                                                              |
 | `unhoverElement({ element })`                  | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`. **Throws** if it still does.                                                                                            |
 | `clickElement({ element, button, modifiers })` | Clicks `element`'s center with optional `button` / `modifiers`, so Chromium synthesizes a real `click` (or `contextmenu`). Does **not** poll — pair with `waitUntil`.                                           |
-| `moveMouse({ x, y })`                          | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. Does **not** poll. **Desktop only.**                                                                                             |
-| `clickMouse({ x, y, button, modifiers })`      | Low-level primitive: one trusted `mouseMove` → `mouseDown` → `mouseUp` at the given web-contents DIP coordinates. Does **not** poll.                                                                            |
+| `moveMouse({ x, y, window })`                  | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. Does **not** poll. **Desktop only.**                                                                                             |
+| `clickMouse({ x, y, button, modifiers, window })` | Low-level primitive: one trusted `mouseMove` → `mouseDown` → `mouseUp` at the given web-contents DIP coordinates. Does **not** poll.                                                                            |
 
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
@@ -114,6 +114,28 @@ A right click opens a **real** context menu, and it stays open. A suite that dri
 :::caution[Serialize focus- and pointer-dependent test files]
 Trusted input targets the single shared window's **global** focus and pointer, so test files that depend on either must not run in parallel against the one shared Obsidian instance — they race for focus, and a `detachLeavesOfType('markdown')` in one file wipes another's editor. Run that Vitest project with `fileParallelism: false` and `maxWorkers: 1`.
 :::
+
+## Popout windows
+
+Every Obsidian window, the main one and each popout, is its own Electron web contents, so trusted input sent to one never reaches another. The helpers pick the window like this:
+
+- `clickElement`, `hoverElement` and `unhoverElement` use the window that owns `element`, and `typeIntoEditor` uses the window that owns `editor`. An element or editor in a popout is driven in that popout with nothing extra to pass.
+- `pressKey`, `moveMouse` and `clickMouse` take an optional `window`, and default to the main window. A key goes to the DOM-focused element of the window you name, and coordinates are in that window's viewport.
+
+```ts
+await evalInObsidian({
+  callback: async ({ app, lib: { pressKey, waitUntil } }) => {
+    const leaf = app.workspace.openPopoutLeaf();
+    const popoutWindow = leaf.getContainer().win;
+    await waitUntil({ predicate: () => popoutWindow.document.readyState === 'complete' });
+
+    // Focus something in the popout first, then press the key there.
+    await pressKey({ key: 'Escape', window: popoutWindow });
+  }
+});
+```
+
+Pass a top-level Obsidian window. An iframe's window has no Electron bridge, so the helpers throw rather than sending the input to the main window instead. On mobile there are no popouts: naming the main window is accepted, so a suite that passes `element.win` runs on both platforms, and naming any other window throws.
 
 ## Wait for an async condition
 

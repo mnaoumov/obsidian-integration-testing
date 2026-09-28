@@ -160,6 +160,7 @@
     "pointerdown",
     "pointerup",
     "Popout",
+    "popouts",
     "ppid",
     "prctl",
     "Precomputes",

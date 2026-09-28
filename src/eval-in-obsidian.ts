@@ -74,6 +74,10 @@ export interface ClickElementParams {
    * The element to click. The pointer is moved to its center. This is a live
    * renderer DOM node — the callback runs in-renderer, so no cross-process
    * serialization is needed (same as {@link TypeIntoEditorParams.editor}).
+   *
+   * The input goes to the window that owns the element (its
+   * `ownerDocument.defaultView`), so an element in a popout is driven in that
+   * popout with no extra parameter.
    */
   readonly element: HTMLElement;
 
@@ -104,6 +108,19 @@ export interface ClickMouseParams {
    * @default `[]`
    */
   readonly modifiers?: readonly Modifier[];
+
+  /**
+   * The Obsidian window to click in: the main window or a popout. Pass the
+   * window that owns the target, e.g. `leaf.view.containerEl.win` for a popout
+   * leaf. Each Obsidian window is its own Electron web contents, so a click
+   * sent to one never reaches another, and the coordinates are in the named
+   * window's viewport.
+   *
+   * **On mobile** there are no popouts, so any window but the main one throws.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
 
   /**
    * The x coordinate (web-contents DIP) to click at.
@@ -218,6 +235,10 @@ export interface HoverElementParams {
    * The element to hover. The pointer is moved to its center. This is a live
    * renderer DOM node — the callback runs in-renderer, so no cross-process
    * serialization is needed (same as {@link TypeIntoEditorParams.editor}).
+   *
+   * The input goes to the window that owns the element (its
+   * `ownerDocument.defaultView`), so an element in a popout is driven in that
+   * popout with no extra parameter.
    */
   readonly element: HTMLElement;
 }
@@ -297,6 +318,10 @@ export interface Lib {
    *
    * A real context menu actually opens, so a suite driving a right click must
    * close it (or remove the leftover `.menu` element) before the next test.
+   *
+   * It clicks in the main window unless {@link ClickMouseParams.window} names a
+   * popout. {@link Lib.clickElement} needs no such parameter: it clicks in the
+   * window that owns its element.
    *
    * **On mobile** the button model does not survive the port: touch has no
    * buttons, so `'left'` (the default) is a **tap**, `'right'` is the
@@ -388,6 +413,9 @@ export interface Lib {
    * **Desktop only — it throws on mobile**, for the same reason as
    * {@link Lib.hoverElement}: there is no touch pointer to move.
    *
+   * It moves the pointer in the main window unless
+   * {@link MoveMouseParams.window} names a popout.
+   *
    * **Must be awaited** — see {@link Lib.clickElement}.
    *
    * @param params - The web-contents DIP coordinates to move to.
@@ -447,6 +475,10 @@ export interface Lib {
    * selection). The caller focuses the intended target first, then awaits the
    * expected effect via {@link Lib.waitUntil}. It targets the single shared
    * window's **global** focus, so only the DOM-focused element receives the key.
+   *
+   * It presses the key in the main window unless
+   * {@link PressKeyParams.window} names a popout. Each Obsidian window is its
+   * own web contents, so a key pressed in one never reaches another.
    *
    * **On mobile** the same sequence is injected through the WebView's debugger
    * (`Input.dispatchKeyEvent`), which is equally trusted. Named keys (`'Enter'`,
@@ -544,6 +576,18 @@ export type MouseButton = 'left' | 'middle' | 'right';
  */
 export interface MoveMouseParams {
   /**
+   * The Obsidian window to move the pointer in: the main window or a popout.
+   * Each Obsidian window is its own Electron web contents with its own pointer,
+   * and the coordinates are in the named window's viewport.
+   *
+   * Mobile has no pointer to move, so {@link Lib.moveMouse} throws there
+   * whatever this is.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
+
+  /**
    * The x coordinate (web-contents DIP) to move the pointer to.
    */
   readonly x: number;
@@ -602,6 +646,19 @@ export interface PressKeyParams {
    * @default `[]`
    */
   readonly modifiers?: readonly Modifier[];
+
+  /**
+   * The Obsidian window to press the key in: the main window or a popout. Pass
+   * the window that owns the focused target, e.g. `leaf.view.containerEl.win`
+   * for a popout leaf. Each Obsidian window is its own Electron web contents,
+   * so the key goes to the DOM-focused element of the window named here,
+   * whichever window the OS has focused, and never reaches another window.
+   *
+   * **On mobile** there are no popouts, so any window but the main one throws.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
 }
 
 /**
@@ -611,6 +668,9 @@ export interface TypeIntoEditorParams {
   /**
    * The editor to type into. It is focused (with the caret moved to the end of
    * the document) before the keystrokes are injected.
+   *
+   * The keystrokes go to the window that owns the editor, so an editor in a
+   * popout is typed into in that popout with no extra parameter.
    */
   readonly editor: Editor;
 
@@ -630,6 +690,9 @@ export interface UnhoverElementParams {
    * just outside its bounding box. This is a live renderer DOM node — the
    * callback runs in-renderer, so no cross-process serialization is needed
    * (same as {@link TypeIntoEditorParams.editor}).
+   *
+   * The move goes to the window that owns the element, so an element in a
+   * popout is driven in that popout with no extra parameter.
    */
   readonly element: HTMLElement;
 }

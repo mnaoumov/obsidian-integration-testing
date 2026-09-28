@@ -536,7 +536,54 @@ describe('mobile trusted input', () => {
 
     expect(errorMessage).toContain('has no meaning on mobile');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // Mobile has no popouts. Naming the main window is harmless, so a suite that passes `element.win` runs on
+  // both platforms; naming any other window throws, because the key could only go to the main one instead.
+  it('should accept the main window and refuse any other one', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<WindowTargetResult> {
+        let mainWindowKeyCount = 0;
+        function listener(): void {
+          mainWindowKeyCount++;
+        }
+
+        const frame = document.body.createEl('iframe');
+        document.addEventListener('keydown', listener, { capture: true });
+        try {
+          await lib.pressKey({ key: 'Escape', window: document.body.win });
+          await lib.waitUntil({ message: 'a keydown to reach the document', predicate: () => mainWindowKeyCount > 0 });
+
+          const frameWindow = frame.contentWindow;
+          if (!frameWindow) {
+            throw new Error('The iframe has no window.');
+          }
+
+          try {
+            await lib.pressKey({ key: 'Escape', window: frameWindow });
+            return { errorMessage: '', mainWindowKeyCount };
+          } catch (error) {
+            return { errorMessage: error instanceof Error ? error.message : String(error), mainWindowKeyCount };
+          }
+        } finally {
+          document.removeEventListener('keydown', listener, { capture: true });
+          frame.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.mainWindowKeyCount).toBe(1);
+    expect(result.errorMessage).toContain('Obsidian Mobile has no popout windows');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
 });
+
+/**
+ * What the window-target case reports back from the renderer.
+ */
+interface WindowTargetResult {
+  readonly errorMessage: string;
+  readonly mainWindowKeyCount: number;
+}
 
 /**
  * Counts observed events by type, so a suite can assert HOW MANY of each a gesture produced.
