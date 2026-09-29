@@ -661,6 +661,16 @@ The user-facing docs are an Astro + Starlight site under `docs/`, served at `htt
 3. **`generate-api-docs.ts`** — filters the collected types down to the barrel's names, *after* `resolveInheritedMembers`, so a public class still inherits from an internal base class.
 4. **`getImportStatement()`** — every documented name is imported from the package root; the namespace only groups the reference by source module, it is not an import subpath.
 
+The two `satteri-plugins/*.test.ts` suites also differ by one import: `castTo` comes from `src/type-guards.ts` here, where upstream has it in `src/object-utils.ts`. `satteri-github-alerts.ts` differs in two expressions, not in behaviour: this repo's `unicorn/prefer-combined-guards` and `unicorn/prefer-ternary` (**L34**) reported its two early returns, so they are one combined guard and one ternary here.
+
+### The Markdown pipeline is Sätteri, and GitHub alerts ride on it as a local plugin
+
+Astro 7.3 made **Sätteri** its default Markdown processor, and `markdown.remarkPlugins` runs only on the separate `unified` processor from `@astrojs/markdown-remark`. [`astro.config.ts`](astro.config.ts) names the processor, `satteri({ mdastPlugins: [satteriGitHubAlerts(), satteriRelativeLinks(BASE)] })`, and `@astrojs/markdown-satteri` and `satteri` are direct devDependencies because of it. Both plugins live in `scripts/docs-gen/helpers/satteri-plugins/`: the link rewrite that used to be `remarkRelativeLinks`, and the conversion of GitHub alerts (`> [!NOTE]` and the rest) into the directive Starlight's asides plugin renders.
+
+**`starlight-github-alerts` is gone, and must not come back.** Version 0.4.0 registers itself in front of an mdast plugin named `starlight-asides`, which Starlight 0.42 does not name, so under Sätteri it silently converts nothing and every alert ships as a plain blockquote with a literal `[!NOTE]` line. Until the Sätteri move it DID work here, because this repo was still on the `unified` processor (measured 2026-09-29: a probe page rendered `starlight-aside--note` and `starlight-aside--caution` on the old pipeline, and the literal markers on Sätteri without the local plugin). So the defect it causes arrives with the processor change, which is the reason the two landed together. No guide here uses an alert today; they write Starlight's own `:::note` directives, which never needed the plugin.
+
+**`docs-link-check.ts` fails on any page whose blockquote still opens with an alert marker** (`scripts/docs-gen/helpers/unrendered-alerts.ts`), before its network half runs, so the next pipeline change cannot break alerts silently. Both the plugin and the guard are copied from `obsidian-dev-utils` (`67a8a7bf`) rather than imported, for the dependency-direction reason above.
+
 ### Incidental fixes the port forced
 
 - **`js-yaml` override `^5.2.3` → `4.3.1`** (since moved to `4.3.2` by an advisory, see **L55**) — js-yaml 5 is ESM-only with no default export, so `astro build` died on import. The `^5.2.3` came from an update sweep, not a requirement; `obsidian-dev-utils` pins the same `4.3.1`.
