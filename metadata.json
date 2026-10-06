@@ -6201,5 +6201,22 @@
       "chrome": "150.0.7871.212"
     },
     "ecmaScriptVersion": "ES2024"
+  },
+  "1.14.4": {
+    "channel": "public+catalyst",
+    "downloads": {
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.14.4/Obsidian-1.14.4.apk",
+      "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.14.4/obsidian-1.14.4.asar.gz",
+      "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.14.4/Obsidian-1.14.4.dmg",
+      "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.14.4/Obsidian-1.14.4.exe",
+      "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.14.4/obsidian-1.14.4.tar.gz"
+    },
+    "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-10-05-desktop-v1.14.4/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-10-01-desktop-v1.14.4/",
+      "mobile": "https://obsidian.md/changelog/2026-10-05-mobile-v1.14.4/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-10-01-mobile-v1.14.4/"
+    },
+    "minRecommendedInstallerVersion": "1.1.9"
   }
 }
