@@ -1866,3 +1866,12 @@ Every desktop helper used to inject through `globalThis.electron.remote.getCurre
 - On **mobile** there are no popouts. The main window is accepted, so a suite passing `element.win` runs on both platforms, and any other window throws.
 
 Coverage: the `popout windows` block of `src/trusted-input.desktop.integration.test.ts` (a key, typing into a popout editor, a click on a popout element, and the iframe refusal) and the window case in `src/mobile-trusted-input.android.integration.test.ts`. Against the pre-fix helpers all four desktop cases fail. The helpers are **L17**-synced, so `obsidian-dev-utils`' copies need the same change.
+
+## L73. The adb server is started before the first quick listing, because a listing that starts it outlasts its budget
+
+`EmulatorReclaimer.getDevicesOutput` runs `adb devices` under the 5s `ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS`. When no adb server is running, the first `adb` call of a session starts one, and on a contended host that start outlasts 5s: the child is killed and the run fails in setup with `Failed to run 'adb devices': Command failed: adb devices * daemon not running; starting now at tcp:5037`. Found during a plugin release on 2026-10-08, and a manual `adb start-server` made the same release pass. On an idle host the cold start took ~2.1s, which is why it is intermittent. A 1s budget reproduces the kill on demand.
+
+- **`ensureAdbServerStarted`** (`src/adb-server.ts`) runs `adb start-server` once per process under a 60s budget, before every listing. An already running server answers at once, so the call costs nothing after the first. A failed start is not remembered, so the next listing tries again.
+- **A listing that still reports the daemon starting** (`checkIsAdbDaemonStarting`, `src/adb-daemon-start.ts`, unit-tested) means the server stopped after this process started it. The server is started again and the listing retried once.
+- `adb-server.ts` imports nothing that reads `OBSIDIAN_METADATA`, because `emulator-reclaim.ts` uses it and the emulator reaper loads that module under plain Node (**L56**).
+- `resolveEmulatorDeviceId`'s listing passes no timeout, so a cold start never killed it, and it is left as it is.
