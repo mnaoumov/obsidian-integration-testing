@@ -29,7 +29,9 @@ import type {
 } from './emulator-backend.ts';
 import type { EmulatorMarker } from './emulator-marker.ts';
 
+import { checkIsAdbDaemonStarting } from './adb-daemon-start.ts';
 import { checkIsDeviceListed } from './adb-device-list.ts';
+import { ensureAdbServerStarted } from './adb-server.ts';
 import {
   buildEmulatorProcessQueries,
   checkIsNoMatchReported,
@@ -251,22 +253,27 @@ export class EmulatorReclaimer {
    * the `device` state, and an emulator on its way out answers `offline` while
    * still holding the AVD — see `adb-device-list.ts`.
    *
+   * The adb server is started first (`ensureAdbServerStarted`), because a
+   * listing that has to start it itself outlasts its 5s budget. A listing that
+   * still reports the daemon starting means the server stopped after this
+   * process started it, so the server is started again and the listing retried
+   * once.
+   *
    * @returns The raw `adb devices` output.
    * @throws If adb could not be run at all.
    */
-  public getDevicesOutput(): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to run 'adb devices': ${error.message}. Is ADB installed and in PATH?`));
-          return;
-        }
-        if (stderr) {
-          this.log(`ADB stderr: ${stderr.trim()}`);
-        }
-        resolve(stdout);
-      });
-    });
+  public async getDevicesOutput(): Promise<string> {
+    await ensureAdbServerStarted();
+    try {
+      return await this.runAdbDevices();
+    } catch (error) {
+      if (!(error instanceof Error) || !checkIsAdbDaemonStarting(error.message)) {
+        throw error;
+      }
+      this.log('adb devices found the adb server stopped; starting it again and retrying once.');
+      await ensureAdbServerStarted(true);
+      return await this.runAdbDevices();
+    }
   }
 
   /**
@@ -498,6 +505,21 @@ export class EmulatorReclaimer {
       avdName: marker.avdName,
       deviceId: marker.deviceId,
       ownedEmulatorPids: selectLiveMarkedPids(marker, liveEmulatorPids)
+    });
+  }
+
+  private runAdbDevices(): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(`Failed to run 'adb devices': ${error.message}. Is ADB installed and in PATH?`));
+          return;
+        }
+        if (stderr) {
+          this.log(`ADB stderr: ${stderr.trim()}`);
+        }
+        resolve(stdout);
+      });
     });
   }
 
