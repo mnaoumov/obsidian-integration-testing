@@ -1061,6 +1061,18 @@ function getUnicornConfigs(): Linter.Config[] {
       }
     },
     {
+      /*
+       * Parked until upstream clears it: `obsidian-dev-utils`' current source of this rule ends a callback in an
+       * early `return false` followed by a boolean `return`, which `unicorn/prefer-ternary` reports. A fix written
+       * here would be drift the vendored-rules gate reports, so the rule is off for this file until the re-sync
+       * that carries upstream's own fix, and this block is deleted on that sync.
+       */
+      files: ['scripts/helpers/eslint-rules/no-used-underscore-variables.ts'],
+      rules: {
+        'unicorn/prefer-ternary': 'off'
+      }
+    },
+    {
       // Build/lint/version scripts are CLI entry points, where exiting with a status code is the interface.
       files: scriptFiles,
       rules: {
