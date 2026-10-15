@@ -48,6 +48,7 @@
  * Exits non-zero when the emulator wedges, so CI can gate on it.
  */
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import {
   execFile,
   spawn
@@ -100,7 +101,6 @@ import {
   formatProbeTick,
   parseBackendSample
 } from './helpers/emulator-wedge-probe-report.ts';
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 const ADB_QUERY_TIMEOUT_IN_MILLISECONDS = 15_000;
 const BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;

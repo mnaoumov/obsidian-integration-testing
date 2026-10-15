@@ -37,6 +37,7 @@
  *   npm run collect:runtime-versions -- --out fragment.json --disable-sandbox
  */
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { parseArgs } from 'node:util';
@@ -46,7 +47,6 @@ import type { ObsidianRuntimeVersions } from '../src/obsidian-metadata.ts';
 import { deriveEcmaScriptVersion } from '../src/ecmascript-version.ts';
 import { errorToString } from '../src/error-to-string.ts';
 import { compareVersions } from '../src/obsidian-version.ts';
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { defineObsidianMetadataGlobal } from './helpers/metadata-global.ts';
 import {
   readMetadataTable,

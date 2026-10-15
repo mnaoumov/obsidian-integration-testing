@@ -1,6 +1,5 @@
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { rm } from 'node:fs/promises';
-
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 exitIfScriptDisabled();
 

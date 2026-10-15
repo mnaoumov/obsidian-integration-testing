@@ -27,12 +27,12 @@
  *   npm run merge:runtime-versions -- --fragment windows=a.json --fragment macos=b.json --fragment linux=c.json
  */
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 
 import type { ObsidianRuntimeVersions } from '../src/obsidian-metadata.ts';
 
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import {
   readMetadataTable,
   writeMetadataTable
