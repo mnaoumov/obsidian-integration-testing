@@ -53,7 +53,7 @@ const FALLBACK_PAGE_RELATIVE_PATH = '404.html';
 /*
  * A package page on npmjs.com answers an unattended `fetch` with 403 (bot protection), so a perfectly
  * good package link would fail the check. Validate the package through the registry instead — the same
- * rewrite `scripts/helpers/markdownlint.ts` hands to linkinator for the repo's own markdown.
+ * rewrite the toolkit's markdown runner hands to linkinator for the repo's own markdown.
  */
 const NPM_PACKAGE_URL_PREFIX = 'https://www.npmjs.com/package/';
 const NPM_REGISTRY_URL_PREFIX = 'https://registry.npmjs.org/';
