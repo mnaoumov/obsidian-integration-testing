@@ -31,14 +31,8 @@
     "script|obsidian-dev-utils/no-over-cap-wait-in-eval-in-obsidian|level": {
       "why": "The rule imports `DEFAULT_EVAL_CAP_IN_MILLISECONDS` from THIS package to know the cap it predicts, and it polices a consumer suite's `evalInObsidian` / `pollInObsidian` closures. The harness that defines the cap and implements both transports is not one of those consumers."
     },
-    "script|obsidian-dev-utils/prefer-noop-async|level": {
-      "why": "This package vendors a five-rule subset of obsidian-dev-utils' custom rules into `scripts/helpers/eslint-rules/`; its plugin file's `rules` map IS that subset. Only `obsidian-test-mocks` vendors this sixth rule, which its own consumer table records."
-    },
     "script|obsidian-dev-utils/require-component-suffix|level": {
-      "why": "Not vendored - same subset reason. Obsidian `Component` subclasses are a plugin-authoring shape; this package drives Obsidian from outside rather than running inside it."
-    },
-    "script|obsidian-dev-utils/require-method-template|level": {
-      "why": "Not vendored - same subset reason."
+      "why": "The rule is Obsidian-specific, so `@mnaoumov/typescript-dev-toolkit`' generic in-house plugin does not carry it. Obsidian `Component` subclasses are a plugin-authoring shape; this package drives Obsidian from outside rather than running inside it."
     },
     "script|unicorn/no-top-level-assignment-in-function|level": {
       "why": "Module-level state written from a function is this package's registry / cache / once-guard pattern - `setTransportOptionsResolver`, the memoized transport, the once-flagged process-cleanup handler. Wider than the shared config on purpose: obsidian-dev-utils turns it off only over its test files, because those shapes are production code here and test-only there."

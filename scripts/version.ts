@@ -5,6 +5,18 @@ import type {
   UndefinedOnPartialDeep
 } from 'type-fest';
 
+import { spellcheckContent } from '@mnaoumov/typescript-dev-toolkit/linters/cspell-content';
+import { lintMarkdownContent } from '@mnaoumov/typescript-dev-toolkit/linters/markdownlint-content';
+import { getPackageManagerRunCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
+import {
+  execFromRoot,
+  getRootFolder
+} from '@mnaoumov/typescript-dev-toolkit/root';
+import { toPosixPath } from '@mnaoumov/typescript-lib/path';
+import {
+  assertNonNullable,
+  ensureNonNullable
+} from '@mnaoumov/typescript-lib/type-guards';
 import { existsSync } from 'node:fs';
 import {
   mkdtemp,
@@ -28,24 +40,12 @@ import {
 } from 'semver';
 
 import {
-  assertNonNullable,
-  ensureNonNullable
-} from '../src/type-guards.ts';
-import {
   findBreakingCommitSubjects,
   isMajorRaise
 } from './helpers/breaking-change.ts';
 import { toChangelogSectionDocument } from './helpers/changelog-section.ts';
-import { spellcheckContent } from './helpers/cspell-content.ts';
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
-import { lintMarkdownContent } from './helpers/markdownlint-content.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
-import { getPackageManagerRunCommand } from './helpers/package-manager.ts';
-import {
-  execFromRoot,
-  getRootFolder,
-  toPosixPath
-} from './helpers/root.ts';
 
 exitIfScriptDisabled();
 
@@ -87,6 +87,19 @@ enum VersionUpdateType {
   PrePatch = 'prepatch',
   PreRelease = 'prerelease'
 }
+
+/**
+ * The update types that name a semver release type, as opposed to a manual version or an invalid argument.
+ */
+const RELEASE_TYPE_VERSION_UPDATE_TYPES: readonly VersionUpdateType[] = [
+  VersionUpdateType.Major,
+  VersionUpdateType.Minor,
+  VersionUpdateType.Patch,
+  VersionUpdateType.PreMajor,
+  VersionUpdateType.PreMinor,
+  VersionUpdateType.PrePatch,
+  VersionUpdateType.PreRelease
+];
 
 async function addGitTag(newVersion: string): Promise<void> {
   await execFromRoot(`git tag -a ${newVersion} -m ${newVersion} --force`, { isQuiet: true });
@@ -325,22 +338,12 @@ async function getRepoUrl(): Promise<string> {
 }
 
 function getVersionUpdateType(versionUpdateType: string): VersionUpdateType {
-  const versionUpdateTypeEnum = versionUpdateType as VersionUpdateType;
-  switch (versionUpdateTypeEnum) {
-    case VersionUpdateType.Major:
-    case VersionUpdateType.Minor:
-    case VersionUpdateType.Patch:
-    case VersionUpdateType.PreMajor:
-    case VersionUpdateType.PreMinor:
-    case VersionUpdateType.PrePatch:
-    case VersionUpdateType.PreRelease: {
-      return versionUpdateTypeEnum;
-    }
-
-    default: {
-      return /^\d+\.\d+\.\d+(?:-[\w\d.-]+)?$/.test(versionUpdateType) ? VersionUpdateType.Manual : VersionUpdateType.Invalid;
-    }
+  const releaseTypeUpdate = RELEASE_TYPE_VERSION_UPDATE_TYPES.find((type) => type as string === versionUpdateType);
+  if (releaseTypeUpdate !== undefined) {
+    return releaseTypeUpdate;
   }
+
+  return /^\d+\.\d+\.\d+(?:-[\w\d.-]+)?$/.test(versionUpdateType) ? VersionUpdateType.Manual : VersionUpdateType.Invalid;
 }
 
 async function gitPush(): Promise<void> {

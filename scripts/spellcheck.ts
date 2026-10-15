@@ -1,8 +1,8 @@
+import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
+import { execFromRoot } from '@mnaoumov/typescript-dev-toolkit/root';
 import process from 'node:process';
 
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
-import { resolveToolCommand } from './helpers/package-manager.ts';
-import { execFromRoot } from './helpers/root.ts';
 
 exitIfScriptDisabled();
 

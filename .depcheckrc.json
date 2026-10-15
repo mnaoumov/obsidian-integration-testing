@@ -14,7 +14,7 @@
     "  tsconfig.json's `libReplacement: true` resolves (node_modules/@typescript/lib-dom is @better-typescript-lib/dom).",
     "cspell - run as a CLI by scripts/spellcheck.ts.",
     "czg - run as a CLI by scripts/commit.ts.",
-    "dprint - run as a CLI by scripts/helpers/format.ts, configured by dprint.json.",
+    "dprint - run as a CLI by @mnaoumov/typescript-dev-toolkit/formatters/dprint (scripts/format.ts), configured by dprint.json.",
     "globals - imported by scripts/vitest-config.ts (a depcheck parser miss, not an indirect use).",
     "husky - installed by scripts/prepare.ts; the hooks in .husky/ are its output.",
     "jest-config - imported by jest.config.ts and scripts/metadata-global-setup.ts.",

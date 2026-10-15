@@ -1,5 +1,6 @@
+import { execFromRoot } from '@mnaoumov/typescript-dev-toolkit/root';
+
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
-import { execFromRoot } from './helpers/root.ts';
 
 exitIfScriptDisabled();
 

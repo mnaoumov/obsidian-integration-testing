@@ -9,14 +9,13 @@
  * reason to be the first.
  */
 
+import { spellcheckContent } from '@mnaoumov/typescript-dev-toolkit/linters/cspell-content';
+import { getRootFolder } from '@mnaoumov/typescript-dev-toolkit/root';
 import {
   describe,
   expect,
   it
 } from 'vitest';
-
-import { spellcheckContent } from './cspell-content.ts';
-import { getRootFolder } from './root.ts';
 
 // `spellcheck` reads this file too, so the unknown word cannot be written here as a literal -- doing so would
 // put the very defect this module exists to catch into the repository, and turn the gate red on the next

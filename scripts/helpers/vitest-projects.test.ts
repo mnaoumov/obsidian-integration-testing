@@ -16,6 +16,7 @@
  * does.
  */
 
+import { getRootFolder } from '@mnaoumov/typescript-dev-toolkit/root';
 import {
   readdirSync,
   readFileSync
@@ -28,7 +29,6 @@ import {
 } from 'vitest';
 
 import { config } from '../vitest-config.ts';
-import { getRootFolder } from './root.ts';
 import {
   COVERAGE_TEST_PROJECTS,
   DESKTOP_INTEGRATION_TEST_PROJECTS,

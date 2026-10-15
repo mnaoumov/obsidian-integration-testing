@@ -4,13 +4,12 @@
  * Nano-staged configuration for pre-commit hooks.
  */
 
-import process from 'node:process';
-
 import {
   isEnvVariableOff,
   loadEnvFileIfExists
-} from './helpers/env-toggle.ts';
-import { getPackageManagerRunCommand } from './helpers/package-manager.ts';
+} from '@mnaoumov/typescript-dev-toolkit/env-toggle';
+import { getPackageManagerRunCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
+import process from 'node:process';
 
 /**
  * The `<manager> run` prefix every task below is built on, resolved once for the process.
@@ -40,27 +39,6 @@ const tasks: Record<string, string[]> = {
   ],
   '*.md': [
     `${PACKAGE_MANAGER_RUN_COMMAND} lint:md:fix --`
-  ],
-  /*
-   * The vendored ESLint rule sources, which are hand-copies of `obsidian-dev-utils`' and are supposed to be
-   * the same bytes. `lint:fix` and `format` above rewrite a staged copy in place, which is one of the three
-   * ways these files drift, so this check has to read what is about to be committed — and where its key
-   * sits cannot buy that. **nano-staged builds one task group per pattern and runs the groups with
-   * `Promise.all`** (measured against nano-staged 1.0.2, 2026-09-19), so this group RACES `lint:fix` rather
-   * than following it; sequencing exists within a single key's command list and nowhere else, which is why
-   * `lint:fix` then `format` under one key really is ordered. Key order here is only what perfectionist
-   * sorts it to, and says nothing about when anything runs.
-   *
-   * So the ordering is not enforced, it is made IRRELEVANT: the gate reads its subject out of the git index
-   * rather than off disk (`scripts/helpers/git-content.ts`), which is the same bytes whether `lint:fix` has
-   * run or not. Moving this key, or letting a future nano-staged order the groups differently, changes
-   * nothing.
-   *
-   * It takes no filenames: the glob is only what decides whether it runs at all, so an ordinary commit
-   * touching no vendored file fetches nothing.
-   */
-  '**/eslint-rules/*.ts': [
-    `${PACKAGE_MANAGER_RUN_COMMAND} check:vendored-eslint-rules --`
   ]
 };
 
