@@ -1,3 +1,4 @@
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
 import { execFromRoot } from '@mnaoumov/typescript-dev-toolkit/root';
 import {
@@ -16,8 +17,6 @@ import {
   join,
   relative
 } from 'node:path';
-
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 exitIfScriptDisabled();
 

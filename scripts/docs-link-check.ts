@@ -11,6 +11,7 @@
  * {@link ./docs-gen/helpers/unrendered-alerts.ts}), since nothing else notices when the conversion stops.
  */
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import {
   readdir,
   readFile
@@ -35,7 +36,6 @@ import {
   collectUnrenderedAlerts,
   formatUnrenderedAlerts
 } from './docs-gen/helpers/unrendered-alerts.ts';
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 exitIfScriptDisabled();
 

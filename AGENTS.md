@@ -614,7 +614,8 @@ The same change moved the generic `scripts/helpers/` modules onto the packages: 
 
 - **The package's ESLint runner adds `--max-warnings 0 --no-warn-ignored`**, so a warning now fails `lint` where the local runner let it through.
 - **The markdown runner is the package's too, told to leave `docs/**` out of its linkinator pass.** `scripts/lint-md.ts` and `scripts/lint-md-fix.ts` call `@mnaoumov/typescript-dev-toolkit/linters/markdownlint` with `linkCheckExcludeGlobs: ['docs/**']`, because in-site links only resolve once Astro has built them (**L35**); `markdownlint-cli2` still lints those files. That option arrived in 1.3.0, which is what the local copy waited for.
-- **Two helpers stay local because the package version does something different here.** `scripts/helpers/env-toggle.ts` keeps `exitIfScriptDisabled`, because the package acts on the switch only inside its `wrapCliTask`, which these scripts do not use. And `scripts/eslint-config.ts` itself stays a hand copy, for the reason **L60** gives.
+- **`exitIfScriptDisabled` comes from the package too.** Every `scripts/*.ts` entry point imports it from `@mnaoumov/typescript-dev-toolkit/env-toggle`, which exports it since 1.3.0 for repos whose scripts do not go through `wrapCliTask`. It prints the same `Skipped (<VAR> is off).` line and exits 0 the local copy did.
+- **`scripts/eslint-config.ts` stays a hand copy**, for the reason **L60** gives.
 
 `params-options-name-match` is enabled at `error` over `src/` as well as `scripts/`, and every site it cannot satisfy carries a scoped disable whose reason says which of **two** kinds it is — the distinction is the point, because the two retire on different schedules and nothing else in the file tells them apart. **All 23 disables in the tree today are `Permanent:`; the `Temporary:` kind is empty**, and the word is documented here so the next breaking rename can be parked the same way rather than invented afresh:
 

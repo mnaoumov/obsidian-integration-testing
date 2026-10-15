@@ -3,14 +3,13 @@ import {
   parseTsConfig,
   toCanonical
 } from '@mnaoumov/typescript-dev-toolkit/check-project-types';
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
 import {
   execFromRoot,
   getRootFolder
 } from '@mnaoumov/typescript-dev-toolkit/root';
 import { join } from 'node:path/posix';
-
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 exitIfScriptDisabled();
 

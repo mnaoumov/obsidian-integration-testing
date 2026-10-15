@@ -1,5 +1,6 @@
 import type { Plugin } from 'esbuild';
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { build } from 'esbuild';
 import {
   readdirSync,
@@ -9,7 +10,6 @@ import {
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { readMetadataJsonText } from './helpers/metadata-global.ts';
 
 exitIfScriptDisabled();

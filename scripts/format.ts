@@ -1,7 +1,6 @@
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { format } from '@mnaoumov/typescript-dev-toolkit/formatters/dprint';
 import process from 'node:process';
-
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 exitIfScriptDisabled();
 

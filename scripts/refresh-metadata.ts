@@ -38,6 +38,7 @@
  * the updated `metadata.json`.
  */
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import process from 'node:process';
 
 import type { ObsidianVersionChangelogUrls } from '../src/obsidian-metadata.ts';
@@ -49,7 +50,6 @@ import {
   resolveReleaseChannel,
   selectReleaseDownloads
 } from '../src/release-catalog.ts';
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import {
   readMetadataTable,
   writeMetadataTable

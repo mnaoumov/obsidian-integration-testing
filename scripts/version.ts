@@ -5,6 +5,7 @@ import type {
   UndefinedOnPartialDeep
 } from 'type-fest';
 
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { spellcheckContent } from '@mnaoumov/typescript-dev-toolkit/linters/cspell-content';
 import { lintMarkdownContent } from '@mnaoumov/typescript-dev-toolkit/linters/markdownlint-content';
 import { getPackageManagerRunCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
@@ -44,7 +45,6 @@ import {
   isMajorRaise
 } from './helpers/breaking-change.ts';
 import { toChangelogSectionDocument } from './helpers/changelog-section.ts';
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
 
 exitIfScriptDisabled();
