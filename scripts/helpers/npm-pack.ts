@@ -28,7 +28,7 @@
  * `npm notice run ... prepare` lines to `stderr` -- so the string reaching this module is pure JSON.
  */
 
-import { castTo } from '../../src/type-guards.ts';
+import { castTo } from '@mnaoumov/typescript-lib/object-utils';
 
 interface NpmPackResult {
   readonly filename: string;

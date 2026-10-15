@@ -1,12 +1,9 @@
+import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
+import { execFromRoot } from '@mnaoumov/typescript-dev-toolkit/root';
+import { toPosixPath } from '@mnaoumov/typescript-lib/path';
 import { glob } from 'node:fs/promises';
 import { relative } from 'node:path';
 import process from 'node:process';
-
-import { resolveToolCommand } from './package-manager.ts';
-import {
-  execFromRoot,
-  toPosixPath
-} from './root.ts';
 
 interface LintOptions {
   readonly paths?: string[] | undefined;

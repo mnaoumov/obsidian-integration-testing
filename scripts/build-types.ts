@@ -1,3 +1,5 @@
+import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
+import { execFromRoot } from '@mnaoumov/typescript-dev-toolkit/root';
 import {
   copyFileSync,
   mkdirSync,
@@ -16,8 +18,6 @@ import {
 } from 'node:path';
 
 import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
-import { resolveToolCommand } from './helpers/package-manager.ts';
-import { execFromRoot } from './helpers/root.ts';
 
 exitIfScriptDisabled();
 

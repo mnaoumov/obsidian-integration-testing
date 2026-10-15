@@ -9,9 +9,9 @@ import { VitestProject } from './helpers/vitest-projects.ts';
 const SHARED_EXCLUDE = ['node_modules', 'dist'];
 const INTEGRATION_TEST_FILES = 'src/**/*.integration.test.ts';
 const JEST_TEST_FILES = 'src/**/*.jest.test.ts';
-// Every test under `scripts/` — the vendored docs generator (L35), the custom ESLint rules, and the
-// release-script helpers. Deliberately the whole tree rather than `scripts/docs-gen/**`, which is what it
-// used to be: that narrower glob silently left `scripts/helpers/eslint-rules/*.test.ts` run by no project
+// Every test under `scripts/` — the vendored docs generator (L35) and the release-script helpers.
+// Deliberately the whole tree rather than `scripts/docs-gen/**`, which is what it used to be: that narrower
+// glob silently left the then-vendored ESLint rule suites under `scripts/helpers/` run by no project
 // at all, and left `scripts/version.ts` with nowhere to put a regression test at all.
 const SCRIPTS_TEST_FILES = 'scripts/**/*.test.ts';
 const DOCS_SITE_TEST_FILES = 'docs/src/**/*.test.ts';

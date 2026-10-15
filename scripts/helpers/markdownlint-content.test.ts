@@ -9,14 +9,13 @@
  * has no reason to be the first.
  */
 
+import { lintMarkdownContent } from '@mnaoumov/typescript-dev-toolkit/linters/markdownlint-content';
+import { getRootFolder } from '@mnaoumov/typescript-dev-toolkit/root';
 import {
   describe,
   expect,
   it
 } from 'vitest';
-
-import { lintMarkdownContent } from './markdownlint-content.ts';
-import { getRootFolder } from './root.ts';
 
 // The path the virtual document is attributed to. It has to be a real path inside this repository, because
 // that is what decides which configuration applies and where the path-relative rules walk from.

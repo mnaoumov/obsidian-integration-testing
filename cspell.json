@@ -12,7 +12,6 @@
     "docs/src/styles",
     "patches",
     "scripts/docs-gen",
-    "scripts/helpers/@types/markdownlint-cli2-config-schema.d.ts",
     "tsconfig.tsbuildinfo"
   ],
   "dictionaryDefinitions": [],

@@ -1,16 +1,16 @@
-import { join } from 'node:path/posix';
-
 import {
   checkProjectTypes,
   parseTsConfig,
   toCanonical
-} from './helpers/check-project-types.ts';
-import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
-import { resolveToolCommand } from './helpers/package-manager.ts';
+} from '@mnaoumov/typescript-dev-toolkit/check-project-types';
+import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
 import {
   execFromRoot,
   getRootFolder
-} from './helpers/root.ts';
+} from '@mnaoumov/typescript-dev-toolkit/root';
+import { join } from 'node:path/posix';
+
+import { exitIfScriptDisabled } from './helpers/env-toggle.ts';
 
 exitIfScriptDisabled();
 

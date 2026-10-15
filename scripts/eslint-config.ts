@@ -17,6 +17,11 @@ import {
   includeIgnoreFile
 } from '@eslint/config-helpers';
 import eslint from '@eslint/js';
+import {
+  IN_HOUSE_ESLINT_PLUGIN_NAME,
+  inHouseEslintPlugin
+} from '@mnaoumov/typescript-dev-toolkit/linters/eslint-rules/in-house-plugin';
+import { getRootFolder } from '@mnaoumov/typescript-dev-toolkit/root';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `plugin` is too confusing.
 import stylistic from '@stylistic/eslint-plugin';
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript';
@@ -34,9 +39,6 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path/posix';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `_default` is too confusing.
 import tseslint from 'typescript-eslint';
-
-import { obsidianDevUtilsPlugin } from './helpers/eslint-rules/obsidian-dev-utils-plugin.ts';
-import { getRootFolder } from './helpers/root.ts';
 
 const rootConfigFiles = [
   'astro.config.ts',
@@ -275,12 +277,6 @@ function getEslintConfigs(): Linter.Config[] {
       files: [...testFiles, 'scripts/eslint-config.ts'],
       rules: {
         'no-magic-numbers': 'off'
-      }
-    },
-    {
-      files: ['scripts/helpers/@types/markdownlint-cli2-config-schema.d.ts'],
-      rules: {
-        'no-restricted-syntax': 'off'
       }
     },
     {
@@ -557,12 +553,6 @@ function getNoRestrictedSyntaxRulesConfigs(): Linter.Config[] {
           }
         ]
       }
-    },
-    {
-      files: ['scripts/helpers/@types/markdownlint-cli2-config-schema.d.ts'],
-      rules: {
-        'no-restricted-syntax': 'off'
-      }
     }
   ]);
 }
@@ -572,7 +562,7 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
     {
       files: allFiles,
       plugins: {
-        'obsidian-dev-utils': obsidianDevUtilsPlugin
+        [IN_HOUSE_ESLINT_PLUGIN_NAME]: inHouseEslintPlugin
       },
       rules: {
         'obsidian-dev-utils/no-unused-params-members': 'error',
@@ -1028,13 +1018,6 @@ function getUnicornConfigs(): Linter.Config[] {
       }
     },
     {
-      /*
-       * Unsatisfiable in this file alongside `perfectionist/sort-union-types`, and the clash is a genuine
-       * circular fix rather than a style preference: every rule option in the vendored markdownlint schema is
-       * `boolean | { ... }`, so this rule moves the object literal to the end and the alphabetical sort moves it
-       * straight back in front of `boolean`. Both ship fixers and both are `error`, so `--fix` never converges.
-       * The file is generated from markdownlint's published JSON schema, so neither order is ours to choose.
-       */
       files: ['scripts/helpers/@types/*.d.ts'],
       rules: {
         /*
@@ -1044,32 +1027,6 @@ function getUnicornConfigs(): Linter.Config[] {
          */
         'unicorn/name-replacements': 'off',
         'unicorn/prefer-type-literal-last': 'off'
-      }
-    },
-    {
-      /*
-       * The rule fires on the tail call that follows a type alias. That function recurses in two places — there,
-       * and above, fanning out over the members of a union — so turning the tail call into a loop would leave it
-       * half recursive and half iterative over the same tree. The suppression lives here rather than on the line
-       * itself because the file is vendored from `obsidian-dev-utils` alongside sibling projects that do not install
-       * this plugin, where a disable directive naming one of its rules is an unresolvable rule reference and fails
-       * their lint outright, so every consumer strips the upstream directive on the way in.
-       */
-      files: ['scripts/helpers/eslint-rules/no-async-callback-to-unsafe-return.ts'],
-      rules: {
-        'unicorn/no-useless-recursion': 'off'
-      }
-    },
-    {
-      /*
-       * Parked until upstream clears it: `obsidian-dev-utils`' current source of this rule ends a callback in an
-       * early `return false` followed by a boolean `return`, which `unicorn/prefer-ternary` reports. A fix written
-       * here would be drift the vendored-rules gate reports, so the rule is off for this file until the re-sync
-       * that carries upstream's own fix, and this block is deleted on that sync.
-       */
-      files: ['scripts/helpers/eslint-rules/no-used-underscore-variables.ts'],
-      rules: {
-        'unicorn/prefer-ternary': 'off'
       }
     },
     {
