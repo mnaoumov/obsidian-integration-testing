@@ -36,6 +36,8 @@
 
 /* v8 ignore start -- Integration-time code (drives a live Obsidian) covered by integration tests, not unit tests. */
 
+import type { ElectronWindow } from '@obsidian-typings/obsidian-public-latest';
+
 import type { EvalInObsidianParams } from './eval-in-obsidian.ts';
 import type { ObsidianTransport } from './transport.ts';
 
@@ -79,16 +81,6 @@ export interface PinWindowFocusOptions {
   readonly vaultPath?: string;
 }
 
-// Kept local rather than declared globally, like every other holder of a
-// harness `window` property, so it never leaks into consumer types.
-interface ElectronWindowHolder {
-  electronWindow?: FocusReportingWindow;
-}
-
-interface FocusReportingWindow {
-  isFocused: () => boolean;
-}
-
 /**
  * Adds `is-focused` to the body when the window is drawn unfocused.
  *
@@ -122,8 +114,10 @@ export async function pinWindowFocus(options?: PinWindowFocusOptions): Promise<P
         callback(): void {
           // The same expression Obsidian's own handler evaluates: the Electron
           // window's focus on desktop, the document's elsewhere.
-          // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `electronWindow` is Obsidian's own Window property, kept local rather than declared globally.
-          const { electronWindow } = globalThis as unknown as ElectronWindowHolder;
+          // `electronWindow` is Obsidian's own global, which `obsidian-typings`
+          // declares always-present; it is absent on mobile, so it is widened to
+          // let the fallback below run there.
+          const electronWindow = globalThis.electronWindow as ElectronWindow | undefined;
           document.body.toggleClass('is-focused', electronWindow?.isFocused() ?? document.hasFocus());
         },
         transport,

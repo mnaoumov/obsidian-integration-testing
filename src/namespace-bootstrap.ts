@@ -234,6 +234,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly input: Record<string, unknown>;
   }
 
+  // The `*Like` views below are deliberately local, not `obsidian-typings`
+  // types: each probes a member that `obsidian-typings` declares always-present
+  // but that is absent at runtime on old Obsidian versions or during boot, so
+  // the optional view is what lets the code detect its absence without a false
+  // `no-unnecessary-condition`. A precise `obsidian-typings` type cannot
+  // express that absence.
+  //
+  // Old Obsidian versions (e.g. 0.6.x) predate `getBasePath()` and expose only
+  // the `basePath` property.
   interface FileSystemAdapterLike {
     basePath?: string;
     getBasePath?: () => string;

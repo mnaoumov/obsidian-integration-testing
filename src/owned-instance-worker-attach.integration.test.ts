@@ -154,12 +154,9 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
   it('writes both headless defaults into the vault the global setup provisioned', async () => {
     const config = await evalInObsidian({
       callback({ app }): Record<string, unknown> {
-        // `obsidian-typings`' `ConfigItem` union does not list `settingsPopoutWindow`, so the key cannot
-        // be passed as typed. Widening the bound function keeps it to one assertion.
-        const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
         return {
-          alwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
-          settingsPopoutWindow: getConfig('settingsPopoutWindow')
+          alwaysUpdateLinks: app.vault.getConfig('alwaysUpdateLinks'),
+          settingsPopoutWindow: app.vault.getConfig('settingsPopoutWindow')
         };
       }
     });
@@ -175,15 +172,13 @@ describe('headless vault defaults in the global-setup-owned vault', () => {
     const probe = await evalInObsidian({
       callback({ app }): HeadlessDefaultsProbe {
         const setting = app.setting;
-        const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
-
         // No helper, no pre-append: this measures `open()` alone, which is what the popout branch
         // hijacks. With the popout on, `open()` appends `modalEl` into a SECOND Electron window and
         // reassigns the `activeDocument` global to it, leaving this document with none of the modal.
         setting.open();
         const result = {
-          configuredAlwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
-          configuredSettingsPopoutWindow: getConfig('settingsPopoutWindow'),
+          configuredAlwaysUpdateLinks: app.vault.getConfig('alwaysUpdateLinks'),
+          configuredSettingsPopoutWindow: app.vault.getConfig('settingsPopoutWindow'),
           isActiveDocumentMain: activeDocument === document,
           isContainerAttachedByOpenAlone: document.body.contains(setting.containerEl),
           isContainerInMainDocument: setting.containerEl.ownerDocument === document

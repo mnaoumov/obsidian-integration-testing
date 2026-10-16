@@ -63,10 +63,9 @@ describe('configDirectory override', () => {
     // re-asserted here because this is the only suite that runs under an override end to end).
     const config = await evalInObsidian({
       callback({ app }): Record<string, unknown> {
-        const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
         return {
-          alwaysUpdateLinks: getConfig('alwaysUpdateLinks'),
-          settingsPopoutWindow: getConfig('settingsPopoutWindow')
+          alwaysUpdateLinks: app.vault.getConfig('alwaysUpdateLinks'),
+          settingsPopoutWindow: app.vault.getConfig('settingsPopoutWindow')
         };
       }
     });

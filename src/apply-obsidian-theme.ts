@@ -89,10 +89,6 @@ export interface AssertObsidianThemeUnchangedParams {
  */
 export type ObsidianTheme = 'dark' | 'light';
 
-interface AppearanceConfig {
-  readonly theme?: unknown;
-}
-
 // A `window` property rather than a closure variable: the apply and the check
 // are separate evaluations. Spelled out in the holder rather than shared through
 // a constant, because a closure is serialized and cannot reach module scope.
@@ -145,7 +141,7 @@ export async function applyObsidianTheme(params: ApplyObsidianThemeParams): Prom
       await waitUntil({
         message: `the ${requestedTheme} theme to be applied and saved to appearance.json`,
         async predicate(): Promise<boolean> {
-          const appearance = await app.vault.readConfigJson('appearance') as AppearanceConfig | null;
+          const appearance = await app.vault.readConfigJson('appearance');
           return document.body.classList.contains(bodyClass) && appearance?.theme === themeName;
         },
         timeoutInMilliseconds: timeout
