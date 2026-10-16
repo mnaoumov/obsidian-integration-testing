@@ -29,6 +29,8 @@ import type { PopulateFilesParams } from './temporary-vault.ts';
 import { REQUIRED_PLUGIN_ASSET_NAMES } from './community-plugin-registry.ts';
 import { DEFAULT_CONFIG_DIRECTORY } from './config-directory.ts';
 import { readDemoVaultTree } from './demo-vault-tree.ts';
+import { log } from './log.ts';
+import { compareVersions } from './obsidian-version.ts';
 import { ensureNonNullable } from './type-guards.ts';
 
 /*
@@ -40,6 +42,7 @@ import { ensureNonNullable } from './type-guards.ts';
 const OBSIDIAN_CONFIG_DIR = DEFAULT_CONFIG_DIRECTORY;
 const PLUGINS_DIR = 'plugins';
 const DATA_JSON = 'data.json';
+const MANIFEST_JSON = 'manifest.json';
 const DATA_JSON_INDENT = 2;
 
 const DEFAULT_OBSIDIAN_CONFIG_FILES = ['app.json', 'appearance.json', 'core-plugins.json'];
@@ -88,6 +91,19 @@ export interface InjectPluginParams {
   readonly data?: unknown;
 
   /**
+   * The oldest plugin version the demo vault works with, e.g. `'13.8.0'` for a demo script that imports
+   * something only that release serves. A copy already installed in the demo vault whose `manifest.json`
+   * reports an older version (or none) is **stale**: the headless bootstrap re-downloads it, and the
+   * synchronous {@link buildDemoVaultPopulate} refuses it rather than seeding it.
+   *
+   * Without it a warm checkout keeps whatever version it first downloaded for good, since the plugin folder
+   * is gitignored — so a fresh clone passes while every machine with an old copy fails, under an error
+   * that names the demo script rather than the plugin. Ignored for a plugin with an explicit
+   * {@link InjectPluginParams.sourceDirectory}.
+   */
+  readonly minVersion?: string | undefined;
+
+  /**
    * The community plugin's id (its `.obsidian/plugins/<pluginId>` folder name).
    */
   readonly pluginId: string;
@@ -95,9 +111,10 @@ export interface InjectPluginParams {
   /**
    * The GitHub repository (`owner/name`) publishing this plugin, consulted **only** by the headless
    * bootstrap (`bootstrapDemoVaultPlugins` / `buildDemoVaultPopulateAsync` / the
-   * `bootstrap-demo-vault` CLI) when the binaries are missing from the demo vault. Supplying it skips
-   * the lookup in Obsidian's community plugin registry, which is also the way to bootstrap a plugin
-   * that is not listed there at all. Never used when the files are already on disk.
+   * `bootstrap-demo-vault` CLI) when the binaries are missing from the demo vault or stale (see
+   * {@link InjectPluginParams.minVersion}). Supplying it skips the lookup in Obsidian's community plugin
+   * registry, which is also the way to bootstrap a plugin that is not listed there at all. Never used
+   * when an acceptable copy is already on disk.
    */
   readonly repo?: string | undefined;
 
@@ -115,8 +132,12 @@ export interface InjectPluginParams {
 
   /**
    * The release tag the headless bootstrap downloads from, pinning the installed version. Omit for the
-   * repository's latest release — what the in-app community browser installs. Like
-   * {@link InjectPluginParams.repo}, consulted only while bootstrapping missing binaries.
+   * repository's latest release — what the in-app community browser installs.
+   *
+   * A pin is held, not merely used for the first download: an installed copy whose `manifest.json` reports
+   * a different version is **stale**, exactly as one below {@link InjectPluginParams.minVersion} is. A
+   * leading `v` on the tag is ignored for that comparison. Ignored for a plugin with an explicit
+   * {@link InjectPluginParams.sourceDirectory}.
    */
   readonly version?: string | undefined;
 }
@@ -132,6 +153,21 @@ export interface ResolveInjectedPluginSourceDirectoryParams {
 
   /**
   The injected plugin whose source directory to resolve.
+   */
+  readonly plugin: InjectPluginParams;
+}
+
+/**
+ * Parameters for {@link resolveInjectedPluginStaleReason}.
+ */
+export interface ResolveInjectedPluginStaleReasonParams {
+  /**
+  The version the installed copy's `manifest.json` reports, or `undefined` when it reports none.
+   */
+  readonly installedVersion: string | undefined;
+
+  /**
+  The injected plugin whose installed copy is being judged.
    */
   readonly plugin: InjectPluginParams;
 }
@@ -190,13 +226,41 @@ export function resolveInjectedPluginSourceDirectory(params: ResolveInjectedPlug
 }
 
 /**
- * Selects the injected plugins whose binaries are missing from the demo vault and can therefore be
- * installed headlessly — the exact set {@link buildDemoVaultPopulate} would otherwise throw on.
+ * Judges whether an installed copy of an injected plugin is too old to use, against its pinned
+ * {@link InjectPluginParams.version} and its {@link InjectPluginParams.minVersion}.
+ *
+ * @param params - The {@link ResolveInjectedPluginStaleReasonParams}.
+ * @returns Why the copy is stale, or `undefined` when it is acceptable (including when the plugin declares
+ *   neither a pin nor a minimum, or opted out with an explicit `sourceDirectory`).
+ */
+export function resolveInjectedPluginStaleReason(params: ResolveInjectedPluginStaleReasonParams): string | undefined {
+  const { installedVersion, plugin } = params;
+  if (plugin.sourceDirectory !== undefined) {
+    return undefined;
+  }
+
+  const installedLabel = installedVersion ?? 'no version';
+
+  if (plugin.version !== undefined) {
+    const pinnedVersion = stripVersionTagPrefix(plugin.version);
+    if (installedVersion !== pinnedVersion) {
+      return `the installed copy reports ${installedLabel}, but \`version\` pins ${pinnedVersion}`;
+    }
+  }
+
+  return plugin.minVersion !== undefined && (installedVersion === undefined || compareVersions(installedVersion, plugin.minVersion) < 0) ? `the installed copy reports ${installedLabel}, older than \`minVersion\` ${plugin.minVersion}` : undefined;
+}
+
+/**
+ * Selects the injected plugins that the headless bootstrap has to (re-)install — the exact set
+ * {@link buildDemoVaultPopulate} would otherwise throw on: those whose binaries are missing from the demo
+ * vault, and those whose installed copy is stale (see {@link resolveInjectedPluginStaleReason}).
  *
  * Plugins carrying an explicit {@link InjectPluginParams.sourceDirectory} are excluded: that names a local
  * build output, not somewhere to download a published release into.
  *
- * Shared with the bootstrap so "missing" has one definition rather than two that can drift apart.
+ * Shared with the bootstrap so "missing" and "stale" each have one definition rather than two that can drift
+ * apart.
  *
  * @param params - The {@link ResolveMissingInjectedPluginsParams}.
  * @returns The plugins to bootstrap, in the order given.
@@ -207,8 +271,9 @@ export function resolveMissingInjectedPlugins(params: ResolveMissingInjectedPlug
     if (plugin.sourceDirectory !== undefined) {
       return false;
     }
-    const fileNames = readPluginFileNames(resolveInjectedPluginSourceDirectory({ demoVaultPath, plugin }));
-    return REQUIRED_PLUGIN_ASSET_NAMES.some((assetName) => !fileNames.includes(assetName));
+    const sourceDirectory = resolveInjectedPluginSourceDirectory({ demoVaultPath, plugin });
+    const fileNames = readPluginFileNames(sourceDirectory);
+    return REQUIRED_PLUGIN_ASSET_NAMES.some((assetName) => !fileNames.includes(assetName)) ? true : resolveInjectedPluginStaleReason({ installedVersion: readInstalledPluginVersion(sourceDirectory), plugin }) !== undefined;
   });
 }
 
@@ -229,6 +294,28 @@ function buildMissingPluginRemedy(demoVaultPath: string, plugin: InjectPluginPar
       + 'Opening demo-vault/ in Obsidian once so demo-vault-helper installs it also works.'
     : 'It was read from an explicit `sourceDirectory`, which opts it out of the headless bootstrap — '
       + 'build it into that directory, or drop `sourceDirectory` to install it from its published release.';
+}
+
+/**
+ * Reads the `version` an installed plugin's `manifest.json` reports.
+ *
+ * @param sourceDirectory - The plugin's directory.
+ * @returns The version, or `undefined` when the manifest is absent, unreadable, or carries no string
+ *   `version`.
+ */
+function readInstalledPluginVersion(sourceDirectory: string): string | undefined {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(join(sourceDirectory, MANIFEST_JSON), 'utf-8'));
+  } catch {
+    return undefined;
+  }
+
+  if (typeof manifest !== 'object' || manifest === null || !('version' in manifest)) {
+    return undefined;
+  }
+
+  return typeof manifest.version === 'string' ? manifest.version : undefined;
 }
 
 /**
@@ -267,6 +354,18 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
     }
   }
 
+  const installedVersion = readInstalledPluginVersion(sourceDirectory);
+  const staleReason = resolveInjectedPluginStaleReason({ installedVersion, plugin });
+  if (staleReason !== undefined) {
+    throw new Error(
+      `Community plugin "${pluginId}" in the demo vault (${sourceDirectory}) is stale: ${staleReason}. `
+        + `Re-install it headlessly with \`npx obsidian-integration-testing bootstrap-demo-vault --demo-vault "${demoVaultPath}"\`, `
+        + 'or switch this setup to `buildDemoVaultPopulateAsync`, which re-downloads stale plugins itself.'
+    );
+  }
+
+  log(`[demo-vault-populate] Injecting "${pluginId}" ${installedVersion ?? '(no version in manifest.json)'} from ${sourceDirectory}.`);
+
   for (const fileName of fileNames) {
     // `data.json` is regenerated from `data` below (when provided); skip the on-disk copy to avoid seeding it twice.
     if (fileName === DATA_JSON && data !== undefined) {
@@ -281,4 +380,14 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
 
   const dataJson: string = ensureNonNullable(JSON.stringify(data, null, DATA_JSON_INDENT));
   map[`${pluginPrefix}/${DATA_JSON}`] = `${dataJson}\n`;
+}
+
+/**
+ * Strips the `v` some repositories prefix their release tags with, so a tag compares with a manifest version.
+ *
+ * @param version - A release tag or version.
+ * @returns The version without a leading `v`.
+ */
+function stripVersionTagPrefix(version: string): string {
+  return version.startsWith('v') ? version.slice(1) : version;
 }

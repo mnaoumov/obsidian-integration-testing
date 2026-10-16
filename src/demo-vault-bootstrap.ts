@@ -86,7 +86,7 @@ export interface BootstrapDemoVaultPluginsParams {
 
   /**
    * The injected plugins to install — the same list passed to `buildDemoVaultPopulate`. Plugins whose
-   * binaries are already present are skipped (unless {@link BootstrapDemoVaultPluginsParams.shouldForce}),
+   * binaries are already present, and not stale against their `version` / `minVersion`, are skipped (unless {@link BootstrapDemoVaultPluginsParams.shouldForce}),
    * as are plugins carrying an explicit `sourceDirectory`.
    */
   readonly injectPlugins: readonly InjectPluginParams[];
@@ -109,7 +109,7 @@ export interface BootstrapDemoVaultPluginsResult {
   readonly installed: readonly InstalledPluginInfo[];
 
   /**
-  The ids of plugins left untouched — already installed, or opted out via an explicit `sourceDirectory`.
+  The ids of plugins left untouched — already installed at an acceptable version, or opted out via an explicit `sourceDirectory`.
    */
   readonly skippedPluginIds: readonly string[];
 }
@@ -149,8 +149,8 @@ export interface InstalledPluginInfo {
 }
 
 /**
- * Installs every injected community plugin whose built files are missing from the demo vault, by
- * downloading its published release assets into `demo-vault/.obsidian/plugins/<id>/`.
+ * Installs every injected community plugin whose built files are missing from the demo vault, or whose installed
+ * copy is stale against its pinned `version` or its `minVersion`, by downloading its published release assets into `demo-vault/.obsidian/plugins/<id>/`.
  *
  * Each plugin's repository comes from its {@link InjectPluginParams.repo} when given, otherwise from
  * Obsidian's own community plugin registry — the same `id` → `repo` table the in-app community browser
@@ -182,7 +182,7 @@ export async function bootstrapDemoVaultPlugins(params: BootstrapDemoVaultPlugin
 
 /**
  * The self-healing counterpart of `buildDemoVaultPopulate`: installs any injected community plugin whose
- * binaries are missing (see {@link bootstrapDemoVaultPlugins}), then builds the populate map exactly as the
+ * binaries are missing or stale (see {@link bootstrapDemoVaultPlugins}), then builds the populate map exactly as the
  * synchronous builder does.
  *
  * Use this from a global setup's `populate` thunk — both the Vitest and Jest adapters accept a thunk

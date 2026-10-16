@@ -16,6 +16,7 @@ import {
 
 import {
   buildDemoVaultPopulate,
+  resolveInjectedPluginStaleReason,
   resolveMissingInjectedPlugins
 } from './demo-vault-populate.ts';
 
@@ -182,6 +183,67 @@ describe('buildDemoVaultPopulate', () => {
     expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'cst', sourceDirectory }] }))
       .toThrow(/opts it out of the headless bootstrap/);
   });
+
+  it('should refuse an installed copy older than minVersion, naming both versions and the remedies', () => {
+    const directory = writePluginBinaries('cst');
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ id: 'cst', version: '13.6.7' }));
+
+    expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ minVersion: '13.8.0', pluginId: 'cst' }] }))
+      .toThrow(/"cst" in the demo vault .* is stale: the installed copy reports 13\.6\.7, older than `minVersion` 13\.8\.0\. .*bootstrap-demo-vault.*buildDemoVaultPopulateAsync/);
+  });
+
+  it('should seed an installed copy that satisfies minVersion', () => {
+    const directory = writePluginBinaries('cst');
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ id: 'cst', version: '13.8.0' }));
+
+    const map = buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ minVersion: '13.8.0', pluginId: 'cst' }] });
+
+    expect(map['.obsidian/plugins/cst/manifest.json']?.toString()).toContain('13.8.0');
+  });
+
+  it('should ignore minVersion for an explicit sourceDirectory, a local build the caller owns', () => {
+    const sourceDirectory = writePluginBinaries('cst', join(root, 'dist'));
+
+    const map = buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ minVersion: '99.0.0', pluginId: 'cst', sourceDirectory }] });
+
+    expect(map['.obsidian/plugins/cst/main.js']?.toString()).toBe('// cst main');
+  });
+});
+
+describe('resolveInjectedPluginStaleReason', () => {
+  it('should accept any installed copy when neither a pin nor a minimum is declared', () => {
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '1.0.0', plugin: { pluginId: 'p' } })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: undefined, plugin: { pluginId: 'p' } })).toBeUndefined();
+  });
+
+  it('should judge minVersion numerically, segment by segment', () => {
+    const plugin = { minVersion: '13.8.0', pluginId: 'p' };
+
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.10.0', plugin })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.8.0', plugin })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.7.1', plugin }))
+      .toBe('the installed copy reports 13.7.1, older than `minVersion` 13.8.0');
+  });
+
+  it('should treat a manifest with no version as below any minVersion', () => {
+    expect(resolveInjectedPluginStaleReason({ installedVersion: undefined, plugin: { minVersion: '1.0.0', pluginId: 'p' } }))
+      .toBe('the installed copy reports no version, older than `minVersion` 1.0.0');
+  });
+
+  it('should hold a pinned version in both directions, ignoring a leading v on the tag', () => {
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '2.0.0', plugin: { pluginId: 'p', version: 'v2.0.0' } })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '2.1.0', plugin: { pluginId: 'p', version: '2.0.0' } }))
+      .toBe('the installed copy reports 2.1.0, but `version` pins 2.0.0');
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '1.9.0', plugin: { pluginId: 'p', version: '2.0.0' } }))
+      .toBe('the installed copy reports 1.9.0, but `version` pins 2.0.0');
+  });
+
+  it('should never judge a plugin with an explicit sourceDirectory', () => {
+    expect(resolveInjectedPluginStaleReason({
+      installedVersion: '1.0.0',
+      plugin: { minVersion: '2.0.0', pluginId: 'p', sourceDirectory: 'dist', version: '3.0.0' }
+    })).toBeUndefined();
+  });
 });
 
 describe('resolveMissingInjectedPlugins', () => {
@@ -239,5 +301,51 @@ describe('resolveMissingInjectedPlugins', () => {
     });
 
     expect(missing).toEqual([{ pluginId: 'first', repo: 'owner/first' }, { pluginId: 'second', version: '1.2.3' }]);
+  });
+
+  it('should select an installed plugin whose manifest is older than its minVersion', () => {
+    writePluginBinaries('old');
+    writeFileSync(join(root, '.obsidian', 'plugins', 'old', 'manifest.json'), JSON.stringify({ id: 'old', version: '13.6.7' }));
+    writePluginBinaries('new');
+    writeFileSync(join(root, '.obsidian', 'plugins', 'new', 'manifest.json'), JSON.stringify({ id: 'new', version: '13.8.0' }));
+
+    const missing = resolveMissingInjectedPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ minVersion: '13.8.0', pluginId: 'old' }, { minVersion: '13.8.0', pluginId: 'new' }]
+    });
+
+    expect(missing.map((plugin) => plugin.pluginId)).toEqual(['old']);
+  });
+
+  it('should select an installed plugin whose manifest cannot be parsed when a minVersion is declared', () => {
+    writePluginBinaries('broken');
+    writeFileSync(join(root, '.obsidian', 'plugins', 'broken', 'manifest.json'), 'not json');
+
+    const missing = resolveMissingInjectedPlugins({ demoVaultPath: root, injectPlugins: [{ minVersion: '1.0.0', pluginId: 'broken' }] });
+
+    expect(missing.map((plugin) => plugin.pluginId)).toEqual(['broken']);
+  });
+
+  it('should select an installed plugin whose manifest version is not a string when a minVersion is declared', () => {
+    writePluginBinaries('odd');
+    writeFileSync(join(root, '.obsidian', 'plugins', 'odd', 'manifest.json'), JSON.stringify({ version: 13 }));
+
+    const missing = resolveMissingInjectedPlugins({ demoVaultPath: root, injectPlugins: [{ minVersion: '1.0.0', pluginId: 'odd' }] });
+
+    expect(missing.map((plugin) => plugin.pluginId)).toEqual(['odd']);
+  });
+
+  it('should select an installed plugin whose manifest is not an object when a minVersion is declared', () => {
+    writePluginBinaries('null-manifest');
+    writeFileSync(join(root, '.obsidian', 'plugins', 'null-manifest', 'manifest.json'), 'null');
+    writePluginBinaries('string-manifest');
+    writeFileSync(join(root, '.obsidian', 'plugins', 'string-manifest', 'manifest.json'), '"1.0.0"');
+
+    const missing = resolveMissingInjectedPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ minVersion: '1.0.0', pluginId: 'null-manifest' }, { minVersion: '1.0.0', pluginId: 'string-manifest' }]
+    });
+
+    expect(missing.map((plugin) => plugin.pluginId)).toEqual(['null-manifest', 'string-manifest']);
   });
 });
