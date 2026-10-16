@@ -90,10 +90,12 @@ export {
 export type {
   BuildDemoVaultPopulateParams,
   InjectPluginParams,
+  ResolveInjectedPluginStaleReasonParams,
   ResolveMissingInjectedPluginsParams
 } from './demo-vault-populate.ts';
 export {
   buildDemoVaultPopulate,
+  resolveInjectedPluginStaleReason,
   resolveMissingInjectedPlugins
 } from './demo-vault-populate.ts';
 export type { ReadDemoVaultTreeParams } from './demo-vault-tree.ts';

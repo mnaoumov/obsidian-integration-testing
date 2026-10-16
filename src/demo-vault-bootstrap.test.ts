@@ -126,6 +126,34 @@ describe('bootstrapDemoVaultPlugins', () => {
     expect(existsSync(join(installedDirectory, 'styles.css'))).toBe(false);
   });
 
+  it('should re-download an installed plugin whose manifest is older than its minVersion', async () => {
+    vi.stubGlobal('fetch', servePluginAssets);
+    const installedDirectory = writePluginBinaries('installed-plugin');
+    writeFileSync(join(installedDirectory, 'manifest.json'), JSON.stringify({ id: 'installed-plugin', version: '13.6.7' }));
+
+    const result = await bootstrapDemoVaultPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ minVersion: '13.8.0', pluginId: 'installed-plugin', repo: 'demo-owner/obsidian-installed-plugin' }]
+    });
+
+    expect(result.installed.map((plugin) => plugin.pluginId)).toEqual(['installed-plugin']);
+    expect(result.skippedPluginIds).toEqual([]);
+    expect(readFileSync(join(installedDirectory, 'manifest.json'), 'utf-8')).toBe('{"id":"installed-plugin"}');
+  });
+
+  it('should skip an installed plugin that already satisfies its minVersion', async () => {
+    const installedDirectory = writePluginBinaries('fix-require-modules');
+    writeFileSync(join(installedDirectory, 'manifest.json'), JSON.stringify({ id: 'fix-require-modules', version: '13.8.0' }));
+
+    const result = await bootstrapDemoVaultPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ minVersion: '13.8.0', pluginId: 'fix-require-modules' }]
+    });
+
+    expect(result.installed).toEqual([]);
+    expect(result.skippedPluginIds).toEqual(['fix-require-modules']);
+  });
+
   it('should do nothing for an empty plugin list', async () => {
     const result = await bootstrapDemoVaultPlugins({ demoVaultPath: root, injectPlugins: [] });
 
