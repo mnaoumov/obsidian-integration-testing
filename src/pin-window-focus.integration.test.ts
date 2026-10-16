@@ -40,14 +40,6 @@ interface CaptureOptions {
   readonly shouldPinWindowFocus: boolean;
 }
 
-interface ElectronWindowHolder {
-  electronWindow?: FocusReportingWindow;
-}
-
-interface FocusReportingWindow {
-  isFocused: () => boolean;
-}
-
 interface FocusState {
   readonly hasFocusedClass: boolean;
   readonly isWindowFocused: boolean;
@@ -167,11 +159,10 @@ function countChangedPixels(first: SharpRawResult, second: SharpRawResult): numb
 async function readFocusState(): Promise<FocusState> {
   return await evalInObsidian({
     callback(): FocusState {
-      // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `electronWindow` is Obsidian's own Window property, kept local rather than declared globally.
-      const { electronWindow } = globalThis as unknown as ElectronWindowHolder;
+      // This suite runs on desktop only, where Obsidian always sets its own `electronWindow` global.
       return {
         hasFocusedClass: document.body.hasClass('is-focused'),
-        isWindowFocused: electronWindow?.isFocused() ?? document.hasFocus()
+        isWindowFocused: electronWindow.isFocused()
       };
     },
     vaultPath: temporaryVault.path

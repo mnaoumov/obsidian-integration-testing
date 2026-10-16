@@ -108,7 +108,7 @@ describe('headless vault defaults on Android', () => {
   it('should carry the whole harness app.json across, not just the one key', async () => {
     const settingsPopoutWindow = await evalInObsidian({
       callback({ app }): unknown {
-        return (app.vault.getConfig as (configKey: string) => unknown)('settingsPopoutWindow');
+        return app.vault.getConfig('settingsPopoutWindow');
       },
       vaultPath: vault.path
     });

@@ -1,3 +1,5 @@
+import type { ConfigItem } from '@obsidian-typings/obsidian-public-latest';
+
 import {
   afterAll,
   beforeAll,
@@ -31,12 +33,12 @@ interface AppConfigProbe {
 }
 
 interface ProbeInput extends GenericObject {
-  configKey: string;
+  configKey: ConfigItem;
 }
 
 /**
- * The key under test — the harness's own headless default, and the one
- * `obsidian-typings`' `ConfigItem` union omits.
+ * The key under test — the harness's own headless default, and the one the
+ * popout-subject tests this seam exists for need to flip.
  *
  * The suite stops at the config layer deliberately: `SettingsModal`'s
  * `shouldUsePopout()` is `getConfig('settingsPopoutWindow')` verbatim in the
@@ -61,11 +63,9 @@ let vaultPath: string;
 async function probe(): Promise<AppConfigProbe> {
   return await evalInObsidian<ProbeInput, AppConfigProbe>({
     callback({ app, configKey }): AppConfigProbe {
-      const getConfig = app.vault.getConfig.bind(app.vault) as (key: string) => unknown;
-
       return {
         isPresent: Object.hasOwn(app.vault.config, configKey),
-        value: getConfig(configKey)
+        value: app.vault.getConfig(configKey)
       };
     },
     input: { configKey: CONFIG_KEY },

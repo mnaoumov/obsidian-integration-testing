@@ -1082,7 +1082,7 @@ The two defaults stay unconditional, and there is deliberately **no provisioning
 Three things it buys over the inline `app.vault.setConfig` a consumer writes inside its own `evalInObsidian` closure — which is what those three tests carried before this existed:
 
 - **The value is restored, including *deleting* a key that had never been written.** An inline setter writes into a vault shared with the rest of the run, so every later test in that instance inherits the change — precisely the cross-test contamination the unconditional default exists to end.
-- **One cast instead of one per consumer.** `obsidian-typings`' `ConfigItem` union omits `settingsPopoutWindow`, so `getConfig` / `setConfig` must be bound and widened to pass it at all; every consumer that set the key inline repeated that cast. It disappears from one place when the typings grow the key.
+- **One key narrowing instead of one per consumer.** The public `configKey` is a plain `string` (`obsidian-typings` is a development dependency here, so `ConfigItem` cannot appear in the published declarations), and it is narrowed to `ConfigItem` once, inside the seam. `obsidian-typings` has listed `settingsPopoutWindow` in both `ConfigItem` and `AppVaultConfig` since the 1.14.4 typings release that added the keyed `getConfig` / `setConfig` overloads, so the bound-and-widened setter consumers used to copy is gone.
 - **Per-test granularity**, as above.
 
 Two facts about Obsidian shape the restore, both read out of the shipped 1.14.1 bundle rather than assumed:

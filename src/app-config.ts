@@ -20,10 +20,10 @@
  *   written. An inline setter writes into a vault shared with the rest of the
  *   run, so every later test in that instance inherits the change — the
  *   cross-test contamination the unconditional default exists to end.
- * - **The cast lives in one place.** `obsidian-typings`' `ConfigItem` union omits
- *   `settingsPopoutWindow`, so the key cannot be passed to `getConfig` /
- *   `setConfig` without widening them; every consumer that wrote the setter
- *   inline repeated that cast.
+ * - **The key narrowing lives in one place.** The key arrives as a plain
+ *   `string` and Obsidian's `getConfig` / `setConfig` take `obsidian-typings`'
+ *   `ConfigItem`, so it is narrowed here once rather than at every consumer's
+ *   inline setter.
  * - **Per-test granularity.** A parameter on the provisioning write would be
  *   per-vault, and a project whose tests share one vault — the usual shape —
  *   cannot have it both ways.
@@ -49,6 +49,8 @@
  */
 
 /* v8 ignore start -- Integration-time code (drives a live Obsidian via evalInObsidian) covered by integration tests, not unit tests. */
+
+import type { ConfigItem } from '@obsidian-typings/obsidian-public-latest';
 
 import type {
   EvalInObsidianParams,
@@ -100,10 +102,10 @@ export interface AppConfigRestore {
  */
 export interface GetAppConfigParams {
   /**
-   * The vault config key, e.g. `settingsPopoutWindow`. Not narrowed to
-   * `obsidian-typings`' `ConfigItem`: that union omits keys Obsidian really
-   * reads, `settingsPopoutWindow` among them, which is the whole reason a
-   * consumer had to widen the setter by hand.
+   * The vault config key, e.g. `settingsPopoutWindow`. A plain `string` rather
+   * than `obsidian-typings`' `ConfigItem`, because `obsidian-typings` is only a
+   * development dependency of this package, so its types cannot appear in the
+   * published declarations, and because Obsidian itself accepts any key.
    */
   readonly configKey: string;
 
@@ -196,8 +198,7 @@ export async function getAppConfig(params: GetAppConfigParams): Promise<unknown>
 
   return await evalInObsidian(normalizeOptionalProperties<EvalInObsidianParams<ReadInput, unknown>>({
     callback({ app, configKey: key }): unknown {
-      const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
-      return getConfig(key);
+      return app.vault.getConfig(key as ConfigItem);
     },
     input: { configKey },
     transport,
@@ -232,11 +233,9 @@ export async function restoreAppConfig(restore: AppConfigRestore): Promise<void>
       isPresent: wasPresent,
       value: previousValue
     }): undefined {
-      const setConfig = app.vault.setConfig.bind(app.vault) as (configKey: string, value: unknown) => void;
-
       // `undefined` is not a no-op here: `setConfig` deletes the key for it,
       // which is the only way to restore one the vault never carried.
-      setConfig(key, wasPresent ? previousValue : undefined);
+      app.vault.setConfig(key as ConfigItem, wasPresent ? previousValue : undefined);
     },
     input: {
       configKey,
@@ -283,11 +282,9 @@ export async function setAppConfig(params: SetAppConfigParams): Promise<AppConfi
       // there is one — so the read needs no cast of the config object.
       const isPresent = Object.hasOwn(app.vault.config, key);
 
-      const getConfig = app.vault.getConfig.bind(app.vault) as (configKey: string) => unknown;
-      const previousValue = isPresent ? getConfig(key) : undefined;
-
-      const setConfig = app.vault.setConfig.bind(app.vault) as (configKey: string, value: unknown) => void;
-      setConfig(key, newValue);
+      const configItem = key as ConfigItem;
+      const previousValue = isPresent ? app.vault.getConfig(configItem) : undefined;
+      app.vault.setConfig(configItem, newValue);
 
       return {
         isPresent,
