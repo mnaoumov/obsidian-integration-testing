@@ -4,7 +4,7 @@
  * Builds a complete {@link PopulateFilesParams} map for a plugin's in-repo `demo-vault/`, ready to seed into
  * the temp vault before Obsidian opens it. Composes {@link readDemoVaultTree} (the note tree) with the two
  * pieces it deliberately omits: selected `.obsidian/*` config files, and the built binaries (+ `data.json`)
- * of any extra community plugins the demo vault depends on (e.g. CodeScript Toolkit, `demo-vault-helper`).
+ * of any extra community plugins the demo vault depends on (e.g. `CodeScript Toolkit`, `demo-vault-helper`).
  *
  * Pairs with the `enableCommunityPlugins` option of the global-setup `createSetup`: this seeds the binaries,
  * that turns them on. It intentionally does NOT write `community-plugins.json` — the harness owns that file

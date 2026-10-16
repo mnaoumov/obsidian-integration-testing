@@ -147,7 +147,7 @@ When wiring `TemporaryVault` yourself, without a framework global setup, call `v
 
 ## Seed a plugin's `demo-vault/`
 
-A plugin's committed `demo-vault/` often needs more than the plugin under test — **CodeScript Toolkit** (`fix-require-modules`) to run its `code-button` blocks, say, or the `demo-vault-helper` bootstrap. Two pieces make that a one-liner:
+A plugin's committed `demo-vault/` often needs more than the plugin under test — `CodeScript Toolkit` (`fix-require-modules`) to run its `code-button` blocks, say, or the `demo-vault-helper` bootstrap. Two pieces make that a one-liner:
 
 - **`enableCommunityPlugins`** — a `createSetup` option listing community-plugin ids to enable **in addition to** the plugin under test, after it is enabled. Each id's built files must already be in the vault (seed them below). It replaces the hand-rolled `beforeAll` that turned off restricted mode and called `enablePlugin(...)` in every demo-vault test.
 - **`buildDemoVaultPopulate`** — reads the repo's `demo-vault/` tree, carries over selected `.obsidian/*` config (`app.json`, `appearance.json`, `core-plugins.json` by default), and seeds each injected plugin's binaries (plus an optional `data.json`), returning a `populate` map.
