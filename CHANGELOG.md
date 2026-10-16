@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 17.4.0
+
+- feat(demo-vault): merge re-downloading a stale injected plugin
+- docs: merge marking plugin names as code in markdown and comments
+- refactor: merge reading vault config through obsidian-typings' config types
+- build(scripts): merge importing exitIfScriptDisabled from typescript-dev-toolkit
+- build(scripts): merge running lint:md through the typescript-dev-toolkit markdown runner
+- build(scripts): merge importing the ESLint rules and script helpers from the @mnaoumov packages
+- fix(scripts): merge reading vendored eslint rules from typescript-dev-toolkit
+- chore: collect runtime versions
+- fix(android): merge starting the adb server before the first adb devices listing
+- chore: refresh metadata.json
+- build(docs): merge moving the Markdown pipeline onto Sätteri, with GitHub alerts as a local plugin
+
 ## 17.3.0
 
 - feat(trusted-input): merge delivering input to a popout window, not always the main one
