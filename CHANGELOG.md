@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 17.5.0
+
+- feat(android): merge writing a file again when the emulator lands it empty
+
 ## 17.4.0
 
 - feat(demo-vault): merge re-downloading a stale injected plugin
