@@ -11,6 +11,10 @@ import {
 
 import type { StartupProbeResult } from './app-startup-progress.ts';
 
+import {
+  drainAndroidWriteLossRewrites,
+  installAndroidWriteLossGuard
+} from './android-write-loss-guard.ts';
 import { log } from './log.ts';
 import { strictProxy } from './strict-proxy.ts';
 import { AppiumTransport } from './transport-appium.ts';
@@ -304,6 +308,35 @@ describe('AppiumTransport.registerVault', () => {
       ''
     );
   });
+
+  it('should install the write-loss guard once the layout is ready', async () => {
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(mockBrowser.execute).toHaveBeenLastCalledWith(installAndroidWriteLossGuard);
+  });
+
+  it('should report the rewrites the guard made before the reload discards them', async () => {
+    vi.mocked(log).mockClear();
+    mockBrowser.execute.mockResolvedValueOnce(['note.md (5 bytes, attempt 1)']);
+
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(mockBrowser.execute).toHaveBeenNthCalledWith(1, drainAndroidWriteLossRewrites);
+    expect(vi.mocked(log)).toHaveBeenCalledWith(
+      '[android-write-loss-guard] Re-wrote 1 file(s) the emulator wrote empty: note.md (5 bytes, attempt 1)'
+    );
+  });
+
+  it('should finish registering when the guard cannot be installed', async () => {
+    vi.mocked(log).mockClear();
+    mockBrowser.execute.mockImplementation((script: unknown): unknown => {
+      return script === installAndroidWriteLossGuard ? Promise.reject(new Error('no such window')) : Promise.resolve(STARTED_PROBE);
+    });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Could not install the write-loss guard'));
+  });
 });
 
 describe('AppiumTransport.unregisterVault', () => {
@@ -415,6 +448,8 @@ describe('AppiumTransport startup budgets', () => {
 
   it('should not start the layout-ready clock until the app has started', async () => {
     mockBrowser.execute
+      // The write-loss guard's rewrites, drained before the reload discards them.
+      .mockResolvedValueOnce([])
       // The localStorage write that triggers the reload.
       .mockResolvedValueOnce(undefined)
       // The app is still cold-starting: the WebView answers, but there is no `app` yet.
@@ -441,6 +476,8 @@ describe('AppiumTransport startup budgets', () => {
   it('should report the furthest milestone and the probe timings when a budget runs out', async () => {
     const SHORT_TIMEOUT_IN_MILLISECONDS = 600;
     mockBrowser.execute
+      // The write-loss guard's rewrites, drained before the reload discards them.
+      .mockResolvedValueOnce([])
       // The localStorage write that triggers the reload.
       .mockResolvedValueOnce(undefined)
       // The WebView never comes back.

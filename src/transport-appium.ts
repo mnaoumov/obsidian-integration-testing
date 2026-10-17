@@ -65,6 +65,11 @@ import type {
 import type { WebViewCdpConnection } from './webview-cdp.ts';
 
 import {
+  buildAndroidWriteLossReport,
+  drainAndroidWriteLossRewrites,
+  installAndroidWriteLossGuard
+} from './android-write-loss-guard.ts';
+import {
   buildStartupTimeoutMessage,
   checkAppStarted,
   checkLayoutReady,
@@ -643,6 +648,9 @@ export class AppiumTransport implements ObsidianTransport {
     // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
 
+    // The reload below discards the page, and with it the guard's record of what it re-wrote.
+    await this.reportWriteLossRewrites();
+
     // Invalidate before reload — the page will navigate and the WebView
     // context may be temporarily unavailable during reload.
     this.isInWebViewContext = false;
@@ -677,6 +685,7 @@ export class AppiumTransport implements ObsidianTransport {
     // The app's cold start first, then Obsidian's own work. See `waitForAppStarted`.
     await this.waitForAppStarted();
     await this.waitForLayoutReady();
+    await this.installWriteLossGuard();
   }
 
   /**
@@ -699,6 +708,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     try {
       await this.ensureWebViewContext();
+      await this.reportWriteLossRewrites();
 
       await this.browser.execute((path: string) => {
         const existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
@@ -993,6 +1003,27 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Installs the write-loss guard (see `android-write-loss-guard.ts`) in the
+   * vault the page just opened.
+   *
+   * Here rather than in a per-worker setup file because every vault open goes
+   * through {@link registerVault}'s reload, which discards the page and any guard
+   * installed in it, and because this reaches every framework (L6) and every
+   * consumer at once. Best-effort: a guard that cannot be installed is logged and
+   * the run goes on, exactly as it did before the guard existed.
+   */
+  private async installWriteLossGuard(): Promise<void> {
+    try {
+      const result = await this.browser.execute(installAndroidWriteLossGuard);
+      if (result === 'no-vault-adapter') {
+        log('[appium-transport] Write-loss guard not installed: the opened vault has no adapter yet.');
+      }
+    } catch (error: unknown) {
+      log(`[appium-transport] Could not install the write-loss guard: ${errorToString(error)}`);
+    }
+  }
+
+  /**
    * Probes the WebView once for how far Obsidian's startup has got.
    *
    * A probe that throws is reported as `undefined` rather than propagated: the
@@ -1113,6 +1144,21 @@ export class AppiumTransport implements ObsidianTransport {
       }
     } catch (error: unknown) {
       log(`[appium-transport] Vault directory removal failed (non-fatal): ${String(error)}`);
+    }
+  }
+
+  /**
+   * Logs the files the write-loss guard re-wrote since the last report, so a run
+   * never hides that it needed one. Best-effort, like the guard itself.
+   */
+  private async reportWriteLossRewrites(): Promise<void> {
+    try {
+      const report = buildAndroidWriteLossReport(await this.browser.execute(drainAndroidWriteLossRewrites));
+      if (report) {
+        log(report);
+      }
+    } catch (error: unknown) {
+      log(`[appium-transport] Could not read the write-loss guard's rewrites: ${errorToString(error)}`);
     }
   }
 
