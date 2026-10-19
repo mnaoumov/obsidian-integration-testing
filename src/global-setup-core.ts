@@ -516,7 +516,7 @@ export async function coreTeardown(result?: CoreSetupResult): Promise<void> {
  * @param configDirectory - The resolved override, or `undefined` for Obsidian's default (a no-op).
  * @returns The map with its config-folder keys redirected, or the original map when there is nothing to move.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `PopulateFilesParams` is one bag shared by `TemporaryVault.populate` and this remap, so no per-owner name can satisfy both.
+// eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `PopulateFilesParams` is one bag shared by `TemporaryVault.populate` and this remap, so no per-owner name can satisfy both.
 export function remapConfigDirectoryKeys(populate: PopulateFilesParams, configDirectory: string | undefined): PopulateFilesParams {
   if (configDirectory === undefined || configDirectory === DEFAULT_CONFIG_DIRECTORY) {
     return populate;
@@ -540,7 +540,7 @@ export function remapConfigDirectoryKeys(populate: PopulateFilesParams, configDi
  * @param options - Consumer-provided transport options.
  * @returns Options with the desktop integration visibility default applied.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
+// eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export function resolveIntegrationTransportOptions(options?: ObsidianTransportOptions): ObsidianTransportOptions {
   return options?.type === 'obsidian-android-appium'
     ? options

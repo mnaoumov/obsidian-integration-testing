@@ -11,6 +11,7 @@ import {
   drainAndroidWriteLossRewrites,
   installAndroidWriteLossGuard
 } from './android-write-loss-guard.ts';
+import { noopAsync } from './noop.ts';
 
 interface FakeAdapter {
   stat: (path: string) => Promise<FakeStat | null>;
@@ -42,16 +43,16 @@ function createFakeAdapter(disk: FakeDisk): FakeAdapter {
 
   return {
     async stat(path): Promise<FakeStat | null> {
-      await Promise.resolve();
+      await noopAsync();
       const size = disk.sizes.get(path);
       return size === undefined ? null : { size };
     },
     async write(path, data): Promise<void> {
-      await Promise.resolve();
+      await noopAsync();
       land(path, new TextEncoder().encode(data).byteLength);
     },
     async writeBinary(path, data): Promise<void> {
-      await Promise.resolve();
+      await noopAsync();
       land(path, data.byteLength);
     }
   };

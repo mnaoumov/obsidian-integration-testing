@@ -27,13 +27,11 @@ function areProjectTypesValid(): boolean {
   const rootCanonical = toCanonical(root);
   const { fileNames, options } = parseTsConfig(join(root, 'tsconfig.json'));
 
-  return options.skipLibCheck
-    ? checkProjectTypes({
-      options,
-      rootNames: fileNames,
-      shouldKeepFile: (fileName) => shouldKeepProjectFile(fileName, rootCanonical)
-    })
-    : true;
+  return !options.skipLibCheck || checkProjectTypes({
+    options,
+    rootNames: fileNames,
+    shouldKeepFile: (fileName) => shouldKeepProjectFile(fileName, rootCanonical)
+  });
 }
 
 async function main(): Promise<void> {

@@ -408,7 +408,7 @@ export class AppiumTransport implements ObsidianTransport {
    * @returns The raw PNG bytes.
    * @throws Error if the driver returns data that is not a PNG.
    */
-  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `CaptureScreenshotParams` is one bag shared by the `captureScreenshot` of both transports, so no per-owner name can satisfy both.
+  // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `CaptureScreenshotParams` is one bag shared by the `captureScreenshot` of both transports, so no per-owner name can satisfy both.
   public async captureScreenshot(_params: CaptureScreenshotParams): Promise<Uint8Array> {
     const bytes = decodeBase64Png(await this.browser.takeScreenshot());
     if (!isPng(bytes)) {
@@ -457,7 +457,7 @@ export class AppiumTransport implements ObsidianTransport {
    * @param _options - Evaluation options (cwd is not used on mobile — vault targeting is via localStorage).
    * @returns The normalized result string.
    */
-  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `TransportEvalOptions` is one bag shared by the `evaluate` of both transports, so no per-owner name can satisfy both.
+  // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `TransportEvalOptions` is one bag shared by the `evaluate` of both transports, so no per-owner name can satisfy both.
   public async evaluate(expression: string, _options: TransportEvalOptions): Promise<string> {
     await this.ensureWebViewContext();
     await this.ensureInputChannel();

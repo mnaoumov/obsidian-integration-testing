@@ -565,8 +565,9 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
         [IN_HOUSE_ESLINT_PLUGIN_NAME]: inHouseEslintPlugin
       },
       rules: {
-        'obsidian-dev-utils/no-unused-params-members': 'error',
-        'obsidian-dev-utils/no-used-underscore-variables': 'error',
+        'typescript-dev-toolkit/no-unresolved-jsdoc-link': 'error',
+        'typescript-dev-toolkit/no-unused-params-members': 'error',
+        'typescript-dev-toolkit/no-used-underscore-variables': 'error',
         /*
          * Enforced over `src/` as well as `scripts/`, which is a decision about the library's API rather than a
          * config default. The rule derives a per-owner bag name (`fooBar(params: FooBarParams)`), and this library
@@ -576,8 +577,11 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
          * `src/index.ts` re-exports cannot be renamed without a major bump, so those wait for one. Every
          * suppression in the tree says at its site which of the two it is.
          */
-        'obsidian-dev-utils/params-options-name-match': 'error',
-        'obsidian-dev-utils/readonly-params-options-result-members': 'error'
+        'typescript-dev-toolkit/params-options-name-match': 'error',
+        'typescript-dev-toolkit/prefer-logical-operator-over-ternary': 'error',
+        'typescript-dev-toolkit/prefer-noop-async': 'error',
+        'typescript-dev-toolkit/readonly-params-options-result-members': 'error',
+        'typescript-dev-toolkit/require-method-template': 'error'
       }
     }
   ]);
@@ -604,6 +608,8 @@ function getStylisticConfigs(): Linter.Config[] {
       ],
       files: allFiles,
       rules: {
+        // `customize({ arrowParens: true })` adds `requireForBlockBody`, an option only `as-needed` reads.
+        '@stylistic/arrow-parens': ['error', 'always'],
         '@stylistic/generator-star-spacing': 'off',
         '@stylistic/indent': 'off',
         '@stylistic/indent-binary-ops': 'off',
@@ -706,8 +712,8 @@ function getTseslintConfigs(): Linter.Config[] {
           }
         ],
         '@typescript-eslint/prefer-readonly': 'error',
-        'obsidian-dev-utils/no-async-callback-to-unsafe-return': 'error',
-        'obsidian-dev-utils/no-used-underscore-variables': 'error'
+        'typescript-dev-toolkit/no-async-callback-to-unsafe-return': 'error',
+        'typescript-dev-toolkit/no-used-underscore-variables': 'error'
       }
     },
     {
@@ -813,7 +819,7 @@ function getUnicornConfigs(): Linter.Config[] {
              *
              * The disabled replacements below are established vocabulary rather than abbreviations to be
              * expanded. `params` is the parameter-bag convention, enforced by
-             * `obsidian-dev-utils/readonly-params-options-result-members` and its siblings, which require bag
+             * `typescript-dev-toolkit/readonly-params-options-result-members` and its siblings, which require bag
              * types to be named `<Owner>Params` / `<Owner>Options`; expanding it to `Parameters` would put the
              * two rules in direct contradiction. `el` is exempt because Obsidian names every element member that
              * way (`containerEl`, `contentEl`, `inputEl`), so expanding ours would leave this harness reading

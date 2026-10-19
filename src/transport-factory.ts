@@ -160,6 +160,7 @@ import {
   willSweepLeftovers
 } from './leftover-cleanup.ts';
 import { log } from './log.ts';
+import { noopAsync } from './noop.ts';
 import { normalizeOptionalProperties } from './normalize-optional-properties.ts';
 import { getObsidianConfigDirectory } from './obsidian-config.ts';
 import { resolveObsidianExecutable } from './obsidian-executable.ts';
@@ -2410,7 +2411,7 @@ class AppiumTransportFactory {
         ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds, appiumLaunch).then(() => {
           this.log('Auto-started Appium server is ready.');
         })
-        : Promise.resolve(),
+        : noopAsync(),
       this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
     ]);
 
@@ -3287,7 +3288,7 @@ class AppiumTransportFactory {
  * @param options - Transport configuration. Defaults to an owned desktop CDP transport.
  * @returns A new transport instance.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
+// eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export async function createTransportFromOptions(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   const type = options?.type ?? DEFAULT_TRANSPORT_TYPE;
 
@@ -3318,7 +3319,7 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
  * @returns The cached or newly created transport.
  * @throws {IntegrationSetupFailedError} When this project's global setup failed.
  */
-// eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
+// eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
 export async function getOrCreateTransport(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
   const setupError = getSetupError();
   if (setupError) {

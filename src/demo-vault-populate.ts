@@ -273,7 +273,7 @@ export function resolveMissingInjectedPlugins(params: ResolveMissingInjectedPlug
     }
     const sourceDirectory = resolveInjectedPluginSourceDirectory({ demoVaultPath, plugin });
     const fileNames = readPluginFileNames(sourceDirectory);
-    return REQUIRED_PLUGIN_ASSET_NAMES.some((assetName) => !fileNames.includes(assetName)) ? true : resolveInjectedPluginStaleReason({ installedVersion: readInstalledPluginVersion(sourceDirectory), plugin }) !== undefined;
+    return REQUIRED_PLUGIN_ASSET_NAMES.some((assetName) => !fileNames.includes(assetName)) || resolveInjectedPluginStaleReason({ installedVersion: readInstalledPluginVersion(sourceDirectory), plugin }) !== undefined;
   });
 }
 

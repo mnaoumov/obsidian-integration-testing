@@ -203,11 +203,11 @@ describe('register', () => {
     const calls: string[] = [];
     const pushFiles = vi.fn(async () => {
       calls.push('pushFiles');
-      await Promise.resolve();
+      await noopAsync();
     });
     mockRegisterVault.mockImplementation(async () => {
       calls.push('registerVault');
-      await Promise.resolve();
+      await noopAsync();
     });
 
     const vault = new TemporaryVault('/vault');
