@@ -48,18 +48,32 @@
       "expect": "4.3.2",
       "manualCheck": "The check is a re-examination trigger, not proof: a newer v4-legacy publish means read its changelog and move this pin onto it, because while astro is on 4.x a backport is the only way an advisory leaves this tree. The override's DELETION condition is separate and has no mechanical test here - it can go once nothing needs js-yaml 4, i.e. when `node -e \"process.stdout.write(require('astro/package.json').dependencies['js-yaml'])\"` stops reporting ^4.3.0. Verify either change with `npm run docs:build`, the only gate that exercises Astro's default import."
     },
+    "katex": {
+      "section": "overrides",
+      "why": "Clears GHSA-238p-pmpm-9mq7 (KaTeX: existing prototype pollution can bypass trust restrictions, low), which covers 0.11.0 - <0.18.2. Reached only through markdownlint -> micromark-extension-math, which declares ^0.16.0, so no direct bump gets there: micromark-extension-math 3.1.0 is the newest release. The forced move across 0.x minors is safe for this consumer: micromark-extension-math calls exactly one KaTeX function, renderToString, in its HTML extension, and markdownlint only tokenizes, so KaTeX is never even called here. The 0.17-0.19 breaking changes are internal CSS class names, the `__defineFunction` API and strict-mode warning reporting, none of which that one call depends on. NEVER take the `npm audit fix --force` remedy: it downgrades markdownlint to 0.36.1.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/micromark-extension-math/package.json','utf8')).dependencies['katex'])\"",
+      "expect": "^0.16.0",
+      "manualCheck": "The check reads micromark-extension-math's own declared range, because that range is what makes the override necessary. When it admits 0.18.2 or later, delete the override and this entry together, then confirm with `npm audit` and `npm run lint:md`."
+    },
     "lodash": {
       "section": "overrides",
       "why": "Live in the tree exactly once, under webdriverio → archiver → archiver-utils, which asks for ^4.17.15. The override forces the newest 4.x across every copy rather than whatever old release the transitive range resolves to. Its justification is simply 'this is the newest lodash', so it goes stale the moment a newer one publishes.",
       "check": "npm view lodash version",
       "expect": "4.18.1"
     },
+    "postcss-nested": {
+      "section": "overrides",
+      "why": "Clears GHSA-rj75-hqrm-r3gf (postcss-selector-parser quadratic complexity in flat selector parsing, moderate), which covers <7.1.6. The vulnerable copy is the 6.x line, which postcss-nested 6.2.0 asks for under @astrojs/starlight -> expressive-code -> @expressive-code/core, and 6.x has no backport. No direct bump gets there: @astrojs/starlight 0.42.6 and @expressive-code/core 0.44.2 are the newest releases and still declare postcss-nested ^6.0.1. Overriding postcss-nested, rather than forcing postcss-selector-parser across a major under a postcss-nested that was written against 6.x, keeps each package on the parser it declares: postcss-nested 9.0.0 declares postcss-selector-parser ^7.1.6 and dedupes onto the copy eslint-plugin-astro already brings. Its majors since 6 are 7 (dropped Node 12-16), 8 (moved to ESM, dropped Node 18 and 20) and 9 (Sass and CSS nesting compatibility). @expressive-code/core loads it with a default ESM import and calls it as a PostCSS plugin, which all three keep, and `npm run docs:build` is green on it. NEVER take the `npm audit fix --force` remedy: it downgrades @astrojs/starlight to 0.21.5.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/@expressive-code/core/package.json','utf8')).dependencies['postcss-nested'])\"",
+      "expect": "^6.0.1",
+      "manualCheck": "The check reads @expressive-code/core's own declared range. When it moves to a range that reaches postcss-selector-parser 7.1.6 or later on its own, delete the override and this entry together, then confirm with `npm audit` and `npm run docs:build`, the only gate that runs expressive-code."
+    },
     "smol-toml": {
       "section": "overrides",
-      "why": "Clears GHSA-7w5x-hrqm-74c2 (smol-toml denial of service via malformed TOML documents), which covers <=1.7.0. Nothing here declares smol-toml directly, so no direct bump can fix it: the tree is held at 1.7.0 by markdownlint-cli2, which pins it EXACTLY at 1.7.0, and astro plus @astrojs/internal-helpers dedupe onto that pin even though both ask for the compatible ^1.6.0. cspell already resolves 1.8.0 on its own, so the override collapses two copies into one rather than adding anything. Caret-ranged so the sweep keeps it current; listed here anyway because the sweep never reports that the advisory it answers is gone and the override with it.",
+      "why": "Clears GHSA-r4xh-jqrq-34v2 (smol-toml quadratic-time parse() from parseKey rescanning, <=1.8.0, patched in 1.9.0), and before it GHSA-7w5x-hrqm-74c2 (<=1.7.0). Nothing here declares smol-toml directly, so no direct bump can fix it: the tree is held back by markdownlint-cli2, which pins it EXACTLY (1.7.0 in 0.23.2, 1.8.0 in 0.23.3, both vulnerable), and astro plus @astrojs/internal-helpers dedupe onto that pin even though both ask for the compatible ^1.6.0. The floor is ^1.9.1 rather than ^1.8.0 so that the override itself carries the newer fix, instead of leaving it to whatever the lockfile happens to resolve. It also collapses the copies into one rather than adding anything. Caret-ranged so the sweep keeps it current; listed here anyway because the sweep never reports that the advisory it answers is gone and the override with it.",
       "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/markdownlint-cli2/package.json','utf8')).dependencies['smol-toml'])\"",
-      "expect": "1.7.0",
-      "manualCheck": "The check reads markdownlint-cli2's own declared range, not a version, because that exact pin is the only thing keeping this tree on a vulnerable smol-toml. It goes through fs.readFileSync rather than require() because markdownlint-cli2's 'exports' map does not expose ./package.json, so require() throws ERR_PACKAGE_PATH_NOT_EXPORTED. When the range moves off 1.7.0, re-resolve without the override: if every remaining consumer lands on 1.7.1 or newer by itself, delete the override and this entry together."
+      "expect": "1.8.0",
+      "manualCheck": "The check reads markdownlint-cli2's own declared range, not a version, because that exact pin is the only thing keeping this tree on a vulnerable smol-toml. It goes through fs.readFileSync rather than require() because markdownlint-cli2's 'exports' map does not expose ./package.json, so require() throws ERR_PACKAGE_PATH_NOT_EXPORTED. When the range moves off 1.8.0, re-resolve without the override: if every remaining consumer lands on 1.9.0 or newer by itself, delete the override and this entry together."
     },
     "typescript": {
       "section": "devDependencies",
