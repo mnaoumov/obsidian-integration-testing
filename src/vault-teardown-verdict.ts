@@ -65,14 +65,11 @@ export function shouldTearDownVaultWindow(params: ShouldTearDownVaultWindowParam
     isSelfRegistered
   } = params;
 
-  if (isOwnedInstance) {
-    // The owned instance is killed wholesale on dispose, and its registry lives
-    // in the isolated user-data config — there is nothing to unregister from.
-    return false;
-  }
-
-  // When attached to someone else's instance, only this transport's own vaults come down. Otherwise this is
-  // plain attach mode — a foreign Obsidian the harness opened a vault in, which outlives the run and must be
-  // left as it was found.
-  return isHarnessOwnedInstance ? isSelfRegistered : true;
+  /*
+   * The owned instance is killed wholesale on dispose, and its registry lives in the isolated user-data config —
+   * there is nothing to unregister from. When attached to someone else's instance, only this transport's own vaults
+   * come down. Otherwise this is plain attach mode — a foreign Obsidian the harness opened a vault in, which outlives
+   * the run and must be left as it was found.
+   */
+  return !isOwnedInstance && (!isHarnessOwnedInstance || isSelfRegistered);
 }

@@ -171,7 +171,7 @@ export async function findNewestSourceModification(projectRoot: string): Promise
  * @returns `true` when a stale build should throw.
  */
 export function willFailOnStaleBuild(options: ObsidianTransportOptions | undefined): boolean {
-  return checkIsStaleBuildAllowedByEnvironment() ? false : options?.shouldFailOnStaleBuild ?? true;
+  return !checkIsStaleBuildAllowedByEnvironment() && (options?.shouldFailOnStaleBuild ?? true);
 }
 
 /**

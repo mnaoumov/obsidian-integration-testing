@@ -21,6 +21,7 @@ import {
   TEMP_VAULT_DIR_PREFIX,
   willSweepLeftovers
 } from './leftover-cleanup.ts';
+import { noopAsync } from './noop.ts';
 
 const HOUR_IN_MILLISECONDS = 3_600_000;
 const FIXED_NOW_IN_MILLISECONDS = 1_000_000_000_000;
@@ -353,7 +354,7 @@ describe('sweepDeviceLeftovers', () => {
           return Promise.reject(new Error(`rm: ${name}: Operation not permitted`));
         }
         remaining.delete(name);
-        return Promise.resolve();
+        return noopAsync();
       }
     };
   }
@@ -405,7 +406,7 @@ describe('sweepDeviceLeftovers', () => {
   it('should not count a directory that survives a removal reporting success', async () => {
     const result = await sweepDeviceLeftovers({
       listNames: (): Promise<readonly string[]> => Promise.resolve(['temp-vault-a']),
-      removeDirectory: (): Promise<void> => Promise.resolve(),
+      removeDirectory: (): Promise<void> => noopAsync(),
       vaultBasePath: VAULT_BASE_PATH
     });
 

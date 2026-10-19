@@ -201,6 +201,7 @@ ${name}`;
       // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression -- Testing void function.
       await evalInObsidian({
         async callback(): Promise<void> {
+          // eslint-disable-next-line typescript-dev-toolkit/prefer-noop-async -- The closure is serialized into Obsidian and cannot import `noopAsync`.
           await Promise.resolve();
         },
         vaultPath
@@ -322,6 +323,7 @@ ${name}`;
           const startTime = Date.now();
           await waitUntil({
             async predicate(): Promise<boolean> {
+              // eslint-disable-next-line typescript-dev-toolkit/prefer-noop-async -- The closure is serialized into Obsidian and cannot import `noopAsync`.
               await Promise.resolve();
               return Date.now() - startTime >= FLIP_AFTER_IN_MILLISECONDS;
             }

@@ -5,6 +5,7 @@ import {
   vi
 } from 'vitest';
 
+import { noopAsync } from './noop.ts';
 import { pollUntil } from './poll-until.ts';
 
 /**
@@ -25,7 +26,7 @@ function makeClock(stepInMilliseconds: number): () => number {
 describe('pollUntil', () => {
   it('returns immediately when the first attempt is accepted', async () => {
     const attempt = vi.fn(() => Promise.resolve('ready'));
-    const sleep = vi.fn(() => Promise.resolve());
+    const sleep = vi.fn(() => noopAsync());
 
     const result = await pollUntil({
       attempt,
@@ -47,7 +48,7 @@ describe('pollUntil', () => {
       calls++;
       return Promise.resolve(calls);
     });
-    const sleep = vi.fn(() => Promise.resolve());
+    const sleep = vi.fn(() => noopAsync());
 
     const result = await pollUntil({
       attempt,
@@ -66,7 +67,7 @@ describe('pollUntil', () => {
 
   it('rejects with the timeout message once the budget elapses', async () => {
     const attempt = vi.fn(() => Promise.resolve('never'));
-    const sleep = vi.fn(() => Promise.resolve());
+    const sleep = vi.fn(() => noopAsync());
 
     await expect(pollUntil({
       attempt,
@@ -85,7 +86,7 @@ describe('pollUntil', () => {
       attempt: () => Promise.resolve(false),
       intervalInMilliseconds: 10,
       nowInMilliseconds: makeClock(100),
-      sleep: () => Promise.resolve(),
+      sleep: () => noopAsync(),
       timeoutInMilliseconds: 500,
       until: (value) => value
     })).rejects.toThrow(/^pollInObsidian timed out after 500 milliseconds$/);

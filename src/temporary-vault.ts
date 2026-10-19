@@ -139,7 +139,7 @@ export class TemporaryVault {
    *
    * @param files - Map of file/folder paths to content.
    */
-  // eslint-disable-next-line obsidian-dev-utils/params-options-name-match -- Permanent: `PopulateFilesParams` is one bag shared by this method and the config-directory remap in `global-setup-core.ts`, so no per-owner name can satisfy both.
+  // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `PopulateFilesParams` is one bag shared by this method and the config-directory remap in `global-setup-core.ts`, so no per-owner name can satisfy both.
   public populate(files: PopulateFilesParams): void {
     for (const [filePath, content] of Object.entries(files)) {
       const fullPath = join(this.path, filePath);

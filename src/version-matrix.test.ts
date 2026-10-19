@@ -11,6 +11,7 @@ import type {
   ResolvedVersionSpec
 } from './version-matrix.ts';
 
+import { noopAsync } from './noop.ts';
 import {
   CATALYST_LATEST,
   PUBLIC_LATEST
@@ -383,7 +384,7 @@ describe('runVersionMatrixEntries', () => {
       entries: [entry('1.12.7', PUBLIC_LATEST), entry('1.13.4', CATALYST_LATEST)],
       onEntryStart: () => undefined,
       run: async ({ version }) => {
-        await Promise.resolve();
+        await noopAsync();
         seen.push(version);
       }
     });

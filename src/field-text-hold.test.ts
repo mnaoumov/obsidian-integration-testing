@@ -7,6 +7,7 @@ import {
 import type { HoldFieldTextParams } from './field-text-hold.ts';
 
 import { holdFieldText } from './field-text-hold.ts';
+import { noopAsync } from './noop.ts';
 
 interface FakeField {
   readonly params: HoldFieldTextParams;
@@ -34,12 +35,12 @@ function createFakeField(reads: (null | string)[], overrides: Partial<HoldFieldT
       },
       sleep(milliseconds: number): Promise<void> {
         sleeps.push(milliseconds);
-        return Promise.resolve();
+        return noopAsync();
       },
       writeText(text: string): Promise<void> {
         writes.push(text);
         lastWritten = text;
-        return Promise.resolve();
+        return noopAsync();
       },
       ...overrides
     },
