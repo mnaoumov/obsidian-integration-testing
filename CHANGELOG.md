@@ -20,7 +20,7 @@
 
 ## 17.3.0
 
-- feat(trusted-input): merge delivering input to a popout window, not always the main one (re #1 - [FR] allow to specify the window in `pressKey`)
+- feat(trusted-input): merge delivering input to a popout window, not always the main one (re #1 - \[FR\] allow to specify the window in `pressKey`)
 - fix(soft-keyboard): merge refusing a field selector that matches more than one element
 - fix(capture): merge drawing the window focused whether or not the OS gave it focus
 - feat(capture): merge applying the theme with an immediate save, and refusing a frame in the wrong theme
