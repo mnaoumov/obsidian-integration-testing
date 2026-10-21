@@ -126,14 +126,14 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   interface IntegrationTestingNamespace extends IntegrationTestingNamespaceState {
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: trivial — reads
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: trivial — reads
      * `window.app`, which every closure already receives directly as its `app`
      * arg, so there is nothing general-purpose to share.
      */
     readonly app: App;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is the renderer half of
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is the renderer half of
      * the mobile trusted-input channel's **exactly-once** guarantee (**L39**).
      *
      * CDP broadcasts `Runtime.bindingCalled` to **every** attached session, so every Node process
@@ -152,24 +152,24 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     claimInput: (id: string) => boolean;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It
      * owns the harness test window's lifecycle via Electron (`window.electronWindow`),
      * which is the harness's concern, not a general utility.
      */
     destroyCurrentWindow: () => Promise<void>;
 
     /**
-     * Synced with `obsidian-dev-utils` (mirror `workspace.ts`) — see L17.
+     * Synced with `@mnaoumov/obsidian-lib` (mirror `workspace.ts`) — see L17.
      */
     ensureLayoutReady: () => Promise<void>;
 
     /**
-     * Synced with `obsidian-dev-utils` (mirror `error.ts`) — see L17.
+     * Synced with `@mnaoumov/typescript-lib` (mirror `error.ts`) — see L17.
      */
     errorToString: (error: unknown) => string;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. This
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. This
      * is the harness's own eval plumbing (builds the `lib` bag, resolves the
      * module, invokes the closure, envelopes the result) — meaningless outside
      * the harness.
@@ -177,28 +177,28 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     evalWrapper: (nsParams: EvalWrapperParams) => Promise<string>;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is
      * the harness's one-time bootstrap that resolves the `obsidian` module for
      * the process; closures obtain it directly via their `obsidianModule` arg.
      */
     getObsidianModule: () => Promise<unknown>;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. Raw
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. Raw
      * Electron IPC (`window.electron.ipcRenderer.sendSync`) is a harness/transport
      * primitive, not a general-purpose helper.
      */
     ipcSendSync: (nsParams: IpcSendSyncParams) => Promise<void>;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is
      * part of the harness's vault-path handshake with the Node side, not a
      * general utility.
      */
     pollVaultBasePath: () => Promise<string>;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: transport-only. It is the renderer end of the
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is the renderer end of the
      * mobile trusted-input channel (**L39**) — the host calls it over CDP to answer a request this
      * closure is awaiting, so it is meaningless outside the harness.
      *
@@ -208,16 +208,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     resolveInput: (id: string, errorMessage: null | string) => void;
 
     /**
-     * Intentionally NOT migrated to `obsidian-dev-utils`: niche/trivial — a
+     * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: niche/trivial — a
      * one-line `localStorage.setItem` wrapper used only by the harness.
      */
     setLocalStorageItem: (nsParams: SetLocalStorageItemParams) => Promise<void>;
 
     /**
-     * The deliberate seam `obsidian-dev-utils` reads on mobile — the one namespace member that exists for
+     * The deliberate seam `@mnaoumov/obsidian-lib` reads on mobile — the one namespace member that exists for
      * another package rather than for the harness. Its **L17** mirror (`desktop-trusted-input.ts`) can
      * reach a trusted event on desktop by itself, but on mobile the injection has to come from the Node
-     * side over the harness's CDP channel (**L39**), and `obsidian-dev-utils` must never import this
+     * side over the harness's CDP channel (**L39**), and `@mnaoumov/obsidian-lib` must never import this
      * package at runtime (its own peer-dependency rule). So it reads these off
      * `window.__obsidianIntegrationTesting` instead, declaring the shape locally.
      *
@@ -409,7 +409,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   /**
    * Prefix used by {@link errorToString}'s nested-error separator lines, matching
    * the `    at` prefix of a V8 stack-trace frame so the separators blend into
-   * the surrounding stack. Kept identical to `obsidian-dev-utils`' `errorToString`.
+   * the surrounding stack. Kept identical to `@mnaoumov/typescript-lib`'s `errorToString`.
    */
   const STACK_TRACE_PREFIX = '    at';
 
@@ -644,7 +644,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     },
 
     // The same function objects `evalWrapper` puts in a closure's `lib` bag — deliberately not re-derived
-    // and not wrapped, so `obsidian-dev-utils` gets exactly the harness's behavior on both platforms.
+    // and not wrapped, so `@mnaoumov/obsidian-lib` gets exactly the harness's behavior on both platforms.
     trustedInput: {
       clickElement,
       clickMouse,

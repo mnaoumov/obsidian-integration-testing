@@ -13,7 +13,7 @@ import { satteriRelativeLinks } from './satteri-relative-links.ts';
 
 describe('satteriRelativeLinks', () => {
   it('rewrites based internal links relative to the current content page', async () => {
-    const node = link('/obsidian-dev-utils/api/alpha/Alpha/#member');
+    const node = link('/typescript-lib/api/alpha/Alpha/#member');
     const context = mockContext('F:/repo/docs/src/content/docs/api/bravo/Bravo/index.mdx');
 
     await visit(node, context);
@@ -23,10 +23,10 @@ describe('satteriRelativeLinks', () => {
 
   it('rewrites a self-link to the current directory instead of emitting a 404-ing double slash', async () => {
     const context = mockContext('F:/repo/docs/src/content/docs/api/path/join/index.mdx');
-    const plugin = satteriRelativeLinks('/obsidian-dev-utils');
+    const plugin = satteriRelativeLinks('/typescript-lib');
 
-    await plugin.link?.(link('/obsidian-dev-utils/api/path/join/'), context.value);
-    await plugin.link?.(link('/obsidian-dev-utils/api/path/join/#overloads'), context.value);
+    await plugin.link?.(link('/typescript-lib/api/path/join/'), context.value);
+    await plugin.link?.(link('/typescript-lib/api/path/join/#overloads'), context.value);
 
     expect(context.rewrites).toEqual(['./', '#overloads']);
   });
@@ -42,7 +42,7 @@ describe('satteriRelativeLinks', () => {
   it('leaves an internal link unchanged when the document has no file URL', async () => {
     const context = mockContext(null);
 
-    await visit(link('/obsidian-dev-utils/api/alpha/Alpha/'), context);
+    await visit(link('/typescript-lib/api/alpha/Alpha/'), context);
 
     expect(context.rewrites).toEqual([]);
   });
@@ -50,12 +50,12 @@ describe('satteriRelativeLinks', () => {
   it('resolves against the current document rather than the one memoized from the previous file', async () => {
     // The definition is reused across documents, so the slug memo has to follow the document.
     // A stale one would rewrite every page after the first as though it still sat in that first directory.
-    const plugin = satteriRelativeLinks('/obsidian-dev-utils');
+    const plugin = satteriRelativeLinks('/typescript-lib');
     const first = mockContext('F:/repo/docs/src/content/docs/api/bravo/Bravo/index.mdx');
     const second = mockContext('F:/repo/docs/src/content/docs/api/charlie/Charlie/index.mdx');
 
-    await plugin.link?.(link('/obsidian-dev-utils/api/alpha/Alpha/'), first.value);
-    await plugin.link?.(link('/obsidian-dev-utils/api/alpha/Alpha/'), second.value);
+    await plugin.link?.(link('/typescript-lib/api/alpha/Alpha/'), first.value);
+    await plugin.link?.(link('/typescript-lib/api/alpha/Alpha/'), second.value);
 
     expect(first.rewrites).toEqual(['../../alpha/Alpha/']);
     expect(second.rewrites).toEqual(['../../alpha/Alpha/']);
@@ -92,5 +92,5 @@ function mockContext(filePath: null | string): MockContext {
 }
 
 async function visit(node: Link, context: MockContext): Promise<void> {
-  await satteriRelativeLinks('/obsidian-dev-utils').link?.(node, context.value);
+  await satteriRelativeLinks('/typescript-lib').link?.(node, context.value);
 }

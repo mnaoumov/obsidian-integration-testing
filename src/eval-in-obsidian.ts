@@ -149,7 +149,7 @@ export interface CommonArguments {
    * helpers (trusted input — `typeIntoEditor` / `pressKey` / `moveMouse` /
    * `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement` — plus
    * `waitUntil`, `createNote` and `openSettingsTab`), and provider packages
-   * (chiefly `obsidian-dev-utils`) `Object.assign` their whole renderer-safe
+   * (chiefly `@mnaoumov/obsidian-lib`) `Object.assign` their whole renderer-safe
    * library on top via {@link registerLibResolver}. A serialized closure reaches
    * every shared helper through `lib` — `lib.typeIntoEditor({ editor, text })`,
    * `lib.getFileOrNull({ app, … })` — instead of importing or hand-rolling them.
@@ -260,7 +260,7 @@ export interface HoverElementParams {
  * @example
  * ```ts
  * declare module 'obsidian-integration-testing' {
- *   interface Lib extends (typeof import('obsidian-dev-utils/__merged')) {}
+ *   interface Lib extends (typeof import('@mnaoumov/obsidian-lib/__merged')) {}
  * }
  * ```
  */
@@ -547,7 +547,7 @@ export interface Lib {
    * Integration-test `evalInObsidian` callbacks routinely need to wait for an
    * asynchronous effect to settle (a view to open, a DOM node to appear, a
    * setting to apply). Because the callback is serialized via `toString()` and
-   * cannot import modules, it can't reuse `obsidian-dev-utils`'
+   * cannot import modules, it can't reuse a library's
    * `retryWithTimeout` / `runWithTimeout`. This helper is the shared, injected
    * replacement for the per-closure poll loops consumers would otherwise
    * hand-roll.

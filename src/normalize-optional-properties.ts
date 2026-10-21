@@ -2,10 +2,11 @@
  * @file
  *
  * Type-only helper for building objects with optional-but-not-`undefined`
- * properties under `exactOptionalPropertyTypes`. Ported from
- * `obsidian-dev-utils/object-utils` rather than depended on, keeping the harness
- * free of an `obsidian-dev-utils` runtime dependency (the same dependency-hygiene
- * reason the trusted-input helpers are duplicated — see the project `AGENTS.md`).
+ * properties under `exactOptionalPropertyTypes`. A local copy of
+ * `@mnaoumov/typescript-lib`'s `object-utils` helper of the same name rather than
+ * an import, because that library is only a development dependency here (the
+ * `scripts/` tooling uses it) and the published package takes no runtime
+ * dependency on it — see the project `AGENTS.md` L25.
  */
 
 import type { UndefinedOnPartialDeep } from 'type-fest';

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
  * Sätteri mdast plugin that converts absolute internal links to relative links.
  *
  * The generator emits markdown files with absolute links that embed the Astro config's `base` path
- * (e.g., `/obsidian-dev-utils/api/...`). When the base path is overridden at build time, those links
+ * (e.g., `/typescript-lib/api/...`). When the base path is overridden at build time, those links
  * break because they still reference the config-time base.
  *
  * This plugin strips the known base prefix, computes a relative path from the current file to the
