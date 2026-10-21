@@ -4,24 +4,21 @@
  * Validates the links emitted by the built documentation site.
  *
  * Internal links are resolved offline against the build output; external links are validated
- * over the network, deduplicated so each unique URL is fetched at most once. See
- * {@link ./docs-gen/helpers/link-check.ts} for the reusable, unit-tested core.
+ * over the network, deduplicated so each unique URL is fetched at most once. The decision logic is
+ * `@mnaoumov/typescript-dev-toolkit/docs-site/link-check`.
  *
- * It also fails on a GitHub alert that reached a page as a plain blockquote (see
- * {@link ./docs-gen/helpers/unrendered-alerts.ts}), since nothing else notices when the conversion stops.
+ * It also fails on a GitHub alert that reached a page as a plain blockquote (the toolkit's
+ * `docs-site/unrendered-alerts`), since nothing else notices when the conversion stops.
+ *
+ * This is a local driver rather than the toolkit's `assertDocsLinksResolve` only because that one fetches an
+ * npmjs.com package page as is, and npmjs answers an unattended `fetch` with 403.
  */
-
-import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
-import {
-  readdir,
-  readFile
-} from 'node:fs/promises';
-import { resolve } from 'node:path';
 
 import type {
   DocumentationPage,
+  ExternalLinkProbeResult,
   LinkCheckFileSystem
-} from './docs-gen/helpers/link-check.ts';
+} from '@mnaoumov/typescript-dev-toolkit/docs-site/link-check';
 
 import {
   collectBrokenExternalLinks,
@@ -30,12 +27,19 @@ import {
   extractIds,
   formatBrokenLinks,
   NETWORK_FAILURE_STATUS,
+  parseRetryAfterInMilliseconds,
   resolveWithinRoot
-} from './docs-gen/helpers/link-check.ts';
+} from '@mnaoumov/typescript-dev-toolkit/docs-site/link-check';
 import {
   collectUnrenderedAlerts,
   formatUnrenderedAlerts
-} from './docs-gen/helpers/unrendered-alerts.ts';
+} from '@mnaoumov/typescript-dev-toolkit/docs-site/unrendered-alerts';
+import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
+import {
+  readdir,
+  readFile
+} from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 exitIfScriptDisabled();
 
@@ -85,7 +89,7 @@ function createFileSystem(allFiles: Set<string>, pages: DocumentationPage[]): Li
   };
 }
 
-async function fetchUrlStatus(url: string): Promise<number> {
+async function fetchUrlStatus(url: string): Promise<ExternalLinkProbeResult> {
   const controller = new AbortController();
   const timeoutId = globalThis.setTimeout(() => {
     controller.abort();
@@ -97,9 +101,12 @@ async function fetchUrlStatus(url: string): Promise<number> {
     // Without this the per-host connection pool stalls and same-host requests
     // serialize, turning a ~3s run into minutes.
     await response.body?.cancel();
-    return response.status;
+    return {
+      retryAfterInMilliseconds: parseRetryAfterInMilliseconds(response.headers.get('retry-after'), Date.now()),
+      status: response.status
+    };
   } catch {
-    return NETWORK_FAILURE_STATUS;
+    return { status: NETWORK_FAILURE_STATUS };
   } finally {
     globalThis.clearTimeout(timeoutId);
   }
