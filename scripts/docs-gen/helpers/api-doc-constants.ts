@@ -17,7 +17,7 @@ export const ROOT_DIR = process.env['DOCS_ROOT'] ?? resolve(process.cwd());
 export const BASE_PATH = '/obsidian-integration-testing';
 
 /**
-The npm package every documented export is imported from. Unlike obsidian-dev-utils, which exposes one
+The npm package every documented export is imported from. Unlike a library that exposes one
 import subpath per module, obsidian-integration-testing re-exports its whole public API from the root
 entry — the runner-facing `./vitest-*` / `./jest-*` subpaths are configuration modules, not API surface.
 */

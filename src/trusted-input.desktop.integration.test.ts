@@ -6,7 +6,7 @@
  *
  * It exists because **L39** touched every helper on both platforms — they became `Promise<void>` and each
  * gained a `Platform.isMobile` branch — and until this file there was no test in this repo that drove them
- * on desktop at all (the only desktop coverage lived in `obsidian-dev-utils`' own suite, a different repo).
+ * on desktop at all (the only desktop coverage lived in the hand-synced twin's own suite, a different repo).
  * A change to a shared code path deserves proof in the repo that makes it.
  *
  * Runs in its own serial project for the reason **L11** gives consumers: trusted input targets the single

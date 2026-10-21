@@ -20,10 +20,11 @@
  * `undefined`, and `publishGitHubRelease` died with `Cannot read properties of undefined (reading
  * 'filename')` at the SECOND-TO-LAST step of a release -- after the bump, changelog, commit, tag and
  * `git push --follow-tags` had all already landed on the remote -- measured on npm 12.0.2 / Node 26.5.0,
- * and fixed in lockstep in the sibling copies in `obsidian-test-mocks` and `obsidian-dev-utils`.
+ * and fixed in lockstep in the sibling copy in `obsidian-test-mocks` and in the shared release path
+ * (`@mnaoumov/typescript-dev-toolkit`'s `version.ts`, `parseNpmPackOutput`).
  * So this module validates instead of asserting, and every failure names the raw output it could not read.
  *
- * No noise-stripping is needed here, unlike the sibling copy in `obsidian-dev-utils`: `execFromRoot`
+ * No noise-stripping is needed here, unlike `parseNpmPackOutput` in the toolkit: `execFromRoot`
  * accumulates the child's `stdout` and `stderr` separately and returns `stdout` alone, and npm writes its
  * `npm notice run ... prepare` lines to `stderr` -- so the string reaching this module is pure JSON.
  */

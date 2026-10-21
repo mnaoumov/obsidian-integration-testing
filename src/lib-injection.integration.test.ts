@@ -11,7 +11,7 @@ import { registerLibResolver } from './lib-registry.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
 // Augment the injected `lib` bag with the two providers registered below.
-// Same declaration-merging a real provider uses (e.g. obsidian-dev-utils),
+// Same declaration-merging a real provider uses (e.g. @mnaoumov/obsidian-lib),
 // here targeting the local module that declares `Lib`.
 declare module './eval-in-obsidian.ts' {
   interface Lib {

@@ -5,12 +5,12 @@
  * recursive `cause` chain, and the aggregated errors of an `AggregateError`.
  *
  * Used Node-side by the framework global-setup/teardown to log non-fatal
- * cleanup errors. It is a hand-kept copy of `obsidian-dev-utils`' `errorToString`
+ * cleanup errors. It is a hand-kept copy of `@mnaoumov/typescript-lib`'s `errorToString`
  * (`src/error.ts`) — see the sync rule L17 — so the two stay behaviorally
- * identical without the harness taking a dependency on the utility library.
+ * identical without the published package taking a runtime dependency on that library.
  */
 
-/* v8 ignore start -- Hand-kept duplicate of obsidian-dev-utils' errorToString (see L17); its behavior is covered by that library's own unit tests, not repeated here. */
+/* v8 ignore start -- Hand-kept duplicate of @mnaoumov/typescript-lib's errorToString (see L17); its behavior is covered by that library's own unit tests, not repeated here. */
 
 const STACK_TRACE_PREFIX = '    at';
 
