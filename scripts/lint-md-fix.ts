@@ -6,5 +6,5 @@ exitIfScriptDisabled();
 
 const [, , ...paths] = process.argv;
 
-// `docs/**` links are base-absolute and resolve only against the built site; `docs-link-check.ts` checks those.
+// `docs/**` links are base-absolute and resolve only against the built site; `docs:build` checks those.
 await lint({ linkCheckExcludeGlobs: ['docs/**'], paths, shouldFix: true });

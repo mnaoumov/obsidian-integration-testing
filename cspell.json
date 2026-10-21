@@ -8,10 +8,7 @@
     "docs/dist",
     "docs/public/og",
     "docs/src/content/docs/api",
-    "docs/src/components",
-    "docs/src/styles",
     "patches",
-    "scripts/docs-gen",
     "tsconfig.tsbuildinfo"
   ],
   "dictionaryDefinitions": [],
