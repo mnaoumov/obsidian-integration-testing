@@ -1,15 +1,14 @@
 import { satteri } from '@astrojs/markdown-satteri';
 // eslint-disable-next-line import-x/no-rename-default -- The default export name `StarlightIntegration` is too verbose.
 import starlight from '@astrojs/starlight';
+import { satteriGitHubAlerts } from '@mnaoumov/typescript-dev-toolkit/docs-site/satteri-github-alerts';
+import { satteriRelativeLinks } from '@mnaoumov/typescript-dev-toolkit/docs-site/satteri-relative-links';
 import { defineConfig } from 'astro/config';
 import {
   existsSync,
   readFileSync
 } from 'node:fs';
 import { resolve } from 'node:path';
-
-import { satteriGitHubAlerts } from './scripts/docs-gen/helpers/satteri-plugins/satteri-github-alerts.ts';
-import { satteriRelativeLinks } from './scripts/docs-gen/helpers/satteri-plugins/satteri-relative-links.ts';
 
 // The documentation site is a self-contained Astro + Starlight project. Its source lives under `docs/src`
 // (`srcDir`) so it never collides with the library's own `src/` and `dist/`. The API reference is
