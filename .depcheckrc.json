@@ -23,7 +23,7 @@
     "nano-staged - .husky/pre-commit runs it; configured by .nano-staged.mjs and scripts/nano-staged-config.ts.",
     "tslib - has no import anywhere by design: tsconfig.json sets `importHelpers: true`, so tsc emits the",
     "  `import ... from \"tslib\"` calls itself and the package must be installed for that output to resolve.",
-    "typedoc-plugin-mdn-links - never imported: scripts/docs-gen/helpers/api-doc-link-rendering.ts reads its shipped",
+    "typedoc-plugin-mdn-links - never imported: the @mnaoumov/typescript-dev-toolkit API generator (scripts/docs-build.ts) reads its shipped",
     "  data file by path (node_modules/typedoc-plugin-mdn-links/data/web-api.json) to resolve Web API links."
   ],
   "ignores": [

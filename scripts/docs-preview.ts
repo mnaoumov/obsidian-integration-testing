@@ -1,7 +1,8 @@
+import { previewDocsSite } from '@mnaoumov/typescript-dev-toolkit/docs-site/docs-site-commands';
 import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
-import { resolveToolCommand } from '@mnaoumov/typescript-dev-toolkit/package-manager';
-import { execFromRoot } from '@mnaoumov/typescript-dev-toolkit/root';
+
+import { DOCS_SITE_CONFIG } from './docs-site-config.ts';
 
 exitIfScriptDisabled();
 
-await execFromRoot([...resolveToolCommand({ tool: 'astro' }), 'preview']);
+await previewDocsSite(DOCS_SITE_CONFIG);
