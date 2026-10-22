@@ -388,7 +388,7 @@ describe('mobile trusted input', () => {
     const result = await evalInObsidian({
       async callback({ app, lib }): Promise<LongPressResult> {
         // Sized against the transport's 30s per-eval cap: four attempts at 1.5s is 6s of drawer opening,
-        // which leaves the 600ms press and the 5s menu wait below it with room to spare.
+        // which leaves the 1.5s press, its 1s `contextmenu` check and the 5s menu wait below it with room to spare.
         const DRAWER_OPEN_ATTEMPT_COUNT = 4;
         const DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS = 1500;
 
@@ -516,6 +516,37 @@ describe('mobile trusted input', () => {
     expect(result.events.some((event) => event.type === 'contextmenu' && event.isTrusted)).toBe(true);
     // The consumer-visible effect: Obsidian's own file menu, which is what every converted suite needs.
     expect(result.menuItems).toContain('Rename...');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // A long press that Android takes for a tap reaches the page as a click with no `contextmenu`, and a
+  // caller waiting on a menu used to find out only from its own timeout. The page cannot make the platform
+  // misclassify on demand, so this hides the `contextmenu` instead: a window listener registered first
+  // stops it before `clickElement`'s own listener runs, which is what a misclassified press looks like.
+  it('should report a long press that produced no contextmenu', async () => {
+    const errorMessage = await evalInObsidian({
+      async callback({ lib }): Promise<string> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '200px', left: '50px', position: 'fixed', top: '200px', width: '200px', zIndex: '9999' });
+        function swallow(event: Event): void {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+
+        globalThis.addEventListener('contextmenu', swallow, { capture: true });
+        try {
+          await lib.clickElement({ button: 'right', element: target });
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        } finally {
+          globalThis.removeEventListener('contextmenu', swallow, { capture: true });
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(errorMessage).toContain('no `contextmenu` followed');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   it('should refuse a hover rather than silently do nothing', async () => {

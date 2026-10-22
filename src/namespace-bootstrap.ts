@@ -377,6 +377,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const INPUT_TIMEOUT_IN_MILLISECONDS = 5000;
 
   /**
+   * How long (in ms) a mobile long-press waits, after the host reports the gesture done, for the
+   * `contextmenu` it should have produced. The event is dispatched while the touch is still held, so it is
+   * normally already in by then; this only covers the renderer running the host's answer ahead of it.
+   */
+  const LONG_PRESS_CONTEXT_MENU_GRACE_IN_MILLISECONDS = 1000;
+
+  /**
    * Default maximum time (in ms) {@link openSettingsTab} waits for the settings
    * modal to open and for the requested tab to render, when the caller does not
    * override it.
@@ -1022,13 +1029,56 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       assertCenterHitsElement(element, rect);
     }
 
-    await clickMouse({
-      button,
-      modifiers,
-      window: targetWindow,
-      x: rect.left + rect.width / CENTER_DIVISOR,
-      y: rect.top + rect.height / CENTER_DIVISOR
-    });
+    async function clickCenter(): Promise<void> {
+      await clickMouse({
+        button,
+        modifiers,
+        window: targetWindow,
+        x: rect.left + rect.width / CENTER_DIVISOR,
+        y: rect.top + rect.height / CENTER_DIVISOR
+      });
+    }
+
+    if (checkIsMobile() && button === 'right') {
+      await longPressAndExpectContextMenu(element, targetWindow, clickCenter);
+      return;
+    }
+
+    await clickCenter();
+  }
+
+  /*
+   * Runs a mobile long-press and refuses to report it as done unless a `contextmenu` followed. Android's
+   * gesture recognizer decides whether a held touch is a long press, and when it decides otherwise the
+   * page sees a plain tap: the element is clicked, and nothing opens its menu. A caller waiting on that menu
+   * would otherwise time out much later on a wait that names the menu, never the gesture.
+   *
+   * The listener sits on the window in the capture phase, ahead of any handler that stops propagation.
+   */
+  async function longPressAndExpectContextMenu(element: HTMLElement, targetWindow: Window, longPress: () => Promise<void>): Promise<void> {
+    const state = { hasContextMenu: false };
+    function listener(): void {
+      state.hasContextMenu = true;
+    }
+
+    targetWindow.addEventListener('contextmenu', listener, { capture: true });
+    try {
+      // Only the wait is reported as a missing `contextmenu`; a gesture the host failed to inject keeps its own error.
+      await longPress();
+      await waitUntil({
+        intervalInMilliseconds: INPUT_POLL_INTERVAL_IN_MILLISECONDS,
+        predicate: () => state.hasContextMenu,
+        timeoutInMilliseconds: LONG_PRESS_CONTEXT_MENU_GRACE_IN_MILLISECONDS
+      }).catch((error: unknown) => {
+        throw new Error(
+          `\`clickElement({ button: 'right' })\` long-pressed ${describeElement(element)}, but no \`contextmenu\` followed: `
+            + 'Android took the gesture for a tap, so the element was most likely tapped instead and no context menu opened.',
+          { cause: error }
+        );
+      });
+    } finally {
+      targetWindow.removeEventListener('contextmenu', listener, { capture: true });
+    }
   }
 
   async function pressKey(pressParams: PressKeyParams): Promise<void> {

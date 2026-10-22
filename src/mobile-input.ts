@@ -25,7 +25,7 @@ export const MOBILE_INPUT_BINDING_NAME = '__obsidianIntegrationTestingInput';
 /**
  * How long the renderer waits for the host to service one input request before giving up.
  *
- * Generous relative to the work (a tap is two CDP commands; a long-press adds a 600ms dwell): the point is
+ * Generous relative to the work (a tap is two CDP commands; a long-press adds a 1500ms dwell): the point is
  * to fail with a legible error rather than hang the closure until the whole run times out. Passed into the
  * bootstrap closure as data, for the same reason as {@link MOBILE_INPUT_BINDING_NAME}.
  */
@@ -146,16 +146,26 @@ interface EvaluateResult {
 /**
  * How long a long-press holds the touch down before releasing it.
  *
- * It has to clear **Android's** long-press threshold, which is 500ms by default: the gesture is
- * recognized by the platform, and the `contextmenu` Obsidian's menus hang off is what the recognizer
- * emits. 600ms clears that with margin without making every long-press test noticeably slower.
+ * It has to clear **Android's** long-press threshold (400-500ms): the gesture is recognized by the
+ * platform, and the `contextmenu` Obsidian's menus hang off is what the recognizer emits.
+ *
+ * **The margin over that threshold is what decides reliability, and 600ms left too little.** Chromium's
+ * synthetic tap stamps its release `duration` after the press in frame time, while the recognizer's
+ * long-press timer starts only when the press is HANDLED on the browser's UI thread. A UI thread running
+ * late by more than the margin gets the release before the timer fires, and the gesture is a tap: the
+ * element is clicked and no `contextmenu` is sent. Measured on the `obsidian_test` emulator (2026-10-21)
+ * with the host CPU saturated and 32 busy loops in the guest, presses came through as plain `click`s, and
+ * at 600ms the guest was too slow even to finish a round of eight inside the 30s eval cap. Unloaded, all
+ * 64 presses at 600ms and 1500ms produced `contextmenu`. 1500ms gives about a second of margin for the
+ * price of 900ms per press; it is still not a guarantee (one of 16 loaded presses at 1500ms was a tap),
+ * which is why mobile `clickElement` checks for the `contextmenu` and throws when none came.
  *
  * This corrects the former reading — that Obsidian Mobile implements long-press itself, on a JavaScript
  * `touchstart` timer, so the dwell only had to clear *its* threshold. Measured against a real
  * `.nav-file-title`, a 600ms dwell between two dispatched touches opened the note instead of its menu;
  * see {@link toPointerCommands} for why the dwell alone was never going to be enough.
  */
-const LONG_PRESS_DWELL_IN_MILLISECONDS = 600;
+const LONG_PRESS_DWELL_IN_MILLISECONDS = 1500;
 
 const NO_MODIFIERS = 0;
 const MODIFIER_BIT_ALT = 1;

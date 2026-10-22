@@ -139,7 +139,7 @@ describe('toCdpInputCommands: pointer', () => {
     expect(toCdpInputCommands({ kind: 'longPress', modifiers: [], x: 10.5, y: 20.5 })).toEqual([
       {
         method: 'Input.synthesizeTapGesture',
-        params: { duration: 600, gestureSourceType: 'touch', x: 10.5, y: 20.5 }
+        params: { duration: 1500, gestureSourceType: 'touch', x: 10.5, y: 20.5 }
       }
     ]);
   });
