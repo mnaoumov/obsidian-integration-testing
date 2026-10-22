@@ -292,6 +292,15 @@ export interface Lib {
    * would otherwise land on it silently. Use {@link Lib.clickMouse} to tap a
    * point deliberately, covered or not. Desktop is unchanged.
    *
+   * **On mobile a `'right'` long-press must produce a `contextmenu`, or it
+   * throws.** Android's recognizer can take a held touch for a tap when the
+   * device is under load, and the page then sees a click on the element and no
+   * menu. So after the gesture the mobile path waits up to 1 s for a
+   * `contextmenu` on the element's window and throws a named error when none
+   * came, rather than letting a later wait for the menu time out without
+   * naming the gesture. It does not retry, since the tap has already acted on
+   * the page. {@link Lib.clickMouse} checks nothing.
+   *
    * @param params - The element to click, the button to press and any modifiers
    *   to hold.
    * @returns A {@link Promise} that resolves once the click has been injected.
