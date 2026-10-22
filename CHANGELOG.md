@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 17.5.1
+
+- fix(mobile-input): merge reporting a mobile long-press that produced no contextmenu
+- docs(changelog): escape the issue-title tags so markdownlint and cspell pass
+- docs(changelog): name the issue each released entry resolved
+- refactor(docs): merge building the site with typescript-dev-toolkit's docs-site
+- fix(deps): merge clearing the markdown-it and vite audit advisories
+- refactor(docs): merge taking the Satteri plugins, OG cards and link-check logic from typescript-dev-toolkit
+- docs: merge pointing the sync rules and examples at the packages that replaced obsidian-dev-utils
+- fix(deps): merge clearing every npm audit advisory except the unpatched braces
+- chore(deps): move to typescript-dev-toolkit 3.7.1 and refresh the ESLint divergences
+
 ## 17.5.0
 
 - feat(android): merge writing a file again when the emulator lands it empty
