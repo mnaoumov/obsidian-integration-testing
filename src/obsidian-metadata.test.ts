@@ -26,7 +26,7 @@ describe('getVersionMetadata', () => {
   it('exposes the recommended Electron version and channel for a modern version', () => {
     const metadata = getVersionMetadata('1.5.3');
     expect(metadata?.minRecommendedElectronVersion).toBe('25.8.1');
-    expect(metadata?.channel).toBe('public');
+    expect(metadata?.channel).toBe('public+catalyst');
   });
 
   it('exposes the baked asar + desktop-installer + apk download URLs for a public version', () => {

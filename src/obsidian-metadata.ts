@@ -221,6 +221,14 @@ export interface ObsidianVersionMetadata {
   readonly minRunnableInstallerVersion?: string;
 
   /**
+   * The version's GitHub release page in `obsidianmd/obsidian-releases` (e.g.
+   * `'https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.14.5'`).
+   * Present only on versions GitHub published a release for, so never on a
+   * catalyst-only build.
+   */
+  readonly releaseUrl?: string;
+
+  /**
    * The concrete JS runtime versions this version's Electron shell ships, read
    * empirically from `process.versions`. Absent until collected (see
    * {@link ObsidianRuntimeVersions} and `scripts/collect-runtime-versions.ts`).

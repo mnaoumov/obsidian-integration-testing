@@ -83,6 +83,17 @@ describe('my-plugin', () => {
 
 The callback is serialized and executed inside Obsidian, so it must be self-contained, and both its arguments and its return value must be JSON-serializable. See [Writing tests](https://mnaoumov.dev/obsidian-integration-testing/guides/writing-tests/) for the full rules, and [Getting started](https://mnaoumov.dev/obsidian-integration-testing/guides/getting-started/) for the Jest equivalents and the transport options.
 
+## Obsidian version catalog
+
+[`metadata.json`](https://github.com/mnaoumov/obsidian-integration-testing/blob/main/metadata.json) lists every Obsidian desktop version, public and catalyst, and the harness reads it to pick and check the versions it runs. A daily workflow refreshes it from Obsidian's own release endpoints. Each version carries, where they exist:
+
+- `channel`: `public`, `catalyst` or `public+catalyst`.
+- `changelogUrl`: the changelog pages, one per platform and channel.
+- `releaseUrl`: the GitHub release page.
+- `downloads`: the exact asset URLs for the `asar`, the desktop installers and the Android `apk`.
+- `minRecommendedElectronVersion`, `minRecommendedInstallerVersion` and `minRunnableInstallerVersion`: the Electron and installer floors.
+- `runtimeVersions` and `ecmaScriptVersion`: the `process.versions` the version's own installer ships.
+
 ## Support
 
 <!-- markdownlint-disable MD033 -->
