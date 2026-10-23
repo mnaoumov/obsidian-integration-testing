@@ -31,6 +31,12 @@ import type { EmulatorMarker } from './emulator-marker.ts';
 
 import { checkIsAdbDaemonStarting } from './adb-daemon-start.ts';
 import { checkIsDeviceListed } from './adb-device-list.ts';
+import {
+  AdbDevicesFailedError,
+  checkIsAdbDevicesFailureTransient,
+  describeAdbDevicesFailure,
+  resolveAdbDevicesFailure
+} from './adb-devices-failure.ts';
 import { ensureAdbServerStarted } from './adb-server.ts';
 import {
   buildEmulatorProcessQueries,
@@ -63,6 +69,14 @@ import {
  * Budget for one quick `adb` call — `adb devices`, a console command.
  */
 export const ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS = 5000;
+
+/*
+ * Budget for the one retry of a failed `adb devices`. The first try already
+ * failed inside 5s on a host the emulator boot is loading, which is the
+ * contention the other Android budgets size for; 30s matches the connectivity
+ * probe's, and an answering server costs nothing extra.
+ */
+const ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 /*
  * `dumpsys connectivity` is far larger than the other probes' output, and Node's
@@ -254,25 +268,37 @@ export class EmulatorReclaimer {
    * still holding the AVD — see `adb-device-list.ts`.
    *
    * The adb server is started first (`ensureAdbServerStarted`), because a
-   * listing that has to start it itself outlasts its 5s budget. A listing that
-   * still reports the daemon starting means the server stopped after this
-   * process started it, so the server is started again and the listing retried
-   * once.
+   * listing that has to start it itself outlasts its 5s budget.
+   *
+   * A listing that fails in a way a retry can fix — killed by its budget, died
+   * at start, refused, or found the daemon stopped — is retried ONCE, after
+   * `adb start-server` and with {@link ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS}.
+   * `start-server` and not `kill-server`: the adb server is machine-wide, and a
+   * kill drops every device's connection, Appium's included, while a start is a
+   * no-op against a server that is merely slow.
    *
    * @returns The raw `adb devices` output.
-   * @throws If adb could not be run at all.
+   * @throws {@link AdbDevicesFailedError} when the listing failed, and its retry if it earned one.
    */
   public async getDevicesOutput(): Promise<string> {
     await ensureAdbServerStarted();
     try {
-      return await this.runAdbDevices();
+      return await this.runAdbDevices(ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS);
     } catch (error) {
-      if (!(error instanceof Error) || !checkIsAdbDaemonStarting(error.message)) {
+      if (!(error instanceof AdbDevicesFailedError) || !checkIsAdbDevicesFailureTransient(error.failure)) {
         throw error;
       }
-      this.log('adb devices found the adb server stopped; starting it again and retrying once.');
-      await ensureAdbServerStarted(true);
-      return await this.runAdbDevices();
+
+      const reason = checkIsAdbDaemonStarting(error.failure.standardError)
+        ? 'adb devices found the adb server stopped'
+        : `adb devices failed: ${describeAdbDevicesFailure(error.failure)}`;
+      this.log(`${reason} Starting the adb server again and retrying once with a ${String(ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS)}ms budget.`);
+      try {
+        await ensureAdbServerStarted(true);
+      } catch (startError) {
+        this.log(`Could not start the adb server before the retry: ${startError instanceof Error ? startError.message : String(startError)}`);
+      }
+      return await this.runAdbDevices(ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS);
     }
   }
 
@@ -508,11 +534,21 @@ export class EmulatorReclaimer {
     });
   }
 
-  private runAdbDevices(): Promise<string> {
+  private runAdbDevices(timeoutInMilliseconds: number): Promise<string> {
+    const startedAtInMilliseconds = Date.now();
     return new Promise<string>((resolve, reject) => {
-      execFile('adb', ['devices'], { timeout: ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS }, (error, stdout, stderr) => {
+      execFile('adb', ['devices'], { timeout: timeoutInMilliseconds }, (error, stdout, stderr) => {
         if (error) {
-          reject(new Error(`Failed to run 'adb devices': ${error.message}. Is ADB installed and in PATH?`));
+          reject(
+            new AdbDevicesFailedError(resolveAdbDevicesFailure({
+              elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+              errorCode: error.code,
+              isKilled: error.killed === true,
+              signal: error.signal,
+              standardError: stderr,
+              timeoutInMilliseconds
+            }))
+          );
           return;
         }
         if (stderr) {
