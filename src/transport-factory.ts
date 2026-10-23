@@ -30,6 +30,8 @@ import {
 import { join } from 'node:path';
 import process from 'node:process';
 
+import type { AdbDeviceEntry } from './adb-device-list.ts';
+import type { AdbDevicesFailure } from './adb-devices-failure.ts';
 import type { AppiumServerMarker } from './appium-server-marker.ts';
 import type {
   AvdNameChannel,
@@ -62,6 +64,10 @@ import {
   listOnlineDeviceIds,
   parseAdbDevices
 } from './adb-device-list.ts';
+import {
+  AdbDevicesFailedError,
+  checkIsAdbDevicesFailureTransient
+} from './adb-devices-failure.ts';
 import { resolveEmulatorBinaryPath } from './android-sdk.ts';
 import {
   checkIsAppiumDriverInstalled,
@@ -150,6 +156,7 @@ import {
   killProcessTreeByPid
 } from './kill-process-tree.ts';
 import {
+  buildNoLaunchedDeviceMessage,
   resolveLaunchedDevice,
   splitNewDevices
 } from './launched-device-selection.ts';
@@ -3207,9 +3214,37 @@ class AppiumTransportFactory {
      */
     const ignoredDeviceIds = new Set<string>();
 
+    /*
+     * A failed listing is one poll, not the wait. Two release pre-flight runs on
+     * 2026-10-22 died 112s into this wait on one `adb devices` that failed with
+     * the emulator already registered; the re-runs passed. So a listing that
+     * failed transiently is logged and the wait goes on, and what it saw is
+     * reported if it runs out.
+     */
+    let lastListedDevices: AdbDeviceEntry[] | undefined;
+    let lastListingFailure: AdbDevicesFailure | undefined;
+    let listingFailureCount = 0;
+    let pollCount = 0;
+
     while (Date.now() < deadline) {
+      pollCount++;
+      let connectedDeviceIds: string[] = [];
+      try {
+        const devicesOutput = await this.emulators.getDevicesOutput();
+        lastListedDevices = parseAdbDevices(devicesOutput);
+        connectedDeviceIds = listOnlineDeviceIds(devicesOutput);
+      } catch (error) {
+        if (!(error instanceof AdbDevicesFailedError) || !checkIsAdbDevicesFailureTransient(error.failure)) {
+          throw error;
+        }
+
+        listingFailureCount++;
+        lastListingFailure = error.failure;
+        this.log(`Device listing failed during the emulator boot; polling on. ${error.message}`);
+      }
+
       const { emulatorDeviceIds, nonEmulatorDeviceIds } = splitNewDevices({
-        connectedDeviceIds: await this.getConnectedDeviceIds(),
+        connectedDeviceIds,
         deviceIdsBefore
       });
 
@@ -3267,7 +3302,13 @@ class AppiumTransportFactory {
 
     // As in `waitForBoot`: an emulator that hangs has as much to say as one that dies.
     throw new Error(appendProcessOutputTail(
-      `No new emulator device appeared within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`,
+      buildNoLaunchedDeviceMessage({
+        lastListedDevices,
+        lastListingFailure,
+        listingFailureCount,
+        pollCount,
+        timeoutInMilliseconds: EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS
+      }),
       { output: emulator.readOutput(), outputLabel: 'Emulator output' }
     ));
   }

@@ -25,7 +25,41 @@
  * unit-testable; the factory does the `adb` round-trips.
  */
 
+import type { AdbDeviceEntry } from './adb-device-list.ts';
+import type { AdbDevicesFailure } from './adb-devices-failure.ts';
+
+import { describeAdbDevicesFailure } from './adb-devices-failure.ts';
 import { checkIsEmulatorDeviceId } from './avd-probe-verdict.ts';
+
+/**
+ * Parameters for {@link buildNoLaunchedDeviceMessage}.
+ */
+export interface BuildNoLaunchedDeviceMessageParams {
+  /**
+   * The devices the last successful listing showed, in any state, or `undefined` when no listing succeeded.
+   */
+  readonly lastListedDevices: readonly AdbDeviceEntry[] | undefined;
+
+  /**
+   * The most recent failed listing, if any failed.
+   */
+  readonly lastListingFailure: AdbDevicesFailure | undefined;
+
+  /**
+   * How many of the polls' listings failed.
+   */
+  readonly listingFailureCount: number;
+
+  /**
+   * How many times the wait listed the devices.
+   */
+  readonly pollCount: number;
+
+  /**
+   * The wait's budget, in milliseconds.
+   */
+  readonly timeoutInMilliseconds: number;
+}
 
 /**
  * One new emulator device, with what it answered when asked for its AVD name.
@@ -105,6 +139,44 @@ export interface SplitNewDevicesParams {
    * The devices online before the launch.
    */
   readonly deviceIdsBefore: readonly string[];
+}
+
+/**
+ * Builds the message for a launched emulator that produced no usable device in time.
+ *
+ * The emulator process is still running when this is reached (an exit fails the
+ * wait sooner), so what is left to say is what adb saw: a device stuck
+ * `offline` means the emulator registered and the guest's `adbd` never came up,
+ * no device at all means the emulator never registered with the adb server, and
+ * failed listings mean adb itself was not answering.
+ *
+ * @param params - What the wait observed.
+ * @returns The message, without the emulator's output tail.
+ */
+export function buildNoLaunchedDeviceMessage(params: BuildNoLaunchedDeviceMessageParams): string {
+  const parts = [
+    `No new emulator device appeared within ${String(params.timeoutInMilliseconds)}ms, and the emulator process is still running.`
+  ];
+
+  if (params.lastListedDevices === undefined) {
+    parts.push('No device listing succeeded during the wait.');
+  } else if (params.lastListedDevices.length === 0) {
+    parts.push('The last listing showed no devices: the emulator never registered with the adb server.');
+  } else {
+    const devices = params.lastListedDevices.map((entry) => `${entry.deviceId} ${entry.state}`).join(', ');
+    const hasOfflineEmulator = params.lastListedDevices.some((entry) => checkIsEmulatorDeviceId(entry.deviceId) && entry.state === 'offline');
+    parts.push(
+      `The last listing showed: ${devices}.${hasOfflineEmulator ? ' An emulator stuck `offline` registered with adb, but the guest\'s adbd never came up.' : ''}`
+    );
+  }
+
+  if (params.lastListingFailure !== undefined) {
+    parts.push(
+      `${String(params.listingFailureCount)} of ${String(params.pollCount)} listing(s) failed; the last: ${describeAdbDevicesFailure(params.lastListingFailure)}`
+    );
+  }
+
+  return parts.join(' ');
 }
 
 /**

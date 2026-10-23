@@ -5,6 +5,7 @@ import {
 } from 'vitest';
 
 import {
+  buildNoLaunchedDeviceMessage,
   resolveLaunchedDevice,
   splitNewDevices
 } from './launched-device-selection.ts';
@@ -79,5 +80,70 @@ describe('resolveLaunchedDevice', () => {
   it('should find nothing when there are no candidates', () => {
     expect(resolveLaunchedDevice({ avdName: 'obsidian_test', candidates: [] }))
       .toEqual({ deviceId: undefined, otherAvdDeviceIds: [], unansweredDeviceIds: [] });
+  });
+});
+
+describe('buildNoLaunchedDeviceMessage', () => {
+  const TIMEOUT_IN_MILLISECONDS = 120_000;
+
+  it('should say the emulator never registered when the last listing was empty', () => {
+    const message = buildNoLaunchedDeviceMessage({
+      lastListedDevices: [],
+      lastListingFailure: undefined,
+      listingFailureCount: 0,
+      pollCount: 50,
+      timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
+    });
+
+    expect(message).toBe(
+      'No new emulator device appeared within 120000ms, and the emulator process is still running. '
+        + 'The last listing showed no devices: the emulator never registered with the adb server.'
+    );
+  });
+
+  it('should say adbd never came up for an emulator stuck offline', () => {
+    const message = buildNoLaunchedDeviceMessage({
+      lastListedDevices: [{ deviceId: 'emulator-5554', state: 'offline' }],
+      lastListingFailure: undefined,
+      listingFailureCount: 0,
+      pollCount: 50,
+      timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
+    });
+
+    expect(message).toContain('The last listing showed: emulator-5554 offline.');
+    expect(message).toContain('adbd never came up');
+  });
+
+  it('should not blame adbd for a handset that is offline', () => {
+    const message = buildNoLaunchedDeviceMessage({
+      lastListedDevices: [{ deviceId: HANDSET, state: 'offline' }],
+      lastListingFailure: undefined,
+      listingFailureCount: 0,
+      pollCount: 50,
+      timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
+    });
+
+    expect(message).toContain(`The last listing showed: ${HANDSET} offline.`);
+    expect(message).not.toContain('adbd');
+  });
+
+  it('should report failed listings and the last one', () => {
+    const message = buildNoLaunchedDeviceMessage({
+      lastListedDevices: undefined,
+      lastListingFailure: {
+        elapsedInMilliseconds: 5010,
+        exitCode: null,
+        outcome: 'timed-out',
+        signal: 'SIGTERM',
+        standardError: '',
+        timeoutInMilliseconds: 30_000
+      },
+      listingFailureCount: 3,
+      pollCount: 3,
+      timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
+    });
+
+    expect(message).toContain('No device listing succeeded during the wait.');
+    expect(message).toContain('3 of 3 listing(s) failed; the last: no answer within its 30.0s budget');
   });
 });
