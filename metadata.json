@@ -63,7 +63,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.0/obsidian-0.5.0.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.5.0"
   },
   "0.5.1": {
     "channel": "public",
@@ -72,7 +73,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.1/obsidian-0.5.1.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.5.1"
   },
   "0.5.2": {
     "channel": "public",
@@ -81,7 +83,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.2/obsidian-0.5.2.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.5.2"
   },
   "0.5.3": {
     "channel": "public",
@@ -90,7 +93,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.5.3/obsidian-0.5.3.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.5.3"
   },
   "0.6.0": {
     "channel": "public",
@@ -99,7 +103,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.0/obsidian-0.6.0.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.0"
   },
   "0.6.1": {
     "channel": "public",
@@ -108,7 +113,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.1/obsidian-0.6.1.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.1"
   },
   "0.6.2": {
     "channel": "public",
@@ -117,7 +123,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.2/obsidian-0.6.2.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.2"
   },
   "0.6.3": {
     "channel": "public",
@@ -126,7 +133,8 @@
     },
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.3/obsidian-0.6.3.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.3"
   },
   "0.6.4": {
     "channel": "public",
@@ -157,7 +165,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.4"
   },
   "0.6.5": {
     "channel": "public",
@@ -188,7 +197,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.5"
   },
   "0.6.6": {
     "channel": "public",
@@ -198,7 +208,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.6.6/obsidian-0.6.6.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.6"
   },
   "0.6.7": {
     "channel": "public",
@@ -229,7 +240,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.6.7"
   },
   "0.7.0": {
     "channel": "public",
@@ -239,7 +251,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.0/obsidian-0.7.0.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.0"
   },
   "0.7.1": {
     "channel": "public",
@@ -249,7 +262,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.1/obsidian-0.7.1.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.1"
   },
   "0.7.2": {
     "channel": "public",
@@ -259,7 +273,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.2/obsidian-0.7.2.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.2"
   },
   "0.7.3": {
     "channel": "public",
@@ -290,7 +305,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.3"
   },
   "0.7.4": {
     "channel": "public",
@@ -321,7 +337,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.4"
   },
   "0.7.5": {
     "channel": "public",
@@ -331,7 +348,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.7.5/obsidian-0.7.5.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.5"
   },
   "0.7.6": {
     "channel": "public",
@@ -362,7 +380,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.7.6"
   },
   "0.8.0": {
     "channel": "public",
@@ -393,7 +412,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.0"
   },
   "0.8.1": {
     "channel": "public",
@@ -424,7 +444,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.1"
   },
   "0.8.2": {
     "channel": "public",
@@ -455,7 +476,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.2"
   },
   "0.8.3": {
     "channel": "public",
@@ -465,7 +487,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.3/obsidian-0.8.3.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.3"
   },
   "0.8.4": {
     "channel": "public",
@@ -496,7 +519,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.4"
   },
   "0.8.5": {
     "channel": "public",
@@ -506,7 +530,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.5/obsidian-0.8.5.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.5"
   },
   "0.8.6": {
     "channel": "public",
@@ -516,7 +541,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.6/obsidian-0.8.6.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.6"
   },
   "0.8.7": {
     "channel": "public",
@@ -526,7 +552,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.7/obsidian-0.8.7.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.7"
   },
   "0.8.8": {
     "channel": "public",
@@ -536,7 +563,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.8/obsidian-0.8.8.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.8"
   },
   "0.8.9": {
     "channel": "public",
@@ -567,7 +595,8 @@
       "electron": "8.2.5",
       "chrome": "80.0.3987.165"
     },
-    "ecmaScriptVersion": "ES2020"
+    "ecmaScriptVersion": "ES2020",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.9"
   },
   "0.8.10": {
     "channel": "public",
@@ -577,7 +606,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.10/obsidian-0.8.10.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.10"
   },
   "0.8.11": {
     "channel": "public",
@@ -587,7 +617,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.11/obsidian-0.8.11.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.11"
   },
   "0.8.12": {
     "channel": "public",
@@ -618,7 +649,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.12"
   },
   "0.8.13": {
     "channel": "public",
@@ -628,7 +660,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.8.13/obsidian-0.8.13.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.13"
   },
   "0.8.14": {
     "channel": "public",
@@ -659,7 +692,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.14"
   },
   "0.8.15": {
     "channel": "public",
@@ -690,7 +724,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.8.15"
   },
   "0.9.0": {
     "channel": "public",
@@ -700,7 +735,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.0/obsidian-0.9.0.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.0"
   },
   "0.9.1": {
     "channel": "public",
@@ -732,7 +768,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.1"
   },
   "0.9.2": {
     "channel": "public",
@@ -764,7 +801,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.2"
   },
   "0.9.3": {
     "channel": "public",
@@ -796,7 +834,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.3"
   },
   "0.9.4": {
     "channel": "public",
@@ -828,7 +867,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.4"
   },
   "0.9.5": {
     "channel": "public",
@@ -838,7 +878,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.5/obsidian-0.9.5.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.5"
   },
   "0.9.6": {
     "channel": "public",
@@ -870,7 +911,8 @@
       "electron": "10.1.1",
       "chrome": "85.0.4183.93"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.6"
   },
   "0.9.7": {
     "channel": "public",
@@ -880,7 +922,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.7/obsidian-0.9.7.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.7"
   },
   "0.9.8": {
     "channel": "public",
@@ -890,7 +933,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.8/obsidian-0.9.8.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.8"
   },
   "0.9.9": {
     "channel": "public",
@@ -900,7 +944,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.9/obsidian-0.9.9.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.9"
   },
   "0.9.10": {
     "channel": "public",
@@ -932,7 +977,8 @@
       "electron": "10.1.5",
       "chrome": "85.0.4183.121"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.10"
   },
   "0.9.11": {
     "channel": "public",
@@ -964,7 +1010,8 @@
       "electron": "10.1.5",
       "chrome": "85.0.4183.121"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.11"
   },
   "0.9.12": {
     "channel": "public",
@@ -974,7 +1021,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.12/obsidian-0.9.12.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.12"
   },
   "0.9.13": {
     "channel": "public",
@@ -984,7 +1032,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.13/obsidian-0.9.13.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.13"
   },
   "0.9.14": {
     "channel": "public",
@@ -994,7 +1043,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.14/obsidian-0.9.14.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.14"
   },
   "0.9.15": {
     "channel": "public",
@@ -1026,7 +1076,8 @@
       "electron": "10.1.5",
       "chrome": "85.0.4183.121"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.15"
   },
   "0.9.16": {
     "channel": "public",
@@ -1036,7 +1087,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.16/obsidian-0.9.16.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.16"
   },
   "0.9.17": {
     "channel": "public",
@@ -1068,7 +1120,8 @@
       "electron": "11.0.3",
       "chrome": "87.0.4280.67"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.17"
   },
   "0.9.18": {
     "channel": "public",
@@ -1078,7 +1131,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.18/obsidian-0.9.18.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.18"
   },
   "0.9.19": {
     "channel": "public",
@@ -1088,7 +1142,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.19/obsidian-0.9.19.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.19"
   },
   "0.9.20": {
     "channel": "public",
@@ -1120,7 +1175,8 @@
       "electron": "11.0.3",
       "chrome": "87.0.4280.67"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.20"
   },
   "0.9.21": {
     "channel": "public",
@@ -1130,7 +1186,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.9.21/obsidian-0.9.21.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.21"
   },
   "0.9.22": {
     "channel": "public",
@@ -1162,7 +1219,8 @@
       "electron": "11.1.0",
       "chrome": "87.0.4280.88"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.9.22"
   },
   "0.10.0": {
     "channel": "public",
@@ -1172,7 +1230,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.0/obsidian-0.10.0.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.0"
   },
   "0.10.1": {
     "channel": "public",
@@ -1204,7 +1263,8 @@
       "electron": "11.1.0",
       "chrome": "87.0.4280.88"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.1"
   },
   "0.10.2": {
     "channel": "public",
@@ -1214,7 +1274,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.2/obsidian-0.10.2.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.2"
   },
   "0.10.3": {
     "channel": "public",
@@ -1224,7 +1285,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.3/obsidian-0.10.3.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.3"
   },
   "0.10.4": {
     "channel": "public",
@@ -1234,7 +1296,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.4/obsidian-0.10.4.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.4"
   },
   "0.10.5": {
     "channel": "public",
@@ -1244,7 +1307,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.5/obsidian-0.10.5.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.5"
   },
   "0.10.6": {
     "channel": "public",
@@ -1276,7 +1340,8 @@
       "electron": "11.1.0",
       "chrome": "87.0.4280.88"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.6"
   },
   "0.10.7": {
     "channel": "public",
@@ -1308,7 +1373,8 @@
       "electron": "11.1.0",
       "chrome": "87.0.4280.88"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.7"
   },
   "0.10.8": {
     "channel": "public",
@@ -1340,7 +1406,8 @@
       "electron": "11.1.0",
       "chrome": "87.0.4280.88"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.8"
   },
   "0.10.9": {
     "channel": "public",
@@ -1372,7 +1439,8 @@
       "electron": "11.1.0",
       "chrome": "87.0.4280.88"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.9"
   },
   "0.10.10": {
     "channel": "public",
@@ -1382,7 +1450,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.10/obsidian-0.10.10.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.10"
   },
   "0.10.11": {
     "channel": "public",
@@ -1414,7 +1483,8 @@
       "electron": "11.2.1",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.11"
   },
   "0.10.12": {
     "channel": "public",
@@ -1424,7 +1494,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.10.12/obsidian-0.10.12.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.12"
   },
   "0.10.13": {
     "channel": "public",
@@ -1456,7 +1527,8 @@
       "electron": "11.2.1",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.10.13"
   },
   "0.11.0": {
     "channel": "public",
@@ -1488,7 +1560,8 @@
       "electron": "11.2.3",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.0"
   },
   "0.11.1": {
     "channel": "public",
@@ -1498,7 +1571,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.1/obsidian-0.11.1.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.1"
   },
   "0.11.2": {
     "channel": "public",
@@ -1508,7 +1582,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.2/obsidian-0.11.2.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.2"
   },
   "0.11.3": {
     "channel": "public",
@@ -1540,7 +1615,8 @@
       "electron": "11.3.0",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.3"
   },
   "0.11.4": {
     "channel": "public",
@@ -1550,7 +1626,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.4/obsidian-0.11.4.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.4"
   },
   "0.11.5": {
     "channel": "public",
@@ -1582,7 +1659,8 @@
       "electron": "11.3.0",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.5"
   },
   "0.11.6": {
     "channel": "public",
@@ -1592,7 +1670,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.6/obsidian-0.11.6.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.6"
   },
   "0.11.7": {
     "channel": "public",
@@ -1602,7 +1681,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.7/obsidian-0.11.7.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.7"
   },
   "0.11.8": {
     "channel": "public",
@@ -1612,7 +1692,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.8/obsidian-0.11.8.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.8"
   },
   "0.11.9": {
     "channel": "public",
@@ -1644,7 +1725,8 @@
       "electron": "11.3.0",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.9"
   },
   "0.11.10": {
     "channel": "public",
@@ -1654,7 +1736,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.10/obsidian-0.11.10.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.10"
   },
   "0.11.11": {
     "channel": "public",
@@ -1664,7 +1747,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.11/obsidian-0.11.11.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.11"
   },
   "0.11.12": {
     "channel": "public",
@@ -1674,7 +1758,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.11.12/obsidian-0.11.12.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.12"
   },
   "0.11.13": {
     "channel": "public",
@@ -1706,7 +1791,8 @@
       "electron": "11.3.0",
       "chrome": "87.0.4280.141"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.11.13"
   },
   "0.12.0": {
     "channel": "public",
@@ -1716,7 +1802,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.0/obsidian-0.12.0.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.0"
   },
   "0.12.1": {
     "channel": "public",
@@ -1726,7 +1813,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.1/obsidian-0.12.1.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.1"
   },
   "0.12.2": {
     "channel": "public",
@@ -1736,7 +1824,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.2/obsidian-0.12.2.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.2"
   },
   "0.12.3": {
     "channel": "public",
@@ -1767,7 +1856,8 @@
       "electron": "12.0.6",
       "chrome": "89.0.4389.128"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.3"
   },
   "0.12.4": {
     "channel": "public",
@@ -1798,7 +1888,8 @@
       "electron": "12.0.6",
       "chrome": "89.0.4389.128"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.4"
   },
   "0.12.5": {
     "channel": "public",
@@ -1829,7 +1920,8 @@
       "electron": "12.0.11",
       "chrome": "89.0.4389.128"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.5"
   },
   "0.12.6": {
     "channel": "public",
@@ -1839,7 +1931,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.6/obsidian-0.12.6.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.6"
   },
   "0.12.7": {
     "channel": "public",
@@ -1849,7 +1942,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.7/obsidian-0.12.7.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.7"
   },
   "0.12.8": {
     "channel": "public",
@@ -1859,7 +1953,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.8/obsidian-0.12.8.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.8"
   },
   "0.12.9": {
     "channel": "public",
@@ -1869,7 +1964,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.9/obsidian-0.12.9.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.9"
   },
   "0.12.10": {
     "channel": "public",
@@ -1900,7 +1996,8 @@
       "electron": "12.0.14",
       "chrome": "89.0.4389.128"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.10"
   },
   "0.12.11": {
     "channel": "public",
@@ -1910,7 +2007,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.11/obsidian-0.12.11.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.11"
   },
   "0.12.12": {
     "channel": "public",
@@ -1941,7 +2039,8 @@
       "electron": "12.0.14",
       "chrome": "89.0.4389.128"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.12"
   },
   "0.12.13": {
     "channel": "public",
@@ -1951,7 +2050,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.13/obsidian-0.12.13.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.13"
   },
   "0.12.14": {
     "channel": "public",
@@ -1961,7 +2061,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.14/obsidian-0.12.14.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.14"
   },
   "0.12.15": {
     "channel": "public",
@@ -1992,13 +2093,15 @@
       "electron": "12.0.18",
       "chrome": "89.0.4389.128"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.15"
   },
   "0.12.16": {
     "channel": "catalyst",
     "changelogUrl": {
       "desktopCatalyst": "https://obsidian.md/changelog/2021-09-14-desktop-v0.12.16/"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.16"
   },
   "0.12.17": {
     "channel": "public",
@@ -2008,7 +2111,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.17/obsidian-0.12.17.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.17"
   },
   "0.12.18": {
     "channel": "public",
@@ -2018,7 +2122,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.12.18/obsidian-0.12.18.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.18"
   },
   "0.12.19": {
     "channel": "public",
@@ -2049,7 +2154,8 @@
       "electron": "13.5.2",
       "chrome": "91.0.4472.164"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.12.19"
   },
   "0.13.0": {
     "channel": "catalyst",
@@ -2229,7 +2335,8 @@
       "electron": "13.6.2",
       "chrome": "91.0.4472.164"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.14"
   },
   "0.13.15": {
     "channel": "catalyst",
@@ -2305,7 +2412,8 @@
       "electron": "13.6.2",
       "chrome": "91.0.4472.164"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.19"
   },
   "0.13.20": {
     "channel": "catalyst",
@@ -2370,7 +2478,8 @@
       "electron": "13.6.2",
       "chrome": "91.0.4472.164"
     },
-    "ecmaScriptVersion": "ES2021"
+    "ecmaScriptVersion": "ES2021",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.23"
   },
   "0.13.24": {
     "channel": "public",
@@ -2402,7 +2511,8 @@
       "electron": "16.0.8",
       "chrome": "96.0.4664.110"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.24"
   },
   "0.13.25": {
     "channel": "catalyst",
@@ -2489,7 +2599,8 @@
       "electron": "16.0.10",
       "chrome": "96.0.4664.174"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.30"
   },
   "0.13.31": {
     "channel": "public",
@@ -2521,7 +2632,8 @@
       "electron": "17.1.1",
       "chrome": "98.0.4758.109"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.31"
   },
   "0.13.32": {
     "channel": "catalyst",
@@ -2543,7 +2655,8 @@
     "minRunnableInstallerVersion": "0.6.4",
     "downloads": {
       "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v0.13.33/obsidian-0.13.33.asar.gz"
-    }
+    },
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.13.33"
   },
   "0.14.0": {
     "channel": "catalyst",
@@ -2597,7 +2710,8 @@
       "electron": "17.1.1",
       "chrome": "98.0.4758.109"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.14.2"
   },
   "0.14.3": {
     "channel": "catalyst",
@@ -2651,7 +2765,8 @@
       "electron": "18.0.3",
       "chrome": "100.0.4896.75"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.14.5"
   },
   "0.14.6": {
     "channel": "public",
@@ -2683,7 +2798,8 @@
       "electron": "18.0.4",
       "chrome": "100.0.4896.75"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.14.6"
   },
   "0.14.7": {
     "channel": "catalyst",
@@ -2803,7 +2919,8 @@
       "electron": "18.3.0",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.14.15"
   },
   "0.15.0": {
     "channel": "catalyst",
@@ -2905,7 +3022,8 @@
       "electron": "18.3.5",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.15.6"
   },
   "0.15.7": {
     "channel": "catalyst",
@@ -2948,7 +3066,8 @@
       "electron": "18.3.5",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.15.8"
   },
   "0.15.9": {
     "channel": "public",
@@ -2980,7 +3099,8 @@
       "electron": "18.3.5",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v0.15.9"
   },
   "0.16.0": {
     "channel": "catalyst",
@@ -3079,7 +3199,8 @@
       "electron": "18.3.5",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.0.0"
   },
   "1.0.1": {
     "channel": "catalyst",
@@ -3132,7 +3253,8 @@
       "electron": "18.3.5",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.0.3"
   },
   "1.1.0": {
     "channel": "catalyst",
@@ -3254,11 +3376,13 @@
       "electron": "18.3.15",
       "chrome": "100.0.4896.160"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.1.8"
   },
   "1.1.8-E21": {
     "channel": "public",
-    "minRecommendedElectronVersion": "18.0.0"
+    "minRecommendedElectronVersion": "18.0.0",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.1.8-E21"
   },
   "1.1.9": {
     "channel": "public",
@@ -3292,7 +3416,8 @@
       "electron": "21.3.3",
       "chrome": "106.0.5249.199"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.1.9"
   },
   "1.1.10": {
     "channel": "catalyst",
@@ -3350,8 +3475,9 @@
     }
   },
   "1.1.15": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2023-02-22-desktop-v1.1/",
       "desktopCatalyst": "https://obsidian.md/changelog/2023-02-22-desktop-v1.1.15/"
     },
     "minRecommendedElectronVersion": "18.0.0",
@@ -3381,7 +3507,8 @@
       "electron": "21.4.1",
       "chrome": "106.0.5249.199"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.1.15"
   },
   "1.1.16": {
     "channel": "public",
@@ -3415,7 +3542,8 @@
       "electron": "21.4.1",
       "chrome": "106.0.5249.199"
     },
-    "ecmaScriptVersion": "ES2022"
+    "ecmaScriptVersion": "ES2022",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.1.16"
   },
   "1.2": {
     "channel": "public",
@@ -3535,7 +3663,8 @@
       "electron": "24.1.2",
       "chrome": "112.0.5615.87"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.2.7"
   },
   "1.2.8": {
     "channel": "public",
@@ -3573,11 +3702,13 @@
       "electron": "24.1.2",
       "chrome": "112.0.5615.87"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.2.8"
   },
   "1.3.0": {
     "channel": "catalyst",
     "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-05-09-desktop-v1.3/",
       "mobile": "https://obsidian.md/changelog/2022-07-12-mobile-v1.3.0/"
     },
     "minRecommendedElectronVersion": "21.0.0",
@@ -3644,7 +3775,8 @@
       "electron": "24.3.1",
       "chrome": "112.0.5615.183"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.3.3"
   },
   "1.3.4": {
     "channel": "public",
@@ -3682,7 +3814,8 @@
       "electron": "24.3.1",
       "chrome": "112.0.5615.183"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.3.4"
   },
   "1.3.5": {
     "channel": "public",
@@ -3720,7 +3853,8 @@
       "electron": "24.3.1",
       "chrome": "112.0.5615.183"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.3.5"
   },
   "1.3.6": {
     "channel": "catalyst",
@@ -3770,7 +3904,8 @@
       "electron": "24.3.1",
       "chrome": "112.0.5615.183"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.3.7"
   },
   "1.4": {
     "channel": "public",
@@ -3876,7 +4011,8 @@
       "electron": "25.8.0",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.5"
   },
   "1.4.6": {
     "channel": "catalyst",
@@ -3950,7 +4086,8 @@
       "electron": "25.8.0",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.10"
   },
   "1.4.11": {
     "channel": "public",
@@ -3988,7 +4125,8 @@
       "electron": "25.8.0",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.11"
   },
   "1.4.12": {
     "channel": "public",
@@ -4027,7 +4165,8 @@
       "electron": "25.8.0",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.12"
   },
   "1.4.13": {
     "channel": "public",
@@ -4065,7 +4204,8 @@
       "electron": "25.8.1",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.13"
   },
   "1.4.14": {
     "channel": "public+catalyst",
@@ -4105,7 +4245,8 @@
       "electron": "25.8.1",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.14"
   },
   "1.4.15": {
     "channel": "catalyst",
@@ -4155,7 +4296,8 @@
       "electron": "25.8.1",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.4.16"
   },
   "1.5": {
     "channel": "public",
@@ -4198,9 +4340,10 @@
     }
   },
   "1.5.3": {
-    "channel": "public",
+    "channel": "public+catalyst",
     "changelogUrl": {
-      "desktop": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3/"
+      "desktop": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3/",
+      "desktopCatalyst": "https://obsidian.md/changelog/2023-12-26-desktop-v1.5.3-diff/"
     },
     "minRecommendedElectronVersion": "25.8.1",
     "minRunnableInstallerVersion": "1.1.9",
@@ -4233,7 +4376,8 @@
       "electron": "25.8.1",
       "chrome": "114.0.5735.289"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.5.3"
   },
   "1.5.4": {
     "channel": "catalyst",
@@ -4323,7 +4467,8 @@
       "electron": "28.2.3",
       "chrome": "120.0.6099.283"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.5.8"
   },
   "1.5.9": {
     "channel": "catalyst",
@@ -4389,7 +4534,8 @@
       "electron": "28.2.3",
       "chrome": "120.0.6099.283"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.5.11"
   },
   "1.5.12": {
     "channel": "public",
@@ -4430,7 +4576,8 @@
       "electron": "28.2.3",
       "chrome": "120.0.6099.283"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.5.12"
   },
   "1.6.0": {
     "channel": "catalyst",
@@ -4496,7 +4643,8 @@
       "electron": "28.3.3",
       "chrome": "120.0.6099.291"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.6.2"
   },
   "1.6.3": {
     "channel": "public",
@@ -4537,11 +4685,13 @@
       "electron": "28.3.3",
       "chrome": "120.0.6099.291"
     },
-    "ecmaScriptVersion": "ES2023"
+    "ecmaScriptVersion": "ES2023",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.6.3"
   },
   "1.6.3-e30": {
     "channel": "public",
-    "minRecommendedElectronVersion": "25.8.1"
+    "minRecommendedElectronVersion": "25.8.1",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.6.3-e30"
   },
   "1.6.4": {
     "channel": "catalyst",
@@ -4596,7 +4746,8 @@
       "electron": "30.1.2",
       "chrome": "124.0.6367.243"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.6.5"
   },
   "1.6.6": {
     "channel": "catalyst",
@@ -4653,7 +4804,8 @@
       "electron": "30.1.2",
       "chrome": "124.0.6367.243"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.6.7"
   },
   "1.7.0": {
     "channel": "catalyst",
@@ -4742,7 +4894,8 @@
       "electron": "31.6.0",
       "chrome": "126.0.6478.234"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.7.4"
   },
   "1.7.5": {
     "channel": "public",
@@ -4785,7 +4938,8 @@
       "electron": "32.2.2",
       "chrome": "128.0.6613.186"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.7.5"
   },
   "1.7.6": {
     "channel": "public",
@@ -4828,7 +4982,8 @@
       "electron": "32.2.3",
       "chrome": "128.0.6613.186"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.7.6"
   },
   "1.7.7": {
     "channel": "public",
@@ -4871,7 +5026,8 @@
       "electron": "32.2.5",
       "chrome": "128.0.6613.186"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.7.7"
   },
   "1.8.0": {
     "channel": "catalyst",
@@ -4952,7 +5108,8 @@
       "electron": "33.3.2",
       "chrome": "130.0.6723.191"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.8.3"
   },
   "1.8.4": {
     "channel": "public",
@@ -4995,7 +5152,8 @@
       "electron": "33.3.2",
       "chrome": "130.0.6723.191"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.8.4"
   },
   "1.8.5": {
     "channel": "catalyst",
@@ -5063,7 +5221,8 @@
       "electron": "33.3.2",
       "chrome": "130.0.6723.191"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.8.7"
   },
   "1.8.8": {
     "channel": "catalyst",
@@ -5120,7 +5279,8 @@
       "electron": "34.3.0",
       "chrome": "132.0.6834.210"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.8.9"
   },
   "1.8.10": {
     "channel": "public+catalyst",
@@ -5165,7 +5325,8 @@
       "electron": "34.2.0",
       "chrome": "132.0.6834.196"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.8.10"
   },
   "1.9.0": {
     "channel": "catalyst",
@@ -5335,7 +5496,8 @@
       "electron": "37.3.0",
       "chrome": "138.0.7204.224"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.9.10"
   },
   "1.9.11": {
     "channel": "catalyst",
@@ -5397,7 +5559,8 @@
       "electron": "37.3.1",
       "chrome": "138.0.7204.235"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.9.12"
   },
   "1.9.13": {
     "channel": "catalyst",
@@ -5459,7 +5622,8 @@
       "electron": "37.6.0",
       "chrome": "138.0.7204.251"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.9.14"
   },
   "1.10.0": {
     "channel": "catalyst",
@@ -5543,7 +5707,8 @@
       "electron": "37.9.0",
       "chrome": "138.0.7204.251"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.10.3"
   },
   "1.10.4": {
     "channel": "catalyst",
@@ -5615,7 +5780,8 @@
       "electron": "37.10.2",
       "chrome": "138.0.7204.251"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.10.6"
   },
   "1.11.0": {
     "channel": "catalyst",
@@ -5713,7 +5879,8 @@
       "electron": "39.2.7",
       "chrome": "142.0.7444.235"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.11.4"
   },
   "1.11.5": {
     "channel": "public+catalyst",
@@ -5763,7 +5930,8 @@
       "electron": "39.2.6",
       "chrome": "142.0.7444.226"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.11.5"
   },
   "1.11.6": {
     "channel": "catalyst",
@@ -5825,7 +5993,8 @@
       "electron": "39.5.1",
       "chrome": "142.0.7444.265"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.11.7"
   },
   "1.12.0": {
     "channel": "catalyst",
@@ -5923,7 +6092,8 @@
       "electron": "39.6.0",
       "chrome": "142.0.7444.265"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.12.4"
   },
   "1.12.5": {
     "channel": "catalyst",
@@ -5995,7 +6165,8 @@
       "electron": "39.8.3",
       "chrome": "142.0.7444.265"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.12.7"
   },
   "1.13.0": {
     "channel": "catalyst",
@@ -6029,7 +6200,8 @@
     },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.2.asar.gz"
-    }
+    },
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.13.3": {
     "channel": "catalyst",
@@ -6039,7 +6211,8 @@
     },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.3.asar.gz"
-    }
+    },
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.13.4": {
     "channel": "public+catalyst",
@@ -6089,7 +6262,9 @@
       "electron": "43.1.1",
       "chrome": "150.0.7871.114"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.13.4",
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.13.5": {
     "channel": "catalyst",
@@ -6099,7 +6274,8 @@
     },
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.13.5.asar.gz"
-    }
+    },
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.13.6": {
     "channel": "public+catalyst",
@@ -6149,7 +6325,9 @@
       "electron": "43.3.0",
       "chrome": "150.0.7871.212"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.13.6",
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.13.7": {
     "channel": "public+catalyst",
@@ -6200,7 +6378,53 @@
       "electron": "43.3.0",
       "chrome": "150.0.7871.212"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.13.7",
+    "minRecommendedElectronVersion": "28.2.3"
+  },
+  "1.14.0": {
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-09-02-desktop-v1.14.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-09-02-mobile-v1.14.0/"
+    },
+    "channel": "catalyst",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.14.0.asar.gz"
+    },
+    "minRecommendedElectronVersion": "28.2.3"
+  },
+  "1.14.1": {
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-09-08-desktop-v1.14.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-09-08-mobile-v1.14.1/"
+    },
+    "channel": "catalyst",
+    "minRecommendedElectronVersion": "28.2.3",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.14.1.asar.gz"
+    }
+  },
+  "1.14.2": {
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-09-15-desktop-v1.14.2/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-09-15-mobile-v1.14.2/"
+    },
+    "channel": "catalyst",
+    "minRecommendedElectronVersion": "28.2.3",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.14.2.asar.gz"
+    }
+  },
+  "1.14.3": {
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-09-29-desktop-v1.14.3/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-09-29-mobile-v1.14.3/"
+    },
+    "channel": "catalyst",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.14.3.asar.gz"
+    },
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.14.4": {
     "channel": "public+catalyst",
@@ -6251,7 +6475,9 @@
       "electron": "43.7.7",
       "chrome": "150.0.7871.250"
     },
-    "ecmaScriptVersion": "ES2024"
+    "ecmaScriptVersion": "ES2024",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.14.4",
+    "minRecommendedElectronVersion": "28.2.3"
   },
   "1.14.5": {
     "channel": "public",
@@ -6264,6 +6490,20 @@
     "changelogUrl": {
       "desktop": "https://obsidian.md/changelog/2026-10-22-desktop-v1.14.5/"
     },
-    "minRecommendedInstallerVersion": "1.1.9"
+    "minRecommendedInstallerVersion": "1.1.9",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.14.5",
+    "minRecommendedElectronVersion": "28.2.3"
+  },
+  "1.15.0": {
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-10-22-desktop-v1.15.0/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-10-22-mobile-v1.15.0/"
+    },
+    "channel": "catalyst",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.15.0.asar.gz"
+    },
+    "minRecommendedInstallerVersion": "1.1.9",
+    "minRecommendedElectronVersion": "28.2.3"
   }
 }

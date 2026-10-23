@@ -8,7 +8,8 @@
  *
  * Three sources, each authoritative for a different part of an entry:
  *
- * - **The `obsidianmd/obsidian-releases` GitHub Releases API** → `downloads`. The
+ * - **The `obsidianmd/obsidian-releases` GitHub Releases API** → `downloads` and
+ *   `releaseUrl` (the release's `html_url`). The
  *   release's real asset list is matched (never templated) by
  *   {@link selectReleaseDownloads}, so the historical dot-vs-hyphen installer
  *   rename needs no guessing and the 32-bit / arm64 / AppImage / deb / snap
@@ -22,6 +23,9 @@
  *   overwrites a recorded value, because the historical floors were measured
  *   here and cannot be rebuilt from a live endpoint that only ever reports the
  *   latest.
+ * - **Each new version's own asar** → `minRecommendedElectronVersion`, read out of
+ *   its `app.js`. Also additive only, and only for versions past the newest one
+ *   that already carries it, so a steady-state run downloads nothing.
  *
  * Catalyst asars are the one asset with no listing behind them (they are served
  * from `releases.obsidian.md`, not GitHub), so a version the feed knows but
@@ -29,19 +33,31 @@
  * {@link buildCatalystAsarUrl} and **probed** before it is recorded.
  *
  * Our own empirically-measured fields — `minRunnableInstallerVersion`,
- * `minRecommendedElectronVersion`, `available`, `runtimeVersions` /
- * `ecmaScriptVersion` (see `scripts/collect-runtime-versions.ts`) — are never
- * touched.
+ * `available`, `runtimeVersions` / `ecmaScriptVersion` (see
+ * `scripts/collect-runtime-versions.ts`) — are never touched.
  *
  * The output is byte-stable: rerunning against unchanged sources produces no
  * diff, so it doubles as a "is our catalog current?" check. Run it, then commit
  * the updated `metadata.json`.
  */
 
+import { extractFile } from '@electron/asar';
 import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
+import { Buffer } from 'node:buffer';
+import {
+  mkdtemp,
+  rm,
+  writeFile
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
+import { gunzipSync } from 'node:zlib';
 
-import type { ObsidianVersionChangelogUrls } from '../src/obsidian-metadata.ts';
+import type {
+  ObsidianVersionChangelogUrls,
+  ObsidianVersionMetadata
+} from '../src/obsidian-metadata.ts';
 import type { MetadataTable } from './helpers/metadata-io.ts';
 
 import { DESKTOP_RELEASES_MANIFEST_URL } from '../src/obsidian-version.ts';
@@ -50,6 +66,14 @@ import {
   resolveReleaseChannel,
   selectReleaseDownloads
 } from '../src/release-catalog.ts';
+import {
+  checkIsFullFeedVersion,
+  resolveFeedEntryVersion
+} from './helpers/changelog-feed.ts';
+import {
+  extractMinRecommendedElectronVersion,
+  selectElectronVersionCandidates
+} from './helpers/electron-version-extraction.ts';
 import {
   readMetadataTable,
   writeMetadataTable
@@ -77,10 +101,19 @@ interface DesktopReleasesLine {
 }
 
 /**
+A `minRecommendedElectronVersion` read out of a version's asar.
+*/
+interface ExtractedElectronVersion {
+  readonly electronVersion: string;
+  readonly version: string;
+}
+
+/**
 The subset of a GitHub release this script reads.
 */
 interface GitHubRelease {
   readonly assets: readonly GitHubReleaseAsset[];
+  readonly html_url: string;
   readonly tag_name: string;
 }
 
@@ -134,7 +167,7 @@ const FEED_LINK_PATTERN = /<link href="(?<url>https:\/\/obsidian\.md\/changelog\
  * Matches an entry's title, whose trailing parenthetical is the release channel
  * (the only place the feed states it).
  */
-const FEED_TITLE_PATTERN = /<title>[^<]*\((?<channel>Public|Early access)\)<\/title>/;
+const FEED_TITLE_PATTERN = /<title>(?:Obsidian (?<titleVersion>\S+) )?[^<]*\((?<channel>Public|Early access)\)<\/title>/;
 
 const RELEASES_API_URL = 'https://api.github.com/repos/obsidianmd/obsidian-releases/releases';
 
@@ -238,13 +271,14 @@ async function main(): Promise<void> {
   const withChangelog = mergeChangelogAndChannel(table, changelogUrlsByVersion, enriched.publiclyReleasedVersions);
   const probed = await mergeCatalystAsars(table, Object.keys(changelogUrlsByVersion));
   const floored = mergeInstallerFloors(table, floors);
+  const electronFloored = await mergeElectronVersions(table);
 
   await writeMetadataTable(table);
 
   console.log(
     `Refreshed metadata.json: set downloads on ${String(enriched.updated)} versions (added ${String(enriched.added)} new), `
       + `changelog/channel on ${String(withChangelog)}, probed ${String(probed)} catalyst asar(s), `
-      + `recorded ${String(floored)} installer floor(s).`
+      + `recorded ${String(floored)} installer floor(s) and ${String(electronFloored)} Electron floor(s).`
   );
 }
 
@@ -289,7 +323,8 @@ async function mergeCatalystAsars(table: MetadataTable, feedVersions: readonly s
 }
 
 /**
- * Rewrites `changelogUrl` and `channel` for every version the feed knows.
+ * Rewrites `changelogUrl` and `channel` for every version the feed knows,
+ * minting an entry for a desktop build the table lacks.
  *
  * `changelogUrl` is feed-owned: the feed is the authoritative publisher of every
  * changelog page. `channel` is derived from the feed's pages **plus** whether
@@ -309,9 +344,9 @@ function mergeChangelogAndChannel(
   publiclyReleasedVersions: ReadonlySet<string>
 ): number {
   let updated = 0;
-  for (const [version, existing] of Object.entries(table)) {
-    const changelogUrl = changelogUrlsByVersion[version];
-    if (!changelogUrl) {
+  for (const [version, changelogUrl] of Object.entries(changelogUrlsByVersion)) {
+    const existing = table[version] ?? mintFeedVersion(version, changelogUrl);
+    if (!existing) {
       continue;
     }
 
@@ -328,6 +363,45 @@ function mergeChangelogAndChannel(
     updated++;
   }
   return updated;
+}
+
+/**
+ * Records `minRecommendedElectronVersion` for every version past the newest one
+ * that carries it, read out of the version's own asar.
+ *
+ * **Additive only**, like the installer floors: a recorded value is never
+ * rewritten. A version whose asar cannot be fetched, or whose `app.js` gives no
+ * single answer, is logged and left for a later run.
+ *
+ * @param table - The catalog to mutate.
+ * @returns How many versions gained a value.
+ */
+async function mergeElectronVersions(table: MetadataTable): Promise<number> {
+  const extracted: ExtractedElectronVersion[] = [];
+  for (const version of selectElectronVersionCandidates(table)) {
+    const asarUrl = table[version]?.downloads?.asar;
+    if (asarUrl === undefined) {
+      console.warn(`No asar to read minRecommendedElectronVersion from for ${version}; leaving it for a later run.`);
+      continue;
+    }
+
+    const appJs = await readAsarAppJs(asarUrl);
+    const electronVersion = appJs === undefined ? undefined : extractMinRecommendedElectronVersion({ appJs, version });
+    if (electronVersion === undefined) {
+      console.warn(`Could not read minRecommendedElectronVersion for ${version} from ${asarUrl}; leaving it for a later run.`);
+      continue;
+    }
+
+    extracted.push({ electronVersion, version });
+  }
+
+  for (const { electronVersion, version } of extracted) {
+    const existing = table[version];
+    if (existing) {
+      table[version] = { ...existing, minRecommendedElectronVersion: electronVersion };
+    }
+  }
+  return extracted.length;
 }
 
 /**
@@ -392,7 +466,13 @@ function mergeReleaseDownloads(
       assets: release.assets.map((asset) => ({ name: asset.name, url: asset.browser_download_url })),
       version
     });
+    const existing = table[version];
     if (!downloads) {
+      // A release with no asset we carry (`0.12.16` publishes none at all) still
+      // has a release page.
+      if (existing) {
+        table[version] = { ...existing, releaseUrl: release.html_url };
+      }
       continue;
     }
 
@@ -400,9 +480,8 @@ function mergeReleaseDownloads(
       publiclyReleasedVersions.add(version);
     }
 
-    const existing = table[version];
     if (existing) {
-      table[version] = { ...existing, downloads };
+      table[version] = { ...existing, downloads, releaseUrl: release.html_url };
       updated++;
       continue;
     }
@@ -411,22 +490,41 @@ function mergeReleaseDownloads(
       continue;
     }
 
-    table[version] = { channel: 'public', downloads };
+    table[version] = { channel: 'public', downloads, releaseUrl: release.html_url };
     added++;
   }
   return { added, publiclyReleasedVersions, updated };
 }
 
 /**
+ * Starts a catalog entry for a desktop build the feed knows and the table lacks.
+ *
+ * A catalyst-only build has no GitHub release, so until this existed nothing ever
+ * minted one: `1.14.0` to `1.14.3` and `1.15.0` were absent while every daily run
+ * passed and committed nothing. A feed version mints only when it is a full
+ * `x.y.z` with a desktop page, because the table is keyed by desktop app version.
+ *
+ * @param version - The feed version.
+ * @param changelogUrl - Its changelog pages.
+ * @returns An empty entry to fill, or `undefined` when the version mints none.
+ */
+function mintFeedVersion(version: string, changelogUrl: ObsidianVersionChangelogUrls): ObsidianVersionMetadata | undefined {
+  const hasDesktopPage = changelogUrl.desktop !== undefined || changelogUrl.desktopCatalyst !== undefined;
+  return hasDesktopPage && checkIsFullFeedVersion(version) ? {} : undefined;
+}
+
+/**
  * Parses the Atom changelog feed into a version → per-target-URL map.
  *
- * The version and the platform are taken from the link **slug**, never from the
+ * The version and the platform are taken from the link **slug**, not from the
  * title: two entries carry a typo'd version in their title (`Obsidian 1.0.4
  * Mobile` links `…-mobile-v0.1.4/`; `Obsidian 0.6.0 Desktop` links
  * `…-desktop-v0.6.1/`), and trusting the title collapses those onto the wrong
- * key. Only the **channel** comes from the title, which is the sole place the
- * feed states it. Entries with no `-v<version>` slug (the Publish and Sync
- * changelogs) carry no version and are skipped.
+ * key. The one exception is a slug that is not a full version (`-v1.3/`,
+ * `-v1.5.3-diff/`), which {@link resolveFeedEntryVersion} keys by its title. The
+ * **channel** comes from the title, which is the sole place the feed states it.
+ * Entries with no `-v<version>` slug (the Publish and Sync changelogs) carry no
+ * version and are skipped.
  *
  * @param feedXml - The raw feed XML.
  * @returns The map, keyed by app version.
@@ -440,12 +538,13 @@ function parseChangelogFeed(feedXml: string): Record<string, ObsidianVersionChan
     const title = FEED_TITLE_PATTERN.exec(entryXml)?.groups;
     const url = link?.['url'];
     const platform = link?.['platform'];
-    const version = link?.['version'];
+    const slugVersion = link?.['version'];
     const channel = title?.['channel'];
-    if (url === undefined || platform === undefined || version === undefined || channel === undefined) {
+    if (url === undefined || platform === undefined || slugVersion === undefined || channel === undefined) {
       continue;
     }
 
+    const version = resolveFeedEntryVersion({ slugVersion, titleVersion: title?.['titleVersion'] });
     const target = channel === 'Early access' ? `${platform}Catalyst` : platform;
     const urls = urlsByVersion[version] ?? {};
     urls[target] = url;
@@ -455,6 +554,35 @@ function parseChangelogFeed(feedXml: string): Record<string, ObsidianVersionChan
   return Object.fromEntries(
     Object.entries(urlsByVersion).map(([version, urls]) => [version, sortChangelogUrls(urls)])
   );
+}
+
+/**
+ * Downloads a gzipped asar and reads its `app.js`.
+ *
+ * `@electron/asar` reads an archive from disk only, so the decompressed asar goes
+ * through a temporary directory that is removed afterwards.
+ *
+ * @param asarUrl - The `*.asar.gz` URL.
+ * @returns The `app.js` source, or `undefined` when the download or the read fails.
+ */
+async function readAsarAppJs(asarUrl: string): Promise<string | undefined> {
+  const directory = await mkdtemp(join(tmpdir(), 'refresh-metadata-'));
+  try {
+    const response = await fetch(asarUrl, { headers: { 'user-agent': CATALYST_PROBE_USER_AGENT } });
+    if (!response.ok) {
+      console.warn(`Failed to download ${asarUrl}: HTTP ${String(response.status)}`);
+      return undefined;
+    }
+
+    const asarPath = join(directory, 'obsidian.asar');
+    await writeFile(asarPath, gunzipSync(Buffer.from(await response.arrayBuffer())));
+    return extractFile(asarPath, 'app.js').toString('utf-8');
+  } catch (error) {
+    console.warn(`Failed to read app.js from ${asarUrl}:`, error);
+    return undefined;
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
 }
 
 /**

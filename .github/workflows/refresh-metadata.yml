@@ -1,9 +1,10 @@
 name: Refresh Metadata
 
-# Runs npm run refresh:metadata (scripts/refresh-metadata.ts): additively merges the
-# upstream obsidian-versions.json download URLs into the repo-root metadata.json. The
-# script is byte-stable, so this commits ONLY when upstream actually changed. Daily so
-# new Obsidian releases land in the catalog within a day; also manual (workflow_dispatch).
+# Runs npm run refresh:metadata (scripts/refresh-metadata.ts): refreshes the repo-root
+# metadata.json from Obsidian's own endpoints (the obsidian-releases GitHub releases, the
+# changelog feed, desktop-releases.json and each new version's asar). The script is
+# byte-stable, so this commits ONLY when a source actually changed. Daily so new Obsidian
+# releases land in the catalog within a day; also manual (workflow_dispatch).
 
 on:
   schedule:
