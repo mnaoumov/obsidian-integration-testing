@@ -26,7 +26,7 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
 // The same budget the other Android suites carry: emulator boot, Appium session and the network-ready gate.
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 interface WriteLossGuardHolder {

@@ -47,9 +47,10 @@ import { TemporaryVault } from './temporary-vault.ts';
 /*
  * The same budget `mobile-trusted-input.android.integration.test.ts` carries, and for the same reasons:
  * 240s of emulator boot and Appium session, plus the 120s the network-ready gate (L45) can add on a guest
- * that never reports a validated default network.
+ * that never reports a validated default network, plus the 180s the emulator boot budget rose by
+ * (120s -> 300s).
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 describe('headless vault defaults on Android', () => {
