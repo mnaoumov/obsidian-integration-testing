@@ -26,7 +26,10 @@ import type { ObsidianTransport } from './transport.ts';
 import { getTransportOptions } from './context-provider.ts';
 import { TEMP_VAULT_DIR_PREFIX } from './leftover-cleanup.ts';
 import { log } from './log.ts';
-import { getOrCreateTransport } from './transport-factory.ts';
+import {
+  getCachedTransport,
+  getOrCreateTransport
+} from './transport-factory.ts';
 import {
   registerVault,
   unregisterVault
@@ -86,6 +89,12 @@ export class TemporaryVault {
   public readonly path: string;
 
   /**
+   * The transport {@link TemporaryVault.register} resolved, which is the one {@link TemporaryVault.dispose}
+   * unregisters through when it is handed none.
+   */
+  #registrationTransport: ObsidianTransport | undefined;
+
+  /**
    * Whether {@link TemporaryVault.dispose} removes {@link TemporaryVault.path} from disk.
    */
   readonly #shouldRemoveDirectoryOnDispose: boolean;
@@ -109,12 +118,24 @@ export class TemporaryVault {
    * makes a handle over a directory somebody else owns — the run's shared setup vault, say, which
    * `getTemporaryVault()` wraps — safe to dispose from a consumer's `afterAll`.
    *
+   * It never CREATES a transport to unregister through. A vault can only be registered in a transport
+   * that exists, so with no explicit one it uses the transport {@link TemporaryVault.register} resolved,
+   * else the worker's cached one, and skips the unregister when there is neither. Resolving the ambient
+   * transport here used to provision a whole new one for a vault whose registration had failed: on
+   * Android an Appium start and an emulator boot inside `afterAll`, which ran out the hook's timeout
+   * and left the emulator it was booting for the next suite to collide with.
+   *
    * @param transportOverride - An explicit transport to use when unregistering.
-   *   When omitted, falls back to the transport configured via the context provider.
+   *   When omitted, the transport `register` used, else the worker's cached one, else none.
    */
   public async dispose(transportOverride?: ObsidianTransport): Promise<void> {
     try {
-      await unregisterVault(this.path, transportOverride);
+      const transport = transportOverride ?? this.#registrationTransport ?? getCachedTransport();
+      if (transport) {
+        await unregisterVault(this.path, transport);
+      } else {
+        log(`[temporary-vault] No transport was ever created for this vault, so there is nothing to unregister it from: ${this.path}`);
+      }
     } finally {
       if (this.#shouldRemoveDirectoryOnDispose) {
         await retryRm(this.path);
@@ -176,6 +197,8 @@ export class TemporaryVault {
    */
   public async register(transportOverride?: ObsidianTransport): Promise<void> {
     const transport = transportOverride ?? await getOrCreateTransport(getTransportOptions());
+    // Before the push: a push that fails part-way still leaves files on the device for `dispose` to remove.
+    this.#registrationTransport = transport;
     await this.syncToDevice(transport);
     await registerVault(this.path, transport);
   }

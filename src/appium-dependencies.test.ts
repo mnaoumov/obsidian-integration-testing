@@ -8,6 +8,7 @@ import type { ObsidianAndroidAppiumTransportOptions } from './transport-options.
 
 import {
   checkIsAppiumDriverInstalled,
+  checkIsAppiumOutputOnlyNpmNotices,
   UIAUTOMATOR2_DRIVER_NAME,
   willAutoInstallAppiumDependencies
 } from './appium-dependencies.ts';
@@ -70,5 +71,21 @@ describe('willAutoInstallAppiumDependencies', () => {
         shouldAutoInstallAppiumDependencies: false
       })
     ).toBe(false);
+  });
+});
+
+describe('checkIsAppiumOutputOnlyNpmNotices', () => {
+  it('should recognize output that is only npm notices', () => {
+    expect(checkIsAppiumOutputOnlyNpmNotices(
+      'npm notice run obsidian-integration-testing@17.5.1 npx\r\nnpm notice run appium --log-timestamp --port 4723\n'
+    )).toBe(true);
+  });
+
+  it('should not read Appium output as npm notices', () => {
+    expect(checkIsAppiumOutputOnlyNpmNotices('npm notice run appium\n2026-10-23 [Appium] Welcome to Appium v3.7.0\n')).toBe(false);
+  });
+
+  it('should not read empty output as npm notices', () => {
+    expect(checkIsAppiumOutputOnlyNpmNotices('  \n')).toBe(false);
   });
 });

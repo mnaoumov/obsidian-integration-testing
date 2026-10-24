@@ -249,7 +249,28 @@ interface EmulatorReclaimerWaitForEmulatorStoppedParams {
  * caller's log so each caller keeps its own prefix.
  */
 export class EmulatorReclaimer {
+  /**
+   * How many `adb devices` listings answered only on their retry, so a wait can
+   * say how much of it the host's load cost.
+   *
+   * @returns The count, over this reclaimer's life.
+   */
+  public get retriedListingCount(): number {
+    return this.retriedListings;
+  }
+
+  /*
+   * Set once a 5s first try has needed the retry. On 2026-10-23, under the bulk
+   * runner's load, EVERY first try of one boot wait was killed at 5s (after
+   * 7.8-15.5s, the host too slow even to kill it) and answered on the 30s retry,
+   * so each poll paid a dead try plus an `adb start-server` and cost 35-80s. A
+   * host that busy stays busy for the rest of the run.
+   */
+  private isListingBudgetRaised = false;
+
   private readonly log: (message: string) => void;
+
+  private retriedListings = 0;
 
   /**
    * Creates a reclaimer that reports under the caller's own log prefix.
@@ -283,7 +304,7 @@ export class EmulatorReclaimer {
   public async getDevicesOutput(): Promise<string> {
     await ensureAdbServerStarted();
     try {
-      return await this.runAdbDevices(ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS);
+      return await this.runAdbDevices(this.isListingBudgetRaised ? ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS : ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS);
     } catch (error) {
       if (!(error instanceof AdbDevicesFailedError) || !checkIsAdbDevicesFailureTransient(error.failure)) {
         throw error;
@@ -298,7 +319,15 @@ export class EmulatorReclaimer {
       } catch (startError) {
         this.log(`Could not start the adb server before the retry: ${startError instanceof Error ? startError.message : String(startError)}`);
       }
-      return await this.runAdbDevices(ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS);
+      const output = await this.runAdbDevices(ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS);
+      this.retriedListings++;
+      if (!this.isListingBudgetRaised) {
+        this.isListingBudgetRaised = true;
+        this.log(
+          `The retry answered, so the host is too busy for a ${String(ADB_DEVICE_CHECK_TIMEOUT_IN_MILLISECONDS)}ms listing: later listings in this run start with the ${String(ADB_DEVICES_RETRY_TIMEOUT_IN_MILLISECONDS)}ms budget.`
+        );
+      }
+      return output;
     }
   }
 

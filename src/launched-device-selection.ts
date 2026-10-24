@@ -56,6 +56,11 @@ export interface BuildNoLaunchedDeviceMessageParams {
   readonly pollCount: number;
 
   /**
+   * How many of the wait's listings failed their first try and answered only on the retry.
+   */
+  readonly retriedListingCount: number;
+
+  /**
    * The wait's budget, in milliseconds.
    */
   readonly timeoutInMilliseconds: number;
@@ -173,6 +178,17 @@ export function buildNoLaunchedDeviceMessage(params: BuildNoLaunchedDeviceMessag
   if (params.lastListingFailure !== undefined) {
     parts.push(
       `${String(params.listingFailureCount)} of ${String(params.pollCount)} listing(s) failed; the last: ${describeAdbDevicesFailure(params.lastListingFailure)}`
+    );
+  }
+
+  /*
+   * A listing that needed its retry is invisible in the failure count above, and
+   * on 2026-10-23 that was every listing of a wait that ended with the guest
+   * offline: the host's load, not the device, was the thing worth naming.
+   */
+  if (params.retriedListingCount > 0) {
+    parts.push(
+      `${String(params.retriedListingCount)} of ${String(params.pollCount)} listing(s) answered only on a retry, because the adb server, or the host under it, was too busy to list devices on the first try. The host was heavily loaded during this wait, and a guest that stays offline on such a host is more likely starved than broken: re-run when the machine is quieter before suspecting the AVD.`
     );
   }
 
