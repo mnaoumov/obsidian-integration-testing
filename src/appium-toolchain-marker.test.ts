@@ -69,7 +69,7 @@ describe('checkIsAppiumToolchainMarkerFresh', () => {
   });
 
   it('should not trust a marker for another driver', () => {
-    expect(checkIsAppiumToolchainMarkerFresh({ driverName: 'xcuitest', marker, nowInMilliseconds: NOW_IN_MILLISECONDS })).toBe(false);
+    expect(checkIsAppiumToolchainMarkerFresh({ driverName: 'espresso', marker, nowInMilliseconds: NOW_IN_MILLISECONDS })).toBe(false);
   });
 
   it('should not trust a marker at or past its maximum age', () => {
