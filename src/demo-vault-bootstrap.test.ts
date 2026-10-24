@@ -17,15 +17,16 @@ import {
   vi
 } from 'vitest';
 
+import { COMMUNITY_PLUGINS_REGISTRY_URL } from './community-plugin-registry.ts';
 import {
   bootstrapDemoVaultPlugins,
   buildDemoVaultPopulateAsync
 } from './demo-vault-bootstrap.ts';
 
 // No case here reaches the network. Most are NO-DOWNLOAD cases outright: the bootstrap must not fetch when
-// the binaries are on disk already, or the plugin opted out. The one case that DOES walk the install loop
-// stubs `fetch` and passes an explicit `repo`, so neither the asset download nor the memoised community
-// registry lookup leaves the process — a real GitHub round-trip would be slow and flaky here, and the
+// the binaries are on disk already, or the plugin opted out. The cases that DO walk the install loop stub
+// `fetch` (the unlisted-plugin cases answer the registry with an empty table), so neither the asset download
+// nor the memoised community registry lookup leaves the process — a real GitHub round-trip would be slow and flaky here, and the
 // genuine end-to-end download stays an integration test.
 const HTTP_NOT_FOUND = 404;
 const PLUGIN_ASSET_BODIES = new Map<string, string>([
@@ -159,6 +160,33 @@ describe('bootstrapDemoVaultPlugins', () => {
 
     expect(result.installed).toEqual([]);
     expect(result.skippedPluginIds).toEqual([]);
+    expect(result.unlistedPluginIds).toEqual([]);
+  });
+
+  it('should report an unlisted plugin instead of failing when shouldSkipUnlistedPlugins is set, and still install the rest', async () => {
+    vi.stubGlobal('fetch', serveEmptyRegistryAndPluginAssets);
+    writePluginBinaries('demo-vault-helper');
+
+    const result = await bootstrapDemoVaultPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ pluginId: 'demo-vault-helper' }, { pluginId: 'installed-plugin', repo: 'demo-owner/obsidian-installed-plugin' }],
+      shouldForce: true,
+      shouldSkipUnlistedPlugins: true
+    });
+
+    expect(result.installed.map((plugin) => plugin.pluginId)).toEqual(['installed-plugin']);
+    expect(result.unlistedPluginIds).toEqual(['demo-vault-helper']);
+    expect(result.skippedPluginIds).toEqual([]);
+    expect(readFileSync(join(root, '.obsidian', 'plugins', 'demo-vault-helper', 'main.js'), 'utf-8')).toBe('// demo-vault-helper main');
+  });
+
+  it('should fail on an unlisted plugin by default', async () => {
+    vi.stubGlobal('fetch', serveEmptyRegistryAndPluginAssets);
+
+    await expect(bootstrapDemoVaultPlugins({
+      demoVaultPath: root,
+      injectPlugins: [{ pluginId: 'demo-vault-helper' }]
+    })).rejects.toThrow('Community plugin "demo-vault-helper" is not listed in Obsidian\'s community plugin registry');
   });
 });
 
@@ -198,6 +226,17 @@ describe('buildDemoVaultPopulateAsync', () => {
     expect(map['note.md']?.toString()).toBe('top');
   });
 });
+
+/**
+ * A `fetch` that answers the community plugin registry with an empty table, so every plugin without an explicit
+ * `repo` is unlisted, and serves everything else as {@link servePluginAssets} does.
+ *
+ * @param input - The URL the bootstrap asked for.
+ * @returns The response.
+ */
+function serveEmptyRegistryAndPluginAssets(input: RequestInfo | URL): Promise<Response> {
+  return new Request(input).url === COMMUNITY_PLUGINS_REGISTRY_URL ? Promise.resolve(Response.json([])) : servePluginAssets(input);
+}
 
 /**
  * A `fetch` that serves a plugin's release assets from memory, so the install loop can be exercised without

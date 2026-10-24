@@ -20,9 +20,11 @@
 
 import {
   existsSync,
-  readdirSync
+  readdirSync,
+  readFileSync
 } from 'node:fs';
 import {
+  dirname,
   join,
   resolve as resolvePath
 } from 'node:path';
@@ -60,6 +62,8 @@ const USAGE = `Usage:
                --min-version <ver>   re-download an installed copy older than this
                                      (single --plugin only; the setup's minVersion)
                --force              re-download plugins that are already installed
+      Without --plugin, plugins the community registry does not list (e.g. demo-vault-helper)
+      and the plugin the repo itself builds are skipped rather than downloaded.
 `;
 
 /**
@@ -73,6 +77,13 @@ interface ParsedCliValues {
   'obsidian-version'?: string | undefined;
   'port'?: string | undefined;
   'vault'?: string | undefined;
+}
+
+/**
+ * The one field of a plugin's `manifest.json` the folder sweep reads, before it is known to hold a string.
+ */
+interface PluginManifestIdShape {
+  readonly id?: unknown;
 }
 
 /**
@@ -145,6 +156,23 @@ function parseNumber(flag: string, raw: string): number {
 }
 
 /**
+ * Reads the id of the plugin the repo around a demo vault builds, from the `manifest.json` beside `demo-vault/`.
+ * The global setup installs that plugin from the repo's own build, so a folder sweep must never replace it with a
+ * published release.
+ *
+ * @param demoVaultPath - The demo vault root.
+ * @returns The plugin id, or `undefined` when the parent folder holds no readable manifest.
+ */
+function readOwnPluginId(demoVaultPath: string): string | undefined {
+  try {
+    const manifest = JSON.parse(readFileSync(join(dirname(demoVaultPath), 'manifest.json'), 'utf-8')) as PluginManifestIdShape;
+    return typeof manifest.id === 'string' ? manifest.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Runs the `bootstrap-demo-vault` subcommand.
  *
  * @param commandArguments - The subcommand's arguments (everything after the subcommand name).
@@ -166,7 +194,21 @@ async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise
   });
 
   const demoVaultPath = resolvePath(values['demo-vault'] ?? join(process.cwd(), 'demo-vault'));
-  const pluginIds = values.plugin ?? discoverDemoVaultPluginIds(demoVaultPath);
+  // A sweep of the folder holds local plugins nobody published, and the plugin this repo builds. Neither is
+  // something to download, so a sweep skips them; a plugin named with --plugin is installed or fails.
+  const isFolderSweep = values.plugin === undefined;
+  const discoveredPluginIds = isFolderSweep ? discoverDemoVaultPluginIds(demoVaultPath) : [];
+  const ownPluginId = isFolderSweep ? readOwnPluginId(demoVaultPath) : undefined;
+  const pluginIds = values.plugin ?? discoveredPluginIds.filter((pluginId) => pluginId !== ownPluginId);
+
+  if (ownPluginId !== undefined && discoveredPluginIds.includes(ownPluginId)) {
+    process.stdout.write(`Skipped ${ownPluginId}: it is the plugin this repo builds, installed from its own build output.\n`);
+  }
+
+  if (pluginIds.length === 0 && discoveredPluginIds.length > 0) {
+    process.stdout.write('Nothing to install.\n');
+    return;
+  }
 
   if (pluginIds.length === 0) {
     throw new Error(
@@ -189,7 +231,8 @@ async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise
   const result = await bootstrapDemoVaultPlugins({
     demoVaultPath,
     injectPlugins,
-    shouldForce: values.force === true
+    shouldForce: values.force === true,
+    shouldSkipUnlistedPlugins: isFolderSweep
   });
 
   for (const info of result.installed) {
@@ -198,6 +241,12 @@ async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise
 
   if (result.skippedPluginIds.length > 0) {
     process.stdout.write(`Already installed (use --force to re-download): ${result.skippedPluginIds.join(', ')}\n`);
+  }
+
+  if (result.unlistedPluginIds.length > 0) {
+    process.stdout.write(
+      `Skipped, not in Obsidian's community plugin registry (install one with --plugin <id> --repo <owner/name>): ${result.unlistedPluginIds.join(', ')}\n`
+    );
   }
 
   if (result.installed.length === 0) {
