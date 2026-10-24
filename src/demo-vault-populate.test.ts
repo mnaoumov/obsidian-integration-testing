@@ -192,6 +192,20 @@ describe('buildDemoVaultPopulate', () => {
       .toThrow(/"cst" in the demo vault .* is stale: the installed copy reports 13\.6\.7, older than `minVersion` 13\.8\.0\. .*bootstrap-demo-vault.*buildDemoVaultPopulateAsync/);
   });
 
+  it('should name a CLI command scoped to the plugin, carrying the minVersion the setup judged it by', () => {
+    // The bare `--demo-vault` form cannot know `minVersion`, so it reported a stale copy as "Nothing to install".
+    const directory = writePluginBinaries('cst');
+    writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ id: 'cst', version: '13.6.7' }));
+
+    expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ minVersion: '13.8.0', pluginId: 'cst', repo: 'owner/cst' }] }))
+      .toThrow(/bootstrap-demo-vault --demo-vault ".*" --plugin cst --repo owner\/cst --min-version 13\.8\.0`/);
+  });
+
+  it('should name the missing plugin in the CLI command, so a deleted folder is still installed', () => {
+    expect(() => buildDemoVaultPopulate({ demoVaultPath: root, injectPlugins: [{ pluginId: 'ghost', version: '1.2.3' }] }))
+      .toThrow(/bootstrap-demo-vault --demo-vault ".*" --plugin ghost --version 1\.2\.3`/);
+  });
+
   it('should seed an installed copy that satisfies minVersion', () => {
     const directory = writePluginBinaries('cst');
     writeFileSync(join(directory, 'manifest.json'), JSON.stringify({ id: 'cst', version: '13.8.0' }));

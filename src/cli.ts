@@ -57,7 +57,9 @@ const USAGE = `Usage:
                                      id already present under .obsidian/plugins/)
                --repo <owner/name>   override the registry lookup (single --plugin only)
                --version <tag>       pin a release tag (single --plugin only)
-               --force               re-download plugins that are already installed
+               --min-version <ver>   re-download an installed copy older than this
+                                     (single --plugin only; the setup's minVersion)
+               --force              re-download plugins that are already installed
 `;
 
 /**
@@ -147,7 +149,7 @@ function parseNumber(flag: string, raw: string): number {
  *
  * @param commandArguments - The subcommand's arguments (everything after the subcommand name).
  * @returns A {@link Promise} that resolves once the install has finished.
- * @throws Error if no plugin ids can be determined, or `--repo` / `--version` are used with several plugins.
+ * @throws Error if no plugin ids can be determined, or `--repo` / `--version` / `--min-version` are used with several plugins.
  */
 async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise<void> {
   const { values } = parseArgs({
@@ -156,6 +158,7 @@ async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise
     options: {
       'demo-vault': { type: 'string' },
       'force': { type: 'boolean' },
+      'min-version': { type: 'string' },
       'plugin': { multiple: true, type: 'string' },
       'repo': { type: 'string' },
       'version': { type: 'string' }
@@ -172,12 +175,13 @@ async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise
     );
   }
 
-  if (pluginIds.length > 1 && (values.repo !== undefined || values.version !== undefined)) {
-    throw new Error('--repo and --version apply to a single plugin; pass exactly one --plugin, or run the command once per plugin.');
+  if (pluginIds.length > 1 && (values.repo !== undefined || values.version !== undefined || values['min-version'] !== undefined)) {
+    throw new Error('--repo, --version and --min-version apply to a single plugin; pass exactly one --plugin, or run the command once per plugin.');
   }
 
   const injectPlugins: InjectPluginParams[] = pluginIds.map((pluginId) => ({
     pluginId,
+    ...(values['min-version'] !== undefined && { minVersion: values['min-version'] }),
     ...(values.repo !== undefined && { repo: values.repo }),
     ...(values.version !== undefined && { version: values.version })
   }));

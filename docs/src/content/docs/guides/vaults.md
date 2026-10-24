@@ -200,7 +200,7 @@ An injected plugin's built files are **not in git** — `.obsidian/plugins/*` is
   npx obsidian-integration-testing bootstrap-demo-vault --plugin fix-require-modules --version 13.6.11
   ```
 
-  With no `--plugin` it installs every id already present under `.obsidian/plugins/`. `--force` re-downloads plugins that are already installed; `--repo owner/name` and `--version <tag>` apply to a single `--plugin`.
+  With no `--plugin` it installs every id already present under `.obsidian/plugins/`. `--force` re-downloads plugins that are already installed; `--repo owner/name`, `--version <tag>` and `--min-version <version>` apply to a single `--plugin`.
 
 ### Keep an injected plugin current: `minVersion`
 
@@ -210,7 +210,7 @@ A plugin that is already installed is normally left alone, so a warm checkout ke
 injectPlugins: [{ pluginId: CST_ID, minVersion: '13.8.0', data: { modulesRoot: '_assets' } }]
 ```
 
-An installed copy whose `manifest.json` reports an older version (or none) is **stale**. `buildDemoVaultPopulateAsync` and the `bootstrap-demo-vault` CLI re-download it; the synchronous `buildDemoVaultPopulate` refuses it, naming both versions and the remedies. A pinned `version` is held the same way: a copy reporting any other version is stale too. Neither applies to a plugin read from an explicit `sourceDirectory`. Every seeded plugin's version is logged, so the copy a run actually used is in its log.
+An installed copy whose `manifest.json` reports an older version (or none) is **stale**. `buildDemoVaultPopulateAsync` re-downloads it; the synchronous `buildDemoVaultPopulate` refuses it, naming both versions and the remedies. The CLI cannot read the setup, so it judges staleness only by the `--min-version` and `--version` it is given, and the refusal names the exact command, with that plugin's `--plugin`, `--repo`, `--version` and `--min-version` filled in. A pinned `version` is held the same way: a copy reporting any other version is stale too. Neither applies to a plugin read from an explicit `sourceDirectory`. Every seeded plugin's version is logged, so the copy a run actually used is in its log.
 
 Each id resolves to its GitHub repository through **Obsidian's own community plugin registry** — the same `id` → `repo` table the in-app community browser installs from — so nothing is hardcoded. Pass `repo` on the injected plugin to skip that lookup (or to bootstrap a plugin that is not listed there), and `version` to pin a release tag instead of taking the latest.
 
