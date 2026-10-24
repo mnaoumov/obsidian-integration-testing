@@ -71,6 +71,7 @@ import {
 import { resolveEmulatorBinaryPath } from './android-sdk.ts';
 import {
   checkIsAppiumDriverInstalled,
+  checkIsAppiumOutputOnlyNpmNotices,
   UIAUTOMATOR2_DRIVER_NAME,
   willAutoInstallAppiumDependencies
 } from './appium-dependencies.ts';
@@ -86,6 +87,13 @@ import {
   resolveScriptTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from './appium-session-config.ts';
+import {
+  checkIsAppiumToolchainMarkerFresh,
+  clearAppiumToolchainMarker,
+  describeProbeDuration,
+  readAppiumToolchainMarker,
+  writeAppiumToolchainMarker
+} from './appium-toolchain-marker.ts';
 import {
   checkAvdExists,
   listAvailableAvds
@@ -1501,12 +1509,28 @@ class AppiumTransportFactory {
    * path spawns without a shell and cannot).
    */
   private async ensureAppiumDependencies(): Promise<void> {
-    await this.ensureAppiumInstalled();
+    /*
+     * A verified toolchain is remembered (`appium-toolchain-marker.ts`): the two
+     * npx probes cost 1.5-3s idle, but about four minutes EACH under the bulk
+     * runner's load on 2026-10-23, which is most of a suite's registration budget.
+     */
+    const marker = readAppiumToolchainMarker();
+    const freshness = { driverName: UIAUTOMATOR2_DRIVER_NAME, marker, nowInMilliseconds: Date.now() };
+    if (checkIsAppiumToolchainMarkerFresh(freshness)) {
+      this.log(
+        `Appium ${freshness.marker.appiumVersion} and the ${UIAUTOMATOR2_DRIVER_NAME} driver were verified at ${new Date(freshness.marker.checkedAtInMilliseconds).toISOString()}; skipping the install probes.`
+      );
+      return;
+    }
+
+    const appiumVersion = await this.ensureAppiumInstalled();
     await this.ensureUiautomator2DriverInstalled();
+    writeAppiumToolchainMarker({ appiumVersion, driverName: UIAUTOMATOR2_DRIVER_NAME });
   }
 
-  private async ensureAppiumInstalled(): Promise<void> {
+  private async ensureAppiumInstalled(): Promise<string> {
     this.log('Checking whether Appium is installed...');
+    const probeStart = Date.now();
     const result = await exec('npx --no-install appium --version', {
       isQuiet: true,
       shouldIgnoreExitCode: true,
@@ -1514,8 +1538,9 @@ class AppiumTransportFactory {
     });
 
     if (result.exitCode === 0) {
-      this.log(`Appium is installed (version ${result.stdout.trim() || 'unknown'}).`);
-      return;
+      const version = result.stdout.trim() || 'unknown';
+      this.log(`Appium is installed (version ${version}; ${describeProbeDuration(Date.now() - probeStart)}).`);
+      return version;
     }
 
     this.log('Appium is not installed. Installing globally via `npm install -g appium`...');
@@ -1540,7 +1565,9 @@ class AppiumTransportFactory {
           + '`shouldAutoInstallAppiumDependencies: false` and install/manage Appium yourself.'
       );
     }
-    this.log(`Appium installed (version ${verify.stdout.trim() || 'unknown'}).`);
+    const installedVersion = verify.stdout.trim() || 'unknown';
+    this.log(`Appium installed (version ${installedVersion}).`);
+    return installedVersion;
   }
 
   /**
@@ -1699,13 +1726,14 @@ class AppiumTransportFactory {
 
   private async ensureUiautomator2DriverInstalled(): Promise<void> {
     this.log(`Checking whether the ${UIAUTOMATOR2_DRIVER_NAME} driver is installed...`);
+    const probeStart = Date.now();
     const driverListJson = await exec('npx --no-install appium driver list --installed --json', {
       isQuiet: true,
       shouldIgnoreExitCode: true
     });
 
     if (checkIsAppiumDriverInstalled({ driverListJson, driverName: UIAUTOMATOR2_DRIVER_NAME })) {
-      this.log(`The ${UIAUTOMATOR2_DRIVER_NAME} driver is installed.`);
+      this.log(`The ${UIAUTOMATOR2_DRIVER_NAME} driver is installed (${describeProbeDuration(Date.now() - probeStart)}).`);
       return;
     }
 
@@ -1734,6 +1762,8 @@ class AppiumTransportFactory {
     try {
       return { browser: await this.connectSession(params) };
     } catch (error: unknown) {
+      // A driver removed since the toolchain was verified fails here, not at the server start; costing the next run only the probes.
+      clearAppiumToolchainMarker();
       const verdict = resolveWedgedAppiumServerRemedy({
         connectedDeviceIds: await this.getConnectedDeviceIdsQuietly(),
         deviceId: params.deviceId,
@@ -2941,9 +2971,14 @@ class AppiumTransportFactory {
 
     const outputTail = launch.readOutput().trim();
     const outputSection = outputTail.length > 0 ? `\n\nAppium server output (tail):\n${outputTail}` : '';
-    throw new Error(`Auto-started Appium server did not become ready within ${String(timeoutInMilliseconds)}ms.${outputSection}`);
+    const npxSection = checkIsAppiumOutputOnlyNpmNotices(outputTail)
+      ? ' Appium never printed a line of its own: npx was still resolving the command when the budget ran out, which is the host\'s load starving npm (an idle host starts the server in under 10s), not Appium failing.'
+      : '';
+    throw new Error(`Auto-started Appium server did not become ready within ${String(timeoutInMilliseconds)}ms.${npxSection}${outputSection}`);
 
     function buildDeathError(exitInfo: ProcessExitInfo): Error {
+      // A server that dies at startup may be a toolchain that has gone since it was verified, so the next run probes again.
+      clearAppiumToolchainMarker();
       return new Error(buildProcessExitMessage({
         exitInfo,
         output: launch.readOutput(),
@@ -3233,6 +3268,7 @@ class AppiumTransportFactory {
     let lastListingFailure: AdbDevicesFailure | undefined;
     let listingFailureCount = 0;
     let pollCount = 0;
+    const retriedListingCountBefore = this.emulators.retriedListingCount;
 
     while (Date.now() < deadline) {
       pollCount++;
@@ -3315,6 +3351,7 @@ class AppiumTransportFactory {
         lastListingFailure,
         listingFailureCount,
         pollCount,
+        retriedListingCount: this.emulators.retriedListingCount - retriedListingCountBefore,
         timeoutInMilliseconds: EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS
       }),
       { output: emulator.readOutput(), outputLabel: 'Emulator output' }
@@ -3347,6 +3384,19 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
 
   const factory = new AppiumTransportFactory(type);
   return factory.create(options);
+}
+
+/**
+ * Returns the worker's cached ambient transport, without ever creating one.
+ *
+ * For teardown: a vault can only be registered in a transport that exists, so
+ * unregistering never needs a new one. Creating one there is what turned a
+ * failed Android registration into a second full provisioning inside `afterAll`.
+ *
+ * @returns The cached transport, or `undefined` when this worker has none.
+ */
+export function getCachedTransport(): ObsidianTransport | undefined {
+  return cachedTransport;
 }
 
 /**

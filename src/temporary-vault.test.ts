@@ -22,6 +22,7 @@ const mockRegisterVault = vi.hoisted(() => vi.fn<() => Promise<void>>().mockReso
 const mockUnregisterVault = vi.hoisted(() => vi.fn<() => Promise<void>>().mockResolvedValue(undefined));
 const mockLog = vi.hoisted(() => vi.fn<(message: string) => void>());
 const mockGetOrCreateTransport = vi.hoisted(() => vi.fn<() => Promise<ObsidianTransport>>());
+const mockGetCachedTransport = vi.hoisted(() => vi.fn<() => ObsidianTransport | undefined>());
 const mockGetTransportOptions = vi.hoisted(() => vi.fn<() => unknown>());
 const mockReaddir = vi.hoisted(() => vi.fn<() => Promise<Dirent[]>>());
 const mockReadFile = vi.hoisted(() => vi.fn<() => Promise<Uint8Array>>());
@@ -52,6 +53,7 @@ vi.mock('./vault-registry.ts', () => ({
 }));
 
 vi.mock('./transport-factory.ts', () => ({
+  getCachedTransport: mockGetCachedTransport,
   getOrCreateTransport: mockGetOrCreateTransport
 }));
 
@@ -78,6 +80,9 @@ function createTransportStub(pushFiles?: ObsidianTransport['pushFiles']): Obsidi
   return strictProxy<ObsidianTransport>({ pushFiles });
 }
 
+// The worker's cached ambient transport, which `dispose` falls back to when it was handed none.
+const CACHED_TRANSPORT = createTransportStub();
+
 beforeEach(() => {
   mockMkdirSync.mockReset();
   mockMkdtempSync.mockReset().mockReturnValue('/tmp/temp-vault-abc');
@@ -90,6 +95,7 @@ beforeEach(() => {
   mockReadFile.mockReset().mockResolvedValue(new Uint8Array());
   mockGetTransportOptions.mockReset().mockReturnValue({});
   mockGetOrCreateTransport.mockReset().mockResolvedValue(createTransportStub());
+  mockGetCachedTransport.mockReset().mockReturnValue(CACHED_TRANSPORT);
   vi.restoreAllMocks();
 });
 
@@ -237,16 +243,51 @@ describe('dispose', () => {
   it('should unregister and remove a directory it created', async () => {
     const vault = new TemporaryVault();
     await vault.dispose();
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', undefined);
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', CACHED_TRANSPORT);
     expect(mockRm).toHaveBeenCalledWith('/tmp/temp-vault-abc', { force: true, recursive: true });
   });
 
   it('should unregister but keep a directory it did not create', async () => {
     const vault = new TemporaryVault('/vault');
     await vault.dispose();
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', undefined);
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', CACHED_TRANSPORT);
     expect(mockRm).not.toHaveBeenCalled();
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('/vault'));
+  });
+
+  it('should never create a transport to unregister through', async () => {
+    mockGetCachedTransport.mockReturnValue(undefined);
+    const vault = new TemporaryVault();
+    await vault.dispose();
+    expect(mockGetOrCreateTransport).not.toHaveBeenCalled();
+    expect(mockUnregisterVault).not.toHaveBeenCalled();
+    expect(mockRm).toHaveBeenCalledWith('/tmp/temp-vault-abc', { force: true, recursive: true });
+    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('nothing to unregister'));
+  });
+
+  it('should unregister through the transport register used, over the cached one', async () => {
+    const registrationTransport = createTransportStub();
+    const vault = new TemporaryVault('/vault');
+    await vault.register(registrationTransport);
+    await vault.dispose();
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', registrationTransport);
+  });
+
+  it('should remember the transport even when the push after it fails', async () => {
+    const registrationTransport = createTransportStub(vi.fn<NonNullable<ObsidianTransport['pushFiles']>>().mockRejectedValue(new Error('push failed')));
+    mockGetCachedTransport.mockReturnValue(undefined);
+    const vault = new TemporaryVault('/vault');
+    await expect(vault.register(registrationTransport)).rejects.toThrow('push failed');
+    await vault.dispose();
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', registrationTransport);
+  });
+
+  it('should prefer an explicit transport over every other', async () => {
+    const explicitTransport = createTransportStub();
+    const vault = new TemporaryVault('/vault');
+    await vault.register(createTransportStub());
+    await vault.dispose(explicitTransport);
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/vault', explicitTransport);
   });
 
   it('should remove a directory it did not create when told to explicitly', async () => {
@@ -258,7 +299,7 @@ describe('dispose', () => {
   it('should keep a directory it created when told to explicitly', async () => {
     const vault = new TemporaryVault(undefined, { shouldRemoveDirectoryOnDispose: false });
     await vault.dispose();
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', undefined);
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', CACHED_TRANSPORT);
     expect(mockRm).not.toHaveBeenCalled();
   });
 
@@ -300,7 +341,7 @@ describe('Symbol.asyncDispose', () => {
     {
       await using _vault = new TemporaryVault();
     }
-    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', undefined);
+    expect(mockUnregisterVault).toHaveBeenCalledWith('/tmp/temp-vault-abc', CACHED_TRANSPORT);
     expect(mockRm).toHaveBeenCalled();
   });
 });

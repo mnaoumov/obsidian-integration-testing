@@ -92,6 +92,7 @@ describe('buildNoLaunchedDeviceMessage', () => {
       lastListingFailure: undefined,
       listingFailureCount: 0,
       pollCount: 50,
+      retriedListingCount: 0,
       timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
     });
 
@@ -107,6 +108,7 @@ describe('buildNoLaunchedDeviceMessage', () => {
       lastListingFailure: undefined,
       listingFailureCount: 0,
       pollCount: 50,
+      retriedListingCount: 0,
       timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
     });
 
@@ -120,6 +122,7 @@ describe('buildNoLaunchedDeviceMessage', () => {
       lastListingFailure: undefined,
       listingFailureCount: 0,
       pollCount: 50,
+      retriedListingCount: 0,
       timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
     });
 
@@ -140,10 +143,25 @@ describe('buildNoLaunchedDeviceMessage', () => {
       },
       listingFailureCount: 3,
       pollCount: 3,
+      retriedListingCount: 0,
       timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
     });
 
     expect(message).toContain('No device listing succeeded during the wait.');
     expect(message).toContain('3 of 3 listing(s) failed; the last: no answer within its 30.0s budget');
+  });
+
+  it('should name the host load when listings answered only on their retry', () => {
+    const message = buildNoLaunchedDeviceMessage({
+      lastListedDevices: [{ deviceId: 'emulator-5554', state: 'offline' }],
+      lastListingFailure: undefined,
+      listingFailureCount: 0,
+      pollCount: 7,
+      retriedListingCount: 7,
+      timeoutInMilliseconds: TIMEOUT_IN_MILLISECONDS
+    });
+
+    expect(message).toContain('7 of 7 listing(s) answered only on a retry');
+    expect(message).toContain('more likely starved than broken');
   });
 });
