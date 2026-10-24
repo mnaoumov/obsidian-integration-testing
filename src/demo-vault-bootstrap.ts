@@ -97,6 +97,15 @@ export interface BootstrapDemoVaultPluginsParams {
    * network I/O at all.
    */
   readonly shouldForce?: boolean | undefined;
+
+  /**
+   * Whether a plugin with no explicit `repo` that Obsidian's community plugin registry does not list is reported in
+   * {@link BootstrapDemoVaultPluginsResult.unlistedPluginIds} instead of failing the run. Defaults to `false`: a
+   * setup names exactly the plugins it needs, so one it cannot install is an error. The CLI turns it on when it
+   * sweeps a whole `.obsidian/plugins/` folder, which holds local plugins such as `demo-vault-helper` that were
+   * never published.
+   */
+  readonly shouldSkipUnlistedPlugins?: boolean | undefined;
 }
 
 /**
@@ -112,6 +121,11 @@ export interface BootstrapDemoVaultPluginsResult {
   The ids of plugins left untouched — already installed at an acceptable version, or opted out via an explicit `sourceDirectory`.
    */
   readonly skippedPluginIds: readonly string[];
+
+  /**
+  The ids of plugins that needed installing but have no explicit `repo` and are not in the community plugin registry. Only filled under {@link BootstrapDemoVaultPluginsParams.shouldSkipUnlistedPlugins}.
+   */
+  readonly unlistedPluginIds: readonly string[];
 }
 
 /**
@@ -149,6 +163,26 @@ export interface InstalledPluginInfo {
 }
 
 /**
+ * Parameters for {@link installPlugin}.
+ */
+interface InstallPluginParams {
+  /**
+  The demo vault root.
+   */
+  readonly demoVaultPath: string;
+
+  /**
+  The plugin to install.
+   */
+  readonly plugin: InjectPluginParams;
+
+  /**
+  Whether an unlisted plugin with no explicit `repo` is skipped rather than an error.
+   */
+  readonly shouldSkipUnlistedPlugins: boolean;
+}
+
+/**
  * Installs every injected community plugin whose built files are missing from the demo vault, or whose installed
  * copy is stale against its pinned `version` or its `minVersion`, by downloading its published release assets into `demo-vault/.obsidian/plugins/<id>/`.
  *
@@ -161,22 +195,29 @@ export interface InstalledPluginInfo {
  * @throws Error if a plugin's repository cannot be resolved, or a required asset cannot be downloaded.
  */
 export async function bootstrapDemoVaultPlugins(params: BootstrapDemoVaultPluginsParams): Promise<BootstrapDemoVaultPluginsResult> {
-  const { demoVaultPath, injectPlugins, shouldForce = false } = params;
+  const { demoVaultPath, injectPlugins, shouldForce = false, shouldSkipUnlistedPlugins = false } = params;
 
   const bootstrappable = injectPlugins.filter((plugin) => plugin.sourceDirectory === undefined);
   const targets = shouldForce ? bootstrappable : resolveMissingInjectedPlugins({ demoVaultPath, injectPlugins });
   const targetPluginIds = new Set(targets.map((plugin) => plugin.pluginId));
 
   const installed: InstalledPluginInfo[] = [];
+  const unlistedPluginIds: string[] = [];
   for (const plugin of targets) {
     // Sequential on purpose: the installs share one memoised registry fetch.
     // Parallelism would buy nothing but interleaved logs for the handful of plugins a demo vault injects.
-    installed.push(await installPlugin(demoVaultPath, plugin));
+    const info = await installPlugin({ demoVaultPath, plugin, shouldSkipUnlistedPlugins });
+    if (info === undefined) {
+      unlistedPluginIds.push(plugin.pluginId);
+    } else {
+      installed.push(info);
+    }
   }
 
   return {
     installed,
-    skippedPluginIds: injectPlugins.map((plugin) => plugin.pluginId).filter((pluginId) => !targetPluginIds.has(pluginId))
+    skippedPluginIds: injectPlugins.map((plugin) => plugin.pluginId).filter((pluginId) => !targetPluginIds.has(pluginId)),
+    unlistedPluginIds
   };
 }
 
@@ -267,14 +308,24 @@ async function fetchCommunityPluginRegistry(): Promise<readonly CommunityPluginR
 /**
  * Downloads one plugin's release assets and writes them into the demo vault.
  *
- * @param demoVaultPath - The demo vault root.
- * @param plugin - The plugin to install.
- * @returns What was installed.
+ * @param params - The {@link InstallPluginParams}.
+ * @returns What was installed, or `undefined` when the plugin is unlisted and `shouldSkipUnlistedPlugins` is set.
  * @throws Error if the repository cannot be resolved or a required asset cannot be downloaded.
  */
-async function installPlugin(demoVaultPath: string, plugin: InjectPluginParams): Promise<InstalledPluginInfo> {
+async function installPlugin(params: InstallPluginParams): Promise<InstalledPluginInfo | undefined> {
+  const { demoVaultPath, plugin, shouldSkipUnlistedPlugins } = params;
   const { pluginId, version } = plugin;
   const repo = await resolvePluginRepo(plugin);
+  if (repo === undefined) {
+    if (shouldSkipUnlistedPlugins) {
+      log(`[demo-vault-bootstrap] Skipping "${pluginId}": it is not in Obsidian's community plugin registry and no \`repo\` was given.`);
+      return undefined;
+    }
+    throw new Error(
+      `Community plugin "${pluginId}" is not listed in Obsidian's community plugin registry, so its GitHub `
+        + 'repository cannot be resolved. Pass an explicit `repo` (`owner/name`) on the injected plugin.'
+    );
+  }
   const targetDirectory = resolveInjectedPluginSourceDirectory({ demoVaultPath, plugin });
 
   log(`[demo-vault-bootstrap] Installing "${pluginId}" from ${repo}@${version ?? 'latest'} into ${targetDirectory}...`);
@@ -311,10 +362,10 @@ async function installPlugin(demoVaultPath: string, plugin: InjectPluginParams):
  * Obsidian's community plugin registry.
  *
  * @param plugin - The plugin to resolve.
- * @returns The `owner/name` repository reference.
- * @throws Error if an explicit override is malformed, or the id is not a registered community plugin.
+ * @returns The `owner/name` repository reference, or `undefined` when the id is not a registered community plugin.
+ * @throws Error if an explicit override is malformed.
  */
-async function resolvePluginRepo(plugin: InjectPluginParams): Promise<string> {
+async function resolvePluginRepo(plugin: InjectPluginParams): Promise<string | undefined> {
   const { pluginId, repo } = plugin;
 
   if (repo !== undefined) {
@@ -324,15 +375,7 @@ async function resolvePluginRepo(plugin: InjectPluginParams): Promise<string> {
     return repo;
   }
 
-  const registryRepo = selectPluginRepo({ entries: await fetchCommunityPluginRegistry(), pluginId });
-  if (registryRepo === undefined) {
-    throw new Error(
-      `Community plugin "${pluginId}" is not listed in Obsidian's community plugin registry, so its GitHub `
-        + 'repository cannot be resolved. Pass an explicit `repo` (`owner/name`) on the injected plugin.'
-    );
-  }
-
-  return registryRepo;
+  return selectPluginRepo({ entries: await fetchCommunityPluginRegistry(), pluginId });
 }
 
 /* v8 ignore stop */

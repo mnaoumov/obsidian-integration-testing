@@ -200,7 +200,7 @@ An injected plugin's built files are **not in git** — `.obsidian/plugins/*` is
   npx obsidian-integration-testing bootstrap-demo-vault --plugin fix-require-modules --version 13.6.11
   ```
 
-  With no `--plugin` it installs every id already present under `.obsidian/plugins/`. `--force` re-downloads plugins that are already installed; `--repo owner/name`, `--version <tag>` and `--min-version <version>` apply to a single `--plugin`.
+  With no `--plugin` it installs every id already present under `.obsidian/plugins/`, except the plugin the repo itself builds (the id in the `manifest.json` beside `demo-vault/`) and any plugin Obsidian's community registry does not list, such as `demo-vault-helper`; both are reported as skipped. A plugin named with `--plugin` is installed or fails. `--force` re-downloads plugins that are already installed; `--repo owner/name`, `--version <tag>` and `--min-version <version>` apply to a single `--plugin`.
 
 ### Keep an injected plugin current: `minVersion`
 
