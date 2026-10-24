@@ -278,6 +278,29 @@ export function resolveMissingInjectedPlugins(params: ResolveMissingInjectedPlug
 }
 
 /**
+ * Builds the copy-pasteable `bootstrap-demo-vault` command that repairs exactly one injected plugin.
+ *
+ * It names the plugin and carries every setting the setup judged it by (`repo`, `version`, `minVersion`).
+ * The bare `--demo-vault` form installs only the plugins already present in the folder and cannot know the
+ * setup's `minVersion`, so it reported a stale copy as `Nothing to install`, and missed a plugin whose
+ * folder had been deleted.
+ *
+ * @param demoVaultPath - The demo vault root.
+ * @param plugin - The plugin to repair.
+ * @returns The command line.
+ */
+function buildBootstrapCommand(demoVaultPath: string, plugin: InjectPluginParams): string {
+  return [
+    'npx obsidian-integration-testing bootstrap-demo-vault',
+    `--demo-vault "${demoVaultPath}"`,
+    `--plugin ${plugin.pluginId}`,
+    plugin.repo === undefined ? '' : `--repo ${plugin.repo}`,
+    plugin.version === undefined ? '' : `--version ${plugin.version}`,
+    plugin.minVersion === undefined ? '' : `--min-version ${plugin.minVersion}`
+  ].filter(Boolean).join(' ');
+}
+
+/**
  * Builds the "how to fix this" half of the missing-binaries error.
  *
  * The remedy differs by opt-out: a plugin read from the demo vault can be installed headlessly, while one
@@ -289,7 +312,7 @@ export function resolveMissingInjectedPlugins(params: ResolveMissingInjectedPlug
  */
 function buildMissingPluginRemedy(demoVaultPath: string, plugin: InjectPluginParams): string {
   return plugin.sourceDirectory === undefined
-    ? `Install it headlessly with \`npx obsidian-integration-testing bootstrap-demo-vault --demo-vault "${demoVaultPath}"\`, `
+    ? `Install it headlessly with \`${buildBootstrapCommand(demoVaultPath, plugin)}\`, `
       + 'or switch this setup to `buildDemoVaultPopulateAsync`, which installs missing plugins itself. '
       + 'Opening demo-vault/ in Obsidian once so demo-vault-helper installs it also works.'
     : 'It was read from an explicit `sourceDirectory`, which opts it out of the headless bootstrap — '
@@ -359,7 +382,7 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
   if (staleReason !== undefined) {
     throw new Error(
       `Community plugin "${pluginId}" in the demo vault (${sourceDirectory}) is stale: ${staleReason}. `
-        + `Re-install it headlessly with \`npx obsidian-integration-testing bootstrap-demo-vault --demo-vault "${demoVaultPath}"\`, `
+        + `Re-install it headlessly with \`${buildBootstrapCommand(demoVaultPath, plugin)}\`, `
         + 'or switch this setup to `buildDemoVaultPopulateAsync`, which re-downloads stale plugins itself.'
     );
   }
