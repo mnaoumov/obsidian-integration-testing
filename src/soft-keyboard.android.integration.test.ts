@@ -63,9 +63,10 @@ import { TemporaryVault } from './temporary-vault.ts';
 
 /*
  * The same budget the other Android suites carry: 240s of emulator boot and Appium session, plus the 120s
- * the network-ready gate (L45) can add on a guest that never reports a validated default network.
+ * the network-ready gate (L45) can add on a guest that never reports a validated default network, plus
+ * the 180s the emulator boot budget rose by (120s -> 300s).
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
 
 /*
  * A raise costs a keyboard retract (up to ~2s), one or two touches with a 1.5s settle each, and a handful of

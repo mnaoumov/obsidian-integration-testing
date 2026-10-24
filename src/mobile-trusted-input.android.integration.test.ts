@@ -25,13 +25,14 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
 import { TemporaryVault } from './temporary-vault.ts';
 
 /*
- * 240s + the 120s the network-ready gate (L45) can add on a guest that
+ * 240s + the 120s the network-ready gate (L45) can add + the 180s the emulator boot budget rose by
+ * (120s -> 300s) on a guest that
  * never reports a validated default network. The old figure was already a
  * practical number rather than the sum of its parts — Appium start and session
  * connection alone budget 180s each — so this raises it by exactly what the new
  * phase can cost, rather than re-deriving a worst case nothing waits out.
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**

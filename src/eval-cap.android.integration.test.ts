@@ -40,9 +40,10 @@ import { TemporaryVault } from './temporary-vault.ts';
 
 /*
  * The same budget the other Android suite waits out: Appium start and session
- * connection alone are 180s each, plus what the network-ready gate can add.
+ * connection alone are 180s each, plus what the network-ready gate and the
+ * 300s emulator boot budget can add.
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 360_000;
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
 // Comfortably past the 30s default cap, so the transport gives up first.
 const OVER_CAP_SLEEP_IN_MILLISECONDS = 40_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;

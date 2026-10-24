@@ -96,7 +96,8 @@ const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/trusted-input.desktop.integration.t
 // vault push, app restart — happens inside the hooks. Raised by the 120s the network-ready gate can add on
 // A guest that never reports a validated default network (L45); `afterAll`'s dispose builds a
 // transport of its own, so it needs the same headroom the registration hook does.
-const ANDROID_TIMEOUT_IN_MILLISECONDS = 420_000;
+// Raised by 180s more when the emulator boot budget went from 120s to 300s.
+const ANDROID_TIMEOUT_IN_MILLISECONDS = 600_000;
 
 // Inject the per-version compatibility table into `obsidian-metadata.ts` under
 // test, the same way the esbuild build does via `define`. Two mechanisms are

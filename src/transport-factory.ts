@@ -287,7 +287,14 @@ const DEVICE_LIVENESS_ATTEMPT_COUNT = 2;
  */
 const EMULATOR_BOOT_ATTEMPT_COUNT = 2;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
-const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 120_000;
+/*
+ * One budget for the device to appear AND finish booting, sized for the top of
+ * the measured ~90-220s cold boot with load on top. It was 120s, inside that
+ * range: on 2026-10-23, at 100% host CPU, three runs in a row spent 69-114s
+ * waiting for the device to appear and were left 10-54s for `sys.boot_completed`,
+ * so both boot attempts of every run failed.
+ */
+const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 300_000;
 const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10_000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const HTTP_MULTIPLE_CHOICES = 300;
@@ -2981,7 +2988,8 @@ class AppiumTransportFactory {
    * @param emulator - The emulator this run started, so its early death fails fast instead of polling out the deadline. Omitted for a reused device, which this run did not launch and cannot inspect.
    */
   private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch | undefined): Promise<void> {
-    const remainingMs = Math.max(0, deadline - Date.now());
+    const bootWaitStart = Date.now();
+    const remainingMs = Math.max(0, deadline - bootWaitStart);
     this.log(
       `Waiting for device ${deviceId} to finish booting (remaining: ${String(remainingMs)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
@@ -3025,7 +3033,7 @@ class AppiumTransportFactory {
      * reader got — a budget, with the explanation captured and discarded.
      */
     throw new Error(appendProcessOutputTail(
-      `Device "${deviceId}" connected but did not finish booting within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms.`,
+      `Device "${deviceId}" connected but did not finish booting within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms (it was connected for the last ${String(Date.now() - bootWaitStart)}ms of that budget).`,
       { output: emulator?.readOutput() ?? '', outputLabel: 'Emulator output' }
     ));
   }
