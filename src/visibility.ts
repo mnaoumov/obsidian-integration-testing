@@ -14,7 +14,7 @@
  */
 
 /**
- * Chromium switches passed to a **hidden** owned desktop instance.
+ * Chromium switches passed to **every** owned desktop instance, visible or hidden.
  *
  * The harness hides the window by moving it **off-screen** (not minimizing it).
  * An off-screen window still reports `visibilityState: 'visible'` to Chromium, so
@@ -24,11 +24,18 @@
  * disabled and the timer/renderer backgrounding heuristics are switched off, so
  * an off-screen (or covered) renderer is never throttled or frozen.
  *
+ * A **visible** window needs them just as much. With native occlusion tracking on,
+ * Windows reports a window that is covered, or on a locked or powered-off screen, as
+ * `document.hidden`, and Obsidian then defers rendering: Reading view stays empty and
+ * "Show debug info" reports `Main window: hidden`. A harness-owned instance is driven
+ * by a test or a tool, not watched, so whether its renderer runs must not depend on
+ * what is on top of it.
+ *
  * A *minimized* window, by contrast, freezes `requestAnimationFrame` regardless
  * of any flag (there is no surface to composite), which is why the harness moves
  * the window off-screen rather than minimizing it.
  */
-export const OWNED_HIDDEN_LAUNCH_FLAGS = [
+export const OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS: readonly string[] = [
   '--disable-features=CalculateNativeWinOcclusion',
   '--disable-background-timer-throttling',
   '--disable-backgrounding-occluded-windows',
@@ -47,18 +54,6 @@ export const OWNED_HIDDEN_LAUNCH_FLAGS = [
  * instance can pass it uniformly across platforms.
  */
 export const NO_SANDBOX_LAUNCH_FLAG = '--no-sandbox';
-
-/**
- * Resolves the extra Chromium launch arguments for an owned desktop instance: the
- * {@link OWNED_HIDDEN_LAUNCH_FLAGS} when the window is hidden, or an empty list
- * when it is visible (the default).
- *
- * @param isObsidianAppVisible - The resolved option value (omitted → visible).
- * @returns The extra launch arguments (possibly empty).
- */
-export function resolveOwnedHiddenLaunchArguments(isObsidianAppVisible?: boolean): string[] {
-  return shouldHideObsidianApp(isObsidianAppVisible) ? [...OWNED_HIDDEN_LAUNCH_FLAGS] : [];
-}
 
 /**
  * Resolves the extra Chromium launch arguments for disabling the sandbox.

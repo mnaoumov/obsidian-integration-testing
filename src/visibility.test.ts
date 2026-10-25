@@ -6,8 +6,7 @@ import {
 
 import {
   NO_SANDBOX_LAUNCH_FLAG,
-  OWNED_HIDDEN_LAUNCH_FLAGS,
-  resolveOwnedHiddenLaunchArguments,
+  OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS,
   resolveSandboxLaunchArguments,
   shouldHideAppiumConsole,
   shouldHideEmulatorWindow,
@@ -59,30 +58,12 @@ describe('shouldHideAppiumConsole', () => {
   });
 });
 
-describe('resolveOwnedHiddenLaunchArguments', () => {
-  it('should return no extra input by default when the option is omitted', () => {
-    expect(resolveOwnedHiddenLaunchArguments()).toStrictEqual([]);
-    expect(resolveOwnedHiddenLaunchArguments(undefined)).toStrictEqual([]);
-  });
-
-  it('should return the keep-alive flags when explicitly not visible', () => {
-    expect(resolveOwnedHiddenLaunchArguments(false)).toStrictEqual(OWNED_HIDDEN_LAUNCH_FLAGS);
-  });
-
-  it('should return a fresh array (not the shared constant) so callers cannot mutate it', () => {
-    const input = resolveOwnedHiddenLaunchArguments(false);
-    expect(input).not.toBe(OWNED_HIDDEN_LAUNCH_FLAGS);
-  });
-
-  it('should return no extra input when visible', () => {
-    expect(resolveOwnedHiddenLaunchArguments(true)).toStrictEqual([]);
-  });
-
+describe('OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS', () => {
   it('should include the occlusion-disable and backgrounding flags', () => {
-    expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-features=CalculateNativeWinOcclusion');
-    expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-background-timer-throttling');
-    expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-backgrounding-occluded-windows');
-    expect(OWNED_HIDDEN_LAUNCH_FLAGS).toContain('--disable-renderer-backgrounding');
+    expect(OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS).toContain('--disable-features=CalculateNativeWinOcclusion');
+    expect(OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS).toContain('--disable-background-timer-throttling');
+    expect(OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS).toContain('--disable-backgrounding-occluded-windows');
+    expect(OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS).toContain('--disable-renderer-backgrounding');
   });
 });
 

@@ -473,14 +473,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     },
 
     async evalWrapper(this: IntegrationTestingNamespace, params): Promise<string> {
-      // Old Obsidian (e.g. 0.6.x) predates the community-plugin API: `plugins`
-      // exists but has no `isEnabled`/`setEnable`, and there are no third-party
-      // plugins to enable, so skip this step when the API is absent.
-      // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
-      const plugins = this.app.plugins as unknown as PluginsLike;
-      if (plugins.isEnabled && !plugins.isEnabled()) {
-        await this.app.plugins.setEnable(true);
-      }
+      // `getObsidianModule` turns community plugins on itself, since its temp-plugin
+      // trick needs them, so every closure runs with restricted mode off.
       const obsidianModule = await this.getObsidianModule();
       // Avoid `??=`: old Obsidian's Chromium (e.g. 0.6.x on Chromium 80) predates
       // ES2021 logical-assignment and cannot parse it in this serialized bootstrap.
@@ -540,6 +534,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         return null;
       }
 
+      // `loadPlugin` returns `undefined` at once, running nothing, while restricted
+      // mode is on, and a fresh vault starts in it. A direct
+      // `getObsidianModule()` call (not through `evalWrapper`) used to reach the
+      // trick in that state and throw. `isEnabled`/`setEnable` arrived with the
+      // registry, but are probed anyway in case a version has one without the other.
+      if (plugins.isEnabled && !plugins.isEnabled()) {
+        await this.app.plugins.setEnable(true);
+      }
+
       const SLICE_START = 2;
       const randomSuffix = String(Math.random()).slice(SLICE_START);
       const temporaryModuleName = `get-obsidian-module-${randomSuffix}`;
@@ -591,7 +594,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         return this.obsidianModule;
       }
 
-      throw new Error('Failed to load obsidian module');
+      throw new Error(`Failed to load obsidian module: \`app.plugins.loadPlugin('${temporaryModuleName}')\` returned without running the temporary plugin's main.js (community plugins enabled: ${String(plugins.isEnabled?.())}).`);
     },
 
     async ipcSendSync(this: IntegrationTestingNamespace, params): Promise<void> {
