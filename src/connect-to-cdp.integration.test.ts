@@ -25,6 +25,21 @@ const LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
 const CONFIG_DIRECTORY = '.obsidian-desktop';
 
 /**
+ * What a raw `getObsidianModule()` call saw, sampled inside Obsidian.
+ */
+interface ObsidianModuleProbe {
+  /**
+  `typeof` the resolved module's `Plugin` export.
+  */
+  readonly pluginType: string;
+
+  /**
+  Whether community plugins were already on before the call.
+  */
+  readonly wasEnabled: boolean;
+}
+
+/**
  * The observable state of the owned window, sampled inside Obsidian.
  */
 interface WindowState {
@@ -96,6 +111,24 @@ describe('connect-to-cdp integration', () => {
 
     // The throw-away temp vault is removed on dispose.
     expect(existsSync(vaultPath)).toBe(false);
+  }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
+
+  it('resolves the obsidian module from a raw invoke while the fresh vault is still in restricted mode', async () => {
+    // A fresh vault starts with community plugins off, and `loadPlugin` then runs
+    // nothing, so a direct `getObsidianModule()` that skipped turning them on threw
+    // `Failed to load obsidian module`. Only `evalWrapper` used to turn them on.
+    const connection = await connectToCdp();
+    try {
+      const probe = JSON.parse(
+        await connection.invoke(
+          '(async () => { const wasEnabled = app.plugins.isEnabled(); const m = await window.__obsidianIntegrationTesting.getObsidianModule(); return JSON.stringify({ pluginType: typeof m.Plugin, wasEnabled }); })()'
+        )
+      ) as ObsidianModuleProbe;
+      expect(probe.wasEnabled).toBe(false);
+      expect(probe.pluginType).toBe('function');
+    } finally {
+      await connection.dispose();
+    }
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 
   it('launches the owned window off-screen (hidden) yet keeps the renderer alive', async () => {

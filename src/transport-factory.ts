@@ -158,6 +158,7 @@ import {
 import { exec } from './exec.ts';
 import { IncompatibleInstallerVersionError } from './incompatible-installer-version-error.ts';
 import { resolveInstallerCompatibility } from './installer-compatibility.ts';
+import { resolveInstallerVersionAction } from './installer-version-resolution.ts';
 import { IntegrationSetupFailedError } from './integration-setup-failed-error.ts';
 import {
   killProcessTree,
@@ -189,7 +190,10 @@ import {
   findNewestAsar,
   resolveConcreteVersion
 } from './obsidian-version-switch.ts';
-import { compareVersions } from './obsidian-version.ts';
+import {
+  compareVersions,
+  PUBLIC_LATEST
+} from './obsidian-version.ts';
 import { readOwnedInstanceExitMarker } from './owned-instance-exit-marker.ts';
 import { buildOwnedInstanceExitedErrorFromMarker } from './owned-instance-exited-error.ts';
 import {
@@ -3759,7 +3763,7 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
   } else {
     // A pinned installer version fully determines the shell version up front,
     // without requiring a locally-installed Obsidian (a CI runner has none).
-    pinnedInstallerVersion = await resolveConcreteVersion(options.obsidianInstallerVersion);
+    pinnedInstallerVersion = await resolvePinnedInstallerVersion(options.obsidianInstallerVersion);
     shellVersion = pinnedInstallerVersion;
   }
 
@@ -3799,6 +3803,30 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
 
     userDataDirectory: createOwnedUserDataDirectory()
   };
+}
+
+/**
+ * Resolves an `obsidianInstallerVersion` specifier to a version that publishes an
+ * installer for this platform, judged from the catalog before anything downloads.
+ * `catalyst-latest` falls back to the public installer, since Catalyst builds ship
+ * an asar only; an explicit version with no installer is refused by name.
+ *
+ * @param spec - The `obsidianInstallerVersion` specifier.
+ * @returns The concrete installer version to use.
+ * @throws Error when an explicit version publishes no installer for this platform.
+ */
+async function resolvePinnedInstallerVersion(spec: string): Promise<string> {
+  const version = await resolveConcreteVersion(spec);
+  const decision = resolveInstallerVersionAction({ downloads: getVersionMetadata(version)?.downloads, platform: process.platform, spec, version });
+  if (decision.action === 'refuse') {
+    throw new Error(decision.message);
+  }
+  if (decision.action === 'use') {
+    return version;
+  }
+  const publicVersion = await resolveConcreteVersion(PUBLIC_LATEST);
+  log(`[transport-factory:obsidian-cdp] ${spec} is ${version}, a Catalyst build with no installer for ${process.platform}; using the ${publicVersion} public installer shell instead.`);
+  return publicVersion;
 }
 
 /**

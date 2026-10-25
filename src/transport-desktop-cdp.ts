@@ -85,7 +85,7 @@ import {
 } from './vault-path-match.ts';
 import { shouldTearDownVaultWindow } from './vault-teardown-verdict.ts';
 import {
-  resolveOwnedHiddenLaunchArguments,
+  OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS,
   resolveSandboxLaunchArguments,
   shouldHideObsidianApp
 } from './visibility.ts';
@@ -1486,7 +1486,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         exePath: config.exePath,
         extraArguments: [
           ...DETERMINISTIC_RASTER_LAUNCH_FLAGS,
-          ...resolveOwnedHiddenLaunchArguments(this.isObsidianAppVisible),
+          ...OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS,
           ...resolveSandboxLaunchArguments(this.shouldDisableSandbox)
         ],
 
