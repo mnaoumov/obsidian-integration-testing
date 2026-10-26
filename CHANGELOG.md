@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 17.6.0
+
+- feat(lib): add a trusted dragMouse helper for held-button pointer drags
+- chore: collect runtime versions
+- fix: resolve the obsidian module in restricted mode, fall back from a Catalyst installer pin, keep visible windows rendering
+- fix(demo-vault): let a bare bootstrap-demo-vault --force sweep past unlisted and own plugins
+- fix(demo-vault): make the injected-plugin throw's bootstrap command actually repair the plugin
+- fix(android): stop a failed registration's teardown from provisioning, and name the host's load
+- fix(android): size the emulator boot budget for a loaded machine
+- fix(android): report and survive a failed adb devices during the emulator boot
+- feat(metadata): absorb the per-version catalog obsidian-versions dropped
+- chore: refresh metadata.json
+
 ## 17.5.1
 
 - fix(mobile-input): merge reporting a mobile long-press that produced no contextmenu
