@@ -147,7 +147,8 @@ export interface CommonArguments {
    *
    * Never empty: the harness pre-populates a **base** set of renderer-driving
    * helpers (trusted input — `typeIntoEditor` / `pressKey` / `moveMouse` /
-   * `clickMouse` / `hoverElement` / `unhoverElement` / `clickElement` — plus
+   * `clickMouse` / `dragMouse` / `hoverElement` / `unhoverElement` /
+   * `clickElement` — plus
    * `waitUntil`, `createNote` and `openSettingsTab`), and provider packages
    * (chiefly `@mnaoumov/obsidian-lib`) `Object.assign` their whole renderer-safe
    * library on top via {@link registerLibResolver}. A serialized closure reaches
@@ -176,6 +177,56 @@ export interface CreateNoteParams {
    * The vault-relative path to create, extension included.
    */
   readonly path: string;
+}
+
+/**
+ * Parameters for {@link Lib.dragMouse}.
+ */
+export interface DragMouseParams {
+  /**
+   * The mouse button to hold for the whole drag.
+   *
+   * @default `'left'`
+   */
+  readonly button?: MouseButton;
+
+  /**
+   * The point (web-contents DIP) where the button goes down.
+   */
+  readonly from: MousePoint;
+
+  /**
+   * The modifier keys to hold for the whole drag, using Obsidian's
+   * {@link Modifier} names. `'Mod'` resolves per-platform (Cmd on macOS, Ctrl
+   * elsewhere).
+   *
+   * @default `[]`
+   */
+  readonly modifiers?: readonly Modifier[];
+
+  /**
+   * How many held-button moves to send between {@link DragMouseParams.from}
+   * and {@link DragMouseParams.to}, evenly spaced along the straight line, the
+   * last one landing on `to`. More steps make a slower, smoother drag; a
+   * handler that tracks the pointer's path (a canvas edge, a drag threshold)
+   * needs more than one.
+   *
+   * @default `10`
+   */
+  readonly steps?: number;
+
+  /**
+   * The point (web-contents DIP) where the button is released.
+   */
+  readonly to: MousePoint;
+
+  /**
+   * The Obsidian window to drag in: the main window or a popout. Both points
+   * are in the named window's viewport.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
 }
 
 /**
@@ -376,6 +427,40 @@ export interface Lib {
    *   is confirmed.
    */
   createNote: (this: void, params: CreateNoteParams) => Promise<TFile>;
+
+  /**
+   * Drags the mouse from one point to another using **trusted** Electron
+   * pointer input, with the button held throughout.
+   *
+   * It sends a `mouseMove` to {@link DragMouseParams.from}, a `mouseDown`
+   * there, {@link DragMouseParams.steps} `mouseMove`s along the straight line
+   * to {@link DragMouseParams.to} that carry the held button, and a `mouseUp`
+   * at `to`. Chromium turns that into real `pointerdown` → `pointermove` … →
+   * `pointerup` events with `isTrusted === true` and `buttons` reporting the
+   * held button, which is what a pointer-capture drag handler reads. Each move
+   * waits one animation frame, so a handler that does its work per frame sees
+   * every step rather than one coalesced jump.
+   *
+   * {@link Lib.clickMouse} cannot do this: its button goes down and up at one
+   * point, so a handler that starts a drag only after the pointer has moved a
+   * few pixels (Obsidian's canvas connection handles, for one) never starts.
+   * A dispatched `PointerEvent` does not work either, because Obsidian's
+   * handlers ignore untrusted input.
+   *
+   * It is a low-level primitive and waits for no effect: the caller polls for
+   * what the drop should have produced, with {@link Lib.waitUntil}.
+   *
+   * **Desktop only — it throws on mobile.** A touch drag would need its own
+   * host-side gesture, and nothing asks for one yet; a silent no-op would let a
+   * test assert against a drag that never happened.
+   *
+   * **Must be awaited** — see {@link Lib.clickElement}.
+   *
+   * @param params - The two points, the button to hold, any modifiers, and how
+   *   many intermediate moves to send.
+   * @returns A {@link Promise} that resolves once the button has been released.
+   */
+  dragMouse: (this: void, params: DragMouseParams) => Promise<void>;
 
   /**
    * Moves the mouse pointer to the center of an element using **trusted**
@@ -579,6 +664,21 @@ export interface Lib {
  * spelling.
  */
 export type MouseButton = 'left' | 'middle' | 'right';
+
+/**
+ * A point in a window's viewport, in web-contents DIP (CSS pixels).
+ */
+export interface MousePoint {
+  /**
+   * The x coordinate.
+   */
+  readonly x: number;
+
+  /**
+   * The y coordinate.
+   */
+  readonly y: number;
+}
 
 /**
  * Parameters for {@link Lib.moveMouse}.
