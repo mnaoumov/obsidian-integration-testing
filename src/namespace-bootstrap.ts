@@ -16,6 +16,7 @@ import type {
   ClickElementParams,
   ClickMouseParams,
   CreateNoteParams,
+  DragMouseParams,
   HoverElementParams,
   MoveMouseParams,
   OpenSettingsTabParams,
@@ -494,6 +495,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         clickElement,
         clickMouse,
         createNote,
+        dragMouse,
         hoverElement,
         moveMouse,
         openSettingsTab,
@@ -1010,6 +1012,81 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       type: 'mouseUp',
       x: roundedX,
       y: roundedY
+    });
+  }
+
+  /*
+   * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib` (L17), for the reason `openSettingsTab` is not:
+   * a drag is driven to make a gesture observable to a test, and no production code has a reason to
+   * import it. It is therefore also left out of the `trustedInput` seam, which carries the synced set only.
+   */
+  async function dragMouse(dragParams: DragMouseParams): Promise<void> {
+    const DEFAULT_STEP_COUNT = 10;
+    const SINGLE_CLICK_COUNT = 1;
+
+    const { button = 'left', from, modifiers = [], steps = DEFAULT_STEP_COUNT, to } = dragParams;
+    const targetWindow = dragParams.window ?? getMainWindow();
+
+    if (checkIsMobile()) {
+      throw new Error(
+        '`dragMouse` is not supported on mobile: it injects mouse events, and Obsidian Mobile has only touch input. '
+          + 'Branch on `Platform.isDesktopApp`.'
+      );
+    }
+
+    if (!Number.isSafeInteger(steps) || steps < 1) {
+      throw new Error(`\`dragMouse\` needs a whole number of steps of at least 1, got ${String(steps)}.`);
+    }
+
+    const webContents = getTargetWebContents(targetWindow);
+    const electronModifiers = toElectronModifiers(modifiers);
+    // A move with no `*ButtonDown` modifier reports `buttons === 0`, which a drag handler reads as the
+    // button having been released: Electron takes the held button from the modifiers, not from `button`.
+    const heldModifiers: ElectronModifier[] = [...electronModifiers, `${button}ButtonDown` as const];
+    const fromX = Math.round(from.x);
+    const fromY = Math.round(from.y);
+    const toX = Math.round(to.x);
+    const toY = Math.round(to.y);
+
+    // One frame between events, so Chromium does not coalesce the moves into one and a handler that works
+    // per frame sees the path. The window is off-screen, never minimized (L15), so its frames keep coming.
+    async function nextFrame(): Promise<void> {
+      await new Promise<void>((resolve) => {
+        targetWindow.requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    }
+
+    webContents.sendInputEvent({ modifiers: electronModifiers, type: 'mouseMove', x: fromX, y: fromY });
+    webContents.sendInputEvent({
+      button,
+      clickCount: SINGLE_CLICK_COUNT,
+      modifiers: electronModifiers,
+      type: 'mouseDown',
+      x: fromX,
+      y: fromY
+    });
+
+    for (let step = 1; step <= steps; step++) {
+      await nextFrame();
+      const fraction = step / steps;
+      webContents.sendInputEvent({
+        modifiers: heldModifiers,
+        type: 'mouseMove',
+        x: Math.round(fromX + (toX - fromX) * fraction),
+        y: Math.round(fromY + (toY - fromY) * fraction)
+      });
+    }
+
+    await nextFrame();
+    webContents.sendInputEvent({
+      button,
+      clickCount: SINGLE_CLICK_COUNT,
+      modifiers: electronModifiers,
+      type: 'mouseUp',
+      x: toX,
+      y: toY
     });
   }
 

@@ -28,6 +28,14 @@ const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 120_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 60_000;
 
 /**
+ * What a drag probe reports back: every pointer event, and the `buttons` field of each move.
+ */
+interface DragProbeResult {
+  readonly buttons: number[];
+  readonly events: ObservedEvent[];
+}
+
+/**
  * One observed DOM event: its type, and whether the browser vouched for it.
  */
 interface ObservedEvent {
@@ -212,6 +220,134 @@ describe('desktop trusted input', () => {
     });
 
     expect(message).toContain('never matched `:hover`');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should deliver a TRUSTED drag through dragMouse, with the button held on every move', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<DragProbeResult> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '120px', left: '24px', position: 'fixed', top: '220px', width: '320px', zIndex: '2147483647' });
+
+        const events: ObservedEvent[] = [];
+        const buttons: number[] = [];
+        for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
+          target.addEventListener(type, (event: Event) => {
+            events.push({ isTrusted: event.isTrusted, type: event.type });
+            if (event.type === 'pointermove' && event instanceof PointerEvent) {
+              buttons.push(event.buttons);
+            }
+          });
+        }
+
+        try {
+          await lib.dragMouse({ from: { x: 44, y: 280 }, steps: 5, to: { x: 304, y: 280 } });
+          await lib.waitUntil({ message: 'the pointerup ending the drag', predicate: () => events.some((event) => event.type === 'pointerup') });
+          return { buttons, events };
+        } finally {
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.events.every((event) => event.isTrusted)).toBe(true);
+    const counts = countByType(result.events);
+    expect(counts['pointerdown']).toBe(1);
+    expect(counts['pointerup']).toBe(1);
+    // The leading hover move may or may not land as a move of its own, so at least the five held ones.
+    expect(counts['pointermove']).toBeGreaterThanOrEqual(5);
+    // The held moves are the last five; each must report the left button down, or a drag handler ends the drag.
+    expect(result.buttons.slice(-5)).toStrictEqual([1, 1, 1, 1, 1]);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  /*
+   * The case `dragMouse` exists for. Obsidian's canvas shows its connection-drop menu only after a node's
+   * connection handle is dragged onto empty canvas: the handle's `pointerdown` starts a pointer-capture drag
+   * that begins only once the pointer has moved 5px, and the menu opens from the matching `pointerup`. A
+   * click never moves, and a dispatched event is not trusted, so neither reaches the menu.
+   */
+  it('should open the canvas connection-drop menu by dragging a node connection handle onto empty canvas', async () => {
+    const menuItems = await evalInObsidian({
+      async callback({ app, lib }): Promise<string[]> {
+        const NODE_HEIGHT = 60;
+        const NODE_WIDTH = 120;
+        const DROP_DISTANCE_IN_PIXELS = 150;
+        // Canvas pans when a drag nears its edge (30px), so the drop stays well clear of it.
+        const EDGE_CLEARANCE_IN_PIXELS = 60;
+        const CENTER_DIVISOR = 2;
+
+        const file = await lib.createNote({
+          content: JSON.stringify({
+            edges: [],
+            nodes: [{ height: NODE_HEIGHT, id: 'source', text: 'Source', type: 'text', width: NODE_WIDTH, x: 0, y: 0 }]
+          }),
+          path: 'drag.canvas'
+        });
+
+        const leaf = app.workspace.getLeaf(true);
+        try {
+          await leaf.openFile(file);
+          if (leaf.view.getViewType() !== 'canvas') {
+            throw new Error(`drag.canvas opened a ${leaf.view.getViewType()} view, not a canvas one.`);
+          }
+
+          const containerEl = leaf.view.containerEl;
+          // The canvas renders its nodes after the view opens, so each element is looked up as it is waited on.
+          function findLaidOut(selector: string): HTMLElement | null {
+            const element = containerEl.querySelector<HTMLElement>(selector);
+            return element && element.getBoundingClientRect().width > 0 ? element : null;
+          }
+
+          await lib.waitUntil({ message: 'the canvas node to be laid out', predicate: () => findLaidOut('.canvas-node') !== null });
+          const nodeEl = findLaidOut('.canvas-node');
+          const wrapperEl = findLaidOut('.canvas-wrapper');
+          if (!nodeEl || !wrapperEl) {
+            throw new Error('The canvas rendered no node or no wrapper.');
+          }
+
+          // The connection handles belong to the node under the pointer, so the pointer goes there first.
+          const nodeRect = nodeEl.getBoundingClientRect();
+          const wrapperRect = wrapperEl.getBoundingClientRect();
+          await lib.moveMouse({ x: nodeRect.left + nodeRect.width / CENTER_DIVISOR, y: nodeRect.top + nodeRect.height / CENTER_DIVISOR });
+
+          // Drag out of whichever side has more empty canvas beside it.
+          const roomOnRight = wrapperRect.right - nodeRect.right;
+          const roomOnLeft = nodeRect.left - wrapperRect.left;
+          const side = roomOnRight >= roomOnLeft ? 'right' : 'left';
+          const room = Math.max(roomOnRight, roomOnLeft) - EDGE_CLEARANCE_IN_PIXELS;
+          if (room < DROP_DISTANCE_IN_PIXELS / CENTER_DIVISOR) {
+            throw new Error(`The canvas has only ${String(room)}px of empty space beside the node to drop on.`);
+          }
+
+          const handleSelector = `.canvas-node-connection-point[data-side="${side}"]`;
+          await lib.waitUntil({ message: `the ${side} connection handle to be laid out`, predicate: () => findLaidOut(handleSelector) !== null });
+          const handleEl = findLaidOut(handleSelector);
+          if (!handleEl) {
+            throw new Error(`The canvas rendered no ${side} connection handle.`);
+          }
+
+          const handleRect = handleEl.getBoundingClientRect();
+          const from = { x: handleRect.left + handleRect.width / CENTER_DIVISOR, y: handleRect.top + handleRect.height / CENTER_DIVISOR };
+          const distance = Math.min(DROP_DISTANCE_IN_PIXELS, room);
+          const to = { x: side === 'right' ? from.x + distance : from.x - distance, y: from.y };
+
+          await lib.dragMouse({ from, to });
+
+          await lib.waitUntil({ message: 'the connection-drop menu to open', predicate: () => document.querySelector('.menu') !== null });
+
+          const titles = [...document.querySelectorAll('.menu .menu-item-title')].map((titleEl) => titleEl.textContent);
+          await lib.pressKey({ key: 'Escape' });
+          await lib.waitUntil({ message: 'the menu to close', predicate: () => document.querySelector('.menu') === null });
+          return titles;
+        } finally {
+          leaf.detach();
+          await app.vault.delete(file);
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(menuItems).toContain('Add card');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   /*

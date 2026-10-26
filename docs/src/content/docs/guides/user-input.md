@@ -27,6 +27,7 @@ The trusted helpers flow through the real input pipeline, so text lands **only i
 | `clickElement({ element, button, modifiers })` | Clicks `element`'s center with optional `button` / `modifiers`, so Chromium synthesizes a real `click` (or `contextmenu`). Does **not** poll — pair with `waitUntil`.                                           |
 | `moveMouse({ x, y, window })`                  | Low-level primitive: injects one trusted pointer move at the given web-contents DIP coordinates. Does **not** poll. **Desktop only.**                                                                                             |
 | `clickMouse({ x, y, button, modifiers, window })` | Low-level primitive: one trusted `mouseMove` → `mouseDown` → `mouseUp` at the given web-contents DIP coordinates. Does **not** poll.                                                                            |
+| `dragMouse({ from, to, steps, button, modifiers, window })` | Trusted drag: `mouseDown` at `from`, `steps` held-button moves (default `10`, one per frame) along the line, `mouseUp` at `to`. Does **not** poll. **Desktop only.** |
 
 ```ts
 // Type into the active editor — only succeeds if the editor truly holds focus.
@@ -109,6 +110,34 @@ await evalInObsidian({
 });
 ```
 
+A drag is what a click cannot be. Obsidian starts a pointer drag only once the pointer has moved a few pixels with the button down, so a handler such as the canvas's node connection handle never starts from `clickMouse`. `dragMouse({ from, to })` sends the button down at `from`, then moves to `to` in `steps` frames with the button held (each move reports it in `buttons`, which is what tells a drag handler the drag is still on), and releases at `to`. This opens the canvas's connection-drop menu, the one with **Add card**:
+
+```ts
+await evalInObsidian({
+  callback: async ({ lib: { dragMouse, moveMouse, waitUntil } }) => {
+    const node = document.querySelector<HTMLElement>('.canvas-node');
+    if (!node) {
+      return;
+    }
+
+    // The connection handles belong to the node under the pointer.
+    const nodeRect = node.getBoundingClientRect();
+    await moveMouse({ x: nodeRect.left + nodeRect.width / 2, y: nodeRect.top + nodeRect.height / 2 });
+    const handle = document.querySelector<HTMLElement>('.canvas-node-connection-point[data-side="right"]');
+    const handleRect = handle?.getBoundingClientRect();
+    if (!handleRect) {
+      return;
+    }
+
+    const from = { x: handleRect.left + handleRect.width / 2, y: handleRect.top + handleRect.height / 2 };
+    await dragMouse({ from, to: { x: from.x + 150, y: from.y } });
+    await waitUntil({ message: 'the connection-drop menu', predicate: () => Boolean(document.querySelector('.menu')) });
+  }
+});
+```
+
+Keep the drop point clear of the canvas edge: a drag that comes within 30px of it pans the canvas.
+
 A right click opens a **real** context menu, and it stays open. A suite that drives one must close it — `menu.hide()` from your own handler, or removing the leftover `.menu` element — before the next test, or the menu still on screen swallows the click that test makes.
 
 :::caution[Serialize focus- and pointer-dependent test files]
@@ -120,7 +149,7 @@ Trusted input targets the single shared window's **global** focus and pointer, s
 Every Obsidian window, the main one and each popout, is its own Electron web contents, so trusted input sent to one never reaches another. The helpers pick the window like this:
 
 - `clickElement`, `hoverElement` and `unhoverElement` use the window that owns `element`, and `typeIntoEditor` uses the window that owns `editor`. An element or editor in a popout is driven in that popout with nothing extra to pass.
-- `pressKey`, `moveMouse` and `clickMouse` take an optional `window`, and default to the main window. A key goes to the DOM-focused element of the window you name, and coordinates are in that window's viewport.
+- `pressKey`, `moveMouse`, `clickMouse` and `dragMouse` take an optional `window`, and default to the main window. A key goes to the DOM-focused element of the window you name, and coordinates are in that window's viewport.
 
 ```ts
 await evalInObsidian({
@@ -175,8 +204,9 @@ These helpers work on Android as well, but not all of them, and not identically.
 | `clickMouse({ button: 'middle' })`                  | **Throws.** Touch has no middle button.                                                                                                                        |
 | `pressKey` / `typeIntoEditor`                       | Work. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, arrows) and single printable characters; any other multi-character name throws.             |
 | `moveMouse` / `hoverElement` / `unhoverElement`     | **Throw.** Touch input has no hover state.                                                                                                                     |
+| `dragMouse`                                         | **Throws.** It injects mouse events; a touch drag would be a gesture of its own, and none is implemented.                                                      |
 
-The three that throw do so deliberately rather than doing nothing quietly: a hover that silently no-ops would leave a test asserting against a state that never existed, which is precisely the false-confidence problem trusted input exists to solve. Branch on `Platform.isDesktopApp` when a suite runs on both.
+The ones that throw do so deliberately rather than doing nothing quietly: a hover that silently no-ops would leave a test asserting against a state that never existed, which is precisely the false-confidence problem trusted input exists to solve. Branch on `Platform.isDesktopApp` when a suite runs on both.
 
 Coordinates on mobile are CSS pixels in the WebView's own viewport — the same numbers `getBoundingClientRect()` reports — so there is no device-pixel-ratio conversion to do.
 
