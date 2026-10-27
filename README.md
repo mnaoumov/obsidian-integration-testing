@@ -104,7 +104,7 @@ The callback is serialized and executed inside Obsidian, so it must be self-cont
 
 ## My other Obsidian resources
 
-[See my other Obsidian resources](https://github.com/mnaoumov/obsidian-resources).
+[My other Obsidian resources](https://github.com/mnaoumov/obsidian-resources)
 
 ## License
 
