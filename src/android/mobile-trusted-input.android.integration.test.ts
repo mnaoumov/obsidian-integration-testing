@@ -1,0 +1,634 @@
+/**
+ * @file
+ *
+ * The decisive test for the mobile trusted-input path (**L39**): it asserts that what reaches the DOM on
+ * Android is **`isTrusted === true`**, which is the single property that makes these helpers worth having.
+ *
+ * Without this assertion the whole feature is unverified — an untrusted `dispatchEvent` would satisfy every
+ * *other* observation a test can make (the listener fires, the counter increments) while Obsidian and
+ * CodeMirror, which gate on `e.isTrusted`, ignore it. That is the false-confidence failure mode the
+ * trusted-input work exists to end, so it is checked directly rather than inferred from an effect.
+ *
+ * Runs in its own Vitest project (`integration-tests:android`) against a real emulator via
+ * Appium. It is deliberately NOT part of the default `integration-tests` aggregate, which is desktop.
+ */
+
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it
+} from 'vitest';
+
+import { evalInObsidian } from '../eval/eval-in-obsidian.ts';
+import { TemporaryVault } from '../vault/temporary-vault.ts';
+
+/*
+ * 240s + the 120s the network-ready gate (L45) can add + the 180s the emulator boot budget rose by
+ * (120s -> 300s) on a guest that
+ * never reports a validated default network. The old figure was already a
+ * practical number rather than the sum of its parts — Appium start and session
+ * connection alone budget 180s each — so this raises it by exactly what the new
+ * phase can cost, rather than re-deriving a worst case nothing waits out.
+ */
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
+
+/**
+ * How many freshly opened modals the sliding-modal test taps. More than one, because the hold before the
+ * slide varies between modals, and the first one after a boot is the slowest.
+ */
+const MODAL_TAP_ROUND_COUNT = 3;
+
+/**
+ * What the covered-element test reports back: the error `clickElement` raised, and whether the cover
+ * received the tap anyway.
+ */
+interface CoveredTapResult {
+  readonly errorMessage: string;
+  readonly wasOverlayTapped: boolean;
+}
+
+/**
+ * What the long-press test reports back: the events that reached the pressed element, and the menu the
+ * press produced.
+ */
+interface LongPressResult {
+  readonly events: ObservedEvent[];
+  readonly menuItems: string[];
+}
+
+/**
+ * What one round of the sliding-modal test reports back.
+ */
+interface ModalTapResult {
+  readonly clickCount: number;
+  readonly wasModalOpen: boolean;
+}
+
+/**
+ * One observed DOM event: its type, and whether the browser vouched for it.
+ */
+interface ObservedEvent {
+  readonly isTrusted: boolean;
+  readonly type: string;
+}
+
+/**
+ * What a probe run reports back from the WebView.
+ */
+interface ProbeResult {
+  readonly events: ObservedEvent[];
+  readonly hasOnlyTrustedEvents: boolean;
+}
+
+describe('mobile trusted input', () => {
+  const vault = new TemporaryVault();
+
+  beforeAll(async () => {
+    vault.populate({ 'note.md': '# note\n' });
+    await vault.register();
+  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS);
+
+  afterAll(async () => {
+    await vault.dispose();
+  });
+
+  // Guard, not a feature test. Without a registered transport resolver the harness silently falls back to
+  // the desktop owned-CDP default (observed 2026-08-30), and this whole suite would then pass on desktop
+  // while claiming to prove something about Android. Assert the platform before asserting anything else.
+  it('should actually be running on mobile', async () => {
+    const isMobile = await evalInObsidian({
+      callback({ obsidianModule }): boolean {
+        return obsidianModule.Platform.isMobile;
+      },
+      vaultPath: vault.path
+    });
+
+    expect(isMobile).toBe(true);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The second guard, and the reason this file once ran against an EMPTY vault for its whole life:
+  // `populate` writes to the HOST filesystem, while the app on Android opens the device's copy. Until
+  // `register` learned to push the directory across, the note below never arrived — and nothing raised an
+  // error, because no assertion in this file read the vault's contents. Asserting that the seeded file is
+  // visible from inside the app is what keeps a re-broken push loud instead of silent.
+  it('should open the vault the harness populated, not an empty one', async () => {
+    const markdownPaths = await evalInObsidian({
+      callback({ app }): string[] {
+        return app.vault.getMarkdownFiles().map((file) => file.path);
+      },
+      vaultPath: vault.path
+    });
+
+    expect(markdownPaths).toContain('note.md');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should deliver a TRUSTED tap through clickElement', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<ProbeResult> {
+        const target = document.body.createDiv();
+        target.setCssStyles({
+          background: 'red',
+          height: '80px',
+          left: '24px',
+          position: 'fixed',
+          top: '220px',
+          width: '160px',
+          zIndex: '2147483647'
+        });
+
+        const events: ObservedEvent[] = [];
+        for (const type of ['pointerdown', 'touchstart', 'pointerup', 'touchend', 'click']) {
+          target.addEventListener(type, (event: Event) => {
+            events.push({ isTrusted: event.isTrusted, type: event.type });
+          });
+        }
+
+        try {
+          await lib.clickElement({ element: target });
+          await lib.waitUntil({ message: 'the tap to produce a click', predicate: () => events.some((event) => event.type === 'click') });
+
+          return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
+        } finally {
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    // The point of the whole feature. An untrusted dispatch would satisfy every other assertion here.
+    expect(result.hasOnlyTrustedEvents).toBe(true);
+
+    // COUNTS, not `toContain`. A tap is ONE of each event, and the presence-only form this replaces
+    // passed just as happily on the TWO `pointerdown` / `touchstart` pairs the dispatch route actually
+    // delivered — which is how a doubled tap shipped unnoticed and toggled a consumer's panel open and
+    // straight back shut. Multiplicity is the property that was never asserted, so it is what is
+    // asserted here.
+    expect(countByType(result.events)).toStrictEqual({
+      click: 1,
+      pointerdown: 1,
+      pointerup: 1,
+      touchend: 1,
+      touchstart: 1
+    });
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should deliver a TRUSTED key press through pressKey', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<ProbeResult> {
+        const events: ObservedEvent[] = [];
+
+        function listener(event: Event): void {
+          events.push({ isTrusted: event.isTrusted, type: event.type });
+        }
+
+        // Capture phase: Obsidian's own handlers may stop propagation before a bubbling listener sees it.
+        document.addEventListener('keydown', listener, { capture: true });
+        try {
+          await lib.pressKey({ key: 'Escape' });
+          await lib.waitUntil({ message: 'a keydown to reach the document', predicate: () => events.length > 0 });
+
+          return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
+        } finally {
+          document.removeEventListener('keydown', listener, { capture: true });
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.hasOnlyTrustedEvents).toBe(true);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should obey real hit-testing, so a covered element is NOT clicked', async () => {
+    // The mutation check established: a trusted tap goes to whatever is on top at that point, while a
+    // dispatched event reaches its target through any overlay. If this passes, the tap is not a dispatch.
+    const wasCoveredElementClicked = await evalInObsidian({
+      async callback({ lib }): Promise<boolean> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '1' });
+
+        const overlay = document.body.createDiv();
+        overlay.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        let wasClicked = false;
+        target.addEventListener('click', () => {
+          wasClicked = true;
+        });
+
+        try {
+          // `clickMouse`, not `clickElement`: the element-relative helper refuses a covered target outright
+          // (next test), so only the raw coordinate tap still reaches the hit test being proved here.
+          const rect = target.getBoundingClientRect();
+          await lib.clickMouse({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+          return wasClicked;
+        } finally {
+          target.remove();
+          overlay.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(wasCoveredElementClicked).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // A covered target used to be a SILENT miss: the tap went to the cover and `clickElement` resolved as if it
+  // had clicked. It now refuses before tapping anything, and says what is on top.
+  it('should refuse to tap a covered element, naming what covers it', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<CoveredTapResult> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '1' });
+
+        const overlay = document.body.createDiv('oit-probe-overlay');
+        overlay.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        let wasOverlayTapped = false;
+        overlay.addEventListener('pointerdown', () => {
+          wasOverlayTapped = true;
+        });
+
+        try {
+          await lib.clickElement({ element: target });
+          return { errorMessage: '', wasOverlayTapped };
+        } catch (error) {
+          return { errorMessage: error instanceof Error ? error.message : String(error), wasOverlayTapped };
+        } finally {
+          target.remove();
+          overlay.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.errorMessage).toContain('.oit-probe-overlay');
+    expect(result.wasOverlayTapped).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // `document.elementFromPoint` retargets a hit inside a shadow root to its host, which the target does not
+  // contain, so the covered-target refusal used to refuse EVERY shadow-DOM target — eruda's console, for one.
+  it('should tap an unobstructed element inside a shadow root', async () => {
+    const clickCount = await evalInObsidian({
+      async callback({ lib }): Promise<number> {
+        const host = document.body.createDiv();
+        host.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+        const shadowRoot = host.attachShadow({ mode: 'open' });
+        const target = host.createDiv();
+        target.setCssStyles({ height: '80px', width: '160px' });
+        shadowRoot.append(target);
+
+        let count = 0;
+        target.addEventListener('click', () => {
+          count++;
+        });
+
+        try {
+          await lib.clickElement({ element: target });
+          await lib.waitUntil({ message: 'the tap on the shadow-DOM target to produce a click', predicate: () => count > 0 });
+          return count;
+        } finally {
+          host.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(clickCount).toBe(1);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should still refuse a shadow-DOM element whose host a light-DOM element covers', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<CoveredTapResult> {
+        const host = document.body.createDiv();
+        host.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '1' });
+        const shadowRoot = host.attachShadow({ mode: 'open' });
+        const target = host.createDiv();
+        target.setCssStyles({ height: '80px', width: '160px' });
+        shadowRoot.append(target);
+
+        const overlay = document.body.createDiv('oit-probe-overlay');
+        overlay.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '220px', width: '160px', zIndex: '2147483647' });
+
+        let wasOverlayTapped = false;
+        overlay.addEventListener('pointerdown', () => {
+          wasOverlayTapped = true;
+        });
+
+        try {
+          await lib.clickElement({ element: target });
+          return { errorMessage: '', wasOverlayTapped };
+        } catch (error) {
+          return { errorMessage: error instanceof Error ? error.message : String(error), wasOverlayTapped };
+        } finally {
+          host.remove();
+          overlay.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.errorMessage).toContain('.oit-probe-overlay');
+    expect(result.wasOverlayTapped).toBe(false);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The shape that motivated the settle wait. Obsidian Mobile opens a modal shifted down, with a `transform`
+  // transition that can hold it there — measured at over 1.5 s on the first modal after a boot — and the tap
+  // reaches the page ~1 s after it is aimed. A caller that clicked a control the moment its modal was open
+  // tapped where the control USED to be, which is usually `.modal-bg`, which closes the modal.
+  //
+  // So this clicks with no wait of its own, over several fresh modals, and asserts every tap landed.
+  it('should tap a control in a modal that is still sliding in', async () => {
+    const results = await evalInObsidian({
+      async callback({ app, lib, modalCount, obsidianModule }): Promise<ModalTapResult[]> {
+        const rounds: ModalTapResult[] = [];
+        for (let round = 0; round < modalCount; round++) {
+          const modal = new obsidianModule.Modal(app);
+          let clickCount = 0;
+          let wasModalOpen = true;
+          modal.onClose = (): void => {
+            wasModalOpen = false;
+          };
+          const button = modal.contentEl.createEl('button', { text: 'Press' });
+          button.addEventListener('click', () => {
+            clickCount++;
+          });
+
+          modal.open();
+          try {
+            await lib.clickElement({ element: button });
+            await lib.waitUntil({
+              message: 'the tap on the modal button to produce a click, or to close the modal',
+              predicate: () => clickCount > 0 || !wasModalOpen
+            });
+            rounds.push({ clickCount, wasModalOpen });
+          } finally {
+            modal.close();
+          }
+        }
+
+        return rounds;
+      },
+      input: { modalCount: MODAL_TAP_ROUND_COUNT },
+      vaultPath: vault.path
+    });
+
+    expect(results).toStrictEqual(Array.from({ length: MODAL_TAP_ROUND_COUNT }, () => ({ clickCount: 1, wasModalOpen: true })));
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The test whose absence let a broken long-press ship. `button: 'right'` used to be a dispatched touch
+  // pair held apart by a dwell, which Android's gesture recognizer never sees — so it was classified as a
+  // tap, and a long press on a file OPENED it instead of opening its menu. Every other assertion in this
+  // file still passed, because none of them pressed anything for longer than an instant.
+  //
+  // It presses a REAL Obsidian element rather than a probe `div` on purpose: a synthetic element has no
+  // Obsidian handler, so it can only ever show that the `contextmenu` arrived, never that a consumer's
+  // menu opens from it. Both halves are asserted here — the trusted event AND the menu it produced.
+  it('should open a REAL Obsidian menu from a long press, rather than tapping the element', async () => {
+    const result = await evalInObsidian({
+      async callback({ app, lib }): Promise<LongPressResult> {
+        // Sized against the transport's 30s per-eval cap: four attempts at 1.5s is 6s of drawer opening,
+        // which leaves the 1.5s press, its 1s `contextmenu` check and the 5s menu wait below it with room to spare.
+        const DRAWER_OPEN_ATTEMPT_COUNT = 4;
+        const DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS = 1500;
+
+        // The `note.md` the suite populates is what gets pressed — the test above proves it is there.
+        const leaf = app.workspace.getLeavesOfType('file-explorer')[0];
+        if (leaf) {
+          await app.workspace.revealLeaf(leaf);
+        }
+
+        // The item must be ON SCREEN, not merely laid out. The drawer slides in from the left, so during
+        // the animation an item already has its full width at a NEGATIVE `left` — and the gesture's centre
+        // point is then off the viewport, which `Input.synthesizeTapGesture` rejects with "Position out of
+        // bounds" rather than pressing anything. Waiting on the centre point rather than on the width is
+        // what makes this wait for the drawer to arrive instead of merely to exist.
+        function findVisibleNavFile(): HTMLElement | undefined {
+          return [...document.querySelectorAll<HTMLElement>('.nav-file-title')].find((item) => {
+            const rect = item.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            return rect.width > 0
+              && centerX >= 0 && centerX <= globalThis.innerWidth
+              && centerY >= 0 && centerY <= globalThis.innerHeight;
+          });
+        }
+
+        // What the explorer actually rendered is the half of the answer a bare timeout throws away, and
+        // it is the half that decides: a drawer that never opened, a vault that came up empty, and an item
+        // laid out past the viewport all produce the same silence otherwise.
+        function describeNavFiles(): string {
+          const split = `left split ${app.workspace.leftSplit.collapsed ? 'collapsed' : 'expanded'}`;
+          const explorer = leaf ? 'file-explorer leaf present' : 'NO file-explorer leaf';
+          const viewport = `viewport ${String(globalThis.innerWidth)}x${String(globalThis.innerHeight)}`;
+          const items = [...document.querySelectorAll<HTMLElement>('.nav-file-title')];
+          if (items.length === 0) {
+            return `no .nav-file-title at all, ${split}, ${explorer}, ${viewport}`;
+          }
+
+          const boxes = items.map((item) => {
+            const rect = item.getBoundingClientRect();
+            return `[${String(Math.round(rect.left))},${String(Math.round(rect.top))} ${String(Math.round(rect.width))}x${String(Math.round(rect.height))}]`;
+          });
+          return `${String(items.length)} .nav-file-title at ${boxes.join(' ')}, ${split}, ${explorer}, ${viewport}`;
+        }
+
+        // Opening the drawer ONCE is not enough, and re-asserting it on every poll is worse than useless.
+        // Measured over six consecutive runs (2026-09-12): `expand()` takes — `collapsed` goes false and
+        // the drawer starts sliding in — and then, ~100ms later and unprompted, `collapsed` flips back to
+        // true and the drawer slides straight back out, ending hidden at 0x0 with its item still in the
+        // DOM. `revealLeaf` is not the trigger: dropping that call leaves the timeline identical. Nor is
+        // it slowness, since five further seconds of polling never bring the drawer back.
+        //
+        // The collapse is ONE-SHOT, so re-opening does work — but only from REST. `expand()` is NOT
+        // idempotent mid-animation: called while the drawer is sliding it leaves the element hidden with
+        // `collapsed === false`, stuck that way for the whole of the remaining wait. An attempt timeout
+        // comfortably longer than the ~300ms slide is what guarantees the next `expand()` is issued from
+        // rest rather than into a moving drawer.
+        for (let attempt = 1; attempt <= DRAWER_OPEN_ATTEMPT_COUNT; attempt++) {
+          if (app.workspace.leftSplit.collapsed) {
+            app.workspace.leftSplit.expand();
+          }
+
+          try {
+            await lib.waitUntil({
+              message: 'the file explorer to render a `.nav-file-title` whose centre is on screen',
+              predicate: () => findVisibleNavFile() !== undefined,
+              timeoutInMilliseconds: DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS
+            });
+            break;
+          } catch (error) {
+            if (attempt === DRAWER_OPEN_ATTEMPT_COUNT) {
+              throw new Error(
+                `The left drawer never stayed open long enough to press a .nav-file-title, after ${String(attempt)} attempts: ${describeNavFiles()}`,
+                { cause: error }
+              );
+            }
+          }
+        }
+
+        const navFile = findVisibleNavFile();
+        if (!navFile) {
+          throw new Error(`The file explorer rendered no visible .nav-file-title to long-press: ${describeNavFiles()}`);
+        }
+
+        const events: ObservedEvent[] = [];
+        function listener(event: Event): void {
+          events.push({ isTrusted: event.isTrusted, type: event.type });
+        }
+
+        // Capture phase: Obsidian's own handler opens the menu and may stop propagation on the way.
+        navFile.addEventListener('contextmenu', listener, { capture: true });
+        try {
+          await lib.clickElement({ button: 'right', element: navFile });
+          try {
+            await lib.waitUntil({
+              message: 'the long press to open a `.menu`',
+              predicate: () => document.querySelector('.menu') !== null
+            });
+          } catch (error) {
+            // Which events the press delivered is the whole diagnosis when no menu appears: a trusted
+            // `contextmenu` with none of Obsidian's menu behind it is a consumer problem, while no
+            // `contextmenu` at all is a gesture one. Losing that list to the timeout would leave the two
+            // indistinguishable.
+            const observed = events.length === 0
+              ? 'none'
+              : events.map((event) => `${event.type}(isTrusted=${String(event.isTrusted)})`).join(', ');
+            throw new Error(`The long press opened no .menu. Events on the pressed element: ${observed}`, { cause: error });
+          }
+
+          return {
+            events,
+            menuItems: [...document.querySelectorAll('.menu-item-title')].map((item) => item.textContent)
+          };
+        } finally {
+          navFile.removeEventListener('contextmenu', listener, { capture: true });
+          // A real menu leaks into the next test unless it is taken down (**L11**).
+          for (const menu of document.querySelectorAll('.menu')) {
+            menu.remove();
+          }
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    // The mechanism: the platform recognized a long press and emitted a genuine `contextmenu`.
+    expect(result.events.some((event) => event.type === 'contextmenu' && event.isTrusted)).toBe(true);
+    // The consumer-visible effect: Obsidian's own file menu, which is what every converted suite needs.
+    expect(result.menuItems).toContain('Rename...');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // A long press that Android takes for a tap reaches the page as a click with no `contextmenu`, and a
+  // caller waiting on a menu used to find out only from its own timeout. The page cannot make the platform
+  // misclassify on demand, so this hides the `contextmenu` instead: a window listener registered first
+  // stops it before `clickElement`'s own listener runs, which is what a misclassified press looks like.
+  it('should report a long press that produced no contextmenu', async () => {
+    const errorMessage = await evalInObsidian({
+      async callback({ lib }): Promise<string> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '200px', left: '50px', position: 'fixed', top: '200px', width: '200px', zIndex: '9999' });
+        function swallow(event: Event): void {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+
+        globalThis.addEventListener('contextmenu', swallow, { capture: true });
+        try {
+          await lib.clickElement({ button: 'right', element: target });
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        } finally {
+          globalThis.removeEventListener('contextmenu', swallow, { capture: true });
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(errorMessage).toContain('no `contextmenu` followed');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should refuse a hover rather than silently do nothing', async () => {
+    const errorMessage = await evalInObsidian({
+      async callback({ lib }): Promise<string> {
+        const target = document.body.createDiv();
+        try {
+          await lib.hoverElement({ element: target });
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        } finally {
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(errorMessage).toContain('has no meaning on mobile');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // Mobile has no popouts. Naming the main window is harmless, so a suite that passes `element.win` runs on
+  // both platforms; naming any other window throws, because the key could only go to the main one instead.
+  it('should accept the main window and refuse any other one', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<WindowTargetResult> {
+        let mainWindowKeyCount = 0;
+        function listener(): void {
+          mainWindowKeyCount++;
+        }
+
+        const frame = document.body.createEl('iframe');
+        document.addEventListener('keydown', listener, { capture: true });
+        try {
+          await lib.pressKey({ key: 'Escape', window: document.body.win });
+          await lib.waitUntil({ message: 'a keydown to reach the document', predicate: () => mainWindowKeyCount > 0 });
+
+          const frameWindow = frame.contentWindow;
+          if (!frameWindow) {
+            throw new Error('The iframe has no window.');
+          }
+
+          try {
+            await lib.pressKey({ key: 'Escape', window: frameWindow });
+            return { errorMessage: '', mainWindowKeyCount };
+          } catch (error) {
+            return { errorMessage: error instanceof Error ? error.message : String(error), mainWindowKeyCount };
+          }
+        } finally {
+          document.removeEventListener('keydown', listener, { capture: true });
+          frame.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.mainWindowKeyCount).toBe(1);
+    expect(result.errorMessage).toContain('Obsidian Mobile has no popout windows');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+});
+
+/**
+ * What the window-target case reports back from the renderer.
+ */
+interface WindowTargetResult {
+  readonly errorMessage: string;
+  readonly mainWindowKeyCount: number;
+}
+
+/**
+ * Counts observed events by type, so a suite can assert HOW MANY of each a gesture produced.
+ *
+ * @param events - The events one gesture delivered.
+ * @returns A count per event type, with absent types simply missing rather than zero — so
+ *   `toStrictEqual` states the whole expected shape in one assertion.
+ */
+function countByType(events: readonly ObservedEvent[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const event of events) {
+    counts[event.type] = (counts[event.type] ?? 0) + 1;
+  }
+
+  return counts;
+}

@@ -18,7 +18,7 @@ await execFromRoot([
   '--coverage',
   // Enforce the thresholds PER FILE, not only across the total. Pass/fail is unchanged — a 100% total is
   // reachable only when every file is already at 100% — but the failure then names the offending path
-  // instead of reporting `All files 99.65%`. That distinction is not cosmetic: `src/android-sdk.ts` was
+  // instead of reporting `All files 99.65%`. That distinction is not cosmetic: `src/android/adb/android-sdk.ts` was
   // reviewed, landed and pushed measuring 0%, and the only thing that said so was a total two hundredths
   // of a percent below the threshold, on a gate nothing runs at commit time.
   '--coverage.thresholds.perFile',

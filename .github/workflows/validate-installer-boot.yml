@@ -55,7 +55,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          CMD="npx vitest run --project integration-tests src/obsidian-installer-boot.integration.test.ts"
+          CMD="npx vitest run --project integration-tests src/desktop/versions/obsidian-installer-boot.integration.test.ts"
           if [ "$RUNNER_OS" = "Linux" ]; then
             xvfb-run -a $CMD
           else
@@ -79,4 +79,4 @@ jobs:
           BIN_DIR=$(mktemp -d)
           ln -s "$SHELL_EXE" "$BIN_DIR/obsidian"
           export PATH="$BIN_DIR:$PATH"
-          xvfb-run -a npx vitest run --project integration-tests src/obsidian-asar-swap.integration.test.ts
+          xvfb-run -a npx vitest run --project integration-tests src/desktop/versions/obsidian-asar-swap.integration.test.ts

@@ -5,7 +5,7 @@
  *
  * The probe's whole value is its evidence, so the evidence is built here where
  * it can be unit-tested, and the script keeps only the shelling-out. That split
- * is the same one `src/emulator-liveness.ts` and `src/emulator-backend.ts` make
+ * is the same one `src/android/emulator/emulator-liveness.ts` and `src/android/emulator/emulator-backend.ts` make
  * against `transport-factory.ts`, for the same reason.
  *
  * Deliberately under `scripts/helpers/` rather than in `src/`: every `src/`
@@ -24,7 +24,7 @@
  * table is a diagnosis rather than a timestamp.
  */
 
-import type { EmulatorLivenessVerdict } from '../../src/emulator-liveness.ts';
+import type { EmulatorLivenessVerdict } from '../../src/android/emulator/emulator-liveness.ts';
 
 /**
  * One sample of the QEMU backend process.

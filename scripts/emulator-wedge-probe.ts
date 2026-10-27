@@ -57,12 +57,12 @@ import { freemem } from 'node:os';
 import process from 'node:process';
 import { parseArgs } from 'node:util';
 
-import type { ProcessListEntry } from '../src/emulator-backend.ts';
+import type { ProcessListEntry } from '../src/android/emulator/emulator-backend.ts';
 import type {
   EmulatorLivenessProbeOutcome,
   EmulatorLivenessVerdict
-} from '../src/emulator-liveness.ts';
-import type { HostProcessQueryResult } from '../src/emulator-reclaim.ts';
+} from '../src/android/emulator/emulator-liveness.ts';
+import type { HostProcessQueryResult } from '../src/android/emulator/emulator-reclaim.ts';
 import type {
   BackendSample,
   ProbeTick
@@ -71,30 +71,30 @@ import type {
 import {
   checkIsDeviceListed,
   listOnlineDeviceIds
-} from '../src/adb-device-list.ts';
-import { resolveEmulatorBinaryPath } from '../src/android-sdk.ts';
-import { checkIsEmulatorDeviceId } from '../src/avd-probe-verdict.ts';
+} from '../src/android/adb/adb-device-list.ts';
+import { resolveEmulatorBinaryPath } from '../src/android/adb/android-sdk.ts';
+import { checkIsEmulatorDeviceId } from '../src/android/avd/avd-probe-verdict.ts';
 import {
   buildEmulatorArguments,
   buildEmulatorEnvironment
-} from '../src/emulator-arguments.ts';
+} from '../src/android/emulator/emulator-arguments.ts';
 import {
   buildEmulatorProcessQueries,
   checkIsNoMatchReported,
   parseEmulatorProcessQueryOutput,
   selectEmulatorBackendPids
-} from '../src/emulator-backend.ts';
+} from '../src/android/emulator/emulator-backend.ts';
 import {
   buildEmulatorLivenessMessage,
   resolveEmulatorLivenessVerdict
-} from '../src/emulator-liveness.ts';
-import { HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS } from '../src/emulator-reclaim.ts';
+} from '../src/android/emulator/emulator-liveness.ts';
+import { HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS } from '../src/android/emulator/emulator-reclaim.ts';
 import { errorToString } from '../src/error-to-string.ts';
 import {
   buildHostProcessQueryMessage,
   resolveHostProcessQueryOutcome
-} from '../src/host-process-query-verdict.ts';
-import { killProcessTreeByPid } from '../src/kill-process-tree.ts';
+} from '../src/process/host-process-query-verdict.ts';
+import { killProcessTreeByPid } from '../src/process/kill-process-tree.ts';
 import {
   buildProbeReport,
   computeCpuPercent,

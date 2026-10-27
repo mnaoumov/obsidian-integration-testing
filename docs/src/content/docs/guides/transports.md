@@ -207,6 +207,6 @@ npx vitest run --project integration-tests:*
 
 ## Related
 
-- [`ObsidianCdpTransportOptions` API reference](/obsidian-integration-testing/api/transport-options/ObsidianCdpTransportOptions/)
-- [`RendererFailedToInitializeError` API reference](/obsidian-integration-testing/api/renderer-failed-to-initialize-error/RendererFailedToInitializeError/)
+- [`ObsidianCdpTransportOptions` API reference](/obsidian-integration-testing/api/transport/transport-options/ObsidianCdpTransportOptions/)
+- [`RendererFailedToInitializeError` API reference](/obsidian-integration-testing/api/desktop/compatibility/renderer-failed-to-initialize-error/RendererFailedToInitializeError/)
 - [Ad-hoc debugging](/obsidian-integration-testing/guides/debugging/) — the same knobs outside a test run.

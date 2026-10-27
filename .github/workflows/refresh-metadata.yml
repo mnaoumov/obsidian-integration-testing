@@ -1,6 +1,6 @@
 name: Refresh Metadata
 
-# Runs npm run refresh:metadata (scripts/refresh-metadata.ts): refreshes the repo-root
+# Runs npm run refresh:metadata (scripts/metadata/refresh-metadata.ts): refreshes the repo-root
 # metadata.json from Obsidian's own endpoints (the obsidian-releases GitHub releases, the
 # changelog feed, desktop-releases.json and each new version's asar). The script is
 # byte-stable, so this commits ONLY when a source actually changed. Daily so new Obsidian

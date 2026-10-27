@@ -242,6 +242,6 @@ Either way, run the health check in [AVD provisioning](#avd-provisioning) first 
 
 ## Related
 
-- [`ObsidianAndroidAppiumTransportOptions` API reference](/obsidian-integration-testing/api/transport-options/ObsidianAndroidAppiumTransportOptions/)
-- [`AppiumTransport` API reference](/obsidian-integration-testing/api/transport-appium/AppiumTransport/)
+- [`ObsidianAndroidAppiumTransportOptions` API reference](/obsidian-integration-testing/api/transport/transport-options/ObsidianAndroidAppiumTransportOptions/)
+- [`AppiumTransport` API reference](/obsidian-integration-testing/api/android/appium/transport-appium/AppiumTransport/)
 - [Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/)

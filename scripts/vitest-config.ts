@@ -30,26 +30,26 @@ const SHARED_TEST_DEFAULTS = { testTimeout: BIG_TIMEOUT_IN_MILLISECONDS };
 // owns the instance in the global setup and evals from a worker (every other
 // integration suite registers in-worker), so it needs the harness-owned global
 // setup plus the per-worker `vitest-setup` resolvers.
-const OWNED_ATTACH_TEST_FILE = 'src/owned-instance-worker-attach.integration.test.ts';
+const OWNED_ATTACH_TEST_FILE = 'src/desktop/owned-instance-worker-attach.integration.test.ts';
 
 // The plugin-less counterpart of the owned-attach suite: it owns the instance in
 // the global setup via `createSetup({ installPlugin: false })` and evals from a
 // worker, so it likewise needs its own global setup plus the per-worker
 // `vitest-setup` resolvers.
-const BARE_ATTACH_TEST_FILE = 'src/bare-instance-worker-attach.integration.test.ts';
+const BARE_ATTACH_TEST_FILE = 'src/desktop/bare-instance-worker-attach.integration.test.ts';
 
 // The `enableCommunityPlugins` end-to-end suite runs in its own project: its global
 // setup seeds a demo vault with two dummy plugins (via `buildDemoVaultPopulate`) and
 // enables them through `createSetup({ enableCommunityPlugins })`, then the worker
 // asserts both loaded — so it needs its own global setup plus the per-worker resolvers.
-const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/enable-community-plugins.integration.test.ts';
+const ENABLE_COMMUNITY_PLUGINS_TEST_FILE = 'src/plugin/enable-community-plugins.integration.test.ts';
 
 // The `configDirectory` override suite runs in its own project because the override is a property of the
 // whole run: its global setup opens the owned vault under `.obsidian-desktop`, and every other integration
 // project deliberately runs under Obsidian's default. It evals from a worker to assert that what the harness
 // wrote before open — the seeded plugin, the headless `app.json` — actually reached the folder the vault
 // opened, so it needs its own global setup plus the per-worker resolvers.
-const CONFIG_DIRECTORY_OVERRIDE_TEST_FILE = 'src/config-directory-override.integration.test.ts';
+const CONFIG_DIRECTORY_OVERRIDE_TEST_FILE = 'src/desktop/config-directory-override.integration.test.ts';
 // Kept in sync with the `CONFIG_DIRECTORY` the companion test asserts `app.vault.configDir` against.
 const CONFIG_DIRECTORY_OVERRIDE = '.obsidian-desktop';
 
@@ -58,14 +58,14 @@ const CONFIG_DIRECTORY_OVERRIDE = '.obsidian-desktop';
 // after a real setup failure. Port 1 is refused outright by `fetch`, so the failure is instant and never
 // touches the network -- and an `obsidian-cdp` transport takes no setup lock, unlike an Appium one, so
 // this project stays hermetic and safe inside the default aggregate.
-const FAILED_SETUP_TEST_FILE = 'src/failed-setup-fail-fast.integration.test.ts';
+const FAILED_SETUP_TEST_FILE = 'src/setup/failed-setup-fail-fast.integration.test.ts';
 const UNREACHABLE_CDP_PORT = 1;
 
 // The instance-death regression suite runs in its own project because it DESTROYS the instance its project
 // shares — the same reason the failed-setup suite has one. It owns the instance in the global setup and evals
 // from a worker, so it needs the per-worker resolvers; the plugin-less setup is enough, since what is under
 // test is the death of the instance rather than anything in a vault.
-const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
+const INSTANCE_DEATH_TEST_FILE = 'src/desktop/owned-instance/owned-instance-death.integration.test.ts';
 
 // The Android suites run in their own project because they are the only ones that need a real Android
 // emulator through Appium (see L39). Keeping them out of the default `integration-tests` aggregate is
@@ -75,11 +75,11 @@ const INSTANCE_DEATH_TEST_FILE = 'src/owned-instance-death.integration.test.ts';
 // share one project rather than taking one each, because each project boots its own emulator session — the
 // cost that dominates an Android run — and these files are serialized within it anyway.
 const ANDROID_TEST_FILES = [
-  'src/mobile-trusted-input.android.integration.test.ts',
-  'src/eval-cap.android.integration.test.ts',
-  'src/headless-vault-config.android.integration.test.ts',
-  'src/soft-keyboard.android.integration.test.ts',
-  'src/android-write-loss-guard.android.integration.test.ts'
+  'src/android/mobile-trusted-input.android.integration.test.ts',
+  'src/eval/eval-cap.android.integration.test.ts',
+  'src/vault/headless-vault-config.android.integration.test.ts',
+  'src/android/soft-keyboard/soft-keyboard.android.integration.test.ts',
+  'src/android/android-write-loss-guard.android.integration.test.ts'
 ];
 
 // Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
@@ -90,7 +90,7 @@ const ANDROID_TEST_FILES = [
 // instance (L7), and it is the only integration file in the repo that touches the pointer or the keyboard,
 // so there is nothing for it to race. Until it was added to that list it sat in no aggregate at all, which
 // left the repo's only desktop coverage of the trusted-input helpers run by nothing.
-const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/trusted-input.desktop.integration.test.ts';
+const DESKTOP_TRUSTED_INPUT_TEST_FILE = 'src/namespace/trusted-input.desktop.integration.test.ts';
 
 // An emulator run is 140-200s cold (L19), and every step before the first assertion — boot, Appium session,
 // vault push, app restart — happens inside the hooks. Raised by the 120s the network-ready gate can add on
@@ -110,7 +110,7 @@ const ANDROID_TIMEOUT_IN_MILLISECONDS = 600_000;
 const DEFINE = {
   OBSIDIAN_METADATA: readMetadataJsonText()
 };
-const METADATA_SETUP_FILE = './scripts/metadata-global-setup.ts';
+const METADATA_SETUP_FILE = './scripts/test-setups/metadata-global-setup.ts';
 
 // The integration projects' global-setup modules (owned-attach / bare-attach) run in
 // the Vitest main process, where the per-project `define` (unit-tests only) and the
@@ -185,7 +185,7 @@ export const config = defineConfig({
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
-          globalSetup: ['./scripts/owned-attach-regression-global-setup.ts'],
+          globalSetup: ['./scripts/test-setups/owned-attach-regression-global-setup.ts'],
           include: [OWNED_ATTACH_TEST_FILE],
           maxWorkers: 1,
           name: VitestProject.OwnedAttachIntegrationTests,
@@ -249,7 +249,7 @@ export const config = defineConfig({
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
-          globalSetup: ['./scripts/enable-community-plugins-global-setup.ts'],
+          globalSetup: ['./scripts/test-setups/enable-community-plugins-global-setup.ts'],
           include: [ENABLE_COMMUNITY_PLUGINS_TEST_FILE],
           maxWorkers: 1,
           name: VitestProject.EnableCommunityPluginsIntegrationTests,
@@ -270,7 +270,7 @@ export const config = defineConfig({
           },
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
-          globalSetup: ['./scripts/config-directory-override-global-setup.ts'],
+          globalSetup: ['./scripts/test-setups/config-directory-override-global-setup.ts'],
           include: [CONFIG_DIRECTORY_OVERRIDE_TEST_FILE],
           maxWorkers: 1,
           name: VitestProject.ConfigDirectoryOverrideIntegrationTests,
@@ -287,12 +287,12 @@ export const config = defineConfig({
           fileParallelism: false,
           // Takes the shared-emulator lock (L7). This project has no transport global setup, so it never
           // goes through `coreSetup` — which is what normally acquires it.
-          globalSetup: ['./scripts/android-global-setup.ts'],
+          globalSetup: ['./scripts/test-setups/android-global-setup.ts'],
           hookTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS,
           include: ANDROID_TEST_FILES,
           maxWorkers: 1,
           name: VitestProject.AndroidIntegrationTests,
-          setupFiles: [METADATA_SETUP_FILE, './scripts/android-transport-setup.ts'],
+          setupFiles: [METADATA_SETUP_FILE, './scripts/test-setups/android-transport-setup.ts'],
           testTimeout: ANDROID_TIMEOUT_IN_MILLISECONDS
         }
       },

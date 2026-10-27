@@ -102,6 +102,6 @@ A tab that legitimately draws no `.setting-item-name` rows (Hotkeys, for instanc
 
 ## Related
 
-- [`registerLibResolver` API reference](/obsidian-integration-testing/api/lib-registry/registerLibResolver/)
-- [`Lib` API reference](/obsidian-integration-testing/api/eval-in-obsidian/Lib/)
-- [`openObsidianSettingsTab` API reference](/obsidian-integration-testing/api/open-obsidian-settings-tab/openObsidianSettingsTab/)
+- [`registerLibResolver` API reference](/obsidian-integration-testing/api/namespace/lib-registry/registerLibResolver/)
+- [`Lib` API reference](/obsidian-integration-testing/api/eval/eval-in-obsidian/Lib/)
+- [`openObsidianSettingsTab` API reference](/obsidian-integration-testing/api/namespace/open-obsidian-settings-tab/openObsidianSettingsTab/)

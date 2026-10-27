@@ -240,6 +240,6 @@ For Jest, use `obsidian-integration-testing/jest-global-setup-no-plugin` (`globa
 
 ## Related
 
-- [`TemporaryVault` API reference](/obsidian-integration-testing/api/temporary-vault/TemporaryVault/)
-- [`buildDemoVaultPopulate` API reference](/obsidian-integration-testing/api/demo-vault-populate/buildDemoVaultPopulate/)
+- [`TemporaryVault` API reference](/obsidian-integration-testing/api/vault/temporary-vault/TemporaryVault/)
+- [`buildDemoVaultPopulate` API reference](/obsidian-integration-testing/api/vault/demo-vault/demo-vault-populate/buildDemoVaultPopulate/)
 - [Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/) — what happens to vaults a dead run left behind.
