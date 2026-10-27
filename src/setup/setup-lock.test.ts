@@ -15,15 +15,16 @@ import {
 } from './setup-lock.ts';
 
 interface ErrnoError extends Error {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The error fixture assigns the process error code after construction.
   code: string;
 }
 
 interface LockInfo {
-  acquiredAtInMilliseconds: number;
-  heartbeatAtInMilliseconds: number;
-  hostname: string;
-  label: string;
-  pid: number;
+  readonly acquiredAtInMilliseconds: number;
+  readonly heartbeatAtInMilliseconds: number;
+  readonly hostname: string;
+  readonly label: string;
+  readonly pid: number;
 }
 
 const POLL_INTERVAL_IN_MILLISECONDS = 500;

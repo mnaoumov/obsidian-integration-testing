@@ -107,12 +107,12 @@ export interface AppiumSessionInfo {
   /**
   The device UDID (e.g. `'emulator-5554'`).
    */
-  deviceId: string;
+  readonly deviceId: string;
 
   /**
   The Appium/WebDriver session ID.
    */
-  sessionId: string;
+  readonly sessionId: string;
 }
 
 /**
@@ -123,7 +123,7 @@ export interface AppiumTransportConfig {
    * App package (Android) or bundle ID (iOS).
    * Defaults to `'md.obsidian'`.
    */
-  appId?: string;
+  readonly appId?: string;
 
   /**
    * Timeout in milliseconds for Obsidian Mobile to get as far as `globalThis.app`
@@ -132,19 +132,19 @@ export interface AppiumTransportConfig {
    *
    * @default `180000`
    */
-  appStartTimeoutInMilliseconds?: number;
+  readonly appStartTimeoutInMilliseconds?: number;
 
   /**
    * The Appium browser/driver instance.
    * Created by the consumer via e.g. WebDriverIO's `remote()`.
    */
-  browser: Browser;
+  readonly browser: Browser;
 
   /**
    * The device UDID (e.g. `'emulator-5554'`).
    * Used for `adb` commands when pushing files to the device.
    */
-  deviceId: string;
+  readonly deviceId: string;
 
   /**
    * Whether this transport owns the Appium session and should delete it on
@@ -155,7 +155,7 @@ export interface AppiumTransportConfig {
    *
    * @default `true`
    */
-  isSessionOwner?: boolean;
+  readonly isSessionOwner?: boolean;
 
   /**
    * Timeout in milliseconds for waiting for `app.workspace.layoutReady`, counted
@@ -164,12 +164,12 @@ export interface AppiumTransportConfig {
    *
    * @default `90000`
    */
-  layoutReadyTimeoutInMilliseconds?: number;
+  readonly layoutReadyTimeoutInMilliseconds?: number;
 
   /**
    * Target platform. Determines WebView context naming and device file paths.
    */
-  platform: 'android' | 'ios';
+  readonly platform: 'android' | 'ios';
 
   /**
    * The per-script cap, in milliseconds, this session was given as its W3C
@@ -180,7 +180,7 @@ export interface AppiumTransportConfig {
    *
    * @default `30000`
    */
-  scriptTimeoutInMilliseconds?: number;
+  readonly scriptTimeoutInMilliseconds?: number;
 
   /**
    * Whether registering a vault also prunes the **other** `temp-vault-*`
@@ -193,7 +193,7 @@ export interface AppiumTransportConfig {
    *
    * @default `true`
    */
-  shouldSweepLeftovers?: boolean;
+  readonly shouldSweepLeftovers?: boolean;
 
   /**
    * Base path on the device where Obsidian stores vaults.
@@ -202,14 +202,14 @@ export interface AppiumTransportConfig {
    * - Android: `/sdcard/Documents/`
    * - iOS: `@md.obsidian:documents/`
    */
-  vaultBasePath?: string;
+  readonly vaultBasePath?: string;
 
   /**
    * Timeout in milliseconds for waiting for the WebView context to become available.
    *
    * @default `60000`
    */
-  webviewTimeoutInMilliseconds?: number;
+  readonly webviewTimeoutInMilliseconds?: number;
 }
 
 const NO_OUTPUT = '(no output)';

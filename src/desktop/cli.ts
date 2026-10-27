@@ -70,13 +70,13 @@ const USAGE = `Usage:
  * The shape of the parsed CLI flag values.
  */
 interface ParsedCliValues {
-  'command-timeout'?: string | undefined;
-  'host'?: string | undefined;
-  'no-remove-vault'?: boolean | undefined;
-  'obsidian-installer-version'?: string | undefined;
-  'obsidian-version'?: string | undefined;
-  'port'?: string | undefined;
-  'vault'?: string | undefined;
+  readonly 'command-timeout'?: string | undefined;
+  readonly 'host'?: string | undefined;
+  readonly 'no-remove-vault'?: boolean | undefined;
+  readonly 'obsidian-installer-version'?: string | undefined;
+  readonly 'obsidian-version'?: string | undefined;
+  readonly 'port'?: string | undefined;
+  readonly 'vault'?: string | undefined;
 }
 
 /**

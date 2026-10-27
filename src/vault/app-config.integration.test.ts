@@ -28,12 +28,12 @@ import { TemporaryVault } from './temporary-vault.ts';
  * delete an exact restore performs.
  */
 interface AppConfigProbe {
-  isPresent: boolean;
-  value: unknown;
+  readonly isPresent: boolean;
+  readonly value: unknown;
 }
 
 interface ProbeInput extends GenericObject {
-  configKey: ConfigItem;
+  readonly configKey: ConfigItem;
 }
 
 /**

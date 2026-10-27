@@ -185,9 +185,13 @@ interface FieldLog {
 }
 
 interface ProbeContext {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The probe resets the input log between keyboard attempts.
   inputValues: string[];
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The probe stores the modal opened after the initial context setup.
   modal?: Modal;
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The probe stores the modal opened after the initial context setup.
   stackedModal?: Modal;
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The probe resets the touch log between keyboard attempts.
   touchValues: string[];
 }
 

@@ -61,7 +61,7 @@ export interface PinnedWindowFocus {
    *
    * @returns A {@link Promise} that resolves once the class is restored.
    */
-  restore: () => Promise<void>;
+  readonly restore: () => Promise<void>;
 }
 
 /**

@@ -601,22 +601,22 @@ interface ProcessLaunch {
   /**
   The spawned process.
    */
-  process: ChildProcess;
+  readonly process: ChildProcess;
 
   /**
   Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`.
    */
-  readExitInfo: () => ProcessExitInfo | undefined;
+  readonly readExitInfo: () => ProcessExitInfo | undefined;
 
   /**
   Returns the captured stdout+stderr (bounded to the most recent output).
    */
-  readOutput: () => string;
+  readonly readOutput: () => string;
 
   /**
   Stops accumulating output. Call once startup has succeeded.
    */
-  stopCapture: () => void;
+  readonly stopCapture: () => void;
 }
 
 /**

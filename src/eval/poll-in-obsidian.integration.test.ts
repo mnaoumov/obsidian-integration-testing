@@ -27,6 +27,7 @@ const WORK_DELAY_IN_MILLISECONDS = 1000;
 A window view exposing the ad-hoc marker the closures read/write.
 */
 interface MarkerWindow extends Window {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The poll callback updates and clears this window marker.
   __t116PollMarker?: boolean;
 }
 

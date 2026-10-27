@@ -100,7 +100,7 @@ export interface SetupLock {
   /**
   Releases the lock. Safe to call more than once.
    */
-  release: () => void;
+  readonly release: () => void;
 }
 
 /**

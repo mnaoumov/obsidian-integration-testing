@@ -15,25 +15,25 @@ import { TemporaryVault } from '../vault/temporary-vault.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
 
 interface AbArguments {
-  a: number;
-  b: number;
+  readonly a: number;
+  readonly b: number;
 }
 
 interface CreateNoteProbe {
-  content: string;
-  path: string;
+  readonly content: string;
+  readonly path: string;
 }
 
 interface CreateNoteRepairProbe {
-  content: string;
-  modifyCallCount: number;
+  readonly content: string;
+  readonly modifyCallCount: number;
 }
 
 interface SettingsTabProbe {
-  activeTabId: string;
-  isContainerAttached: boolean;
-  names: string[];
-  targetTabId: string;
+  readonly activeTabId: string;
+  readonly isContainerAttached: boolean;
+  readonly names: string[];
+  readonly targetTabId: string;
 }
 
 const temporaryVault = new TemporaryVault();
@@ -134,8 +134,8 @@ describe('eval-in-obsidian integration', () => {
 
   it('should pass string input', async () => {
     interface Input {
-      parts: string[];
-      separator: string;
+      readonly parts: string[];
+      readonly separator: string;
     }
     const result = await evalInObsidian({ callback: concat, input: { parts: ['a', 'b', 'c'], separator: '-' }, vaultPath });
     expect(result).toBe('a-b-c');
@@ -147,8 +147,8 @@ describe('eval-in-obsidian integration', () => {
 
   it('should pass input with a multi-line function declaration', async () => {
     interface Input {
-      base: number;
-      factor: number;
+      readonly base: number;
+      readonly factor: number;
     }
     function compute({ base, factor }: Input): number {
       const doubled = base * 2;
@@ -172,7 +172,7 @@ describe('eval-in-obsidian integration', () => {
 
   it('should preserve newlines in template literals', async () => {
     interface Input {
-      name: string;
+      readonly name: string;
     }
     function withTemplate({ name }: Input): string {
       const text = `hello
@@ -571,6 +571,7 @@ ${name}`;
   describe('context', () => {
     it('should persist values across calls and dispose cleanly', async () => {
       interface Context {
+        // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The test writes this context value in a later evaluation.
         storedValue: number;
       }
       const contextId = new ContextId<Context>();

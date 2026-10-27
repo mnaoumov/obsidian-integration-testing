@@ -42,10 +42,10 @@ async function scheduleInstanceDeath(): Promise<void> {
     /* v8 ignore start -- Evaluated inside Obsidian, not in the coverage-instrumented process. */
     async callback(): Promise<string> {
       interface IntegrationTestingNamespace {
-        destroyCurrentWindow: () => Promise<void>;
+        readonly destroyCurrentWindow: () => Promise<void>;
       }
       interface IntegrationTestingHolder {
-        __obsidianIntegrationTesting: IntegrationTestingNamespace;
+        readonly __obsidianIntegrationTesting: IntegrationTestingNamespace;
       }
 
       // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.

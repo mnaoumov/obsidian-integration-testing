@@ -33,12 +33,12 @@ interface ObsidianIntegrationTestingGlobal {
   /**
   Temp vault path, set by the global setup for test workers.
    */
-  temporaryVaultPath?: string | undefined;
+  readonly temporaryVaultPath?: string | undefined;
 
   /**
   Transport options. Set by the consumer before setup, or by the setup itself.
    */
-  transportOptions?: ObsidianTransportOptions | undefined;
+  readonly transportOptions?: ObsidianTransportOptions | undefined;
 }
 
 /* eslint-disable vars-on-top -- Required for `declare global` augmentation. */
@@ -92,8 +92,8 @@ export interface CreateSetupOptions {
  * A Jest `globalSetup` / `globalTeardown` module's `setup` / `teardown` pair.
  */
 export interface JestGlobalSetup {
-  setup: (this: void) => Promise<void>;
-  teardown: (this: void) => Promise<void>;
+  readonly setup: (this: void) => Promise<void>;
+  readonly teardown: (this: void) => Promise<void>;
 }
 
 /**

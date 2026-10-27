@@ -27,7 +27,7 @@ interface ObsidianJson {
   /**
    * Map of vault IDs to vault entries.
    */
-  vaults: Record<string, ObsidianVaultEntry>;
+  readonly vaults: Record<string, ObsidianVaultEntry>;
 }
 
 /**
@@ -37,12 +37,12 @@ interface ObsidianVaultEntry {
   /**
    * The absolute path to the vault folder.
    */
-  path: string;
+  readonly path: string;
 
   /**
    * Timestamp of the last access.
    */
-  ts: number;
+  readonly ts: number;
 }
 
 /**

@@ -149,32 +149,32 @@ export interface WithAppConfigParams<T> extends SetAppConfigParams {
  * What a write captured about the key's state before it wrote.
  */
 interface CapturedValue {
-  isPresent: boolean;
-  value: unknown;
+  readonly isPresent: boolean;
+  readonly value: unknown;
 }
 
 /**
  * The serialized payload of a read.
  */
 interface ReadInput extends GenericObject {
-  configKey: string;
+  readonly configKey: string;
 }
 
 /**
  * The serialized payload of a restore.
  */
 interface RestoreInput extends GenericObject {
-  configKey: string;
-  isPresent: boolean;
-  value: unknown;
+  readonly configKey: string;
+  readonly isPresent: boolean;
+  readonly value: unknown;
 }
 
 /**
  * The serialized payload of a write.
  */
 interface WriteInput extends GenericObject {
-  configKey: string;
-  value: unknown;
+  readonly configKey: string;
+  readonly value: unknown;
 }
 
 /**

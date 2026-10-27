@@ -46,12 +46,12 @@ interface RelayRecord {
   /**
   The arguments the bootstrap handed it.
    */
-  argv: string[];
+  readonly argv: string[];
 
   /**
   Its parent — the relay, which has already exited.
    */
-  ppid: number;
+  readonly ppid: number;
 }
 
 function buildMarker(overrides?: Partial<EmulatorMarker>): EmulatorMarker {

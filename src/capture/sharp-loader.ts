@@ -50,15 +50,15 @@ export type SharpFactory = (input: Uint8Array) => SharpInstance;
  * One `sharp` pipeline.
  */
 export interface SharpInstance {
-  blur: (this: void, sigma: number) => SharpInstance;
-  composite: (this: void, layers: SharpCompositeLayer[]) => SharpInstance;
-  ensureAlpha: (this: void) => SharpInstance;
-  metadata: (this: void) => Promise<SharpMetadata>;
-  png: (this: void) => SharpInstance;
-  raw: (this: void) => SharpInstance;
-  resize: (this: void, width: number, height: number, options?: SharpResizeOptions) => SharpInstance;
-  toBuffer: SharpToBuffer;
-  trim: (this: void, options: SharpTrimOptions) => SharpInstance;
+  readonly blur: (this: void, sigma: number) => SharpInstance;
+  readonly composite: (this: void, layers: SharpCompositeLayer[]) => SharpInstance;
+  readonly ensureAlpha: (this: void) => SharpInstance;
+  readonly metadata: (this: void) => Promise<SharpMetadata>;
+  readonly png: (this: void) => SharpInstance;
+  readonly raw: (this: void) => SharpInstance;
+  readonly resize: (this: void, width: number, height: number, options?: SharpResizeOptions) => SharpInstance;
+  readonly toBuffer: SharpToBuffer;
+  readonly trim: (this: void, options: SharpTrimOptions) => SharpInstance;
 }
 
 /**

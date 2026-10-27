@@ -15,9 +15,13 @@ import {
 } from './exec.ts';
 
 interface MockChild extends EventEmitter {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The child-process fixture assigns this member after constructing its event emitter.
   kill: ReturnType<typeof vi.fn>;
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The child-process fixture assigns this stream after constructing its event emitter.
   stderr: PassThrough;
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The child-process fixture assigns this stream after constructing its event emitter.
   stdin: PassThrough;
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The child-process fixture assigns this stream after constructing its event emitter.
   stdout: PassThrough;
 }
 

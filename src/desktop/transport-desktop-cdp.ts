@@ -97,14 +97,14 @@ export interface DesktopCdpTransportConfig {
   /**
    * CDP host. Defaults to `'localhost'`.
    */
-  cdpHost?: string;
+  readonly cdpHost?: string;
 
   /**
    * CDP port for **attach** mode (the `--remote-debugging-port` the running
    * Obsidian was launched with). In owned-instance mode this is ignored — a
    * free port is chosen at launch.
    */
-  cdpPort?: number;
+  readonly cdpPort?: number;
 
   /**
    * Timeout in milliseconds for individual CDP commands.
@@ -116,7 +116,7 @@ export interface DesktopCdpTransportConfig {
    *
    * @default `30000`
    */
-  commandTimeoutInMilliseconds?: number;
+  readonly commandTimeoutInMilliseconds?: number;
 
   /**
    * The vault's config folder override (Obsidian's *Override config folder*),
@@ -130,7 +130,7 @@ export interface DesktopCdpTransportConfig {
    *
    * @default `undefined` (Obsidian's own default, `.obsidian`)
    */
-  configDirectory?: string;
+  readonly configDirectory?: string;
 
   /**
    * Grace window in milliseconds for fast-failing a dead boot of the owned
@@ -138,7 +138,7 @@ export interface DesktopCdpTransportConfig {
    * `document.readyState` `'complete'`). Defaults to
    * {@link DEFAULT_DEAD_BOOT_GRACE_IN_MILLISECONDS}. `0` disables fast-fail.
    */
-  deadBootGraceInMilliseconds?: number;
+  readonly deadBootGraceInMilliseconds?: number;
 
   /**
    * When attaching (i.e. {@link cdpPort} is set), marks the target as a
@@ -146,7 +146,7 @@ export interface DesktopCdpTransportConfig {
    * vault-registration preflight, since the owned instance's vault lives in an
    * isolated user-data config rather than the user-scope registry.
    */
-  isHarnessOwnedInstance?: boolean;
+  readonly isHarnessOwnedInstance?: boolean;
 
   /**
    * Whether the owned Obsidian window is shown on screen. When `false` (the
@@ -156,13 +156,13 @@ export interface DesktopCdpTransportConfig {
    *
    * @default `true`
    */
-  isObsidianAppVisible?: boolean;
+  readonly isObsidianAppVisible?: boolean;
 
   /**
    * When set, the transport launches and owns an isolated Obsidian instance
    * instead of attaching to a running one. This is the default desktop mode.
    */
-  ownedInstance?: OwnedInstanceConfig;
+  readonly ownedInstance?: OwnedInstanceConfig;
 
   /**
    * Whether to launch the owned instance with Chromium's sandbox disabled
@@ -172,7 +172,7 @@ export interface DesktopCdpTransportConfig {
    *
    * @default `false`
    */
-  shouldDisableSandbox?: boolean;
+  readonly shouldDisableSandbox?: boolean;
 
   /**
    * Whether a post-boot **silent asar fallback** (the running app version differs
@@ -183,7 +183,7 @@ export interface DesktopCdpTransportConfig {
    *
    * @default `true`
    */
-  shouldThrowOnSilentAsarFallback?: boolean;
+  readonly shouldThrowOnSilentAsarFallback?: boolean;
 
   /**
    * Whether the post-boot runtime-Electron compatibility nag warning is emitted
@@ -193,7 +193,7 @@ export interface DesktopCdpTransportConfig {
    *
    * @default `true`
    */
-  shouldWarnOnCompatibilityIssues?: boolean;
+  readonly shouldWarnOnCompatibilityIssues?: boolean;
 }
 
 /**
@@ -262,17 +262,17 @@ export interface OwnedInstanceEndpoint {
 }
 
 interface CdpExceptionDetails {
-  exception?: CdpExceptionObject;
-  text: string;
+  readonly exception?: CdpExceptionObject;
+  readonly text: string;
 }
 
 interface CdpExceptionObject {
-  description?: string;
+  readonly description?: string;
 }
 
 interface CdpResponse {
-  id: number;
-  result?: CdpResponseResult;
+  readonly id: number;
+  readonly result?: CdpResponseResult;
 }
 
 interface CdpResponseResult {
@@ -285,16 +285,16 @@ interface CdpResponseResult {
 }
 
 interface CdpTarget {
-  id: string;
-  title: string;
-  type: string;
-  url: string;
-  webSocketDebuggerUrl: string;
+  readonly id: string;
+  readonly title: string;
+  readonly type: string;
+  readonly url: string;
+  readonly webSocketDebuggerUrl: string;
 }
 
 interface CdpValue {
-  type: string;
-  value?: unknown;
+  readonly type: string;
+  readonly value?: unknown;
 }
 
 /**

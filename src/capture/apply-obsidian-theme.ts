@@ -96,6 +96,7 @@ export type ObsidianTheme = 'dark' | 'light';
 // Kept local rather than declared globally, like every other holder of a
 // harness `window` property, so it never leaks into consumer types.
 interface AppliedThemeHolder {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Applying a theme updates the window marker.
   __obsidianIntegrationTestingAppliedTheme?: ObsidianTheme | undefined;
 }
 

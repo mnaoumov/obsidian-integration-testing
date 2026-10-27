@@ -33,8 +33,8 @@ import { getOrCreateTransport } from '../transport/transport-factory.ts';
 import { generateNamespaceCall } from './generate-function-call.ts';
 
 interface EvalErrorEnvelope {
-  type: 'error';
-  value: string;
+  readonly type: 'error';
+  readonly value: string;
 }
 
 /**
@@ -50,11 +50,11 @@ type EvalResultEnvelope =
   | EvalValueEnvelope;
 
 interface EvalUndefinedEnvelope {
-  type: 'undefined';
+  readonly type: 'undefined';
 }
 
 interface EvalValueEnvelope {
-  value: unknown;
+  readonly value: unknown;
 }
 
 const NO_OUTPUT = '(no output)';
@@ -140,7 +140,7 @@ export interface CommonArguments {
   /**
    * The Obsidian {@link App} instance.
    */
-  app: App;
+  readonly app: App;
 
   /**
    * The shared library bag injected into every callback — see {@link Lib}.
@@ -155,12 +155,12 @@ export interface CommonArguments {
    * every shared helper through `lib` — `lib.typeIntoEditor({ editor, text })`,
    * `lib.getFileOrNull({ app, … })` — instead of importing or hand-rolling them.
    */
-  lib: Lib;
+  readonly lib: Lib;
 
   /**
    * The `obsidian` module, resolved at runtime inside the Obsidian process.
    */
-  obsidianModule: typeof obsidian;
+  readonly obsidianModule: typeof obsidian;
 }
 
 /**
@@ -356,7 +356,7 @@ export interface Lib {
    *   to hold.
    * @returns A {@link Promise} that resolves once the click has been injected.
    */
-  clickElement: (this: void, params: ClickElementParams) => Promise<void>;
+  readonly clickElement: (this: void, params: ClickElementParams) => Promise<void>;
 
   /**
    * Clicks at the given web-contents coordinates using **trusted** Electron
@@ -396,7 +396,7 @@ export interface Lib {
    *   press and any modifiers to hold.
    * @returns A {@link Promise} that resolves once the click has been injected.
    */
-  clickMouse: (this: void, params: ClickMouseParams) => Promise<void>;
+  readonly clickMouse: (this: void, params: ClickMouseParams) => Promise<void>;
 
   /**
    * Creates a note and does not return until its content is verifiably on
@@ -426,7 +426,7 @@ export interface Lib {
    * @returns A {@link Promise} resolving to the created file, once its content
    *   is confirmed.
    */
-  createNote: (this: void, params: CreateNoteParams) => Promise<TFile>;
+  readonly createNote: (this: void, params: CreateNoteParams) => Promise<TFile>;
 
   /**
    * Drags the mouse from one point to another using **trusted** Electron
@@ -460,7 +460,7 @@ export interface Lib {
    *   many intermediate moves to send.
    * @returns A {@link Promise} that resolves once the button has been released.
    */
-  dragMouse: (this: void, params: DragMouseParams) => Promise<void>;
+  readonly dragMouse: (this: void, params: DragMouseParams) => Promise<void>;
 
   /**
    * Moves the mouse pointer to the center of an element using **trusted**
@@ -486,7 +486,7 @@ export interface Lib {
    *   would let a test read an element that is not hovered and pass on whatever
    *   its base style happens to be.
    */
-  hoverElement: (this: void, params: HoverElementParams) => Promise<void>;
+  readonly hoverElement: (this: void, params: HoverElementParams) => Promise<void>;
 
   /**
    * Moves the mouse pointer to the given web-contents coordinates using a
@@ -515,7 +515,7 @@ export interface Lib {
    * @param params - The web-contents DIP coordinates to move to.
    * @returns A {@link Promise} that resolves once the move has been injected.
    */
-  moveMouse: (this: void, params: MoveMouseParams) => Promise<void>;
+  readonly moveMouse: (this: void, params: MoveMouseParams) => Promise<void>;
 
   /**
    * Opens Obsidian's settings modal on a given tab, and does not return until
@@ -546,7 +546,7 @@ export interface Lib {
    * @throws Error if no tab carries {@link OpenSettingsTabParams.tabId}, or if
    *   the tab does not render within the timeout.
    */
-  openSettingsTab: (this: void, params: OpenSettingsTabParams) => Promise<string[]>;
+  readonly openSettingsTab: (this: void, params: OpenSettingsTabParams) => Promise<string[]>;
 
   /**
    * Presses a single key (optionally with modifiers) using **trusted** Electron
@@ -586,7 +586,7 @@ export interface Lib {
    * @returns A {@link Promise} that resolves once the key press has been
    *   injected.
    */
-  pressKey: (this: void, params: PressKeyParams) => Promise<void>;
+  readonly pressKey: (this: void, params: PressKeyParams) => Promise<void>;
 
   /**
    * Types text into a CodeMirror {@link Editor} using **trusted** Electron
@@ -610,7 +610,7 @@ export interface Lib {
    * @param params - The editor to type into and the text to type.
    * @returns A {@link Promise} that resolves once the keystrokes have settled.
    */
-  typeIntoEditor: (this: void, params: TypeIntoEditorParams) => Promise<void>;
+  readonly typeIntoEditor: (this: void, params: TypeIntoEditorParams) => Promise<void>;
 
   /**
    * Moves the mouse pointer to a point just outside an element's bounding box
@@ -632,7 +632,7 @@ export interface Lib {
    * @throws When the element keeps matching `:hover`, which is what a
    *   full-viewport element does.
    */
-  unhoverElement: (this: void, params: UnhoverElementParams) => Promise<void>;
+  readonly unhoverElement: (this: void, params: UnhoverElementParams) => Promise<void>;
 
   /**
    * Polls a predicate until it becomes truthy, or rejects once a bounded
@@ -656,7 +656,7 @@ export interface Lib {
    *   timeout message.
    * @returns A {@link Promise} that resolves once the predicate is truthy.
    */
-  waitUntil: (this: void, params: WaitUntilParams) => Promise<void>;
+  readonly waitUntil: (this: void, params: WaitUntilParams) => Promise<void>;
 }
 
 /**

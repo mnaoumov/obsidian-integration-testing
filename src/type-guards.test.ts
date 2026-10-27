@@ -13,7 +13,7 @@ import {
 } from './type-guards.ts';
 
 interface Boxed {
-  value: number;
+  readonly value: number;
 }
 
 const TEST_VALUE = 42;

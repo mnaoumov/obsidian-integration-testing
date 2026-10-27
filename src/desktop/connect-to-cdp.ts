@@ -73,7 +73,7 @@ export interface CdpConnection extends AsyncDisposable {
    * @param params - The exact size to capture at. Omit to capture the window at its natural size.
    * @returns A {@link Promise} that resolves to the raw PNG bytes.
    */
-  captureScreenshot: (params?: Except<CaptureScreenshotParams, 'cwd'>) => Promise<Uint8Array>;
+  readonly captureScreenshot: (params?: Except<CaptureScreenshotParams, 'cwd'>) => Promise<Uint8Array>;
 
   /**
    * The base CDP URL, e.g. `http://localhost:51888`.
@@ -99,7 +99,7 @@ export interface CdpConnection extends AsyncDisposable {
    *
    * @returns A {@link Promise} that resolves once disposal completes.
    */
-  dispose: () => Promise<void>;
+  readonly dispose: () => Promise<void>;
 
   /**
    * The runtime Electron compatibility verdict for an owned instance, read live
@@ -121,7 +121,7 @@ export interface CdpConnection extends AsyncDisposable {
    * @param params - The evaluation parameters (`callback`, optional `input`/`contextId`).
    * @returns A {@link Promise} that resolves to the return value of `callback`.
    */
-  evalInObsidian: <Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+  readonly evalInObsidian: <Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
     params: Except<EvalInObsidianParams<Input, Result, TContextId>, 'transport' | 'vaultPath'>
   ) => Promise<Result>;
 
@@ -132,7 +132,7 @@ export interface CdpConnection extends AsyncDisposable {
    * @param expression - A self-contained JavaScript expression.
    * @returns A {@link Promise} that resolves to the raw result string.
    */
-  invoke: (expression: string) => Promise<string>;
+  readonly invoke: (expression: string) => Promise<string>;
 
   /**
    * The CDP port the instance is reachable on (the free port chosen for an
@@ -315,8 +315,8 @@ export interface ConnectToCdpOptions {
  * A resolved CDP host/port pair.
  */
 interface ResolvedEndpoint {
-  host: string;
-  port: number;
+  readonly host: string;
+  readonly port: number;
 }
 
 /**

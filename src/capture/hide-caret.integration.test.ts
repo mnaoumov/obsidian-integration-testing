@@ -155,7 +155,9 @@ interface InputState {
 }
 
 interface ProbeModalHolder {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The test installs and clears its modal probe.
   __hideCaretProbeModal?: Modal | undefined;
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The test installs and clears its suggestion probe.
   __hideCaretProbeSuggest?: AbstractInputSuggest<string> | undefined;
 }
 

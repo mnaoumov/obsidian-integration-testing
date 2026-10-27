@@ -97,25 +97,25 @@ interface ExportsConditionMap {
  * `src/` module importing them, which is what makes them roots rather than orphans.
  */
 interface PackageEntryPoints {
-  bin?: Record<string, string>;
-  exports?: ExportsConditionMap;
+  readonly bin?: Record<string, string>;
+  readonly exports?: ExportsConditionMap;
 }
 
 /**
  * The barrel's two halves: which modules it re-exports from, and which names it forwards.
  */
 interface PublicApiBarrel {
-  entryFilePaths: string[];
-  names: Set<string>;
+  readonly entryFilePaths: string[];
+  readonly names: Set<string>;
 }
 
 /**
  * A type a public signature mentions that the barrel does not re-export.
  */
 interface UnexportedTypeReference {
-  publicName: string;
-  referencedTypeName: string;
-  sourceFilePath: string;
+  readonly publicName: string;
+  readonly referencedTypeName: string;
+  readonly sourceFilePath: string;
 }
 
 // Both assertions load the same project; building it twice would double the most expensive thing in this

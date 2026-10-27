@@ -50,17 +50,17 @@ afterAll(async () => {
  * The renderer `window` property the watchdog stores its socket on.
  */
 interface ParentLivenessHolder {
-  __obsidianIntegrationTestingParentLiveness?: ParentLivenessSocket;
+  readonly __obsidianIntegrationTestingParentLiveness?: ParentLivenessSocket;
 }
 
 /**
  * The subset of the renderer's watchdog socket a test reads.
  */
 interface ParentLivenessSocket {
-  destroy: () => void;
-  localPort?: number;
-  readyState?: string;
-  remotePort?: number;
+  readonly destroy: () => void;
+  readonly localPort?: number;
+  readonly readyState?: string;
+  readonly remotePort?: number;
 }
 
 /**
@@ -68,20 +68,20 @@ interface ParentLivenessSocket {
  * close and the one that replaced it.
  */
 interface ReArmedSocketState {
-  afterLocalPort: number | undefined;
-  afterReadyState: string | undefined;
-  afterRemotePort: number | undefined;
-  beforeLocalPort: number | undefined;
-  beforeRemotePort: number | undefined;
+  readonly afterLocalPort: number | undefined;
+  readonly afterReadyState: string | undefined;
+  readonly afterRemotePort: number | undefined;
+  readonly beforeLocalPort: number | undefined;
+  readonly beforeRemotePort: number | undefined;
 }
 
 /**
  * What the arming check reports back out of the renderer.
  */
 interface WatchdogSocketState {
-  isArmed: boolean;
-  readyState: string | undefined;
-  remotePort: number | undefined;
+  readonly isArmed: boolean;
+  readonly readyState: string | undefined;
+  readonly remotePort: number | undefined;
 }
 
 describe('parent-liveness watchdog', () => {
