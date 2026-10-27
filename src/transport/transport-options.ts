@@ -93,6 +93,14 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly deviceIdleTimeoutInMilliseconds?: number;
 
   /**
+   * Guest CPU count for an auto-started emulator, capped by BULK_CORES when set.
+   * Both values must be positive safe integers. Reused devices are unchanged.
+   *
+   * @default `4`
+   */
+  readonly emulatorCpuCount?: number;
+
+  /**
    * Whether the auto-started Appium server console window is shown.
    *
    * When `false` (the default), the `npx appium` server process is spawned with

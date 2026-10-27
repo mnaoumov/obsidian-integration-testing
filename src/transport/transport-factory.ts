@@ -445,6 +445,11 @@ interface EnsureDeviceConnectedParams {
   readonly deviceIdleTimeoutInMilliseconds: number;
 
   /**
+  Requested guest CPU count, capped by BULK_CORES at launch.
+   */
+  readonly emulatorCpuCount?: number | undefined;
+
+  /**
   Whether the auto-started emulator window is shown (omitted → hidden).
    */
   readonly isEmulatorVisible?: boolean | undefined;
@@ -709,6 +714,11 @@ interface StartAppiumAndEmulatorParams {
   Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it).
    */
   readonly deviceIdleTimeoutInMilliseconds: number;
+
+  /**
+  Requested guest CPU count, capped by BULK_CORES at launch.
+   */
+  readonly emulatorCpuCount?: number | undefined;
 
   /**
   Whether the auto-started Appium server console window is shown (omitted → hidden).
@@ -1235,6 +1245,7 @@ class AppiumTransportFactory {
           appiumUrl: url,
           avdName: options.avdName,
           deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
+          emulatorCpuCount: options.emulatorCpuCount,
           isAppiumConsoleVisible: options.isAppiumConsoleVisible,
           isEmulatorVisible: options.isEmulatorVisible,
           networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
@@ -1617,7 +1628,7 @@ class AppiumTransportFactory {
   }
 
   private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
-    const { avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds } = params;
+    const { avdName, deviceIdleTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds } = params;
     const timeouts: DeviceReadinessTimeouts = { deviceIdleTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds };
     /*
      * Before the device listing, so a leftover stopped here is not listed. Only
@@ -1675,7 +1686,7 @@ class AppiumTransportFactory {
       this.logSnapshotAge(avdName);
     }
     const launchedAtInMilliseconds = Date.now();
-    const emulator = this.startEmulator(avdName, shouldReuseSnapshot, isEmulatorVisible);
+    const emulator = this.startEmulator(params, shouldReuseSnapshot);
     const isRecordedFromLaunch = this.recordEmulatorLaunch({ avdName, emulator, launchedAtInMilliseconds, preLaunchEmulatorPids: emulatorPidsBefore });
 
     /*
@@ -2406,7 +2417,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -2460,7 +2471,7 @@ class AppiumTransportFactory {
           this.log('Auto-started Appium server is ready.');
         })
         : noopAsync(),
-      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
+      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
     ]);
 
     const deviceResult = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : undefined;
@@ -2554,10 +2565,11 @@ class AppiumTransportFactory {
     }
   }
 
-  private startEmulator(avdName: string, shouldReuseSnapshot: boolean, isEmulatorVisible?: boolean): ProcessLaunch {
+  private startEmulator(params: EnsureDeviceConnectedParams, shouldReuseSnapshot: boolean): ProcessLaunch {
+    const { avdName, emulatorCpuCount, isEmulatorVisible } = params;
     const emulatorBinary = resolveEmulatorBinaryPath();
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
-    const input = buildEmulatorArguments({ avdName, isHidden: isWindowHidden, shouldReuseSnapshot });
+    const input = buildEmulatorArguments({ avdName, bulkCores: process.env['BULK_CORES'], cpuCount: emulatorCpuCount, isHidden: isWindowHidden, shouldReuseSnapshot });
     const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);
     const { environment, isNetsimLogGuarded } = buildEmulatorEnvironment(process.env);
     this.log(`Running: ${emulatorBinary} ${input.join(' ')}`);

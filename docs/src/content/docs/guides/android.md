@@ -74,7 +74,7 @@ These are minimums, not suggestions. Following the setup above with Android Stud
 | `disk.dataPartition.size` | `16G`   | `6G`                     | This is the one that actually bites — see below.                        |
 | `hw.ramSize`              | `4096`  | `2048`                   | The WebView has to become ready inside a fixed budget.                  |
 | `vm.heapSize`             | `512`   | `256`                    | Obsidian is a large WebView app.                                        |
-| `hw.cpu.ncore`            | `4`+    | `4`                      | Raise it if the host has cores to spare; emulator startup is CPU-bound. |
+| `hw.cpu.ncore`            | `4`+    | `4`                      | The harness overrides this at launch with `-cores`; see the CPU budget below. |
 
 Edit them in Device Manager → *Edit* → *Show Advanced Settings*, or directly in the AVD's `config.ini` (`~/.android/avd/<name>.avd/config.ini`); a size change needs a wipe of user data.
 
@@ -245,3 +245,7 @@ Either way, run the health check in [AVD provisioning](#avd-provisioning) first 
 - [`ObsidianAndroidAppiumTransportOptions` API reference](/obsidian-integration-testing/api/transport/transport-options/ObsidianAndroidAppiumTransportOptions/)
 - [`AppiumTransport` API reference](/obsidian-integration-testing/api/android/appium/transport-appium/AppiumTransport/)
 - [Leftover cleanup](/obsidian-integration-testing/guides/leftover-cleanup/)
+
+### Emulator CPU budget
+
+Auto-started emulators receive `-cores` explicitly. The `emulatorCpuCount` transport option defaults to `4`; when `BULK_CORES` is set, the smaller value wins. For example, `BULK_CORES=2` caps even `emulatorCpuCount: 8` at two guest CPUs. Both values must be positive safe integers; invalid values fail before launch. This applies to Vitest, Jest and manual transport creation. Already-running devices and the shared AVD configuration are unchanged.

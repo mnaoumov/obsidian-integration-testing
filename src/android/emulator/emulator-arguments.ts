@@ -31,6 +31,8 @@
  * environment it inherits. See **L56**.
  */
 
+const DEFAULT_EMULATOR_CPU_COUNT = 4;
+
 const DNS_SERVER = '8.8.8.8';
 
 /**
@@ -53,6 +55,16 @@ export interface BuildEmulatorArgumentsParams {
   The Android Virtual Device name.
    */
   readonly avdName: string;
+
+  /**
+  The BULK_CORES environment value, when set.
+   */
+  readonly bulkCores?: string | undefined;
+
+  /**
+  Requested guest CPU count. Defaults to 4, capped by BULK_CORES.
+   */
+  readonly cpuCount?: number | undefined;
 
   /**
    * Whether to run the emulator headless (`-no-window`), so it never steals
@@ -94,7 +106,17 @@ export interface EmulatorEnvironment {
  * @returns The argument array to pass to the emulator binary.
  */
 export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): string[] {
+  const cpuCount = params.cpuCount ?? DEFAULT_EMULATOR_CPU_COUNT;
+  if (!Number.isSafeInteger(cpuCount) || cpuCount < 1) {
+    throw new Error('emulatorCpuCount must be a positive safe integer.');
+  }
+  const bulkCores = params.bulkCores === undefined ? cpuCount : Number(params.bulkCores);
+  if (!Number.isSafeInteger(bulkCores) || bulkCores < 1) {
+    throw new Error('BULK_CORES must be a positive safe integer.');
+  }
   return [
+    '-cores',
+    String(Math.min(cpuCount, bulkCores)),
     '-avd',
     params.avdName,
     /*
