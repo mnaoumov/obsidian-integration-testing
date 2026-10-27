@@ -43,9 +43,9 @@ const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 60_000;
 What the routing probe reads back from the window it ran against.
 */
 interface VaultProbe {
-  basePath: string;
-  hasFreshManifest: boolean;
-  vaultName: string;
+  readonly basePath: string;
+  readonly hasFreshManifest: boolean;
+  readonly vaultName: string;
 }
 
 describe('owned instance worker attach', () => {
@@ -138,11 +138,11 @@ What a raw `app.setting.open()` -- deliberately NOT the `openSettingsTab` helper
 The harness is actually driving.
 */
 interface HeadlessDefaultsProbe {
-  configuredAlwaysUpdateLinks: unknown;
-  configuredSettingsPopoutWindow: unknown;
-  isActiveDocumentMain: boolean;
-  isContainerAttachedByOpenAlone: boolean;
-  isContainerInMainDocument: boolean;
+  readonly configuredAlwaysUpdateLinks: unknown;
+  readonly configuredSettingsPopoutWindow: unknown;
+  readonly isActiveDocumentMain: boolean;
+  readonly isContainerAttachedByOpenAlone: boolean;
+  readonly isContainerInMainDocument: boolean;
 }
 
 /*

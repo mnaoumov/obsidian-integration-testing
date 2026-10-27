@@ -57,7 +57,7 @@ export interface HiddenCaret {
    *
    * @returns A {@link Promise} that resolves once the caret is restored.
    */
-  restore: () => Promise<void>;
+  readonly restore: () => Promise<void>;
 }
 
 /**
@@ -85,6 +85,7 @@ export interface HideCaretOptions {
 // Kept local rather than declared globally, like every other holder of a
 // harness `window` property, so it never leaks into consumer types.
 interface HiddenCaretHolder {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Hiding and restoring the caret replaces and clears this window state.
   __obsidianIntegrationTestingHiddenCaret?: HiddenCaretRecord | undefined;
 }
 

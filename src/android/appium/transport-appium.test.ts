@@ -50,13 +50,13 @@ const STARTED_PROBE: StartupProbeResult = {
 };
 
 interface MockBrowser {
-  activateApp: ReturnType<typeof vi.fn>;
-  deleteSession: ReturnType<typeof vi.fn>;
-  execute: ReturnType<typeof vi.fn>;
-  getContexts: ReturnType<typeof vi.fn>;
-  pushFile: ReturnType<typeof vi.fn>;
-  queryAppState: ReturnType<typeof vi.fn>;
-  switchContext: ReturnType<typeof vi.fn>;
+  readonly activateApp: ReturnType<typeof vi.fn>;
+  readonly deleteSession: ReturnType<typeof vi.fn>;
+  readonly execute: ReturnType<typeof vi.fn>;
+  readonly getContexts: ReturnType<typeof vi.fn>;
+  readonly pushFile: ReturnType<typeof vi.fn>;
+  readonly queryAppState: ReturnType<typeof vi.fn>;
+  readonly switchContext: ReturnType<typeof vi.fn>;
 }
 
 function createMockBrowser(): MockBrowser {

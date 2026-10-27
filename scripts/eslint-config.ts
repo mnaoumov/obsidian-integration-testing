@@ -581,7 +581,7 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
         'typescript-dev-toolkit/params-options-name-match': 'error',
         'typescript-dev-toolkit/prefer-logical-operator-over-ternary': 'error',
         'typescript-dev-toolkit/prefer-noop-async': 'error',
-        'typescript-dev-toolkit/readonly-params-options-result-members': 'error',
+        'typescript-dev-toolkit/readonly-interface-members': 'error',
         'typescript-dev-toolkit/require-method-template': 'error'
       }
     }
@@ -820,7 +820,7 @@ function getUnicornConfigs(): Linter.Config[] {
              *
              * The disabled replacements below are established vocabulary rather than abbreviations to be
              * expanded. `params` is the parameter-bag convention, enforced by
-             * `typescript-dev-toolkit/readonly-params-options-result-members` and its siblings, which require bag
+             * `typescript-dev-toolkit/params-options-name-match` and its siblings, which require bag
              * types to be named `<Owner>Params` / `<Owner>Options`; expanding it to `Parameters` would put the
              * two rules in direct contradiction. `el` is exempt because Obsidian names every element member that
              * way (`containerEl`, `contentEl`, `inputEl`), so expanding ours would leave this harness reading

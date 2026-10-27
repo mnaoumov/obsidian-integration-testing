@@ -9,12 +9,12 @@ import type { GenerateFunctionCallParams } from './generate-function-call.ts';
 import { generateFunctionCall } from './generate-function-call.ts';
 
 interface AddArguments {
-  a: number;
-  b: number;
+  readonly a: number;
+  readonly b: number;
 }
 
 interface TransformArguments {
-  transform: (x: number) => number;
+  readonly transform: (x: number) => number;
 }
 
 describe('generateFunctionCall', () => {

@@ -136,13 +136,13 @@ interface PluginTestCase {
    * When `undefined` and `shouldHaveError` is `true`, asserts `errorMessage` is defined (any value).
    * When `undefined` and `shouldHaveError` is falsy, asserts `errorMessage` is `undefined`.
    */
-  expectedError?: string;
-  id: string;
-  mainJs: string;
-  name: string;
-  shouldBeEnabled: boolean;
-  shouldBeLoaded: boolean;
-  shouldHaveError?: boolean;
+  readonly expectedError?: string;
+  readonly id: string;
+  readonly mainJs: string;
+  readonly name: string;
+  readonly shouldBeEnabled: boolean;
+  readonly shouldBeLoaded: boolean;
+  readonly shouldHaveError?: boolean;
 }
 
 const TEST_CASES: PluginTestCase[] = [

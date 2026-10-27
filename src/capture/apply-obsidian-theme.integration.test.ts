@@ -19,6 +19,7 @@ import { applyObsidianTheme } from './apply-obsidian-theme.ts';
 import { captureObsidianScreenshot } from './capture-obsidian-screenshot.ts';
 
 interface ReloadProbe {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The wrapped config reader increments this counter.
   appearanceReadCount: number;
   readonly originalReadConfigJson: (config: string) => Promise<null | object>;
 }
@@ -26,6 +27,7 @@ interface ReloadProbe {
 // Kept local rather than declared globally, like every other holder of a test's
 // own `window` property.
 interface ReloadProbeHolder {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The test installs and clears its window probe.
   __applyThemeReloadProbe?: ReloadProbe | undefined;
 }
 

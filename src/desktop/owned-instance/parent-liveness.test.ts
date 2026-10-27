@@ -73,9 +73,9 @@ interface SocketStub {
    *
    * @param event - The event to fire.
    */
-  fire: (event: string) => void;
+  readonly fire: (event: string) => void;
 
-  on: (event: string, listener: () => void) => void;
+  readonly on: (event: string, listener: () => void) => void;
 }
 
 /**
@@ -84,16 +84,16 @@ interface SocketStub {
  * path calls.
  */
 interface WatchdogWindowStub {
-  connectSpy: ReturnType<typeof vi.fn>;
-  destroy: ReturnType<typeof vi.fn>;
+  readonly connectSpy: ReturnType<typeof vi.fn>;
+  readonly destroy: ReturnType<typeof vi.fn>;
 
   /**
    * Every socket handed to the watchdog, in the order it asked for them: the
    * armed connection first, then one per reconnect probe.
    */
   readonly sockets: SocketStub[];
-  windowClose: ReturnType<typeof vi.fn>;
-  windowStub: WindowStub;
+  readonly windowClose: ReturnType<typeof vi.fn>;
+  readonly windowStub: WindowStub;
 }
 
 /**

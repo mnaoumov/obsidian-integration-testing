@@ -25,7 +25,7 @@ declare module 'vitest' {
      * Transport options provided by the global setup, consumed by
      * `evalInObsidian` and other library functions via `inject()`.
      */
-    obsidianTransport?: ObsidianTransportOptions;
+    readonly obsidianTransport?: ObsidianTransportOptions;
 
     /**
      * The global setup's failure, serialized for the workers. Present only when
@@ -33,12 +33,12 @@ declare module 'vitest' {
      * resolver, and `getOrCreateTransport` throws it rather than let a worker
      * build a transport the project never asked for.
      */
-    setupError?: IntegrationSetupFailedErrorConstructorParams;
+    readonly setupError?: IntegrationSetupFailedErrorConstructorParams;
 
     /**
      * Path to the temporary vault created by the global setup.
      */
-    temporaryVaultPath: string;
+    readonly temporaryVaultPath: string;
   }
 }
 

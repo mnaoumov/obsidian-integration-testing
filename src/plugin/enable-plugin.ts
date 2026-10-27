@@ -56,11 +56,11 @@ export interface EnablePluginResult {
 }
 
 interface IntegrationTestingErrorToString {
-  errorToString: (error: unknown) => string;
+  readonly errorToString: (error: unknown) => string;
 }
 
 interface IntegrationTestingHolder {
-  __obsidianIntegrationTesting: IntegrationTestingErrorToString;
+  readonly __obsidianIntegrationTesting: IntegrationTestingErrorToString;
 }
 
 /**

@@ -14,20 +14,22 @@ import {
 } from './android-write-loss-guard.ts';
 
 interface FakeAdapter {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The regression replaces stat to simulate a failed size probe.
   stat: (path: string) => Promise<FakeStat | null>;
-  write: (path: string, data: string) => Promise<void>;
-  writeBinary: (path: string, data: ArrayBuffer) => Promise<void>;
+  readonly write: (path: string, data: string) => Promise<void>;
+  readonly writeBinary: (path: string, data: ArrayBuffer) => Promise<void>;
 }
 
 interface FakeDisk {
   // How many of the next writes land empty.
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The fake disk decrements this counter for each simulated lost write.
   lossesLeft: number;
-  sizes: Map<string, number>;
-  writes: string[];
+  readonly sizes: Map<string, number>;
+  readonly writes: string[];
 }
 
 interface FakeStat {
-  size: number;
+  readonly size: number;
 }
 
 function createFakeAdapter(disk: FakeDisk): FakeAdapter {

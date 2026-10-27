@@ -15,8 +15,8 @@ import { registerLibResolver } from './lib-registry.ts';
 // here targeting the local module that declares `Lib`.
 declare module '../eval/eval-in-obsidian.ts' {
   interface Lib {
-    echo: (this: void, value: string) => string;
-    shout: (this: void, value: string) => string;
+    readonly echo: (this: void, value: string) => string;
+    readonly shout: (this: void, value: string) => string;
   }
 }
 

@@ -15,6 +15,7 @@ import {
 } from './owned-instance-exit-marker.ts';
 
 interface ErrnoError extends Error {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The error fixture assigns the process error code after construction.
   code: string;
 }
 

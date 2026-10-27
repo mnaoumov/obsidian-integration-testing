@@ -30,10 +30,11 @@ const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 interface WriteLossGuardHolder {
-  __obsidianIntegrationTestingWriteLossGuard?: WriteLossGuardState;
+  readonly __obsidianIntegrationTestingWriteLossGuard?: WriteLossGuardState;
 }
 
 interface WriteLossGuardState {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The live guard replaces the rewrite log when the probe drains it.
   rewrites: string[];
 }
 

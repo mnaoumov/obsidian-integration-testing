@@ -123,6 +123,7 @@ describe('evalInObsidian', () => {
   it('should inject context setup when contextId is provided', async () => {
     mockTransportEvaluate.mockResolvedValue(JSON.stringify({ value: 'ok' }));
     interface Context {
+      // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The callback writes this context value during evaluation.
       value: number;
     }
     const contextId = new ContextId<Context>();

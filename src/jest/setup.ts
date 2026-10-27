@@ -25,8 +25,8 @@ import {
 } from '../transport/context-provider.ts';
 
 interface ObsidianIntegrationTestingGlobal {
-  temporaryVaultPath?: string | undefined;
-  transportOptions?: ObsidianTransportOptions | undefined;
+  readonly temporaryVaultPath?: string | undefined;
+  readonly transportOptions?: ObsidianTransportOptions | undefined;
 }
 
 /* eslint-disable vars-on-top -- Required for `declare global` augmentation. */

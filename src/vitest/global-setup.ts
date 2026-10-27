@@ -73,8 +73,8 @@ export interface CreateSetupOptions {
  * A Vitest `globalSetup` module's `setup` / `teardown` pair.
  */
 export interface VitestGlobalSetup {
-  setup: (this: void, project: TestProject) => Promise<void>;
-  teardown: (this: void) => Promise<void>;
+  readonly setup: (this: void, project: TestProject) => Promise<void>;
+  readonly teardown: (this: void) => Promise<void>;
 }
 
 /**

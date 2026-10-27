@@ -59,7 +59,7 @@ const ASAR_HEADER_JSON_OFFSET = 16;
 const MINIMUM_PLAUSIBLE_ASAR_SIZE_IN_BYTES = 1_000_000;
 
 interface AsarHeader {
-  files: object;
+  readonly files: object;
 }
 
 const CHANNELS = [

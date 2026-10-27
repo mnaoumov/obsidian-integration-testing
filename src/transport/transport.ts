@@ -43,7 +43,7 @@ export interface ObsidianTransport {
    *
    * @returns An opaque handle to pass to {@link ObsidianTransport.readConsoleCaptureSince}, or `undefined` when unsupported.
    */
-  beginConsoleCapture?: () => Promise<ConsoleCaptureHandle | undefined>;
+  readonly beginConsoleCapture?: () => Promise<ConsoleCaptureHandle | undefined>;
 
   /**
    * Captures a PNG screenshot of the running Obsidian instance.
@@ -58,11 +58,12 @@ export interface ObsidianTransport {
    * @param params - Which window to capture, and the exact size to capture it at.
    * @returns A {@link Promise} that resolves to the raw PNG bytes.
    */
-  captureScreenshot?: (params: CaptureScreenshotParams) => Promise<Uint8Array>;
+  readonly captureScreenshot?: (params: CaptureScreenshotParams) => Promise<Uint8Array>;
 
   /**
    * Disposes of transport resources (e.g. WebSocket connections, Appium sessions).
    */
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The factory wraps disposal to also clean up the owned instance.
   dispose?: () => Promise<void>;
 
   /**
@@ -72,6 +73,7 @@ export interface ObsidianTransport {
    * Implementations should perform only synchronous cleanup here (e.g. killing
    * child processes). Async operations like unregistering vaults are skipped.
    */
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The factory wraps synchronous disposal to also clean up the owned instance.
   disposeSync?: () => void;
 
   /**
@@ -86,7 +88,7 @@ export interface ObsidianTransport {
    * @param options - Evaluation options including the working directory.
    * @returns The raw result string from Obsidian.
    */
-  evaluate: (expression: string, options: TransportEvalOptions) => Promise<string>;
+  readonly evaluate: (expression: string, options: TransportEvalOptions) => Promise<string>;
 
   /**
    * Whether this transport targets a mobile Obsidian instance.
@@ -94,7 +96,7 @@ export interface ObsidianTransport {
    * When `true`, desktop-only plugins (with `isDesktopOnly: true` in manifest)
    * will refuse to run integration tests.
    */
-  isMobile: boolean;
+  readonly isMobile: boolean;
 
   /**
    * Runs transport-specific preflight checks before evaluation.
@@ -104,7 +106,7 @@ export interface ObsidianTransport {
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
-  preflightCheck: (vaultPath: string) => Promise<void>;
+  readonly preflightCheck: (vaultPath: string) => Promise<void>;
 
   /**
    * Pushes files into a vault directory on the target device.
@@ -115,7 +117,7 @@ export interface ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    * @param files - Map of relative file paths to content buffers.
    */
-  pushFiles?: (vaultPath: string, files: Record<string, Uint8Array>) => Promise<void>;
+  readonly pushFiles?: (vaultPath: string, files: Record<string, Uint8Array>) => Promise<void>;
 
   /**
    * Reads the native console/error output captured since the matching
@@ -126,7 +128,7 @@ export interface ObsidianTransport {
    * @param handle - The handle returned by {@link ObsidianTransport.beginConsoleCapture} (or `undefined` when capture was unsupported).
    * @returns The captured console/error text, or `undefined` when unsupported or nothing relevant was logged.
    */
-  readConsoleCaptureSince?: (handle: ConsoleCaptureHandle | undefined) => Promise<string | undefined>;
+  readonly readConsoleCaptureSince?: (handle: ConsoleCaptureHandle | undefined) => Promise<string | undefined>;
 
   /**
    * Registers a vault path so Obsidian can target it.
@@ -142,7 +144,7 @@ export interface ObsidianTransport {
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
-  registerVault: (vaultPath: string) => Promise<void>;
+  readonly registerVault: (vaultPath: string) => Promise<void>;
 
   /**
    * Unregisters a vault path from the running Obsidian instance.
@@ -152,7 +154,7 @@ export interface ObsidianTransport {
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
-  unregisterVault: (vaultPath: string) => Promise<void>;
+  readonly unregisterVault: (vaultPath: string) => Promise<void>;
 }
 
 /**

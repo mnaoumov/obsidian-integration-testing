@@ -115,14 +115,15 @@ export async function ensureNamespaceBootstrapped(transport: ObsidianTransport, 
  */
 function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<BootstrapNamespaceParams>): void {
   interface IntegrationTestingHolder {
+    // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Bootstrapping installs or replaces the window namespace.
     __obsidianIntegrationTesting: IntegrationTestingNamespaceState;
   }
 
   interface IntegrationTestingNamespaceState {
-    contexts: Record<string, Record<string, unknown>>;
-    libResolvers: LibResolver[];
-    obsidianModule?: unknown;
-    version: string;
+    readonly contexts: Record<string, Record<string, unknown>>;
+    readonly libResolvers: LibResolver[];
+    readonly obsidianModule?: unknown;
+    readonly version: string;
   }
 
   interface IntegrationTestingNamespace extends IntegrationTestingNamespaceState {
@@ -150,24 +151,24 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * @param id - The request id to claim.
      * @returns `true` for the first caller to claim this id, `false` for every later one.
      */
-    claimInput: (id: string) => boolean;
+    readonly claimInput: (id: string) => boolean;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It
      * owns the harness test window's lifecycle via Electron (`window.electronWindow`),
      * which is the harness's concern, not a general utility.
      */
-    destroyCurrentWindow: () => Promise<void>;
+    readonly destroyCurrentWindow: () => Promise<void>;
 
     /**
      * Synced with `@mnaoumov/obsidian-lib` (mirror `workspace.ts`) — see L17.
      */
-    ensureLayoutReady: () => Promise<void>;
+    readonly ensureLayoutReady: () => Promise<void>;
 
     /**
      * Synced with `@mnaoumov/typescript-lib` (mirror `error.ts`) — see L17.
      */
-    errorToString: (error: unknown) => string;
+    readonly errorToString: (error: unknown) => string;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. This
@@ -175,28 +176,28 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * module, invokes the closure, envelopes the result) — meaningless outside
      * the harness.
      */
-    evalWrapper: (nsParams: EvalWrapperParams) => Promise<string>;
+    readonly evalWrapper: (nsParams: EvalWrapperParams) => Promise<string>;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is
      * the harness's one-time bootstrap that resolves the `obsidian` module for
      * the process; closures obtain it directly via their `obsidianModule` arg.
      */
-    getObsidianModule: () => Promise<unknown>;
+    readonly getObsidianModule: () => Promise<unknown>;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. Raw
      * Electron IPC (`window.electron.ipcRenderer.sendSync`) is a harness/transport
      * primitive, not a general-purpose helper.
      */
-    ipcSendSync: (nsParams: IpcSendSyncParams) => Promise<void>;
+    readonly ipcSendSync: (nsParams: IpcSendSyncParams) => Promise<void>;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is
      * part of the harness's vault-path handshake with the Node side, not a
      * general utility.
      */
-    pollVaultBasePath: () => Promise<string>;
+    readonly pollVaultBasePath: () => Promise<string>;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It is the renderer end of the
@@ -206,13 +207,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * @param id - The request id being answered.
      * @param errorMessage - Why the injection failed, or `null` on success.
      */
-    resolveInput: (id: string, errorMessage: null | string) => void;
+    readonly resolveInput: (id: string, errorMessage: null | string) => void;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: niche/trivial — a
      * one-line `localStorage.setItem` wrapper used only by the harness.
      */
-    setLocalStorageItem: (nsParams: SetLocalStorageItemParams) => Promise<void>;
+    readonly setLocalStorageItem: (nsParams: SetLocalStorageItemParams) => Promise<void>;
 
     /**
      * The deliberate seam `@mnaoumov/obsidian-lib` reads on mobile — the one namespace member that exists for
@@ -245,8 +246,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // Old Obsidian versions (e.g. 0.6.x) predate `getBasePath()` and expose only
   // the `basePath` property.
   interface FileSystemAdapterLike {
-    basePath?: string;
-    getBasePath?: () => string;
+    readonly basePath?: string;
+    readonly getBasePath?: () => string;
   }
 
   interface IpcSendSyncParams {
@@ -259,10 +260,10 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // optional-member view to detect their runtime absence without a false
   // `no-unnecessary-condition`.
   interface PluginsLike {
-    isEnabled?: () => boolean;
-    loadPlugin?: (id: string) => Promise<void>;
-    manifests?: unknown;
-    uninstallPlugin?: (id: string) => Promise<void>;
+    readonly isEnabled?: () => boolean;
+    readonly loadPlugin?: (id: string) => Promise<void>;
+    readonly manifests?: unknown;
+    readonly uninstallPlugin?: (id: string) => Promise<void>;
   }
 
   interface SetLocalStorageItemParams {
@@ -273,13 +274,13 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // The shape of the `trustedInput` seam. Every member is one of the L17-synced helpers, exposed as the
   // same function object `evalWrapper` puts in a closure's `lib` bag.
   interface TrustedInputHelpers {
-    clickElement: (clickParams: ClickElementParams) => Promise<void>;
-    clickMouse: (clickParams: ClickMouseParams) => Promise<void>;
-    hoverElement: (hoverParams: HoverElementParams) => Promise<void>;
-    moveMouse: (moveParams: MoveMouseParams) => Promise<void>;
-    pressKey: (pressParams: PressKeyParams) => Promise<void>;
-    typeIntoEditor: (typeParams: TypeIntoEditorParams) => Promise<void>;
-    unhoverElement: (unhoverParams: UnhoverElementParams) => Promise<void>;
+    readonly clickElement: (clickParams: ClickElementParams) => Promise<void>;
+    readonly clickMouse: (clickParams: ClickMouseParams) => Promise<void>;
+    readonly hoverElement: (hoverParams: HoverElementParams) => Promise<void>;
+    readonly moveMouse: (moveParams: MoveMouseParams) => Promise<void>;
+    readonly pressKey: (pressParams: PressKeyParams) => Promise<void>;
+    readonly typeIntoEditor: (typeParams: TypeIntoEditorParams) => Promise<void>;
+    readonly unhoverElement: (unhoverParams: UnhoverElementParams) => Promise<void>;
   }
 
   // `Vault.configDir` is declared always-present by `obsidian-typings`, but old
@@ -288,7 +289,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // unnecessary condition.
   interface VaultLike {
     // eslint-disable-next-line unicorn/name-replacements -- Structural mirror of Obsidian's own `Vault.configDir`; the name has to match for the probe to read it.
-    configDir?: string;
+    readonly configDir?: string;
   }
 
   // `window.app` / `app.workspace` are declared always-present, but are transiently
@@ -296,21 +297,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // optional-member views so the readiness check can guard them without a false
   // `no-unnecessary-condition`.
   interface WorkspaceLike {
-    layoutReady?: boolean;
+    readonly layoutReady?: boolean;
   }
 
   interface AppLike {
-    workspace?: WorkspaceLike;
+    readonly workspace?: WorkspaceLike;
   }
 
   // `Editor.cm` is declared always-present as a CodeMirror 6 `EditorView`; the probe tolerates an editor
   // whose `cm` has no `dom`.
   interface EditorLike {
-    cm?: EditorViewLike;
+    readonly cm?: EditorViewLike;
   }
 
   interface EditorViewLike {
-    dom?: Node;
+    readonly dom?: Node;
   }
 
   type CurrentWebContents = ReturnType<Window['electron']['remote']['getCurrentWebContents']>;
@@ -320,12 +321,12 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   type ElectronModifier = NonNullable<Parameters<CurrentWebContents['sendInputEvent']>[0]['modifiers']>[number];
 
   interface ObsidianModuleWithPlatform {
-    Platform: ObsidianPlatform;
+    readonly Platform: ObsidianPlatform;
   }
 
   interface ObsidianPlatform {
-    isMacOS: boolean;
-    isMobile: boolean;
+    readonly isMacOS: boolean;
+    readonly isMobile: boolean;
   }
 
   /**
@@ -351,8 +352,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface PendingInput {
-    reject: (error: Error) => void;
-    resolve: () => void;
+    readonly reject: (error: Error) => void;
+    readonly resolve: () => void;
   }
 
   /**

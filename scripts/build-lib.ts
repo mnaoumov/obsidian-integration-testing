@@ -15,7 +15,7 @@ import { readMetadataJsonText } from './helpers/metadata-global.ts';
 exitIfScriptDisabled();
 
 interface PackageJson {
-  version: string;
+  readonly version: string;
 }
 
 const packageVersion = (JSON.parse(readFileSync('package.json', 'utf-8')) as PackageJson).version;

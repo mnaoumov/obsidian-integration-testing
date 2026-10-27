@@ -14,6 +14,7 @@ import {
 } from './obsidian-config.ts';
 
 interface MockEnv {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The test changes the environment path to exercise platform config resolution.
   APPDATA: string | undefined;
 }
 

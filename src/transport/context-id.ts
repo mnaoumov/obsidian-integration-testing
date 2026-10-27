@@ -11,7 +11,7 @@ import { evalInObsidian } from '../eval/eval-in-obsidian.ts';
  * Wraps a {@link ContextOf} extraction into an object with a `context` property.
  */
 export interface ContextArguments<TContextId extends ContextId<unknown> | undefined = undefined> {
-  context: ContextOf<TContextId>;
+  readonly context: ContextOf<TContextId>;
 }
 
 /**
@@ -50,10 +50,10 @@ export class ContextId<_Context> implements AsyncDisposable {
       /* v8 ignore start -- Serialized via toString() and executed inside the Obsidian process. Covered by integration tests. */
       callback({ id }): void {
         interface IntegrationTestingContexts {
-          contexts: Record<string, unknown>;
+          readonly contexts: Record<string, unknown>;
         }
         interface IntegrationTestingHolder {
-          __obsidianIntegrationTesting: IntegrationTestingContexts;
+          readonly __obsidianIntegrationTesting: IntegrationTestingContexts;
         }
 
         // eslint-disable-next-line no-restricted-syntax -- Approved double cast: `__obsidianIntegrationTesting` is our internal Window augmentation, intentionally kept local (not declared globally) to avoid leaking into consumer types.

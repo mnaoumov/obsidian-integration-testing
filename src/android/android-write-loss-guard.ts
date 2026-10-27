@@ -39,22 +39,24 @@ export type AndroidWriteLossGuardInstallResult = 'already-installed' | 'installe
 export type AndroidWriteLossRewrites = string[];
 
 interface WriteLossGuardApp {
-  vault?: WriteLossGuardVault;
+  readonly vault?: WriteLossGuardVault;
 }
 
 // Kept local rather than declared globally, like every other holder of a
 // harness `window` property, so it never leaks into consumer types.
 interface WriteLossGuardHolder {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Installation assigns the guard state to the window.
   __obsidianIntegrationTestingWriteLossGuard?: WriteLossGuardState;
-  app?: WriteLossGuardApp;
+  readonly app?: WriteLossGuardApp;
 }
 
 interface WriteLossGuardState {
+  // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Draining the log replaces it with a fresh array.
   rewrites: AndroidWriteLossRewrites;
 }
 
 interface WriteLossGuardVault {
-  adapter?: DataAdapter;
+  readonly adapter?: DataAdapter;
 }
 
 /**
