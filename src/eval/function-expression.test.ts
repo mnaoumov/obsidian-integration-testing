@@ -42,38 +42,38 @@ describe('getFunctionExpressionString', () => {
   });
 
   it('should prefix with "function " for a shorthand method', () => {
-    const object = {
+    const $object = {
       method(this: void): void {
         noop();
       }
     };
-    expect(getFunctionExpressionString(object.method)).toMatch(/^function method\(\)/);
+    expect(getFunctionExpressionString($object.method)).toMatch(/^function method\(\)/);
   });
 
   it('should prefix with "async function " for an async shorthand method', () => {
-    const object = {
+    const $object = {
       async method(this: void): Promise<void> {
         await noopAsync();
       }
     };
-    expect(getFunctionExpressionString(object.method)).toMatch(/^async function method\(\)/);
+    expect(getFunctionExpressionString($object.method)).toMatch(/^async function method\(\)/);
   });
 
   it('should prefix with "function " for a shorthand method named like "async1"', () => {
-    const object = {
+    const $object = {
       async1(this: void): void {
         noop();
       }
     };
-    expect(getFunctionExpressionString(object.async1)).toMatch(/^function async1\(\)/);
+    expect(getFunctionExpressionString($object.async1)).toMatch(/^function async1\(\)/);
   });
 
   it('should prefix with "function " for a shorthand method named like "function1"', () => {
-    const object = {
+    const $object = {
       function1(this: void): void {
         noop();
       }
     };
-    expect(getFunctionExpressionString(object.function1)).toMatch(/^function function1\(\)/);
+    expect(getFunctionExpressionString($object.function1)).toMatch(/^function function1\(\)/);
   });
 });

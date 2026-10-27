@@ -1159,10 +1159,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     const pendingCommands = new Map<number, PendingCommand>();
     this.pendingCommandsBySocket.set(ws, pendingCommands);
-    ws.addEventListener('message', (event: MessageEvent): void => {
+    ws.addEventListener('message', ($event: MessageEvent): void => {
       let message: CdpResponse;
       try {
-        message = JSON.parse(String(event.data)) as CdpResponse;
+        message = JSON.parse(String($event.data)) as CdpResponse;
       } catch {
         return;
       }

@@ -141,16 +141,16 @@ describe('mobile trusted input', () => {
 
         const events: ObservedEvent[] = [];
         for (const type of ['pointerdown', 'touchstart', 'pointerup', 'touchend', 'click']) {
-          target.addEventListener(type, (event: Event) => {
-            events.push({ isTrusted: event.isTrusted, type: event.type });
+          target.addEventListener(type, ($event: Event) => {
+            events.push({ isTrusted: $event.isTrusted, type: $event.type });
           });
         }
 
         try {
           await lib.clickElement({ element: target });
-          await lib.waitUntil({ message: 'the tap to produce a click', predicate: () => events.some((event) => event.type === 'click') });
+          await lib.waitUntil({ message: 'the tap to produce a click', predicate: () => events.some(($event) => $event.type === 'click') });
 
-          return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
+          return { events, hasOnlyTrustedEvents: events.every(($event) => $event.isTrusted) };
         } finally {
           target.remove();
         }
@@ -180,8 +180,8 @@ describe('mobile trusted input', () => {
       async callback({ lib }): Promise<ProbeResult> {
         const events: ObservedEvent[] = [];
 
-        function listener(event: Event): void {
-          events.push({ isTrusted: event.isTrusted, type: event.type });
+        function listener($event: Event): void {
+          events.push({ isTrusted: $event.isTrusted, type: $event.type });
         }
 
         // Capture phase: Obsidian's own handlers may stop propagation before a bubbling listener sees it.
@@ -190,7 +190,7 @@ describe('mobile trusted input', () => {
           await lib.pressKey({ key: 'Escape' });
           await lib.waitUntil({ message: 'a keydown to reach the document', predicate: () => events.length > 0 });
 
-          return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
+          return { events, hasOnlyTrustedEvents: events.every(($event) => $event.isTrusted) };
         } finally {
           document.removeEventListener('keydown', listener, { capture: true });
         }
@@ -474,8 +474,8 @@ describe('mobile trusted input', () => {
         }
 
         const events: ObservedEvent[] = [];
-        function listener(event: Event): void {
-          events.push({ isTrusted: event.isTrusted, type: event.type });
+        function listener($event: Event): void {
+          events.push({ isTrusted: $event.isTrusted, type: $event.type });
         }
 
         // Capture phase: Obsidian's own handler opens the menu and may stop propagation on the way.
@@ -494,7 +494,7 @@ describe('mobile trusted input', () => {
             // indistinguishable.
             const observed = events.length === 0
               ? 'none'
-              : events.map((event) => `${event.type}(isTrusted=${String(event.isTrusted)})`).join(', ');
+              : events.map(($event) => `${$event.type}(isTrusted=${String($event.isTrusted)})`).join(', ');
             throw new Error(`The long press opened no .menu. Events on the pressed element: ${observed}`, { cause: error });
           }
 
@@ -514,7 +514,7 @@ describe('mobile trusted input', () => {
     });
 
     // The mechanism: the platform recognized a long press and emitted a genuine `contextmenu`.
-    expect(result.events.some((event) => event.type === 'contextmenu' && event.isTrusted)).toBe(true);
+    expect(result.events.some(($event) => $event.type === 'contextmenu' && $event.isTrusted)).toBe(true);
     // The consumer-visible effect: Obsidian's own file menu, which is what every converted suite needs.
     expect(result.menuItems).toContain('Rename...');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
@@ -528,9 +528,9 @@ describe('mobile trusted input', () => {
       async callback({ lib }): Promise<string> {
         const target = document.body.createDiv();
         target.setCssStyles({ height: '200px', left: '50px', position: 'fixed', top: '200px', width: '200px', zIndex: '9999' });
-        function swallow(event: Event): void {
-          event.preventDefault();
-          event.stopImmediatePropagation();
+        function swallow($event: Event): void {
+          $event.preventDefault();
+          $event.stopImmediatePropagation();
         }
 
         globalThis.addEventListener('contextmenu', swallow, { capture: true });
@@ -626,8 +626,8 @@ interface WindowTargetResult {
  */
 function countByType(events: readonly ObservedEvent[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const event of events) {
-    counts[event.type] = (counts[event.type] ?? 0) + 1;
+  for (const $event of events) {
+    counts[$event.type] = (counts[$event.type] ?? 0) + 1;
   }
 
   return counts;

@@ -96,12 +96,12 @@ describe('eval-in-obsidian integration', () => {
   });
 
   it('should evaluate a shorthand method', async () => {
-    const object = {
+    const $object = {
       add(this: void, { a, b }: AbArguments): number {
         return a + b;
       }
     };
-    const result = await evalInObsidian({ callback: object.add, input: { a: 7, b: 8 }, vaultPath });
+    const result = await evalInObsidian({ callback: $object.add, input: { a: 7, b: 8 }, vaultPath });
     expect(result).toBe(15);
   });
 
@@ -115,14 +115,14 @@ describe('eval-in-obsidian integration', () => {
   });
 
   it('should evaluate an async shorthand method', async () => {
-    const object = {
+    const $object = {
       async multiply(this: void, { a, b }: AbArguments): Promise<number> {
         // eslint-disable-next-line unicorn/no-useless-promise-resolve-reject -- The `await` is the point: this fixture exists to prove a genuinely asynchronous shorthand method survives serialization and resolves inside Obsidian.
         return await Promise.resolve(a * b);
       }
     };
     const result = await evalInObsidian({
-      callback: object.multiply,
+      callback: $object.multiply,
       input: {
         a: 6,
         b: 7
@@ -160,13 +160,13 @@ describe('eval-in-obsidian integration', () => {
   });
 
   it('should pass input with an async shorthand method', async () => {
-    const object = {
+    const $object = {
       async compute(this: void, { a, b }: AbArguments): Promise<number> {
         const sum = await Promise.resolve(a + b);
         return sum * 2;
       }
     };
-    const result = await evalInObsidian({ callback: object.compute, input: { a: 3, b: 4 }, vaultPath });
+    const result = await evalInObsidian({ callback: $object.compute, input: { a: 3, b: 4 }, vaultPath });
     expect(result).toBe(14);
   });
 

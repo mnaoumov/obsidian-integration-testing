@@ -92,16 +92,16 @@ describe('desktop trusted input', () => {
 
         const events: ObservedEvent[] = [];
         for (const type of ['mousedown', 'mouseup', 'click']) {
-          target.addEventListener(type, (event: Event) => {
-            events.push({ isTrusted: event.isTrusted, type: event.type });
+          target.addEventListener(type, ($event: Event) => {
+            events.push({ isTrusted: $event.isTrusted, type: $event.type });
           });
         }
 
         try {
           await lib.clickElement({ element: target });
-          await lib.waitUntil({ predicate: () => events.some((event) => event.type === 'click') });
+          await lib.waitUntil({ predicate: () => events.some(($event) => $event.type === 'click') });
 
-          return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
+          return { events, hasOnlyTrustedEvents: events.every(($event) => $event.isTrusted) };
         } finally {
           target.remove();
         }
@@ -127,8 +127,8 @@ describe('desktop trusted input', () => {
       async callback({ lib }): Promise<ProbeResult> {
         const events: ObservedEvent[] = [];
 
-        function listener(event: Event): void {
-          events.push({ isTrusted: event.isTrusted, type: event.type });
+        function listener($event: Event): void {
+          events.push({ isTrusted: $event.isTrusted, type: $event.type });
         }
 
         document.addEventListener('keydown', listener, { capture: true });
@@ -136,7 +136,7 @@ describe('desktop trusted input', () => {
           await lib.pressKey({ key: 'Escape' });
           await lib.waitUntil({ predicate: () => events.length > 0 });
 
-          return { events, hasOnlyTrustedEvents: events.every((event) => event.isTrusted) };
+          return { events, hasOnlyTrustedEvents: events.every(($event) => $event.isTrusted) };
         } finally {
           document.removeEventListener('keydown', listener, { capture: true });
         }
@@ -231,17 +231,17 @@ describe('desktop trusted input', () => {
         const events: ObservedEvent[] = [];
         const buttons: number[] = [];
         for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
-          target.addEventListener(type, (event: Event) => {
-            events.push({ isTrusted: event.isTrusted, type: event.type });
-            if (event.type === 'pointermove' && event instanceof PointerEvent) {
-              buttons.push(event.buttons);
+          target.addEventListener(type, ($event: Event) => {
+            events.push({ isTrusted: $event.isTrusted, type: $event.type });
+            if ($event.type === 'pointermove' && $event instanceof PointerEvent) {
+              buttons.push($event.buttons);
             }
           });
         }
 
         try {
           await lib.dragMouse({ from: { x: 44, y: 280 }, steps: 5, to: { x: 304, y: 280 } });
-          await lib.waitUntil({ message: 'the pointerup ending the drag', predicate: () => events.some((event) => event.type === 'pointerup') });
+          await lib.waitUntil({ message: 'the pointerup ending the drag', predicate: () => events.some(($event) => $event.type === 'pointerup') });
           return { buttons, events };
         } finally {
           target.remove();
@@ -250,7 +250,7 @@ describe('desktop trusted input', () => {
       vaultPath: vault.path
     });
 
-    expect(result.events.every((event) => event.isTrusted)).toBe(true);
+    expect(result.events.every(($event) => $event.isTrusted)).toBe(true);
     const counts = countByType(result.events);
     expect(counts['pointerdown']).toBe(1);
     expect(counts['pointerup']).toBe(1);
@@ -366,11 +366,11 @@ describe('desktop trusted input', () => {
             await lib.waitUntil({ message: 'the popout to load', predicate: () => popoutWindow.document.readyState === 'complete' });
 
             const keys: Record<string, string[]> = { main: [], popout: [] };
-            function recordMain(event: KeyboardEvent): void {
-              keys['main']?.push(`${event.key}:${String(event.isTrusted)}`);
+            function recordMain($event: KeyboardEvent): void {
+              keys['main']?.push(`${$event.key}:${String($event.isTrusted)}`);
             }
-            function recordPopout(event: KeyboardEvent): void {
-              keys['popout']?.push(`${event.key}:${String(event.isTrusted)}`);
+            function recordPopout($event: KeyboardEvent): void {
+              keys['popout']?.push(`${$event.key}:${String($event.isTrusted)}`);
             }
 
             document.addEventListener('keydown', recordMain, { capture: true });
@@ -435,8 +435,8 @@ describe('desktop trusted input', () => {
             const target = popoutDocument.body.createDiv();
             target.setCssStyles({ height: '80px', left: '24px', position: 'fixed', top: '120px', width: '160px', zIndex: '2147483647' });
             const observed: ObservedEvent[] = [];
-            target.addEventListener('click', (event: Event) => {
-              observed.push({ isTrusted: event.isTrusted, type: event.type });
+            target.addEventListener('click', ($event: Event) => {
+              observed.push({ isTrusted: $event.isTrusted, type: $event.type });
             });
 
             await lib.clickElement({ element: target });
@@ -489,8 +489,8 @@ describe('desktop trusted input', () => {
  */
 function countByType(events: readonly ObservedEvent[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const event of events) {
-    counts[event.type] = (counts[event.type] ?? 0) + 1;
+  for (const $event of events) {
+    counts[$event.type] = (counts[$event.type] ?? 0) + 1;
   }
 
   return counts;

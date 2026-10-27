@@ -142,10 +142,10 @@ export class WebViewCdpConnection {
    * @param port - The forwarded local port.
    */
   public constructor(private readonly webSocket: WebSocket, private readonly deviceId: string, private readonly port: number) {
-    this.webSocket.addEventListener('message', (event: MessageEvent) => {
+    this.webSocket.addEventListener('message', ($event: MessageEvent) => {
       let message: CdpMessage;
       try {
-        message = JSON.parse(String(event.data)) as CdpMessage;
+        message = JSON.parse(String($event.data)) as CdpMessage;
       } catch {
         return;
       }

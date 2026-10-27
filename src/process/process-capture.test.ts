@@ -33,14 +33,14 @@ class FakeChildProcess {
     this.stderr = hasPipes ? new FakeStream() : null;
   }
 
-  public emit(event: string, ...arguments_: unknown[]): void {
-    for (const listener of this.listeners.get(event) ?? []) {
+  public emit($event: string, ...arguments_: unknown[]): void {
+    for (const listener of this.listeners.get($event) ?? []) {
       listener(...arguments_);
     }
   }
 
-  public once(event: string, listener: Listener): this {
-    this.listeners.set(event, [...this.listeners.get(event) ?? [], listener]);
+  public once($event: string, listener: Listener): this {
+    this.listeners.set($event, [...this.listeners.get($event) ?? [], listener]);
     return this;
   }
 }
@@ -55,8 +55,8 @@ class FakeStream {
     }
   }
 
-  public on(event: string, listener: Listener): this {
-    if (event === 'data') {
+  public on($event: string, listener: Listener): this {
+    if ($event === 'data') {
       this.listeners.push(listener);
     }
     return this;

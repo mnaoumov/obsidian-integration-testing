@@ -161,7 +161,7 @@ describe('bypassStrictProxy', () => {
   });
 
   it('should return non-proxy objects as-is', () => {
-    const object = { name: 'test' };
-    expect(bypassStrictProxy(object)).toBe(object);
+    const $object = { name: 'test' };
+    expect(bypassStrictProxy($object)).toBe($object);
   });
 });

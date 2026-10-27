@@ -53,15 +53,15 @@ interface MockClassRef {
  * instead of throwing. Non-proxied values are returned as-is.
  *
  * @typeParam T - The type of the object.
- * @param object - The object to unwrap.
- * @returns The underlying target, or `object` if it is not a strict proxy.
+ * @param $object - The object to unwrap.
+ * @returns The underlying target, or `$object` if it is not a strict proxy.
  */
-export function bypassStrictProxy<T>(object: T): T {
-  if (!isObjectLike(object)) {
-    return object;
+export function bypassStrictProxy<T>($object: T): T {
+  if (!isObjectLike($object)) {
+    return $object;
   }
-  // eslint-disable-next-line unicorn/no-computed-property-existence-check -- `in` is required, not a shorthand: `object` may be a strict proxy, and only `in` routes through its `has` trap. `Object.hasOwn` would ask the target for an own descriptor and miss the marker.
-  return (STRICT_PROXY_TARGET_SYMBOL in object) ? (object[STRICT_PROXY_TARGET_SYMBOL] as T) : object;
+  // eslint-disable-next-line unicorn/no-computed-property-existence-check -- `in` is required, not a shorthand: `$object` may be a strict proxy, and only `in` routes through its `has` trap. `Object.hasOwn` would ask the target for an own descriptor and miss the marker.
+  return (STRICT_PROXY_TARGET_SYMBOL in $object) ? ($object[STRICT_PROXY_TARGET_SYMBOL] as T) : $object;
 }
 
 // eslint-disable-next-line @typescript-eslint/unified-signatures -- This overload infers T from mockClass; the `unknown` overload below requires explicit T. They cannot be combined.

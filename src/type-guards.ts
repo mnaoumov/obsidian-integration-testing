@@ -63,11 +63,11 @@ export function castTo<T>(value: unknown): T {
  * access type-checks.
  *
  * @typeParam T - The object type.
- * @param object - The object to widen.
+ * @param $object - The object to widen.
  * @returns The same object typed as `GenericObject & T`.
  */
-export function ensureGenericObject<T extends object>(object: T): GenericObject & T {
-  return object as GenericObject & T;
+export function ensureGenericObject<T extends object>($object: T): GenericObject & T {
+  return $object as GenericObject & T;
 }
 
 /**
