@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 17.7.0
+
+- feat(android): cap emulator guest CPUs by the bulk budget
+- chore: adopt readonly interface members
+
 ## 17.6.1
 
 - fix(android): recover requested vault from the mobile picker
