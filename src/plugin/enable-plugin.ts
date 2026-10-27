@@ -156,11 +156,11 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgu
   }
   console.error = ourConsoleError;
   console.warn = ourConsoleWarn;
-  function onWindowError(event: ErrorEvent): void {
-    capturedConsole.push(event.error instanceof Error ? formatArgument(event.error) : event.message);
+  function onWindowError($event: ErrorEvent): void {
+    capturedConsole.push($event.error instanceof Error ? formatArgument($event.error) : $event.message);
   }
-  function onUnhandledRejection(event: PromiseRejectionEvent): void {
-    capturedConsole.push(formatArgument(event.reason));
+  function onUnhandledRejection($event: PromiseRejectionEvent): void {
+    capturedConsole.push(formatArgument($event.reason));
   }
   globalThis.addEventListener('error', onWindowError);
   globalThis.addEventListener('unhandledrejection', onUnhandledRejection);

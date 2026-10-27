@@ -71,11 +71,11 @@ interface SocketStub {
   /**
    * Invokes the listener the watchdog registered for the event, if any.
    *
-   * @param event - The event to fire.
+   * @param $event - The event to fire.
    */
-  readonly fire: (event: string) => void;
+  readonly fire: ($event: string) => void;
 
-  readonly on: (event: string, listener: () => void) => void;
+  readonly on: ($event: string, listener: () => void) => void;
 }
 
 /**
@@ -346,12 +346,12 @@ function createSocketStub(): SocketStub {
   const events: string[] = [];
   return {
     events,
-    fire(event: string): void {
-      listeners.get(event)?.();
+    fire($event: string): void {
+      listeners.get($event)?.();
     },
-    on(event: string, listener: () => void): void {
-      listeners.set(event, listener);
-      events.push(event);
+    on($event: string, listener: () => void): void {
+      listeners.set($event, listener);
+      events.push($event);
     }
   };
 }

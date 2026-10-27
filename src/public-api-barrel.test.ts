@@ -366,12 +366,12 @@ function getProject(): Project {
  * @returns `true` when the type is declared in this package's `src/`.
  */
 function isDeclaredInSrc(typeReference: TypeReferenceNode): boolean {
-  const symbol = typeReference.getTypeName().getSymbol();
-  if (!symbol) {
+  const $symbol = typeReference.getTypeName().getSymbol();
+  if (!$symbol) {
     return false;
   }
 
-  const resolvedSymbol = symbol.getAliasedSymbol() ?? symbol;
+  const resolvedSymbol = $symbol.getAliasedSymbol() ?? $symbol;
 
   return resolvedSymbol.getDeclarations().some((declaration) => {
     // A generic type parameter is scoped to the declaration that introduces it — never a barrel entry.

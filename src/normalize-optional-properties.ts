@@ -23,9 +23,9 @@ import type { UndefinedOnPartialDeep } from 'type-fest';
  * guard, so an explicit `undefined` value is indistinguishable from an absent key.
  *
  * @typeParam T - The target type with optional properties to normalize.
- * @param object - The object literal, permitting explicit `undefined` for optional properties.
+ * @param $object - The object literal, permitting explicit `undefined` for optional properties.
  * @returns The same object, typed as `T`.
  */
-export function normalizeOptionalProperties<T>(object: UndefinedOnPartialDeep<T>): T {
-  return object as T;
+export function normalizeOptionalProperties<T>($object: UndefinedOnPartialDeep<T>): T {
+  return $object as T;
 }
