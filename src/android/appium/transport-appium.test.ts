@@ -18,6 +18,7 @@ import {
   drainAndroidWriteLossRewrites,
   installAndroidWriteLossGuard
 } from '../android-write-loss-guard.ts';
+import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
 import { AppiumTransport } from './transport-appium.ts';
 
 const mockExec = vi.hoisted(() => vi.fn<(command: string | string[], options?: Record<string, unknown>) => Promise<string>>().mockResolvedValue(''));
@@ -392,6 +393,33 @@ describe('AppiumTransport startup budgets', () => {
     // Report a fully started, laid-out app so registerVault resolves without waiting.
     mockBrowser.execute.mockResolvedValue(STARTED_PROBE);
     vi.mocked(log).mockClear();
+  });
+
+  it('recovers the picker inside the startup budget and opens only once', async () => {
+    const deviceVaultPath = '/sdcard/Documents/my-vault';
+    const waiting = { hasApp: false, hasWorkspace: false, isLayoutReady: false, vaultPath: null };
+    mockBrowser.execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ ...waiting, pickerAction: 'selected-vault' })
+      .mockResolvedValueOnce({ ...waiting, pickerAction: 'opened-vault' })
+      .mockResolvedValue(STARTED_PROBE);
+    const transport = new AppiumTransport({ browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    await transport.registerVault('/tmp/my-vault');
+    const probes = mockBrowser.execute.mock.calls.filter(([callback]) => callback === probeMobileVaultStartup);
+    expect(probes.map(([, params]): unknown => params)).toEqual([
+      { deviceVaultPath, shouldRecoverPicker: true },
+      { deviceVaultPath, shouldRecoverPicker: true },
+      { deviceVaultPath, shouldRecoverPicker: false },
+      { deviceVaultPath, shouldRecoverPicker: false }
+    ]);
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Picker recovery: opened-vault'));
+  });
+
+  it('names the requested and live vault when startup never reaches the requested vault', async () => {
+    mockBrowser.execute.mockResolvedValue({ hasApp: false, hasWorkspace: false, isLayoutReady: false, pickerAction: 'waiting', vaultPath: '/sdcard/Documents/old' });
+    const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 1, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('Requested vault: /sdcard/Documents/my-vault; live vault: /sdcard/Documents/old');
   });
 
   it('should default the app-start timeout to 180000ms', async () => {

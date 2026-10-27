@@ -58,10 +58,10 @@ import type {
 } from '../../transport/transport.ts';
 import type {
   AppStartupMilestone,
-  AppStartupPhase,
-  StartupProbeResult
+  AppStartupPhase
 } from '../app-startup-progress.ts';
 import type { MobileInputEnvelope } from '../mobile-input.ts';
+import type { MobileVaultStartupProbeResult } from '../mobile-vault-startup.ts';
 import type { WebViewCdpConnection } from '../webview-cdp.ts';
 
 import {
@@ -96,6 +96,7 @@ import {
   MOBILE_INPUT_BINDING_NAME,
   toCdpInputCommands
 } from '../mobile-input.ts';
+import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
 import { connectToWebViewCdp } from '../webview-cdp.ts';
 
 /**
@@ -272,6 +273,10 @@ const DEFAULT_VAULT_BASE_PATH: Record<string, string> = {
  */
 interface AppiumTransportWaitForStartupMilestoneParams {
   /**
+  The device vault whose live adapter must have started.
+   */
+  readonly deviceVaultPath: string;
+  /**
   Whether the milestone just observed ends this phase.
    */
   readonly isSatisfied: (milestone: AppStartupMilestone) => boolean;
@@ -285,14 +290,6 @@ interface AppiumTransportWaitForStartupMilestoneParams {
   This phase's budget.
    */
   readonly timeoutInMilliseconds: number;
-}
-
-interface LoadingApp {
-  workspace?: LoadingWorkspace;
-}
-
-interface LoadingWorkspace {
-  layoutReady?: boolean;
 }
 
 /**
@@ -683,8 +680,8 @@ export class AppiumTransport implements ObsidianTransport {
 
     // Wait for reload + vault initialization, as two separately budgeted phases:
     // The app's cold start first, then Obsidian's own work. See `waitForAppStarted`.
-    await this.waitForAppStarted();
-    await this.waitForLayoutReady();
+    await this.waitForAppStarted(deviceVaultPath);
+    await this.waitForLayoutReady(deviceVaultPath);
     await this.installWriteLossGuard();
   }
 
@@ -1030,19 +1027,13 @@ export class AppiumTransport implements ObsidianTransport {
    * page is mid-`location.reload()` for most of the app-start phase, and a
    * WebView that cannot answer yet is the *expected* reading there, not an error.
    *
+   * @param deviceVaultPath - The requested live adapter path.
+   * @param shouldRecoverPicker - Whether a picker opening action may be initiated.
    * @returns What the probe saw, or `undefined` when it could not run.
    */
-  private async probeStartup(): Promise<StartupProbeResult | undefined> {
+  private async probeStartup(deviceVaultPath: string, shouldRecoverPicker: boolean): Promise<MobileVaultStartupProbeResult | undefined> {
     try {
-      return await this.browser.execute((): StartupProbeResult => {
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- We need global `app` variable.
-        const app = globalThis.app as LoadingApp | undefined;
-        return {
-          hasApp: !!app,
-          hasWorkspace: !!app?.workspace,
-          isLayoutReady: !!app?.workspace?.layoutReady
-        };
-      });
+      return await this.browser.execute(probeMobileVaultStartup, { deviceVaultPath, shouldRecoverPicker });
     } catch {
       return undefined;
     }
@@ -1184,10 +1175,13 @@ export class AppiumTransport implements ObsidianTransport {
    * the WebView reloading, and a guest that may still be optimizing packages.
    * Keeping it separate is the point of the split — the old single wall clock
    * started here and left the tight layout budget paying for a cold start.
+   *
+   * @param deviceVaultPath - The requested live adapter path.
    */
-  private async waitForAppStarted(): Promise<void> {
+  private async waitForAppStarted(deviceVaultPath: string): Promise<void> {
     log(`[appium-transport] Waiting for the app to start (timeout=${String(this.appStartTimeoutInMilliseconds)}ms)...`);
     await this.waitForStartupMilestone({
+      deviceVaultPath,
       isSatisfied: checkAppStarted,
       phase: 'app-start',
       timeoutInMilliseconds: this.appStartTimeoutInMilliseconds
@@ -1200,10 +1194,13 @@ export class AppiumTransport implements ObsidianTransport {
    * The **second** budget, and the tight one: by the time it starts, the app is
    * already up, so all it covers is Obsidian opening the vault and loading
    * plugins — ~1s in practice, ≤8.4s under heavy host stress (**L19**).
+   *
+   * @param deviceVaultPath - The requested live adapter path.
    */
-  private async waitForLayoutReady(): Promise<void> {
+  private async waitForLayoutReady(deviceVaultPath: string): Promise<void> {
     log(`[appium-transport] Waiting for layout ready (timeout=${String(this.layoutReadyTimeoutInMilliseconds)}ms)...`);
     await this.waitForStartupMilestone({
+      deviceVaultPath,
       isSatisfied: checkLayoutReady,
       phase: 'layout-ready',
       timeoutInMilliseconds: this.layoutReadyTimeoutInMilliseconds
@@ -1224,17 +1221,29 @@ export class AppiumTransport implements ObsidianTransport {
    * @param params - The phase, its budget, and the predicate that ends it.
    */
   private async waitForStartupMilestone(params: AppiumTransportWaitForStartupMilestoneParams): Promise<void> {
-    const { isSatisfied, phase, timeoutInMilliseconds } = params;
+    const { deviceVaultPath, isSatisfied, phase, timeoutInMilliseconds } = params;
     const start = Date.now();
     const deadline = start + timeoutInMilliseconds;
 
     let furthestMilestone: AppStartupMilestone = 'no-webview';
     let pollCount = 0;
     let slowestRoundTripInMilliseconds = 0;
+    let hasOpenedPickerVault = false;
+    let lastProbe: MobileVaultStartupProbeResult | undefined;
 
     while (Date.now() < deadline) {
       const roundTripStart = Date.now();
-      const milestone = classifyAppStartupProbe(await this.probeStartup());
+      const probe = await this.probeStartup(deviceVaultPath, phase === 'app-start' && !hasOpenedPickerVault);
+      if (probe) {
+        lastProbe = probe;
+        if (probe.pickerAction === 'opened-vault') {
+          hasOpenedPickerVault = true;
+        }
+        if (probe.pickerAction !== 'waiting') {
+          log(`[appium-transport] Picker recovery: ${probe.pickerAction} (${deviceVaultPath}).`);
+        }
+      }
+      const milestone = classifyAppStartupProbe(probe);
       const roundTripInMilliseconds = Date.now() - roundTripStart;
 
       pollCount++;
@@ -1256,14 +1265,16 @@ export class AppiumTransport implements ObsidianTransport {
       await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(buildStartupTimeoutMessage({
-      elapsedInMilliseconds: Date.now() - start,
-      milestone: furthestMilestone,
-      phase,
-      pollCount,
-      slowestRoundTripInMilliseconds,
-      timeoutInMilliseconds
-    }));
+    throw new Error(`${
+      buildStartupTimeoutMessage({
+        elapsedInMilliseconds: Date.now() - start,
+        milestone: furthestMilestone,
+        phase,
+        pollCount,
+        slowestRoundTripInMilliseconds,
+        timeoutInMilliseconds
+      })
+    } Requested vault: ${deviceVaultPath}; live vault: ${lastProbe?.vaultPath ?? '(none)'}; picker action: ${lastProbe?.pickerAction ?? '(none)'}.`);
   }
 }
 

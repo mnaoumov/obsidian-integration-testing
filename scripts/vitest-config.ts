@@ -75,6 +75,7 @@ const INSTANCE_DEATH_TEST_FILE = 'src/desktop/owned-instance/owned-instance-deat
 // share one project rather than taking one each, because each project boots its own emulator session — the
 // cost that dominates an Android run — and these files are serialized within it anyway.
 const ANDROID_TEST_FILES = [
+  'src/android/mobile-vault-startup.android.integration.test.ts',
   'src/android/mobile-trusted-input.android.integration.test.ts',
   'src/eval/eval-cap.android.integration.test.ts',
   'src/vault/headless-vault-config.android.integration.test.ts',
