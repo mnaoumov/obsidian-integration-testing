@@ -2,8 +2,8 @@
  * @file
  *
  * Shared read/write helpers for the repo-root `metadata.json` catalog, used by
- * both `scripts/refresh-metadata.ts` (bakes upstream download URLs) and
- * `scripts/collect-runtime-versions.ts` (bakes empirical `process.versions`).
+ * both `scripts/metadata/refresh-metadata.ts` (bakes upstream download URLs) and
+ * `scripts/metadata/collect-runtime-versions.ts` (bakes empirical `process.versions`).
  *
  * The write is byte-stable: version keys sorted numerically, two-space indented,
  * with a trailing newline — matching what the format gate produces, so an
@@ -16,9 +16,9 @@ import {
   writeFile
 } from 'node:fs/promises';
 
-import type { ObsidianVersionMetadata } from '../../src/obsidian-metadata.ts';
+import type { ObsidianVersionMetadata } from '../../src/desktop/versions/obsidian-metadata.ts';
 
-import { compareVersions } from '../../src/obsidian-version.ts';
+import { compareVersions } from '../../src/desktop/versions/obsidian-version.ts';
 import { METADATA_JSON_PATH } from './metadata-global.ts';
 
 /**

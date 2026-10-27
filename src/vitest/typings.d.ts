@@ -11,8 +11,8 @@
  * and `inject('obsidianTransport')` / `inject('temporaryVaultPath')`.
  */
 
-import type { IntegrationSetupFailedErrorConstructorParams } from '../integration-setup-failed-error.ts';
-import type { ObsidianTransportOptions } from '../transport-options.ts';
+import type { IntegrationSetupFailedErrorConstructorParams } from '../transport/integration-setup-failed-error.ts';
+import type { ObsidianTransportOptions } from '../transport/transport-options.ts';
 
 // eslint-disable-next-line import-x/no-unassigned-import -- Forces module resolution so declare module augmentations merge correctly.
 import 'vitest';

@@ -9,19 +9,19 @@
 
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
-import type { CoreSetupResult } from '../global-setup-core.ts';
-import type { PopulateFilesParams } from '../temporary-vault.ts';
-import type { ObsidianTransportOptions } from '../transport-options.ts';
+import type { CoreSetupResult } from '../setup/global-setup-core.ts';
+import type { ObsidianTransportOptions } from '../transport/transport-options.ts';
+import type { PopulateFilesParams } from '../vault/temporary-vault.ts';
 
-import {
-  setTransportOptionsResolver,
-  setVaultPathResolver
-} from '../context-provider.ts';
 import {
   coreSetup,
   coreTeardown
-} from '../global-setup-core.ts';
-import { TemporaryVault } from '../temporary-vault.ts';
+} from '../setup/global-setup-core.ts';
+import {
+  setTransportOptionsResolver,
+  setVaultPathResolver
+} from '../transport/context-provider.ts';
+import { TemporaryVault } from '../vault/temporary-vault.ts';
 
 /**
  * Shape of `globalThis.__obsidianIntegrationTesting`.

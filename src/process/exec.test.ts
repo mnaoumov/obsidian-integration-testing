@@ -1,0 +1,515 @@
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi
+} from 'vitest';
+
+import { assertNonNullable } from '../type-guards.ts';
+import {
+  exec,
+  toCommandLine
+} from './exec.ts';
+
+interface MockChild extends EventEmitter {
+  kill: ReturnType<typeof vi.fn>;
+  stderr: PassThrough;
+  stdin: PassThrough;
+  stdout: PassThrough;
+}
+
+function createMockChild(): MockChild {
+  // eslint-disable-next-line unicorn/prefer-event-target -- This doubles for a Node `ChildProcess`, which IS an `EventEmitter`; `exec` calls `.on(...)` / `.once(...)` on it, so an `EventTarget` would not satisfy the type or the calls.
+  const child = new EventEmitter() as MockChild;
+  child.kill = vi.fn();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  return child;
+}
+
+const {
+  mockSpawn,
+  mockStderrWrite,
+  mockStdoutWrite
+} = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
+  mockStderrWrite: vi.fn(),
+  mockStdoutWrite: vi.fn()
+}));
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const module_ = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...module_,
+    spawn: mockSpawn
+  };
+});
+
+vi.mock('node:process', async (importOriginal) => {
+  const module_ = await importOriginal<typeof import('node:process')>();
+  const mockProcess = {
+    ...module_,
+    cwd: (): string => module_.cwd(),
+    env: module_.env,
+    stderr: { write: mockStderrWrite },
+    stdout: { write: mockStdoutWrite }
+  };
+  Object.defineProperty(mockProcess, 'platform', {
+    configurable: true,
+    enumerable: true,
+    get: () => process.platform
+  });
+  return {
+    ...module_,
+    default: mockProcess
+  };
+});
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+describe('toCommandLine', () => {
+  it.each([
+    [['simple'], 'simple'],
+    [['arg1', 'arg2'], 'arg1 arg2'],
+    [['hello world'], '"hello world"'],
+    [['say "hi"'], String.raw`"say \"hi\""`],
+    [['line1\nline2'], '"line1\nline2"'],
+    [['no-special'], 'no-special'],
+    [[''], '""'],
+    [['a', 'b c', 'd'], 'a "b c" d'],
+    [['path\\'], 'path\\'],
+    [['path with\\spaces\\'], String.raw`"path with\spaces\\"`],
+    [['she said, "you had me at hello"'], String.raw`"she said, \"you had me at hello\""`]
+  ])('should convert %j to %j', (input: string[], expected: string) => {
+    expect(toCommandLine(input)).toBe(expected);
+  });
+});
+
+describe('exec', () => {
+  it('should reject when command exceeds Windows max length', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const longCommand = 'a'.repeat(8192);
+      await expect(exec(longCommand)).rejects.toThrow('Command line is too long');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should allow longer commands on non-Windows platforms', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    try {
+      const longCommand = `echo ${'a'.repeat(8192)}`;
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+      const promise = exec(longCommand);
+      child.stdout.end('ok');
+      child.stderr.end('');
+      child.emit('close', 0, null);
+      await expect(promise).resolves.toBe('ok');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should reject when command exceeds non-Windows max length', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    try {
+      const longCommand = 'a'.repeat(131_073);
+      await expect(exec(longCommand)).rejects.toThrow('Command line is too long');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should reject when array command exceeds max length', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const longArgument = 'a'.repeat(8192);
+      await expect(exec(['echo', longArgument])).rejects.toThrow('Command line is too long');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should spawn directly without shell when command is an array on Windows', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const child = createMockChild();
+      mockSpawn.mockReturnValue(child);
+      const promise = exec(['echo', 'line1\nline2'], { isQuiet: true });
+      child.stdout.end('line1\nline2');
+      child.stderr.end('');
+      child.emit('close', 0, null);
+      const result = await promise;
+      expect(result).toBe('line1\nline2');
+      expect(mockSpawn).toHaveBeenCalledWith('echo', ['line1\nline2'], expect.objectContaining({ stdio: 'pipe' }));
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should throw when command has newlines but no raw input on Windows', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      await expect(exec('echo line1\nline2')).rejects.toThrow('newlines');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should reject when more than one ExecArgument is provided', async () => {
+    await expect(
+      exec(['cmd', { batchedArguments: ['a'] }, { batchedArguments: ['b'] }])
+    ).rejects.toThrow('Only one ExecArgument with batchedArguments is allowed');
+  });
+
+  it('should expand ExecArgument inline when total length is within limit', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec(['echo', { batchedArguments: ['a', 'b', 'c'] }], { isQuiet: true });
+
+    child.stdout.push(Buffer.from('a b c'));
+    child.stdout.end();
+    child.stderr.end();
+    child.emit('close', 0, null);
+
+    await expect(promise).resolves.toBe('a b c');
+    const firstCall = mockSpawn.mock.calls[0];
+    assertNonNullable(firstCall);
+    const calledCommand = firstCall[0] as string;
+    expect(calledCommand).toContain('echo');
+    expect(calledCommand).toContain('a');
+    expect(calledCommand).toContain('b');
+    expect(calledCommand).toContain('c');
+  });
+
+  it('should split ExecArgument into batches when total exceeds limit', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const longArgument = 'x'.repeat(4000);
+      const children = [createMockChild(), createMockChild()];
+      let callIndex = 0;
+      mockSpawn.mockImplementation(() => {
+        const child = children[callIndex];
+        assertNonNullable(child);
+        callIndex++;
+        setTimeout(() => {
+          child.stdout.push(Buffer.from(`out${String(callIndex)}`));
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        });
+        return child;
+      });
+
+      const result = await exec(['echo', { batchedArguments: [longArgument, longArgument, longArgument] }], { isQuiet: true });
+
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
+      expect(result).toContain('out');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should return ExecResult when shouldIncludeDetails is true with batched input that split', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const longArgument = 'x'.repeat(4000);
+      const children = [createMockChild(), createMockChild()];
+      let callIndex = 0;
+      mockSpawn.mockImplementation(() => {
+        const child = children[callIndex];
+        assertNonNullable(child);
+        callIndex++;
+        setTimeout(() => {
+          child.stdout.push(Buffer.from(`batch${String(callIndex)}`));
+          child.stdout.end();
+          child.stderr.end();
+          child.emit('close', 0, null);
+        });
+        return child;
+      });
+
+      const result = await exec(['echo', { batchedArguments: [longArgument, longArgument, longArgument] }], { isQuiet: true, shouldIncludeDetails: true });
+
+      expect(result).toEqual({
+        exitCode: 0,
+        exitSignal: null,
+        stderr: '',
+        stdout: ''
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should reject when a single batched arg exceeds max length', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      const hugeArgument = 'x'.repeat(8192);
+      await expect(
+        exec(['echo', { batchedArguments: [hugeArgument] }])
+      ).rejects.toThrow('Cannot split');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('should resolve with stdout on successful command', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('echo hello', { isQuiet: true });
+
+    child.stdout.push(Buffer.from('hello'));
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    const result = await promise;
+    expect(result).toBe('hello');
+  });
+
+  it('should reject when command fails with non-zero exit code', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('fail', { isQuiet: true });
+
+    child.stdout.push(null);
+    child.stderr.push(Buffer.from('error output'));
+    child.stderr.push(null);
+    child.emit('close', 1, null);
+
+    await expect(promise).rejects.toThrow('Command failed with exit code 1');
+  });
+
+  it('should resolve with stdout when shouldIgnoreExitCode is true', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('fail', { isQuiet: true, shouldIgnoreExitCode: true });
+
+    child.stdout.push(Buffer.from('partial'));
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', 1, null);
+
+    const result = await promise;
+    expect(result).toBe('partial');
+  });
+
+  it('should return ExecResult when shouldIncludeDetails is true', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('cmd', { isQuiet: true, shouldIncludeDetails: true });
+
+    child.stdout.push(Buffer.from('out'));
+    child.stdout.push(null);
+    child.stderr.push(Buffer.from('err'));
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    const result = await promise;
+    expect(result).toEqual({
+      exitCode: 0,
+      exitSignal: null,
+      stderr: 'err',
+      stdout: 'out'
+    });
+  });
+
+  it('should convert array command to command line', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec(['echo', 'hello world'], { isQuiet: true });
+
+    child.stdout.push(Buffer.from('hello world'));
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle spawn error event', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('bad', { isQuiet: true });
+
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('error', new Error('spawn failed'));
+
+    await expect(promise).rejects.toThrow('spawn failed');
+  });
+
+  it('should resolve on error when shouldIgnoreExitCode is true', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('bad', { isQuiet: true, shouldIgnoreExitCode: true });
+
+    child.stdout.push(Buffer.from('partial'));
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('error', new Error('spawn failed'));
+
+    const result = await promise;
+    expect(result).toBe('partial');
+  });
+
+  it('should return ExecResult on error with shouldIgnoreExitCode and shouldIncludeDetails', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('bad', { isQuiet: true, shouldIgnoreExitCode: true, shouldIncludeDetails: true });
+
+    child.stdout.push(null);
+    child.stderr.push(Buffer.from('err'));
+    child.stderr.push(null);
+    child.emit('error', new Error('spawn failed'));
+
+    const result = await promise;
+    expect(result).toEqual({
+      exitCode: null,
+      exitSignal: null,
+      stderr: 'err',
+      stdout: ''
+    });
+  });
+
+  it('should handle null exit code in error message', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('killed', { isQuiet: true });
+
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', null, 'SIGTERM');
+
+    await expect(promise).rejects.toThrow('exit code (null)');
+  });
+
+  it('should write stdin to child process', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+    const chunks: Buffer[] = [];
+    child.stdin.on('data', (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+
+    const promise = exec('cat', { isQuiet: true, stdin: 'input data' });
+
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    await promise;
+    expect(Buffer.concat(chunks).toString()).toBe('input data');
+  });
+
+  it('should write to process stdout and stderr when not quiet', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('echo hello', { isQuiet: false });
+
+    child.stdout.push(Buffer.from('out'));
+    child.stdout.push(null);
+    child.stderr.push(Buffer.from('err'));
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    await promise;
+    expect(mockStdoutWrite).toHaveBeenCalledWith(Buffer.from('out'));
+    expect(mockStderrWrite).toHaveBeenCalledWith(Buffer.from('err'));
+  });
+
+  it('should reject when command times out', async () => {
+    vi.useFakeTimers();
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const TIMEOUT_MS = 5000;
+    const promise = exec('slow-cmd', { isQuiet: true, timeoutInMilliseconds: TIMEOUT_MS });
+
+    vi.advanceTimersByTime(TIMEOUT_MS);
+
+    await expect(promise).rejects.toThrow(`Command timed out after ${String(TIMEOUT_MS)}ms`);
+    expect(child.kill).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('should clear timeout when command completes before timeout', async () => {
+    vi.useFakeTimers();
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const TIMEOUT_MS = 5000;
+    const promise = exec('fast-cmd', { isQuiet: true, timeoutInMilliseconds: TIMEOUT_MS });
+
+    child.stdout.push(Buffer.from('done'));
+    child.stdout.push(null);
+    child.stderr.push(null);
+    child.emit('close', 0, null);
+
+    const result = await promise;
+    expect(result).toBe('done');
+    expect(vi.getTimerCount()).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it('should trim one trailing newline from stdout and stderr', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+
+    const promise = exec('cmd', { isQuiet: true, shouldIncludeDetails: true });
+
+    child.stdout.push(Buffer.from('output\n'));
+    child.stdout.push(null);
+    child.stderr.push(Buffer.from('warning\n'));
+    child.stderr.push(null);
+
+    // Wait for both stream 'end' events (which do the trimming) before emitting close
+    await Promise.all([
+      new Promise<void>((resolve) => {
+        child.stdout.on('end', resolve);
+      }),
+      new Promise<void>((resolve) => {
+        child.stderr.on('end', resolve);
+      })
+    ]);
+    child.emit('close', 0, null);
+
+    const result = await promise;
+    expect(result).toEqual({
+      exitCode: 0,
+      exitSignal: null,
+      stderr: 'warning',
+      stdout: 'output'
+    });
+  });
+});

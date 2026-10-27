@@ -225,4 +225,4 @@ await lib.clickElement({ button: 'right', element });
 ## Related
 
 - [The `lib` bag](/obsidian-integration-testing/guides/lib/) — where these helpers come from, and how to add your own.
-- [`Lib` API reference](/obsidian-integration-testing/api/eval-in-obsidian/Lib/)
+- [`Lib` API reference](/obsidian-integration-testing/api/eval/eval-in-obsidian/Lib/)

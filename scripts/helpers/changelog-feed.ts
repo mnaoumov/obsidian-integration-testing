@@ -2,7 +2,7 @@
  * @file
  *
  * Pure decisions over Obsidian's Atom changelog feed (`obsidian.md/changelog.xml`)
- * that `scripts/refresh-metadata.ts` needs: which catalog version an entry belongs
+ * that `scripts/metadata/refresh-metadata.ts` needs: which catalog version an entry belongs
  * to, and which feed versions may mint a catalog entry of their own.
  */
 

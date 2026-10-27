@@ -48,6 +48,6 @@ Flags mirror the options above: `--vault`, `--obsidian-version`, `--obsidian-ins
 
 ## Related
 
-- [`connectToCdp` API reference](/obsidian-integration-testing/api/connect-to-cdp/connectToCdp/)
-- [`CdpConnection` API reference](/obsidian-integration-testing/api/connect-to-cdp/CdpConnection/)
+- [`connectToCdp` API reference](/obsidian-integration-testing/api/desktop/connect-to-cdp/connectToCdp/)
+- [`CdpConnection` API reference](/obsidian-integration-testing/api/desktop/connect-to-cdp/CdpConnection/)
 - [Transport modes](/obsidian-integration-testing/guides/transports/)

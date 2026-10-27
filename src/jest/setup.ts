@@ -17,12 +17,12 @@
  */
 /* v8 ignore start -- Integration-time setup covered by integration tests, not unit tests. */
 
-import type { ObsidianTransportOptions } from '../transport-options.ts';
+import type { ObsidianTransportOptions } from '../transport/transport-options.ts';
 
 import {
   setTransportOptionsResolver,
   setVaultPathResolver
-} from '../context-provider.ts';
+} from '../transport/context-provider.ts';
 
 interface ObsidianIntegrationTestingGlobal {
   temporaryVaultPath?: string | undefined;

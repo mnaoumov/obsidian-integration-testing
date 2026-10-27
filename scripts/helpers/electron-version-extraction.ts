@@ -12,9 +12,9 @@
  * follows the version being read.
  */
 
-import type { ObsidianVersionMetadata } from '../../src/obsidian-metadata.ts';
+import type { ObsidianVersionMetadata } from '../../src/desktop/versions/obsidian-metadata.ts';
 
-import { compareVersions } from '../../src/obsidian-version.ts';
+import { compareVersions } from '../../src/desktop/versions/obsidian-version.ts';
 
 /**
 The parameters of {@link extractMinRecommendedElectronVersion}.

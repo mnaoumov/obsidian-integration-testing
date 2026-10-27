@@ -2,7 +2,7 @@
  * @file
  *
  * The single place that knows where the repo-root `metadata.json` lives and how
- * its table reaches `src/obsidian-metadata.ts` (the sole reader, see L20/L21),
+ * its table reaches `src/desktop/versions/obsidian-metadata.ts` (the sole reader, see L20/L21),
  * which resolves the whole table from a bare `OBSIDIAN_METADATA` global.
  *
  * Two mechanisms supply that global, and both source the table from here:
@@ -13,7 +13,7 @@
  *   runtime file read). Those callers want {@link readMetadataJsonText}.
  * - **A real global** — runtimes with no `define` (the Vitest main process, the
  *   Vitest integration workers and the Jest workers via
- *   `scripts/metadata-global-setup.ts`, and the jiti-run
+ *   `scripts/test-setups/metadata-global-setup.ts`, and the jiti-run
  *   `collect-runtime-versions.ts`) publish the parsed table on `globalThis` with
  *   {@link defineObsidianMetadataGlobal}.
  *

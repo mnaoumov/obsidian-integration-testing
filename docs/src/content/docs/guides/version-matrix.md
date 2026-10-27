@@ -66,6 +66,6 @@ environmentOptions: {
 
 ## Related
 
-- [`runObsidianVersionMatrix` API reference](/obsidian-integration-testing/api/run-version-matrix/runObsidianVersionMatrix/)
-- [`DEFAULT_OBSIDIAN_VERSION_SPECS` API reference](/obsidian-integration-testing/api/version-matrix/DEFAULT-OBSIDIAN-VERSION-SPECS/)
+- [`runObsidianVersionMatrix` API reference](/obsidian-integration-testing/api/desktop/versions/run-version-matrix/runObsidianVersionMatrix/)
+- [`DEFAULT_OBSIDIAN_VERSION_SPECS` API reference](/obsidian-integration-testing/api/desktop/versions/version-matrix/DEFAULT-OBSIDIAN-VERSION-SPECS/)
 - [Transport modes](/obsidian-integration-testing/guides/transports/#pin-an-obsidian-version) — pinning a single version.

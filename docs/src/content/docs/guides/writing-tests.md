@@ -139,5 +139,5 @@ const attemptTimeoutInMilliseconds = DEFAULT_EVAL_CAP_IN_MILLISECONDS / 4;
 ## Related
 
 - [The `lib` bag](/obsidian-integration-testing/guides/lib/) — inject your own helpers into callbacks.
-- [`evalInObsidian` API reference](/obsidian-integration-testing/api/eval-in-obsidian/evalInObsidian/)
-- [`ContextId` API reference](/obsidian-integration-testing/api/context-id/ContextId/)
+- [`evalInObsidian` API reference](/obsidian-integration-testing/api/eval/eval-in-obsidian/evalInObsidian/)
+- [`ContextId` API reference](/obsidian-integration-testing/api/transport/context-id/ContextId/)

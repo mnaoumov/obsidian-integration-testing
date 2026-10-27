@@ -1,0 +1,91 @@
+import {
+  describe,
+  expect,
+  it
+} from 'vitest';
+
+import type { ObsidianAndroidAppiumTransportOptions } from '../../transport/transport-options.ts';
+
+import {
+  checkIsAppiumDriverInstalled,
+  checkIsAppiumOutputOnlyNpmNotices,
+  UIAUTOMATOR2_DRIVER_NAME,
+  willAutoInstallAppiumDependencies
+} from './appium-dependencies.ts';
+
+const BASE_OPTIONS: ObsidianAndroidAppiumTransportOptions = {
+  appiumUrl: 'http://localhost:4723',
+  avdName: 'obsidian_test',
+  type: 'obsidian-android-appium'
+};
+
+const INSTALLED_DRIVER_LIST_JSON = '{"uiautomator2":{"version":"4.2.3","installed":true}}';
+
+describe('checkIsAppiumDriverInstalled', () => {
+  it('should return true when the driver key is present in the installed list', () => {
+    expect(
+      checkIsAppiumDriverInstalled({ driverListJson: INSTALLED_DRIVER_LIST_JSON, driverName: UIAUTOMATOR2_DRIVER_NAME })
+    ).toBe(true);
+  });
+
+  it('should return false when the driver is absent from a non-empty list', () => {
+    expect(
+      checkIsAppiumDriverInstalled({ driverListJson: '{"espresso":{"version":"1.0.0"}}', driverName: UIAUTOMATOR2_DRIVER_NAME })
+    ).toBe(false);
+  });
+
+  it('should return false for an empty installed list', () => {
+    expect(
+      checkIsAppiumDriverInstalled({ driverListJson: '{}', driverName: UIAUTOMATOR2_DRIVER_NAME })
+    ).toBe(false);
+  });
+
+  it('should return false when the JSON cannot be parsed', () => {
+    expect(
+      checkIsAppiumDriverInstalled({ driverListJson: 'not json', driverName: UIAUTOMATOR2_DRIVER_NAME })
+    ).toBe(false);
+  });
+
+  it('should return false when the parsed JSON is not an object', () => {
+    expect(
+      checkIsAppiumDriverInstalled({ driverListJson: '"uiautomator2"', driverName: UIAUTOMATOR2_DRIVER_NAME })
+    ).toBe(false);
+  });
+
+  it('should return false when the parsed JSON is null', () => {
+    expect(
+      checkIsAppiumDriverInstalled({ driverListJson: 'null', driverName: UIAUTOMATOR2_DRIVER_NAME })
+    ).toBe(false);
+  });
+});
+
+describe('willAutoInstallAppiumDependencies', () => {
+  it('should default to true when the option is omitted', () => {
+    expect(willAutoInstallAppiumDependencies(BASE_OPTIONS)).toBe(true);
+  });
+
+  it('should use the provided value when the option is set to false', () => {
+    expect(
+      willAutoInstallAppiumDependencies({
+        ...BASE_OPTIONS,
+        shouldAutoInstallAppiumDependencies: false
+      })
+    ).toBe(false);
+  });
+});
+
+describe('checkIsAppiumOutputOnlyNpmNotices', () => {
+  it('should recognize output that is only npm notices', () => {
+    expect(checkIsAppiumOutputOnlyNpmNotices(
+      'npm notice run obsidian-integration-testing@17.5.1 npx\r\nnpm notice run appium --log-timestamp --port 4723\n'
+    )).toBe(true);
+  });
+
+  it('should not read Appium output as npm notices', () => {
+    expect(checkIsAppiumOutputOnlyNpmNotices('npm notice run appium\n2026-10-23 [Appium] Welcome to Appium v3.7.0\n')).toBe(false);
+  });
+
+  it('should not read empty output as npm notices', () => {
+    expect(checkIsAppiumOutputOnlyNpmNotices('  \n')).toBe(false);
+  });
+});

@@ -24,7 +24,7 @@ import {
   setSetupErrorResolver,
   setTransportOptionsResolver,
   setVaultPathResolver
-} from '../context-provider.ts';
+} from '../transport/context-provider.ts';
 
 setSetupErrorResolver(() => inject('setupError'));
 setTransportOptionsResolver(() => inject('obsidianTransport'));

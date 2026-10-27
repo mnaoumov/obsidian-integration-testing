@@ -1,0 +1,492 @@
+/**
+ * @file
+ *
+ * Programmatic helper to launch (or attach to) a CDP-enabled Obsidian instance
+ * with the runtime helper namespace bootstrapped, for ad-hoc real-app debugging.
+ *
+ * A single {@link connectToCdp} call resolves the owned-instance config, opens a
+ * vault, and bootstraps `window.__obsidianIntegrationTesting` (so `evalWrapper`,
+ * the base `lib` helpers, `errorToString`, `getObsidianModule`, … are available), then
+ * hands back a disposable {@link CdpConnection} exposing the chosen CDP port, a
+ * raw {@link CdpConnection.invoke} and the rich {@link CdpConnection.evalInObsidian}.
+ */
+
+/* v8 ignore start -- Integration-time code (launches Obsidian / CDP) covered by integration tests, not unit tests. */
+
+import type { Except } from 'type-fest';
+
+import type { CaptureScreenshotParams } from '../capture/capture-screenshot.ts';
+import type {
+  EvalInObsidianParams,
+  GenericObject
+} from '../eval/eval-in-obsidian.ts';
+import type { ContextId } from '../transport/context-id.ts';
+import type { ObsidianCdpTransportOptions } from '../transport/transport-options.ts';
+import type { AsarFallback } from './compatibility/asar-fallback-detection.ts';
+import type { ElectronCompatibility } from './compatibility/electron-compatibility.ts';
+import type { InstallerCompatibility } from './compatibility/installer-compatibility.ts';
+
+import { evalInObsidian } from '../eval/eval-in-obsidian.ts';
+import { log } from '../log.ts';
+import { normalizeOptionalProperties } from '../normalize-optional-properties.ts';
+import {
+  resolveLeftoverMaxAgeInMilliseconds,
+  sweepHostLeftovers,
+  willSweepLeftovers
+} from '../setup/leftover-cleanup.ts';
+import { createTransportFromOptions } from '../transport/transport-factory.ts';
+import { resolveOwnedConfigDirectory } from '../transport/transport-options.ts';
+import { ensureHeadlessVaultConfig } from '../vault/headless-vault-config.ts';
+import { TemporaryVault } from '../vault/temporary-vault.ts';
+import { DesktopCdpTransport } from './transport-desktop-cdp.ts';
+
+const DEFAULT_CDP_HOST = 'localhost';
+
+/**
+ * A live connection to a CDP-enabled Obsidian instance with the runtime helper
+ * namespace bootstrapped.
+ *
+ * Implements `AsyncDisposable`, so `await using conn = await connectToCdp(…)`
+ * disposes it (killing an owned instance and — for a throw-away temp vault —
+ * removing its directory) automatically.
+ */
+export interface CdpConnection extends AsyncDisposable {
+  /**
+   * The silent-asar-fallback verdict for an owned instance, read live after boot:
+   * whether the app version it is actually running matches the swapped-in pin, or
+   * the installer silently reverted to its own bundled asar. `undefined` in attach
+   * mode, when no asar was swapped, or when the running version was unreadable. A
+   * `'fallback'` verdict reaches here only when the throw is disabled
+   * ({@link ConnectToCdpOptions.shouldThrowOnSilentAsarFallback} `false`);
+   * otherwise it throws `SilentAsarFallbackError` before the connection is created.
+   */
+  readonly asarFallback?: AsarFallback | undefined;
+
+  /**
+   * Captures a PNG screenshot of this connection's Obsidian window, with the
+   * vault path pre-bound.
+   *
+   * Pass `widthInPixels` + `heightInPixels` to pin the viewport for the duration
+   * of the capture, so the emitted PNG is exactly that size whatever size the
+   * window happens to be.
+   *
+   * @param params - The exact size to capture at. Omit to capture the window at its natural size.
+   * @returns A {@link Promise} that resolves to the raw PNG bytes.
+   */
+  captureScreenshot: (params?: Except<CaptureScreenshotParams, 'cwd'>) => Promise<Uint8Array>;
+
+  /**
+   * The base CDP URL, e.g. `http://localhost:51888`.
+   */
+  readonly cdpUrl: string;
+
+  /**
+   * The resolved installer↔app compatibility verdict for an owned instance, when
+   * it could be determined. `undefined` in attach mode, or when the verdict is
+   * unknown (undetectable shell version, or the app version is absent from the
+   * table). An `'unrunnable'` verdict reaches here only when the proactive throw
+   * is disabled ({@link ConnectToCdpOptions.shouldThrowOnIncompatibleInstaller}
+   * `false`); otherwise it throws `IncompatibleInstallerVersionError` before the
+   * connection is created.
+   */
+  readonly compatibility?: InstallerCompatibility | undefined;
+
+  /**
+   * Disposes the connection: kills an owned instance and removes its isolated
+   * user-data dir. The vault directory is removed only when it is a throw-away
+   * temp vault (see {@link ConnectToCdpOptions.shouldRemoveVaultOnDispose}); a
+   * real vault passed via {@link ConnectToCdpOptions.vault} is never deleted.
+   *
+   * @returns A {@link Promise} that resolves once disposal completes.
+   */
+  dispose: () => Promise<void>;
+
+  /**
+   * The runtime Electron compatibility verdict for an owned instance, read live
+   * after boot: whether the Electron version it is actually running is new enough
+   * for the running app version. `undefined` in attach mode, or when the verdict
+   * is unknown (the live version was unreadable, or the app version carries no
+   * recommended Electron version). An old Electron never blocks — it only warns —
+   * so unlike {@link compatibility} there is no throwing tier.
+   */
+  readonly electronCompatibility?: ElectronCompatibility | undefined;
+
+  /**
+   * Evaluates a self-contained function inside Obsidian via the rich helper
+   * path, receiving `{ app, lib, obsidianModule, context }` plus any `input`
+   * (shared helpers like `typeIntoEditor` / `waitUntil` live on `lib`). Mirrors
+   * the top-level `evalInObsidian`, with the transport and vault path pre-bound
+   * to this connection.
+   *
+   * @param params - The evaluation parameters (`callback`, optional `input`/`contextId`).
+   * @returns A {@link Promise} that resolves to the return value of `callback`.
+   */
+  evalInObsidian: <Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+    params: Except<EvalInObsidianParams<Input, Result, TContextId>, 'transport' | 'vaultPath'>
+  ) => Promise<Result>;
+
+  /**
+   * Evaluates a raw JavaScript expression inside Obsidian and returns the
+   * normalized string result (e.g. `'5'`, a JSON string, or `'(no output)'`).
+   *
+   * @param expression - A self-contained JavaScript expression.
+   * @returns A {@link Promise} that resolves to the raw result string.
+   */
+  invoke: (expression: string) => Promise<string>;
+
+  /**
+   * The CDP port the instance is reachable on (the free port chosen for an
+   * owned instance, or the attached {@link ConnectToCdpOptions.port}).
+   */
+  readonly port: number;
+
+  /**
+   * The opened vault. Exposes `path` and `populate(...)` for seeding files.
+   */
+  readonly vault: TemporaryVault;
+}
+
+/**
+ * Options for {@link connectToCdp}.
+ */
+export interface ConnectToCdpOptions {
+  /**
+   * Timeout in milliseconds for individual CDP commands.
+   *
+   * A test's closure travels as one `Runtime.evaluate` command, so this is also
+   * the desktop per-eval cap. The default is `DEFAULT_EVAL_CAP_IN_MILLISECONDS`,
+   * exported from the package root — import it rather than restating the number,
+   * so a closure sized against the cap follows it if it ever moves.
+   *
+   * @default `30000`
+   */
+  readonly commandTimeoutInMilliseconds?: number;
+
+  /**
+   * The vault's **config folder** — Obsidian's per-vault *Override config
+   * folder* setting, e.g. `'.obsidian-desktop'`. Set it to open a vault that
+   * keeps its settings somewhere other than `.obsidian`; without it such a vault
+   * opens against `.obsidian`, which for a vault that has a stale one beside the
+   * real folder means opening successfully against the wrong settings.
+   *
+   * Must start with a dot, must not be the bare dot, and must not contain a path
+   * separator — anything else throws before Obsidian launches, since Obsidian
+   * would silently substitute `.obsidian`. After the vault opens, its actual
+   * `app.vault.configDir` is read back and a mismatch throws
+   * `ConfigDirectoryFallbackError`.
+   *
+   * Ignored in attach mode ({@link ConnectToCdpOptions.port} set), where the
+   * vault is opened by the user's own Obsidian under its own config.
+   *
+   * @default `undefined` (Obsidian's own default, `.obsidian`)
+   */
+  readonly configDirectory?: string;
+
+  /**
+   * Grace window in milliseconds for fast-failing a dead boot of the owned
+   * instance — the renderer loaded but the app never bootstrapped (empty
+   * `<body>`, no `window.app`), the terminal state when the asar cannot run on
+   * the launched Electron shell. Once it has held this long a
+   * `RendererFailedToInitializeError` is thrown instead of waiting out the full
+   * readiness timeout. Ignored in attach mode ({@link port} set). Set `0` to
+   * disable fast-fail.
+   *
+   * @default `10000`
+   */
+  readonly deadBootGraceInMilliseconds?: number;
+
+  /**
+   * CDP host.
+   *
+   * @default `'localhost'`
+   */
+  readonly host?: string;
+
+  /**
+   * Whether the Obsidian window is shown on screen. Defaults to `true`; set
+   * `false` to launch it off-screen.
+   * Ignored in attach mode ({@link port} set).
+   *
+   * @default `true`
+   */
+  readonly isObsidianAppVisible?: boolean;
+
+  /**
+   * Pins the Electron shell (installer build) the owned instance runs. Accepts
+   * `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`. Ignored when
+   * {@link port} (attach mode) is set. When omitted, the installed shell is used.
+   *
+   * @default `undefined`
+   */
+  readonly obsidianInstallerVersion?: string;
+
+  /**
+   * Pins the Obsidian app version (asar) the owned instance runs. Accepts
+   * `'x.y.z'`, `'public-latest'`, or `'catalyst-latest'`. Ignored when
+   * {@link port} (attach mode) is set. When omitted, the installed version is used.
+   *
+   * @default `undefined`
+   */
+  readonly obsidianVersion?: string;
+
+  /**
+   * CDP port of an already-running Obsidian to **attach** to. When omitted, an
+   * isolated instance is launched on an automatically chosen free port.
+   *
+   * @default `undefined`
+   */
+  readonly port?: number;
+
+  /**
+   * Whether to launch the owned instance with Chromium's sandbox disabled
+   * (`--no-sandbox`).
+   *
+   * Needed to boot on Linux without a correctly-configured setuid
+   * `chrome-sandbox` helper (e.g. an installer-extracted portable shell, or CI
+   * running as a non-root user); harmless on Windows/macOS. Ignored in attach
+   * mode ({@link port} set).
+   *
+   * @default `false`
+   */
+  readonly shouldDisableSandbox?: boolean;
+
+  /**
+   * Whether to remove the vault directory on {@link CdpConnection.dispose}.
+   *
+   * When omitted, defaults to `true` for an implicit throw-away temp vault
+   * ({@link vault} not given) and `false` when a {@link vault} path is given, so
+   * a real vault is never deleted. Set explicitly to override.
+   */
+  readonly shouldRemoveVaultOnDispose?: boolean;
+
+  /**
+   * Whether an **unrunnable** installer↔app version pair fails fast before launch.
+   *
+   * When `true` (the default), an installer below the app's run floor throws
+   * `IncompatibleInstallerVersionError` from version resolution before anything is
+   * downloaded or launched. Set `false` to let the pin proceed to launch — where
+   * the reactive dead-boot fast-fail still catches the black-screen boot, and the
+   * `'unrunnable'` verdict is surfaced on {@link CdpConnection.compatibility}
+   * rather than thrown. Ignored in attach mode ({@link port} set).
+   *
+   * @default `true`
+   */
+  readonly shouldThrowOnIncompatibleInstaller?: boolean;
+
+  /**
+   * Whether a post-boot **silent asar fallback** fails fast.
+   *
+   * When an asar is swapped onto an installer shell too old for it, the instance
+   * may silently revert to the installer's own bundled asar and run the **wrong
+   * (older)** version behind a healthy UI. When `true` (the default), the running
+   * app version is verified against the pin post-boot and a mismatch throws
+   * `SilentAsarFallbackError`. Set `false` to let the boot proceed — the mismatch
+   * is then surfaced on {@link CdpConnection.asarFallback} rather than thrown.
+   * Ignored in attach mode ({@link port} set) and when no asar is swapped.
+   *
+   * @default `true`
+   */
+  readonly shouldThrowOnSilentAsarFallback?: boolean;
+
+  /**
+   * Whether the owned-instance compatibility **nag warnings** are emitted.
+   *
+   * Covers both the offline installer↔app warning and the post-boot
+   * runtime-Electron warning. When `true` (the default) each fires via the harness
+   * log; set `false` to silence both — the verdicts are still surfaced on
+   * {@link CdpConnection.compatibility} / {@link CdpConnection.electronCompatibility},
+   * only the log is suppressed. Ignored in attach mode ({@link port} set).
+   *
+   * @default `true`
+   */
+  readonly shouldWarnOnCompatibilityIssues?: boolean;
+
+  /**
+   * Absolute path to an existing vault to open. When omitted, an empty temporary
+   * vault is created (and removed on dispose unless
+   * {@link shouldRemoveVaultOnDispose} says otherwise).
+   *
+   * @default `undefined`
+   */
+  readonly vault?: string;
+}
+
+/**
+ * A resolved CDP host/port pair.
+ */
+interface ResolvedEndpoint {
+  host: string;
+  port: number;
+}
+
+/**
+ * Launches (or attaches to) a CDP-enabled Obsidian instance, opens a vault, and
+ * bootstraps the runtime helper namespace, returning a disposable connection.
+ *
+ * @param options - Connection options.
+ * @returns A {@link Promise} that resolves to the live {@link CdpConnection}.
+ */
+export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpConnection> {
+  const transportOptions = buildCdpTransportOptions(options);
+  await sweepLeftovers(transportOptions);
+  const transport = await createTransportFromOptions(transportOptions);
+  const shouldRemoveVaultOnDispose = options?.shouldRemoveVaultOnDispose ?? (options?.vault === undefined);
+  const vault = new TemporaryVault(options?.vault, { shouldRemoveDirectoryOnDispose: shouldRemoveVaultOnDispose });
+
+  // The headless defaults go only into a vault the harness made — the same
+  // `options.vault === undefined` discriminator the disposal above turns on. A
+  // caller-supplied vault is a real one the user keeps, and a debugging session
+  // has no business rewriting its settings.
+  if (options?.vault === undefined) {
+    await ensureHeadlessVaultConfig({
+      configDirectory: resolveOwnedConfigDirectory(transportOptions),
+      label: transportOptions.type,
+      vaultPath: vault.path
+    });
+  }
+
+  // Registering the vault is what launches the owned instance (provisions the
+  // asar, opens the vault, and bootstraps the helper namespace), or opens the
+  // vault in the attached instance.
+  await vault.register(transport);
+
+  const { host, port } = resolveEndpoint(transport, options);
+  const cdpUrl = `http://${host}:${String(port)}`;
+  const asarFallback = transport instanceof DesktopCdpTransport ? transport.getAsarFallback() : undefined;
+  const compatibility = transport instanceof DesktopCdpTransport ? transport.getCompatibility() : undefined;
+  const electronCompatibility = transport instanceof DesktopCdpTransport ? transport.getElectronCompatibility() : undefined;
+
+  const connection: CdpConnection = {
+    cdpUrl,
+    ...(asarFallback && { asarFallback }),
+    ...(compatibility && { compatibility }),
+    ...(electronCompatibility && { electronCompatibility }),
+
+    async captureScreenshot(params?: Except<CaptureScreenshotParams, 'cwd'>): Promise<Uint8Array> {
+      // Every transport `connectToCdp` builds is a DesktopCdpTransport, which
+      // implements the optional method — but the interface still types it
+      // optional, so the absence is reported rather than silently thrown at.
+      if (!transport.captureScreenshot) {
+        throw new Error('connectToCdp: this transport cannot capture screenshots.');
+      }
+
+      return transport.captureScreenshot({ ...params, cwd: vault.path });
+    },
+
+    async dispose(): Promise<void> {
+      try {
+        // The vault carries `shouldRemoveVaultOnDispose` itself (handed to its constructor above), so
+        // this is one call rather than a branch: it always unregisters, and removes the directory only
+        // when that flag says to.
+        await vault.dispose(transport);
+      } finally {
+        await transport.dispose?.();
+      }
+    },
+
+    async evalInObsidian<Input extends GenericObject, Result, TContextId extends ContextId<unknown> | undefined = undefined>(
+      params: Except<EvalInObsidianParams<Input, Result, TContextId>, 'transport' | 'vaultPath'>
+    ): Promise<Result> {
+      return evalInObsidian<Input, Result, TContextId>({ ...params, transport, vaultPath: vault.path });
+    },
+
+    async invoke(expression: string): Promise<string> {
+      return transport.evaluate(expression, { cwd: vault.path });
+    },
+
+    port,
+
+    async [Symbol.asyncDispose](): Promise<void> {
+      await connection.dispose();
+    },
+
+    vault
+  };
+
+  return connection;
+}
+
+/**
+ * Builds the {@link ObsidianCdpTransportOptions} for a connection, threading only
+ * the provided {@link ConnectToCdpOptions} through (owned-visible defaults to
+ * `true`, unlike the hidden-by-default test transports). Unset knobs pass through
+ * as `undefined` and are read with `?? default` / `!== undefined` guards
+ * downstream, so an explicit `undefined` is indistinguishable from an absent key.
+ *
+ * @param options - The connection options.
+ * @returns The transport options to create the connection's transport from.
+ */
+function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTransportOptions {
+  return normalizeOptionalProperties<ObsidianCdpTransportOptions>({
+    commandTimeoutInMilliseconds: options?.commandTimeoutInMilliseconds,
+    configDirectory: options?.configDirectory,
+    deadBootGraceInMilliseconds: options?.deadBootGraceInMilliseconds,
+    host: options?.host,
+    isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
+    obsidianInstallerVersion: options?.obsidianInstallerVersion,
+    obsidianVersion: options?.obsidianVersion,
+    port: options?.port,
+    shouldDisableSandbox: options?.shouldDisableSandbox,
+    shouldThrowOnIncompatibleInstaller: options?.shouldThrowOnIncompatibleInstaller,
+    shouldThrowOnSilentAsarFallback: options?.shouldThrowOnSilentAsarFallback,
+    shouldWarnOnCompatibilityIssues: options?.shouldWarnOnCompatibilityIssues,
+    type: 'obsidian-cdp'
+  });
+}
+
+/**
+ * Resolves the CDP host/port for the connection: from the owned instance's
+ * launched endpoint when present, otherwise from the attach options.
+ *
+ * @param transport - The transport created for this connection.
+ * @param options - The connection options.
+ * @returns The resolved host and port.
+ * @throws Error if the port cannot be determined.
+ */
+function resolveEndpoint(transport: unknown, options: ConnectToCdpOptions | undefined): ResolvedEndpoint {
+  if (transport instanceof DesktopCdpTransport) {
+    const endpoint = transport.getOwnedInstanceEndpoint();
+    if (endpoint) {
+      return { host: endpoint.host, port: endpoint.port };
+    }
+  }
+
+  if (options?.port !== undefined) {
+    return { host: options.host ?? DEFAULT_CDP_HOST, port: options.port };
+  }
+
+  throw new Error('connectToCdp: could not determine the CDP port.');
+}
+
+/**
+ * Removes the host-side temp directories earlier runs leaked, before this
+ * connection adds its own.
+ *
+ * `connectToCdp` mints the same `temp-vault-*` / owned `userdata-*` directories
+ * the test global setup does, and an ad-hoc debugging session is exactly the
+ * kind that gets killed with a leftover behind — so it sweeps too. Age-gated and
+ * best-effort; see the core's `sweepLeftovers`.
+ *
+ * @param transportOptions - The resolved transport options (source of the sweep knobs).
+ */
+async function sweepLeftovers(transportOptions: ObsidianCdpTransportOptions): Promise<void> {
+  if (!willSweepLeftovers(transportOptions)) {
+    return;
+  }
+
+  try {
+    const result = await sweepHostLeftovers({
+      maxAgeInMilliseconds: resolveLeftoverMaxAgeInMilliseconds(transportOptions)
+    });
+    if (result.removedCount > 0 || result.failedCount > 0) {
+      log(
+        `[connect-to-cdp] Swept ${String(result.removedCount)} leftover temp director(ies) from earlier runs `
+          + `(${String(result.failedCount)} still in use).`
+      );
+    }
+  } catch (error: unknown) {
+    log(`[connect-to-cdp] Leftover sweep error (non-fatal): ${String(error)}`);
+  }
+}
+
+/* v8 ignore stop */

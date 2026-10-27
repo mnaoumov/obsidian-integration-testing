@@ -13,23 +13,23 @@ import type { TestProject } from 'vitest/node';
 
 import { inject } from 'vitest';
 
-import type { CoreSetupResult } from '../global-setup-core.ts';
-import type { PopulateFilesParams } from '../temporary-vault.ts';
-import type { ObsidianTransportOptions } from '../transport-options.ts';
+import type { CoreSetupResult } from '../setup/global-setup-core.ts';
+import type { ObsidianTransportOptions } from '../transport/transport-options.ts';
+import type { PopulateFilesParams } from '../vault/temporary-vault.ts';
 
+import { errorToString } from '../error-to-string.ts';
+import { log } from '../log.ts';
+import {
+  coreSetup,
+  coreTeardown
+} from '../setup/global-setup-core.ts';
 import {
   setSetupErrorResolver,
   setTransportOptionsResolver,
   setVaultPathResolver
-} from '../context-provider.ts';
-import { errorToString } from '../error-to-string.ts';
-import {
-  coreSetup,
-  coreTeardown
-} from '../global-setup-core.ts';
-import { IntegrationSetupFailedError } from '../integration-setup-failed-error.ts';
-import { log } from '../log.ts';
-import { TemporaryVault } from '../temporary-vault.ts';
+} from '../transport/context-provider.ts';
+import { IntegrationSetupFailedError } from '../transport/integration-setup-failed-error.ts';
+import { TemporaryVault } from '../vault/temporary-vault.ts';
 
 setSetupErrorResolver(() => inject('setupError'));
 setTransportOptionsResolver(() => inject('obsidianTransport'));
