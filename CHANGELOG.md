@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 17.6.1
+
+- fix(android): recover requested vault from the mobile picker
+- fix: preserve setup errors when stack formatting fails
+- docs(readme): combine related resources and plugin comparisons
+- refactor: group src and scripts into subject folders
+
 ## 17.6.0
 
 - feat(lib): add a trusted dragMouse helper for held-button pointer drags
