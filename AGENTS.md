@@ -304,6 +304,8 @@ When a pinned app version cannot run on the launched Electron shell (an `obsidia
 
 ## L19. Android integration performance — cold-cost breakdown & optimization levers (reference)
 
+Auto-started Android emulators pass `-cores` explicitly: `emulatorCpuCount` defaults to 4 and is capped by `BULK_CORES` when set. Both values must be positive safe integers. The argument builder validates before spawning; reused devices and AVD files are untouched.
+
 Durable performance knowledge, **not** a task (migrated 2026-07-12 from a central task entry that was really a bundle of profiling findings + future ideas). All the *code* levers here already shipped; the remaining levers are provisioning options the user may enable, not pending code work.
 
 ### Where the 140–200s cold Android cost goes (profiled 2026-07-11 on the real WHPX emulator)
