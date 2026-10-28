@@ -263,7 +263,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly isEnabled?: () => boolean;
     readonly loadPlugin?: (id: string) => Promise<void>;
     readonly manifests?: unknown;
-    readonly uninstallPlugin?: (id: string) => Promise<void>;
+    readonly unloadPlugin?: (id: string) => Promise<void>;
   }
 
   interface SetLocalStorageItemParams {
@@ -428,6 +428,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const existingObsidianModule = holder.__obsidianIntegrationTesting?.obsidianModule;
   // Warn at most once per bootstrap that `obsidianModule` is `null` on this version.
   let hasWarnedMissingObsidianModule = false;
+  // The resolution in flight, so concurrent first calls share one temporary plugin.
+  let pendingObsidianModule: Promise<unknown> | undefined;
 
   // In-flight mobile input requests, keyed by request id, awaiting the host's answer via `resolveInput`.
   const pendingInputs = new Map<string, PendingInput>();
@@ -522,84 +524,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         return this.obsidianModule;
       }
 
-      // The temp-plugin trick below resolves `require('obsidian')`, which only
-      // works inside a plugin-load context. It needs the community-plugin registry
-      // (`loadPlugin` + `manifests`), which FIRST appears in Obsidian 0.9.7; the
-      // 0.6.4-0.9.6 band has no registry and cannot run it, so return `null` (not
-      // `undefined`) - app-only closures (`callback({ app })`) still run.
-      // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
-      const plugins = this.app.plugins as unknown as PluginsLike;
-      if (!plugins.loadPlugin || !plugins.manifests) {
-        if (!hasWarnedMissingObsidianModule) {
-          hasWarnedMissingObsidianModule = true;
-          console.warn('[obsidian-integration-testing] `obsidianModule` is `null`: this Obsidian version predates the community-plugin API (added in 0.9.7), so the `obsidian` module cannot be resolved. App-only closures (`callback({ app })`) still work.');
-        }
-        return null;
-      }
-
-      // `loadPlugin` returns `undefined` at once, running nothing, while restricted
-      // mode is on, and a fresh vault starts in it. A direct
-      // `getObsidianModule()` call (not through `evalWrapper`) used to reach the
-      // trick in that state and throw. `isEnabled`/`setEnable` arrived with the
-      // registry, but are probed anyway in case a version has one without the other.
-      if (plugins.isEnabled && !plugins.isEnabled()) {
-        await this.app.plugins.setEnable(true);
-      }
-
-      const SLICE_START = 2;
-      const randomSuffix = String(Math.random()).slice(SLICE_START);
-      const temporaryModuleName = `get-obsidian-module-${randomSuffix}`;
-      // Old versions (e.g. 0.9.10) leave `vault.configDir` undefined; fall back to
-      // Obsidian's default config dir so the temp plugin still gets a valid path,
-      // loads, and its `require('obsidian')` resolves the module.
-      // eslint-disable-next-line no-restricted-syntax -- configDir is runtime-optional on old versions.
-      const configDirectory = (this.app.vault as unknown as VaultLike).configDir ?? '.obsidian';
-      const pluginsDirectory = `${configDirectory}/plugins`;
-      const directory = `${pluginsDirectory}/${temporaryModuleName}`;
-      this.app.plugins.manifests[temporaryModuleName] = {
-        author: '',
-        description: '',
-        // eslint-disable-next-line unicorn/name-replacements -- `dir` is Obsidian's own `PluginManifest` member name.
-        dir: directory,
-        id: temporaryModuleName,
-        isDesktopOnly: false,
-        minAppVersion: '',
-        name: temporaryModuleName,
-        version: ''
-      };
-      // `adapter.mkdir` is not recursive, and an old version on a fresh vault may not
-      // have the config/plugins dirs yet — create the chain so `loadPlugin` finds the
-      // temp plugin at `<configDir>/plugins/<id>`.
-      if (!(await this.app.vault.adapter.exists(configDirectory))) {
-        await this.app.vault.adapter.mkdir(configDirectory);
-      }
-      if (!(await this.app.vault.adapter.exists(pluginsDirectory))) {
-        await this.app.vault.adapter.mkdir(pluginsDirectory);
-      }
-      await this.app.vault.adapter.mkdir(directory);
-
-      const pluginFunctionBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
-      await this.app.vault.adapter.write(`${directory}/main.js`, pluginFunctionBody);
-
-      await this.app.plugins.loadPlugin(temporaryModuleName);
-      // `uninstallPlugin` arrived after the plugin API itself, so it is absent on
-      // 0.9.7 - the FIRST version to expose `loadPlugin`/`manifests` (0.9.6 and below
-      // have neither, and return `undefined` above). The module is already captured by
-      // the plugin's `main.js` at this point, so only uninstall when the method exists;
-      // On 0.9.7 the temp plugin lingers harmlessly in the ephemeral owned vault.
-      // eslint-disable-next-line no-restricted-syntax -- uninstallPlugin is runtime-optional on old versions.
-      const pluginsForCleanup = this.app.plugins as unknown as PluginsLike;
-      if (pluginsForCleanup.uninstallPlugin) {
-        await this.app.plugins.uninstallPlugin(temporaryModuleName);
-      }
-
-      if (this.obsidianModule) {
-        return this.obsidianModule;
-      }
-
-      throw new Error(`Failed to load obsidian module: \`app.plugins.loadPlugin('${temporaryModuleName}')\` returned without running the temporary plugin's main.js (community plugins enabled: ${String(plugins.isEnabled?.())}).`);
+      // Several early `evalInObsidian` calls can arrive before the first resolution
+      // finishes; they share it rather than each loading a temporary plugin. Not
+      // `??=`: this bootstrap must parse on Chromium 80 (Obsidian 0.6.x).
+      const pending = pendingObsidianModule ?? loadObsidianModule(this).finally(() => {
+        pendingObsidianModule = undefined;
+      });
+      pendingObsidianModule = pending;
+      return await pending;
     },
-
     async ipcSendSync(this: IntegrationTestingNamespace, params): Promise<void> {
       await this.ensureLayoutReady();
       globalThis.electron.ipcRenderer.sendSync(params.channel, ...params.channelArguments);
@@ -1353,6 +1286,93 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Not every tab renders `.setting-item-name` rows (Hotkeys does not), so an empty array is a valid
     // answer here — the render itself was already proven by the poll above.
     return [...activeTab.containerEl.querySelectorAll('.setting-item-name')].map((nameEl) => nameEl.textContent);
+  }
+
+  async function loadObsidianModule(namespace: IntegrationTestingNamespace): Promise<unknown> {
+    // The temp-plugin trick below resolves `require('obsidian')`, which only
+    // works inside a plugin-load context. It needs the community-plugin registry
+    // (`loadPlugin` + `manifests`), which FIRST appears in Obsidian 0.9.7; the
+    // 0.6.4-0.9.6 band has no registry and cannot run it, so return `null` (not
+    // `undefined`) - app-only closures (`callback({ app })`) still run.
+    // eslint-disable-next-line no-restricted-syntax -- probe the runtime-optional community-plugin API.
+    const plugins = namespace.app.plugins as unknown as PluginsLike;
+    if (!plugins.loadPlugin || !plugins.manifests) {
+      if (!hasWarnedMissingObsidianModule) {
+        hasWarnedMissingObsidianModule = true;
+        console.warn('[obsidian-integration-testing] `obsidianModule` is `null`: this Obsidian version predates the community-plugin API (added in 0.9.7), so the `obsidian` module cannot be resolved. App-only closures (`callback({ app })`) still work.');
+      }
+      return null;
+    }
+
+    // `loadPlugin` returns `undefined` at once, running nothing, while restricted
+    // mode is on, and a fresh vault starts in it. A direct
+    // `getObsidianModule()` call (not through `evalWrapper`) used to reach the
+    // trick in that state and throw. `isEnabled`/`setEnable` arrived with the
+    // registry, but are probed anyway in case a version has one without the other.
+    if (plugins.isEnabled && !plugins.isEnabled()) {
+      await namespace.app.plugins.setEnable(true);
+    }
+
+    const SLICE_START = 2;
+    const randomSuffix = String(Math.random()).slice(SLICE_START);
+    const temporaryModuleName = `get-obsidian-module-${randomSuffix}`;
+    // Old versions (e.g. 0.9.10) leave `vault.configDir` undefined; fall back to
+    // Obsidian's default config dir so the temp plugin still gets a valid path,
+    // loads, and its `require('obsidian')` resolves the module.
+    // eslint-disable-next-line no-restricted-syntax -- configDir is runtime-optional on old versions.
+    const configDirectory = (namespace.app.vault as unknown as VaultLike).configDir ?? '.obsidian';
+    const pluginsDirectory = `${configDirectory}/plugins`;
+    const directory = `${pluginsDirectory}/${temporaryModuleName}`;
+    namespace.app.plugins.manifests[temporaryModuleName] = {
+      author: '',
+      description: '',
+      // eslint-disable-next-line unicorn/name-replacements -- `dir` is Obsidian's own `PluginManifest` member name.
+      dir: directory,
+      id: temporaryModuleName,
+      isDesktopOnly: false,
+      minAppVersion: '',
+      name: temporaryModuleName,
+      version: ''
+    };
+    // `adapter.mkdir` is not recursive, and an old version on a fresh vault may not
+    // have the config/plugins dirs yet — create the chain so `loadPlugin` finds the
+    // temp plugin at `<configDir>/plugins/<id>`.
+    if (!(await namespace.app.vault.adapter.exists(configDirectory))) {
+      await namespace.app.vault.adapter.mkdir(configDirectory);
+    }
+    if (!(await namespace.app.vault.adapter.exists(pluginsDirectory))) {
+      await namespace.app.vault.adapter.mkdir(pluginsDirectory);
+    }
+    await namespace.app.vault.adapter.mkdir(directory);
+
+    const pluginFunctionBody = 'const r=require,e=exports;const m=r(\'obsidian\');window.__obsidianIntegrationTesting.obsidianModule=m;e.default=m.Plugin;';
+    await namespace.app.vault.adapter.write(`${directory}/main.js`, pluginFunctionBody);
+
+    await namespace.app.plugins.loadPlugin(temporaryModuleName);
+    // Clean up by hand, NOT with `uninstallPlugin`: that is `disablePluginAndSave`,
+    // which requests a save of `enabledPlugins` to `community-plugins.json`. A call
+    // made while the vault is still opening runs before `plugins.initialize` has
+    // read that file, so the set is still empty, and the debounced save erased the
+    // vault's enabled-plugin list before Obsidian ever loaded it. Unloading, dropping
+    // the manifest and removing the folder touch no plugin configuration. The module
+    // is already captured, so a failed folder removal only leaves an empty plugin
+    // folder with no `manifest.json`, which `loadManifests` skips.
+    if (plugins.unloadPlugin) {
+      await namespace.app.plugins.unloadPlugin(temporaryModuleName);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- The temporary plugin's id is generated per call.
+    delete namespace.app.plugins.manifests[temporaryModuleName];
+    try {
+      await namespace.app.vault.adapter.rmdir(directory, true);
+    } catch (rmdirError) {
+      console.warn(`[obsidian-integration-testing] Could not remove the temporary plugin folder ${directory}:`, rmdirError);
+    }
+
+    if (namespace.obsidianModule) {
+      return namespace.obsidianModule;
+    }
+
+    throw new Error(`Failed to load obsidian module: \`app.plugins.loadPlugin('${temporaryModuleName}')\` returned without running the temporary plugin's main.js (community plugins enabled: ${String(plugins.isEnabled?.())}).`);
   }
 
   async function waitUntil(waitParams: WaitUntilParams): Promise<void> {
