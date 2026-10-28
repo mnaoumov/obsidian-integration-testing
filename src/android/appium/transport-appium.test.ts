@@ -54,9 +54,11 @@ interface MockBrowser {
   readonly deleteSession: ReturnType<typeof vi.fn>;
   readonly execute: ReturnType<typeof vi.fn>;
   readonly getContexts: ReturnType<typeof vi.fn>;
+  readonly getWindowHandles: ReturnType<typeof vi.fn>;
   readonly pushFile: ReturnType<typeof vi.fn>;
   readonly queryAppState: ReturnType<typeof vi.fn>;
   readonly switchContext: ReturnType<typeof vi.fn>;
+  readonly switchToWindow: ReturnType<typeof vi.fn>;
 }
 
 function createMockBrowser(): MockBrowser {
@@ -65,9 +67,11 @@ function createMockBrowser(): MockBrowser {
     deleteSession: vi.fn().mockResolvedValue(undefined),
     execute: vi.fn().mockResolvedValue(null),
     getContexts: vi.fn().mockResolvedValue(['WEBVIEW_md.obsidian']),
+    getWindowHandles: vi.fn().mockResolvedValue(['CDwindow-old', 'CDwindow-new']),
     pushFile: vi.fn().mockResolvedValue(undefined),
     queryAppState: vi.fn().mockResolvedValue(4),
-    switchContext: vi.fn().mockResolvedValue(undefined)
+    switchContext: vi.fn().mockResolvedValue(undefined),
+    switchToWindow: vi.fn().mockResolvedValue(undefined)
   };
 }
 
@@ -522,6 +526,64 @@ describe('AppiumTransport startup budgets', () => {
       /Obsidian Mobile did not finish starting within 600ms[\s\S]*never answered a single probe[\s\S]*slowest round-trip/
     );
   });
+
+  // C468: every probe after the session ended answered "A session is either terminated or not started",
+  // And the poll spent the whole 180s app-start budget on it before reporting "no-webview".
+  it('fails at once, naming the session, when the session has ended', async () => {
+    mockBrowser.execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('WebDriverError: A session is either terminated or not started when running "execute/sync" with method "POST"'));
+
+    const transport = new AppiumTransport({ browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    const start = Date.now();
+
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow(/The Appium session ended while waiting for phase "app-start"/);
+    expect(Date.now() - start).toBeLessThan(5000);
+    expect(mockBrowser.execute.mock.calls.filter(([callback]) => callback === probeMobileVaultStartup)).toHaveLength(1);
+  });
+
+  // C468 retry / C512 / C520 / C531: after the window closed, re-selecting the same context "succeeded"
+  // While ChromeDriver kept the dead handle, so every probe answered "no such window" until the budget ran out.
+  it('re-attaches ChromeDriver to a live window when its window closed, and carries on', async () => {
+    mockBrowser.execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('no such window: target window already closed\nfrom unknown error: web view not found'))
+      .mockResolvedValue(STARTED_PROBE);
+
+    const transport = new AppiumTransport({ browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    await transport.registerVault('/tmp/my-vault');
+
+    expect(mockBrowser.switchToWindow).toHaveBeenCalledWith('CDwindow-new');
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('recovering (attempt 1)'));
+  });
+
+  it('re-selects the context through NATIVE_APP when ChromeDriver lists no window', async () => {
+    mockBrowser.getWindowHandles.mockResolvedValue([]);
+    mockBrowser.execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('no such window: target window already closed'))
+      .mockResolvedValue(STARTED_PROBE);
+
+    const transport = new AppiumTransport({ browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    await transport.registerVault('/tmp/my-vault');
+
+    const switches = mockBrowser.switchContext.mock.calls.map(([context]): unknown => context);
+    expect(switches.slice(-2)).toEqual(['NATIVE_APP', 'WEBVIEW_md.obsidian']);
+  });
+
+  it('counts the window recoveries in the timeout message', async () => {
+    mockBrowser.execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('no such window: target window already closed'));
+
+    const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 600, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('WebView window recoveries: 1.');
+  });
 });
 
 describe('AppiumTransport.evaluate', () => {
@@ -558,5 +620,17 @@ describe('AppiumTransport.evaluate', () => {
 
     const result = await transport.evaluate('"hello"', { cwd: '/tmp' });
     expect(result).toBe('(no output)');
+  });
+
+  it('re-attaches ChromeDriver on the next eval after one found its window closed', async () => {
+    mockBrowser.execute
+      .mockRejectedValueOnce(new Error('no such window: target window already closed'))
+      .mockResolvedValue('"ok"');
+
+    await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).rejects.toThrow('no such window');
+    expect(mockBrowser.switchToWindow).not.toHaveBeenCalled();
+
+    await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).resolves.toBe('"ok"');
+    expect(mockBrowser.switchToWindow).toHaveBeenCalledWith('CDwindow-new');
   });
 });

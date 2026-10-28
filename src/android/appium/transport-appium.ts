@@ -63,6 +63,7 @@ import type {
 import type { MobileInputEnvelope } from '../mobile-input.ts';
 import type { MobileVaultStartupProbeResult } from '../mobile-vault-startup.ts';
 import type { WebViewCdpConnection } from '../webview-cdp.ts';
+import type { WebViewProbeFailure } from '../webview-probe-failure.ts';
 
 import {
   decodeBase64Png,
@@ -98,6 +99,10 @@ import {
 } from '../mobile-input.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
 import { connectToWebViewCdp } from '../webview-cdp.ts';
+import {
+  buildSessionTerminatedMessage,
+  classifyWebViewProbeFailure
+} from '../webview-probe-failure.ts';
 
 /**
  * Session connection info returned by {@link AppiumTransport.getSessionInfo},
@@ -221,6 +226,12 @@ const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const DEFAULT_LAYOUT_READY_POLL_TIMEOUT_IN_MILLISECONDS = 90_000;
 const DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS = 180_000;
 const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
+/*
+ * How often the startup poll may try to re-attach ChromeDriver after its window closed. A recovery that
+ * falls back to re-selecting the context runs `getContexts()`, measured at ~17s on a cold guest (L19), so
+ * it is not repeated on every 500ms poll; a page that is merely mid-reload gets a few probes first.
+ */
+const WINDOW_RECOVERY_INTERVAL_IN_MILLISECONDS = 5000;
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 const ADB_MARKER_READ_TIMEOUT_IN_MILLISECONDS = 30_000;
@@ -293,6 +304,36 @@ interface AppiumTransportWaitForStartupMilestoneParams {
 }
 
 /**
+ * A startup probe the page answered.
+ */
+interface StartupProbeAnswered {
+  /**
+  The page's answer.
+   */
+  readonly probe: MobileVaultStartupProbeResult;
+}
+
+/**
+ * A startup probe that could not run, and why.
+ */
+interface StartupProbeFailed {
+  /**
+  What the probe threw.
+   */
+  readonly error: unknown;
+
+  /**
+  What the failure says about the session.
+   */
+  readonly failure: WebViewProbeFailure;
+}
+
+/**
+ * What one startup probe produced: the page's answer, or why it gave none.
+ */
+type StartupProbeOutcome = StartupProbeAnswered | StartupProbeFailed;
+
+/**
  * Transport that communicates with Obsidian Mobile via Appium WebView JS injection.
  *
  * Evaluates expressions by switching to the `WEBVIEW_md.obsidian` context and
@@ -345,6 +386,13 @@ export class AppiumTransport implements ObsidianTransport {
   private isRecoveringFromCapOverrun = false;
 
   private readonly isSessionOwner: boolean;
+
+  /**
+   * Set when a command answered that ChromeDriver's window is closed, so the next
+   * {@link ensureWebViewContext} re-attaches it ({@link recoverWebViewWindow}) instead of
+   * re-selecting the same context, which Appium treats as a no-op that keeps the dead handle.
+   */
+  private isWebViewWindowStale = false;
   private readonly layoutReadyTimeoutInMilliseconds: number;
   private readonly platform: 'android' | 'ios';
   private readonly scriptTimeoutInMilliseconds: number;
@@ -487,6 +535,9 @@ export class AppiumTransport implements ObsidianTransport {
 
       // Context may have been lost mid-execution (e.g. page reload).
       this.isInWebViewContext = false;
+      if (classifyWebViewProbeFailure(error) === 'window-closed') {
+        this.isWebViewWindowStale = true;
+      }
 
       /*
        * Kept as a fast path even though this driver was measured never raising it: it costs nothing,
@@ -815,6 +866,11 @@ export class AppiumTransport implements ObsidianTransport {
    * to Chrome or other WebViews on the device.
    */
   private async ensureWebViewContext(): Promise<void> {
+    if (this.isWebViewWindowStale) {
+      // Clears the flag before it can call back in here, so this never recurses.
+      await this.recoverWebViewWindow();
+    }
+
     if (this.isInWebViewContext) {
       return;
     }
@@ -1023,19 +1079,21 @@ export class AppiumTransport implements ObsidianTransport {
   /**
    * Probes the WebView once for how far Obsidian's startup has got.
    *
-   * A probe that throws is reported as `undefined` rather than propagated: the
-   * page is mid-`location.reload()` for most of the app-start phase, and a
-   * WebView that cannot answer yet is the *expected* reading there, not an error.
+   * A probe that throws is reported rather than propagated: the page is
+   * mid-`location.reload()` for most of the app-start phase, and a WebView that
+   * cannot answer yet is the *expected* reading there, not an error. The failure
+   * is classified, because two kinds of it never improve by waiting (see
+   * `webview-probe-failure.ts`), and the poll acts on those.
    *
    * @param deviceVaultPath - The requested live adapter path.
    * @param shouldRecoverPicker - Whether a picker opening action may be initiated.
-   * @returns What the probe saw, or `undefined` when it could not run.
+   * @returns What the probe saw, or the classified failure when it could not run.
    */
-  private async probeStartup(deviceVaultPath: string, shouldRecoverPicker: boolean): Promise<MobileVaultStartupProbeResult | undefined> {
+  private async probeStartup(deviceVaultPath: string, shouldRecoverPicker: boolean): Promise<StartupProbeOutcome> {
     try {
-      return await this.browser.execute(probeMobileVaultStartup, { deviceVaultPath, shouldRecoverPicker });
-    } catch {
-      return undefined;
+      return { probe: await this.browser.execute(probeMobileVaultStartup, { deviceVaultPath, shouldRecoverPicker }) };
+    } catch (error: unknown) {
+      return { error, failure: classifyWebViewProbeFailure(error) };
     }
   }
 
@@ -1095,6 +1153,48 @@ export class AppiumTransport implements ObsidianTransport {
       await exec(['adb', '-s', this.deviceId, 'push', localMarker, remoteMarker], { isQuiet: true });
     } finally {
       await rm(localMarker, { force: true });
+    }
+  }
+
+  /**
+   * Re-attaches ChromeDriver to a live page after the one it was attached to closed.
+   *
+   * Switching to `WEBVIEW_md.obsidian` again is not enough, and the retained logs show why: Appium treats a
+   * switch to the current context as a no-op, so the switch "succeeds" while ChromeDriver keeps the dead
+   * handle and every later command answers `no such window`. So this first moves ChromeDriver to a live
+   * window handle; when there is none to move to, it leaves to `NATIVE_APP` and switches back, which makes
+   * Appium re-select the WebView rather than short-circuit.
+   *
+   * Best-effort and never throws: the caller's next probe is what says whether it worked.
+   */
+  private async recoverWebViewWindow(): Promise<void> {
+    this.isWebViewWindowStale = false;
+
+    try {
+      const handles = await this.browser.getWindowHandles();
+      const handle = handles.at(-1);
+      if (handle) {
+        await this.browser.switchToWindow(handle);
+        this.isInWebViewContext = true;
+        log(`[appium-transport] WebView window recovery: switched ChromeDriver to window ${handle} (of ${String(handles.length)}).`);
+        return;
+      }
+      log('[appium-transport] WebView window recovery: ChromeDriver lists no window; re-selecting the context.');
+    } catch (error: unknown) {
+      log(`[appium-transport] WebView window recovery: could not switch window (${errorToString(error)}); re-selecting the context.`);
+    }
+
+    this.isInWebViewContext = false;
+    try {
+      await this.browser.switchContext('NATIVE_APP');
+    } catch (error: unknown) {
+      log(`[appium-transport] WebView window recovery: NATIVE_APP switch failed: ${errorToString(error)}`);
+    }
+
+    try {
+      await this.ensureWebViewContext();
+    } catch (error: unknown) {
+      log(`[appium-transport] WebView window recovery: could not re-select the WebView context: ${errorToString(error)}`);
     }
   }
 
@@ -1230,10 +1330,31 @@ export class AppiumTransport implements ObsidianTransport {
     let slowestRoundTripInMilliseconds = 0;
     let hasOpenedPickerVault = false;
     let lastProbe: MobileVaultStartupProbeResult | undefined;
+    let lastWindowRecoveryAt = -Infinity;
+    let windowRecoveryCount = 0;
 
     while (Date.now() < deadline) {
       const roundTripStart = Date.now();
-      const probe = await this.probeStartup(deviceVaultPath, phase === 'app-start' && !hasOpenedPickerVault);
+      const outcome = await this.probeStartup(deviceVaultPath, phase === 'app-start' && !hasOpenedPickerVault);
+      const probe = 'probe' in outcome ? outcome.probe : undefined;
+
+      if ('failure' in outcome && outcome.failure === 'session-terminated') {
+        throw new Error(
+          buildSessionTerminatedMessage({ deviceVaultPath, elapsedInMilliseconds: Date.now() - start, error: outcome.error, phase }),
+          { cause: outcome.error }
+        );
+      }
+
+      if ('failure' in outcome && outcome.failure === 'window-closed' && Date.now() - lastWindowRecoveryAt >= WINDOW_RECOVERY_INTERVAL_IN_MILLISECONDS) {
+        windowRecoveryCount++;
+        log(
+          `[appium-transport] Phase "${phase}": ChromeDriver's WebView window is closed (${errorToString(outcome.error)}); `
+            + `recovering (attempt ${String(windowRecoveryCount)}).`
+        );
+        await this.recoverWebViewWindow();
+        lastWindowRecoveryAt = Date.now();
+      }
+
       if (probe) {
         lastProbe = probe;
         if (probe.pickerAction === 'opened-vault') {
@@ -1265,16 +1386,19 @@ export class AppiumTransport implements ObsidianTransport {
       await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
-    throw new Error(`${
-      buildStartupTimeoutMessage({
-        elapsedInMilliseconds: Date.now() - start,
-        milestone: furthestMilestone,
-        phase,
-        pollCount,
-        slowestRoundTripInMilliseconds,
-        timeoutInMilliseconds
-      })
-    } Requested vault: ${deviceVaultPath}; live vault: ${lastProbe?.vaultPath ?? '(none)'}; picker action: ${lastProbe?.pickerAction ?? '(none)'}.`);
+    throw new Error(
+      `${
+        buildStartupTimeoutMessage({
+          elapsedInMilliseconds: Date.now() - start,
+          milestone: furthestMilestone,
+          phase,
+          pollCount,
+          slowestRoundTripInMilliseconds,
+          timeoutInMilliseconds
+        })
+      } Requested vault: ${deviceVaultPath}; live vault: ${lastProbe?.vaultPath ?? '(none)'}; picker action: ${lastProbe?.pickerAction ?? '(none)'}; `
+        + `WebView window recoveries: ${String(windowRecoveryCount)}.`
+    );
   }
 }
 
