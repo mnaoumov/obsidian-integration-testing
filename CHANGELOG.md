@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 17.7.1
+
+- fix(android): use host DNS for emulator launches
+- chore: adopt keyword identifier lint rule
+
 ## 17.7.0
 
 - feat(android): cap emulator guest CPUs by the bulk budget
