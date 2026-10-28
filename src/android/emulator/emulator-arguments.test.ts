@@ -66,10 +66,9 @@ describe('buildEmulatorArguments', () => {
     }
   });
 
-  it('should configure DNS server for network access', () => {
+  it('should use native DNS discovery when no resolvers are supplied', () => {
     const input = buildEmulatorArguments({ avdName: 'test-avd', isHidden: true, shouldReuseSnapshot: false });
-    expect(input).toContain('-dns-server');
-    expect(input[input.indexOf('-dns-server') + 1]).toBe('8.8.8.8');
+    expect(input).not.toContain('-dns-server');
   });
 
   it('should run headless (-no-window) when hidden', () => {
@@ -84,17 +83,17 @@ describe('buildEmulatorArguments', () => {
 
   it('should return hidden input in correct order', () => {
     const input = buildEmulatorArguments({ avdName: 'MyDevice', isHidden: true, shouldReuseSnapshot: false });
-    expect(input).toStrictEqual(['-cores', '4', '-avd', 'MyDevice', '-no-snapshot-load', '-no-snapshot-save', '-dns-server', '8.8.8.8', '-no-window']);
+    expect(input).toStrictEqual(['-cores', '4', '-avd', 'MyDevice', '-no-snapshot-load', '-no-snapshot-save', '-no-window']);
   });
 
   it('should return visible input in correct order', () => {
     const input = buildEmulatorArguments({ avdName: 'MyDevice', isHidden: false, shouldReuseSnapshot: false });
-    expect(input).toStrictEqual(['-cores', '4', '-avd', 'MyDevice', '-no-snapshot-load', '-no-snapshot-save', '-dns-server', '8.8.8.8']);
+    expect(input).toStrictEqual(['-cores', '4', '-avd', 'MyDevice', '-no-snapshot-load', '-no-snapshot-save']);
   });
 
   it('should return snapshot-reusing input in correct order', () => {
     const input = buildEmulatorArguments({ avdName: 'MyDevice', isHidden: true, shouldReuseSnapshot: true });
-    expect(input).toStrictEqual(['-cores', '4', '-avd', 'MyDevice', '-dns-server', '8.8.8.8', '-no-window']);
+    expect(input).toStrictEqual(['-cores', '4', '-avd', 'MyDevice', '-no-window']);
   });
 });
 
@@ -117,5 +116,27 @@ describe('emulator CPU budget', () => {
 
   it.each([0, -1, 1.5, NaN, Infinity, 9_007_199_254_740_992])('should reject invalid requested count %s', (cpuCount) => {
     expect(() => buildEmulatorArguments({ avdName: 'test', cpuCount, isHidden: true, shouldReuseSnapshot: false })).toThrow('emulatorCpuCount');
+  });
+});
+
+describe('emulator DNS selection', () => {
+  it('should use multiple host resolvers as one argument', () => {
+    const input = buildEmulatorArguments({ avdName: 'test', hostDnsServers: ['192.0.2.1', '192.0.2.2'], isHidden: true, shouldReuseSnapshot: false });
+    expect(input[input.indexOf('-dns-server') + 1]).toBe('192.0.2.1,192.0.2.2');
+  });
+
+  it('should prefer an explicit override to host resolvers', () => {
+    const input = buildEmulatorArguments({ avdName: 'test', dnsServers: ['192.0.2.3'], hostDnsServers: ['192.0.2.1'], isHidden: true, shouldReuseSnapshot: false });
+    expect(input[input.indexOf('-dns-server') + 1]).toBe('192.0.2.3');
+  });
+
+  it('should leave DNS discovery to the emulator when the host list is empty', () => {
+    const input = buildEmulatorArguments({ avdName: 'test', hostDnsServers: [], isHidden: true, shouldReuseSnapshot: false });
+    expect(input).not.toContain('-dns-server');
+  });
+
+  it('should allow an empty override to request native emulator discovery', () => {
+    const input = buildEmulatorArguments({ avdName: 'test', dnsServers: [], hostDnsServers: ['192.0.2.1'], isHidden: true, shouldReuseSnapshot: false });
+    expect(input).not.toContain('-dns-server');
   });
 });

@@ -17,6 +17,7 @@ import {
   execFileSync,
   spawn
 } from 'node:child_process';
+import { getServers } from 'node:dns';
 import {
   mkdirSync,
   mkdtempSync,
@@ -450,6 +451,11 @@ interface EnsureDeviceConnectedParams {
   readonly emulatorCpuCount?: number | undefined;
 
   /**
+  DNS override for an auto-started emulator.
+   */
+  readonly emulatorDnsServers?: readonly string[] | undefined;
+
+  /**
   Whether the auto-started emulator window is shown (omitted → hidden).
    */
   readonly isEmulatorVisible?: boolean | undefined;
@@ -719,6 +725,11 @@ interface StartAppiumAndEmulatorParams {
   Requested guest CPU count, capped by BULK_CORES at launch.
    */
   readonly emulatorCpuCount?: number | undefined;
+
+  /**
+  DNS override for an auto-started emulator.
+   */
+  readonly emulatorDnsServers?: readonly string[] | undefined;
 
   /**
   Whether the auto-started Appium server console window is shown (omitted → hidden).
@@ -1246,6 +1257,7 @@ class AppiumTransportFactory {
           avdName: options.avdName,
           deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
           emulatorCpuCount: options.emulatorCpuCount,
+          emulatorDnsServers: options.emulatorDnsServers,
           isAppiumConsoleVisible: options.isAppiumConsoleVisible,
           isEmulatorVisible: options.isEmulatorVisible,
           networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
@@ -2417,7 +2429,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
+    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -2471,7 +2483,7 @@ class AppiumTransportFactory {
           this.log('Auto-started Appium server is ready.');
         })
         : noopAsync(),
-      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
+      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
     ]);
 
     const deviceResult = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : undefined;
@@ -2566,10 +2578,10 @@ class AppiumTransportFactory {
   }
 
   private startEmulator(params: EnsureDeviceConnectedParams, shouldReuseSnapshot: boolean): ProcessLaunch {
-    const { avdName, emulatorCpuCount, isEmulatorVisible } = params;
+    const { avdName, emulatorCpuCount, emulatorDnsServers, isEmulatorVisible } = params;
     const emulatorBinary = resolveEmulatorBinaryPath();
     const isWindowHidden = shouldHideEmulatorWindow(isEmulatorVisible);
-    const input = buildEmulatorArguments({ avdName, bulkCores: process.env['BULK_CORES'], cpuCount: emulatorCpuCount, isHidden: isWindowHidden, shouldReuseSnapshot });
+    const input = buildEmulatorArguments({ avdName, bulkCores: process.env['BULK_CORES'], cpuCount: emulatorCpuCount, dnsServers: emulatorDnsServers, hostDnsServers: getServers(), isHidden: isWindowHidden, shouldReuseSnapshot });
     const { detached, windowsHide } = resolveEmulatorSpawnFlags(isWindowHidden);
     const { environment, isNetsimLogGuarded } = buildEmulatorEnvironment(process.env);
     this.log(`Running: ${emulatorBinary} ${input.join(' ')}`);

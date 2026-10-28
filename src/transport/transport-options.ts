@@ -101,6 +101,15 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly emulatorCpuCount?: number;
 
   /**
+   * DNS servers for an auto-started emulator, passed as one comma-separated argument.
+   * Omit to use the host resolvers. An empty list requests native emulator discovery.
+   * Ignored for reused devices.
+   *
+   * @default `undefined`
+   */
+  readonly emulatorDnsServers?: readonly string[];
+
+  /**
    * Whether the auto-started Appium server console window is shown.
    *
    * When `false` (the default), the `npx appium` server process is spawned with
