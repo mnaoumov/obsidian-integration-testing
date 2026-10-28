@@ -33,8 +33,6 @@
 
 const DEFAULT_EMULATOR_CPU_COUNT = 4;
 
-const DNS_SERVER = '8.8.8.8';
-
 /**
  * The `RUST_LOG` filter the harness hands the emulator, and through it `netsimd`.
  *
@@ -65,6 +63,16 @@ export interface BuildEmulatorArgumentsParams {
   Requested guest CPU count. Defaults to 4, capped by BULK_CORES.
    */
   readonly cpuCount?: number | undefined;
+
+  /**
+  Explicit DNS override; an empty list requests native emulator discovery.
+   */
+  readonly dnsServers?: readonly string[] | undefined;
+
+  /**
+  Host resolvers discovered at launch, used when no override is supplied.
+   */
+  readonly hostDnsServers?: readonly string[] | undefined;
 
   /**
    * Whether to run the emulator headless (`-no-window`), so it never steals
@@ -114,6 +122,7 @@ export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): st
   if (!Number.isSafeInteger(bulkCores) || bulkCores < 1) {
     throw new Error('BULK_CORES must be a positive safe integer.');
   }
+  const dnsServers = params.dnsServers ?? params.hostDnsServers ?? [];
   return [
     '-cores',
     String(Math.min(cpuCount, bulkCores)),
@@ -124,8 +133,7 @@ export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): st
      * wrote combination this file's header exists to rule out.
      */
     ...(params.shouldReuseSnapshot ? [] : ['-no-snapshot-load', '-no-snapshot-save']),
-    '-dns-server',
-    DNS_SERVER,
+    ...(dnsServers.length > 0 ? ['-dns-server', dnsServers.join(',')] : []),
     ...(params.isHidden ? ['-no-window'] : [])
   ];
 }
