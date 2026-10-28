@@ -1928,7 +1928,7 @@ About one Obsidian file write in a hundred on the Android emulator leaves a 0-by
 - **`smol-toml`'s floor rose to `^1.9.1`** (**L55**). markdownlint-cli2 0.23.3 moved its exact pin to `1.8.0`, and GHSA-r4xh-jqrq-34v2 covers `<= 1.8.0`.
 - **`katex` (low, GHSA-238p-pmpm-9mq7) needed a new override, `^0.19.0`.** It comes in through markdownlint → micromark-extension-math, which declares `^0.16.0` in its newest release. Forcing it across 0.x minors is harmless because markdownlint only tokenizes and never calls the one KaTeX function micromark-extension-math uses.
 - **`postcss-selector-parser` (moderate, GHSA-rj75-hqrm-r3gf) is cleared by overriding its PARENT, `postcss-nested`, to `^9.0.0`.** The vulnerable 6.x line has no backport. It comes in under starlight → expressive-code → `@expressive-code/core`, whose newest release still declares postcss-nested `^6.0.1`. postcss-nested 9 declares the fixed parser itself. Forcing the parser across a major under a plugin written against 6.x would have tested a combination nobody ships. `npm run docs:build` is the gate that runs it.
-- **`braces` is left on purpose.** Its advisory GHSA-vfj7-8cjw-p6xm covers every version, and it reaches this repo only through `markdownlint-cli2` → globby / micromatch. An override waits for a patched release.
+- **`braces` is left on purpose.** Its advisory GHSA-vfj7-8cjw-p6xm covers every version, and it reaches this repo only through `markdownlint-cli2` → globby / micromatch. An override waits for a patched release. **No override is needed any more: GitHub withdrew the advisory on 2026-10-23** (**L80**), so `braces` 3.0.3 stays where it is and the audit no longer reports it.
 
 Both new overrides have `pinned-versions.json` entries. Each entry's check reads the declared range that makes the override necessary.
 
@@ -1942,7 +1942,7 @@ Three days after **L75**, `npm audit` on `main` reported 7 high entries again: `
 - **The `smol-toml` override from **L55** went with it.** markdownlint-cli2 0.24.0 pins `smol-toml` to the patched `1.9.1` itself, which is the removal condition **L55** names. Without the override every consumer (astro, `@astrojs/internal-helpers`, `cspell-config-lib`) resolves `1.9.1`, the audit is clean of it, and its `pinned-versions.json` entry is gone.
 - **The `js-yaml` override still holds markdownlint-cli2 a major below its own pin**, now `5.4.3` rather than `5.2.2`. `npm run lint:md` is green on 4.3.2, which is the same test **L55**'s `pinned-versions.json` entry relies on.
 
-What is left is the **L75** `braces` set: 6 entries, `@mnaoumov/typescript-dev-toolkit` now among them because it reaches globby / micromatch through markdownlint-cli2. `lint:md`, `spellcheck`, `format:check`, `build`, `lint`, `test`, `test:coverage` and `docs:build` all ran green on the result. `docs:build` is the gate that runs the new `vite` under Astro.
+What is left is the **L75** `braces` set: 6 entries, `@mnaoumov/typescript-dev-toolkit` now among them because it reaches globby / micromatch through markdownlint-cli2. `lint:md`, `spellcheck`, `format:check`, `build`, `lint`, `test`, `test:coverage` and `docs:build` all ran green on the result. `docs:build` is the gate that runs the new `vite` under Astro. (The `braces` set has since gone: its advisory was withdrawn, see **L80**.)
 
 ## L77. Under a loaded host the Android leg's cost was a teardown that provisioned, and npx — not the boot budget
 
@@ -1966,3 +1966,14 @@ The companion Android regression runs under the shared-device lock in `integrati
 Auto-started Android emulators use the host DNS resolvers returned by Node's `dns.getServers()` at launch, passed through `-dns-server` as one comma-separated argument. The previous unconditional `8.8.8.8` failed on networks that block direct public DNS, leaving Android's network validation timing out despite working host internet access. No network validation is bypassed.
 
 `emulatorDnsServers` on the Android transport options overrides the host list; an empty list (or no discovered host resolvers) omits `-dns-server` and leaves discovery to the emulator. Reused devices retain their existing DNS configuration. The shared transport factory carries this option for Vitest, Jest and manual consumers.
+
+## L80. Security sweep of 2026-10-28 — `zod`, `fast-uri` and `vitest`, cleared without a new override
+
+`npm audit` on `main` reported `fast-uri` `3.0.0 - 3.1.8` (moderate, four advisories), `zod` `<4.6.6` (high, GHSA-mrhx-c7xc-m3w5, through `chromium-bidi` → `puppeteer-core` and `@astrojs/sitemap`), and `vitest` / `@vitest/mocker` / `@vitest/coverage-v8` `5.0.0-beta.1 - 5.0.2` (moderate, GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp). All of it is cleared, and no override was added. `npm audit fix --force` was not taken: its remedies downgrade `jest` to 25 and `@mnaoumov/typescript-dev-toolkit` to 3.0.0.
+
+- **A lockfile-only `npm audit fix` cleared `fast-uri` and `zod`**, as **L75** says to try first. `fast-uri` went to 3.1.9, `puppeteer-core` to 25.16.0 with `chromium-bidi` 157.0.8090-0, which now takes `zod` 4, so the tree has one `zod`, 4.6.7.
+- **`vitest` was held by this repo's own `^5.0.1`, which the lockfile had resolved to 5.0.1.** `audit fix` left it there, so `vitest` and `@vitest/coverage-v8` went to `^5.0.5`, the newest release; `@vitest/mocker` follows.
+- **`braces` no longer appears.** GHSA-vfj7-8cjw-p6xm was withdrawn on 2026-10-23, so the standing **L75** / **L76** set is gone with no change here.
+- **`deepmerge` is left on purpose, the way `braces` was.** GHSA-gcqx-w48m-w2h4 (low, prototype poisoning in `mergeObject()`) covers `>=4.2.0 <=4.3.1` with no patched release, and 4.3.1 is the newest. It reaches this repo only through `jest-config` 30.5.2, which the Jest runner uses for configuration, and the audit reports it as 7 low entries along the Jest chain (`jest`, `jest-cli`, `@jest/core`, `jest-config`, `ts-jest`, and the toolkit through them). An override waits for a patched release.
+
+`format:check`, `spellcheck`, `lint:md`, `build`, `lint`, `test`, `test:coverage` and `docs:build` all ran green on the result. `test:jest` fails before this change too, on the stale `setupFiles` path its own open item tracks.
