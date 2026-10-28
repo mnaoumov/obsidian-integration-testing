@@ -9,7 +9,7 @@ export const jestConfig: Config = {
   // The harness chain reads the `OBSIDIAN_METADATA` global at module scope, and
   // Jest has no `define` to inline it — publish it per worker from the same
   // setup file the Vitest integration projects use (L6, L20).
-  setupFiles: [join(import.meta.dirname, 'metadata-global-setup.ts')],
+  setupFiles: [join(import.meta.dirname, 'test-setups', 'metadata-global-setup.ts')],
   testMatch: ['**/jest/*.jest.test.ts'],
   transform: {
     // `ts-jest` resolves a relative `tsconfig` against the cwd, not `rootDir` —
