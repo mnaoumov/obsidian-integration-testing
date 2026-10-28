@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 17.7.2
+
+- fix(namespace): never save plugin config while resolving the obsidian module
+- fix(android): recover from an ended session or a closed WebView window during startup
+- fix(desktop): register another vault after a left-behind window
+- fix(jest): point setupFiles at the metadata shim in test-setups
+- fix(deps): clear the zod, fast-uri and vitest advisories
+
 ## 17.7.1
 
 - fix(android): use host DNS for emulator launches
