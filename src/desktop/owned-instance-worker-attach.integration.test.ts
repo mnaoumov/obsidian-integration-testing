@@ -29,7 +29,8 @@ import {
   describe,
   expect,
   inject,
-  it
+  it,
+  vi
 } from 'vitest';
 
 import { evalInObsidian } from '../eval/eval-in-obsidian.ts';
@@ -131,6 +132,115 @@ describe('second registered vault routes to its own window', () => {
     // ...and the shared setup vault is a genuinely different window.
     expect(view.basePath).not.toBe(inject('temporaryVaultPath'));
   });
+});
+
+/*
+ * Multi-vault lifecycle regression: a second vault is opened, evaluated and disposed, and then
+ * another is registered. Two shapes of "second vault", because they leave different windows behind:
+ *
+ * 1. Registered through `register()` — `dispose()` closes its window (L51).
+ * 2. Opened by the suite's own `vault-open` IPC, the way a consumer drives a cross-vault flow —
+ *    `dispose()` deletes the directory but rightly leaves the window, which this worker did not open.
+ *
+ * `openVaultInRunningInstance` used to send `vault-open` through whichever page target was listed
+ * first, and trust its probe. A left-behind window that exposes no vault there made the next
+ * registration fail (reported as `No CDP target found for vault: undefined`) while the shared window
+ * was alive and answering. The second case forces that window into exactly that state, so it fails
+ * without the fix regardless of the order the target list happens to use.
+ */
+describe('registering another vault after one was opened and disposed', () => {
+  async function readBasePath(vaultPath?: string): Promise<string> {
+    return await evalInObsidian({
+      callback({ app }): string {
+        return (app.vault.adapter as FileSystemAdapter).getBasePath();
+      },
+      ...(vaultPath !== undefined && { vaultPath })
+    });
+  }
+
+  async function listWindowUrls(): Promise<string[]> {
+    return await evalInObsidian({
+      callback(): string[] {
+        return globalThis.electron.remote.BrowserWindow.getAllWindows().map((browserWindow) => browserWindow.webContents.getURL());
+      }
+    });
+  }
+
+  async function closeBlankWindows(): Promise<void> {
+    await evalInObsidian({
+      callback(): void {
+        for (const browserWindow of globalThis.electron.remote.BrowserWindow.getAllWindows()) {
+          if (browserWindow.webContents.getURL() === 'about:blank') {
+            browserWindow.destroy();
+          }
+        }
+      }
+    });
+  }
+
+  async function registerAnotherAndCheck(): Promise<void> {
+    const another = new TemporaryVault();
+    try {
+      await another.register();
+      expect(await readBasePath(another.path)).toBe(another.path);
+      expect(await readBasePath()).toBe(inject('temporaryVaultPath'));
+    } finally {
+      await another.dispose();
+    }
+
+    expect(await readBasePath()).toBe(inject('temporaryVaultPath'));
+  }
+
+  it('opens it after disposing a vault this worker registered', async () => {
+    const second = new TemporaryVault();
+    await second.register();
+    expect(await readBasePath(second.path)).toBe(second.path);
+    expect(await readBasePath()).toBe(inject('temporaryVaultPath'));
+    await second.dispose();
+
+    await registerAnotherAndCheck();
+  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS * 2);
+
+  it('opens it after disposing a vault the suite opened through its own IPC', async () => {
+    const second = new TemporaryVault();
+    second.populate({ 'Note.md': 'Note' });
+    await second.syncToDevice();
+    const isOpened = await evalInObsidian({
+      callback({ secondPath }): boolean {
+        return globalThis.electron.ipcRenderer.sendSync('vault-open', secondPath, false) === true;
+      },
+      input: { secondPath: second.path }
+    });
+    expect(isOpened).toBe(true);
+    await vi.waitFor(async () => {
+      expect(await readBasePath(second.path)).toBe(second.path);
+    }, { timeout: REGISTRATION_TIMEOUT_IN_MILLISECONDS / 2 });
+    expect(await readBasePath()).toBe(inject('temporaryVaultPath'));
+
+    // The window outlives its vault: `dispose()` deletes the directory and leaves the window this
+    // Worker did not open. Leave it as a page with no `app` at all — the state in which a probe of it
+    // Reports no vault — so the next registration must look past it rather than depend on where the
+    // Target list happens to put it.
+    await evalInObsidian({
+      callback(): void {
+        globalThis.setTimeout(() => {
+          globalThis.location.replace('about:blank');
+        }, 0);
+      },
+      vaultPath: second.path
+    });
+    await vi.waitFor(async () => {
+      const urls = await listWindowUrls();
+      expect(urls).toContain('about:blank');
+    }, { timeout: REGISTRATION_TIMEOUT_IN_MILLISECONDS / 2 });
+    await second.dispose();
+
+    try {
+      await registerAnotherAndCheck();
+    } finally {
+      await closeBlankWindows();
+    }
+  }, REGISTRATION_TIMEOUT_IN_MILLISECONDS * 2);
 });
 
 /**
