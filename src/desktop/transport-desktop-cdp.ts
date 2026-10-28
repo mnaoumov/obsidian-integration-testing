@@ -298,6 +298,14 @@ interface CdpValue {
 }
 
 /**
+ * A window of the running instance with a vault open, and the vault it reported.
+ */
+interface OpenVaultWindow {
+  readonly target: CdpTarget;
+  readonly vaultPath: string;
+}
+
+/**
  * A command waiting for its reply: settles the caller's promise and cancels the
  * timeout that would otherwise fail it.
  */
@@ -723,12 +731,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     const targets = await this.getPageTargets();
     if (targets.length > 0) {
-      // The `vault-remove` IPC is sent through a still-open window (`targets[0]`) —
-      // `vaultPath`'s own window was just destroyed above, so bootstrap the namespace
-      // on the existing window's OWN base path, not on `vaultPath` (which no longer has
-      // A live target to match).
-      const removalTarget = ensureNonNullable(targets[0]);
-      const removalBasePath = await this.probeVaultPath(removalTarget);
+      // The `vault-remove` IPC is sent through a still-open window — `vaultPath`'s own
+      // window was just destroyed above, so bootstrap the namespace on a remaining
+      // window's OWN base path, not on `vaultPath` (which no longer has a live target to
+      // match). The destroyed window can still be listed for a moment, so it is excluded
+      // by path rather than trusted to have gone.
+      const { target: removalTarget, vaultPath: removalBasePath } = await this.waitForOpenVaultWindow(vaultPath);
       const ws = await this.connectToTarget(removalTarget);
       try {
         await ensureNamespaceBootstrapped(this, removalBasePath);
@@ -1334,15 +1342,16 @@ export class DesktopCdpTransport implements ObsidianTransport {
       throw new Error('No Obsidian CDP targets available. Is Obsidian running?');
     }
 
-    // The `vault-open` IPC is sent through an EXISTING window (`targets[0]`), so the
-    // helper namespace must be bootstrapped on THAT window — not on `vaultPath`, whose
-    // window does not exist yet. Bootstrapping against `vaultPath` here would route
-    // through `findTargetForVault(vaultPath)` with only the existing window present and
-    // poison the connection cache (label `vaultPath`, socket → the existing window), so
-    // every later eval for `vaultPath` would mis-route to the existing window. Probe the
-    // existing window's own base path and bootstrap against that instead.
-    const existingTarget = ensureNonNullable(targets[0]);
-    const existingVaultPath = await this.probeVaultPath(existingTarget);
+    // The `vault-open` IPC is sent through an EXISTING window, so the helper namespace
+    // must be bootstrapped on THAT window — not on `vaultPath`, whose window does not
+    // exist yet. Bootstrapping against `vaultPath` here would route through
+    // `findTargetForVault(vaultPath)` with only the existing window present and poison
+    // the connection cache (label `vaultPath`, socket → the existing window), so every
+    // later eval for `vaultPath` would mis-route to the existing window. Bootstrap
+    // against the existing window's own base path instead — and only a window that
+    // actually reports one: right after another vault was unregistered, the first
+    // listed target can be a window that exposes no vault, and its probe is no path.
+    const { target: existingTarget, vaultPath: existingVaultPath } = await this.waitForOpenVaultWindow();
     const ipcWs = await this.connectToTarget(existingTarget);
     try {
       await ensureNamespaceBootstrapped(this, existingVaultPath);
@@ -1419,8 +1428,15 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * Creates a temporary WebSocket connection, evaluates `getBasePath()`,
    * and returns the result.
    *
+   * A window that does not answer with a non-empty string — one still booting,
+   * one being destroyed, the starter screen — is not a vault window, so the probe
+   * throws rather than returning `String(undefined)`. Returning the literal
+   * `'undefined'` let `openVaultInRunningInstance` bootstrap the namespace against
+   * a vault named `undefined` and fail with `No CDP target found for vault: undefined`.
+   *
    * @param target - The CDP target to probe.
    * @returns The vault's base path.
+   * @throws {Error} When the target does not report a vault base path.
    */
   private async probeVaultPath(target: CdpTarget): Promise<string> {
     const ws = await this.connectToTarget(target);
@@ -1431,7 +1447,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
         expression: 'app.vault.adapter.getBasePath ? app.vault.adapter.getBasePath() : app.vault.adapter.basePath',
         returnByValue: true
       });
-      return String(response.result?.result?.value);
+      const value = response.result?.result?.value;
+      if (typeof value !== 'string' || value === '') {
+        throw new Error(`CDP target ${target.id} reported no vault base path`);
+      }
+      return value;
     } finally {
       ws.close();
     }
@@ -1600,6 +1620,49 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async waitForLayoutReady(vaultPath: string): Promise<void> {
     await ensureNamespaceBootstrapped(this, vaultPath);
     await this.evaluate('window.__obsidianIntegrationTesting.pollVaultBasePath()', { cwd: vaultPath });
+  }
+
+  /**
+   * Waits for any window of the running instance that has a vault open, to send an
+   * IPC command through.
+   *
+   * Every listed page target is probed, not just the first: after a vault window is
+   * destroyed, the target list can still carry it for a moment, and a window that
+   * is still booting or sits on the starter screen reports no vault at all. Either
+   * one in first place used to be probed alone, yielding no path.
+   *
+   * @param excludedVaultPath - A vault whose window must not be chosen, because it
+   *   is being torn down.
+   * @returns The chosen target and the vault path it reported.
+   * @throws {Error} When no window reports a vault within the poll timeout.
+   */
+  private async waitForOpenVaultWindow(excludedVaultPath?: string): Promise<OpenVaultWindow> {
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    let targetCount: number;
+    for (;;) {
+      const targets = await this.getPageTargets();
+      targetCount = targets.length;
+      for (const target of targets) {
+        try {
+          const vaultPath = await this.probeVaultPath(target);
+          if (excludedVaultPath === undefined || !areVaultPathsMatching(vaultPath, excludedVaultPath)) {
+            return { target, vaultPath };
+          }
+        } catch {
+          // Not a vault window, or not ready yet.
+        }
+      }
+
+      if (Date.now() >= deadline) {
+        break;
+      }
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+
+    const exclusion = excludedVaultPath === undefined ? '' : ` other than ${excludedVaultPath}`;
+    throw new Error(
+      `No Obsidian window with an open vault${exclusion} within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms (${String(targetCount)} page target(s) listed, none reported a vault base path).`
+    );
   }
 
   /**
