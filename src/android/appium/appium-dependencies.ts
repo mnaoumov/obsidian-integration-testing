@@ -57,23 +57,6 @@ export function checkIsAppiumDriverInstalled(params: CheckIsAppiumDriverInstalle
 }
 
 /**
- * Checks whether an auto-started Appium server's output shows that npx never
- * launched Appium at all — every line is npm's own `npm notice` banner.
- *
- * That is the shape of `Auto-started Appium server did not become ready within
- * 180000ms` on 2026-10-23, under the bulk runner's load: the tail held only
- * `npm notice run ... npx` and `npm notice run appium ...`, so the whole budget
- * went to npm resolving the command, not to Appium starting.
- *
- * @param output - The server's captured output tail.
- * @returns `true` when there is output and none of it is Appium's.
- */
-export function checkIsAppiumOutputOnlyNpmNotices(output: string): boolean {
-  const lines = output.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
-  return lines.length > 0 && lines.every((line) => line.startsWith('npm notice'));
-}
-
-/**
  * Resolves whether the harness may auto-install missing Appium dependencies,
  * applying the default when the option is omitted.
  *
