@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 17.7.3
+
+- fix(android): accept long non-ASCII vault paths on the device and keep long pushes alive
+- build(deps): bump @mnaoumov/typescript-dev-toolkit to ^5.1.0
+
 ## 17.7.2
 
 - fix(namespace): never save plugin config while resolving the obsidian module
