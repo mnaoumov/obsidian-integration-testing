@@ -68,6 +68,13 @@
       "expect": "^6.0.1",
       "manualCheck": "The check reads @expressive-code/core's own declared range. When it moves to a range that reaches postcss-selector-parser 7.1.6 or later on its own, delete the override and this entry together, then confirm with `npm audit` and `npm run docs:build`, the only gate that runs expressive-code."
     },
+    "re2js": {
+      "section": "overrides",
+      "why": "Clears GHSA-gg6h-894w-4m9c (RE2JS quadratic-time denial of service in lookbehind matching, >=2.2.0 <2.8.7). Reached only through markdownlint, whose newest release 0.42.0 pins re2js at the exact 2.8.6, and markdownlint-cli2 0.24.0 pins that markdownlint exactly in turn, so no bump reaches the fix. 2.9.1 is the version markdownlint itself moved to upstream, so the forced minor is the one it is tested against. NEVER take the `npm audit fix --force` remedy: it downgrades the toolkit packages.",
+      "check": "node -e \"const fs=require('node:fs');process.stdout.write(JSON.parse(fs.readFileSync('node_modules/markdownlint/package.json','utf8')).dependencies.re2js)\"",
+      "expect": "2.8.6",
+      "manualCheck": "The check reads the exact re2js pin of the installed markdownlint, which moves only when a markdownlint-cli2 release pins a newer markdownlint. When it reads 2.8.7 or later, drop the override and this entry and re-run `npm audit`."
+    },
     "typescript": {
       "section": "devDependencies",
       "why": "typescript-eslint peer-requires >=4.8.4 <6.1.0, so type-aware ESLint cannot run on TypeScript 7 — which is already published as latest, so the caret sweep would drift straight onto it. Held at the newest 6.x. Propagates to the whole tree via overrides.typescript = $typescript. obsidian-test-mocks pins the same version for the same reason and records the underlying tsgo detail; the @mnaoumov packages pin it too.",
