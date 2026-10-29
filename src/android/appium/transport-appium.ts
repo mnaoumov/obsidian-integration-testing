@@ -98,6 +98,7 @@ import {
   toCdpInputCommands
 } from '../mobile-input.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
+import { gzipTarForToybox } from '../tar-checksum.ts';
 import { connectToWebViewCdp } from '../webview-cdp.ts';
 import {
   buildSessionTerminatedMessage,
@@ -235,6 +236,11 @@ const WINDOW_RECOVERY_INTERVAL_IN_MILLISECONDS = 5000;
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 const ADB_MARKER_READ_TIMEOUT_IN_MILLISECONDS = 30_000;
+/**
+ * How often a long `adb`-only operation pings the Appium session: well inside
+ * the 300 s `newCommandTimeout` after which Appium ends an idle session.
+ */
+const SESSION_KEEP_ALIVE_INTERVAL_IN_MILLISECONDS = 60_000;
 /*
  * Extra budget granted to the ONE eval that follows a cap overrun, on top of the cap itself. The
  * abandoned closure keeps running in the guest, and Appium serializes commands per session, so the next
@@ -598,34 +604,16 @@ export class AppiumTransport implements ObsidianTransport {
    * webdriver `RangeError` on large base64 payloads and is significantly
    * faster than per-file `browser.pushFile()` calls.
    *
+   * The session is pinged throughout, since the push sends Appium no command
+   * and a large vault outlasts Appium's idle timeout.
+   *
    * @param vaultPath - The vault path (used as the vault directory name on device).
    * @param _files - Map of relative file paths to content buffers (unused — adb pushes the directory directly).
    */
   public async pushFiles(vaultPath: string, _files: Record<string, Uint8Array>): Promise<void> {
-    const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
-    const archiveName = `vault-${randomUUID()}.tar.gz`;
-    const localArchive = join(tmpdir(), archiveName);
-    const remoteArchive = `/data/local/tmp/${archiveName}`;
-
-    try {
-      log(`[appium-transport] Creating archive: ${localArchive}`);
-      await exec(['tar', 'czf', archiveName, '-C', vaultPath, '.'], { cwd: tmpdir(), isQuiet: true });
-
-      log(`[appium-transport] Pushing archive to device ${this.deviceId}...`);
-      await exec(['adb', '-s', this.deviceId, 'push', localArchive, remoteArchive], { isQuiet: true });
-
-      log(`[appium-transport] Extracting archive on device at ${deviceVaultPath}...`);
-      await exec(['adb', '-s', this.deviceId, 'shell', 'mkdir', '-p', deviceVaultPath], { isQuiet: true });
-      await exec(['adb', '-s', this.deviceId, 'shell', 'tar', 'xzf', remoteArchive, '-C', deviceVaultPath], { isQuiet: true });
-
-      log('[appium-transport] Flushing filesystem buffers...');
-      await exec(['adb', '-s', this.deviceId, 'shell', 'sync'], { isQuiet: true });
-
-      log('[appium-transport] Cleaning up remote archive...');
-      await exec(['adb', '-s', this.deviceId, 'shell', 'rm', remoteArchive], { isQuiet: true });
-    } finally {
-      await rm(localArchive, { force: true });
-    }
+    await this.keepSessionAliveDuring(async () => {
+      await this.pushVaultArchive(vaultPath);
+    });
   }
 
   /**
@@ -1077,6 +1065,33 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Runs work that sends no Appium command, pinging the session meanwhile so
+   * Appium does not end it as idle.
+   *
+   * Appium ends a session that receives no command for `newCommandTimeout`
+   * (300 s), and a vault push talks only to `adb`. A 35,544-note vault took
+   * 7.6 min to unpack on the device, after which the session was gone and setup
+   * failed at the next `contexts` call with `A session is either terminated or
+   * not started`. `getAppiumContext` is answered by Appium itself, so the ping
+   * costs one local round-trip and changes nothing. A failed ping is logged and
+   * the work goes on: the work, not the ping, decides the outcome.
+   *
+   * @param callback - The work to run.
+   */
+  private async keepSessionAliveDuring(callback: () => Promise<void>): Promise<void> {
+    const interval = setInterval(() => {
+      this.browser.getAppiumContext().catch((error: unknown) => {
+        log(`[appium-transport] Session keep-alive ping failed: ${errorToString(error)}`);
+      });
+    }, SESSION_KEEP_ALIVE_INTERVAL_IN_MILLISECONDS);
+    try {
+      await callback();
+    } finally {
+      clearInterval(interval);
+    }
+  }
+
+  /**
    * Probes the WebView once for how far Obsidian's startup has got.
    *
    * A probe that throws is reported rather than propagated: the page is
@@ -1153,6 +1168,48 @@ export class AppiumTransport implements ObsidianTransport {
       await exec(['adb', '-s', this.deviceId, 'push', localMarker, remoteMarker], { isQuiet: true });
     } finally {
       await rm(localMarker, { force: true });
+    }
+  }
+
+  /**
+   * Archives the host vault, pushes it to the device and unpacks it there.
+   *
+   * The host `tar` writes an uncompressed archive, which {@link gzipTarForToybox}
+   * gzips with every header checksum rewritten as seven octal digits: Android's
+   * toybox `tar` refuses bsdtar's six-digit form once a header's byte sum reaches
+   * `0o100000`, which a long non-ASCII path does (see `tar-checksum.ts`).
+   *
+   * @param vaultPath - The host vault directory.
+   */
+  private async pushVaultArchive(vaultPath: string): Promise<void> {
+    const deviceVaultPath = this.getDeviceVaultPath(vaultPath);
+    const archiveBaseName = `vault-${randomUUID()}`;
+    const tarName = `${archiveBaseName}.tar`;
+    const archiveName = `${archiveBaseName}.tar.gz`;
+    const localTar = join(tmpdir(), tarName);
+    const localArchive = join(tmpdir(), archiveName);
+    const remoteArchive = `/data/local/tmp/${archiveName}`;
+
+    try {
+      log(`[appium-transport] Creating archive: ${localArchive}`);
+      await exec(['tar', 'cf', tarName, '-C', vaultPath, '.'], { cwd: tmpdir(), isQuiet: true });
+      await gzipTarForToybox({ sourcePath: localTar, targetPath: localArchive });
+
+      log(`[appium-transport] Pushing archive to device ${this.deviceId}...`);
+      await exec(['adb', '-s', this.deviceId, 'push', localArchive, remoteArchive], { isQuiet: true });
+
+      log(`[appium-transport] Extracting archive on device at ${deviceVaultPath}...`);
+      await exec(['adb', '-s', this.deviceId, 'shell', 'mkdir', '-p', deviceVaultPath], { isQuiet: true });
+      await exec(['adb', '-s', this.deviceId, 'shell', 'tar', 'xzf', remoteArchive, '-C', deviceVaultPath], { isQuiet: true });
+
+      log('[appium-transport] Flushing filesystem buffers...');
+      await exec(['adb', '-s', this.deviceId, 'shell', 'sync'], { isQuiet: true });
+
+      log('[appium-transport] Cleaning up remote archive...');
+      await exec(['adb', '-s', this.deviceId, 'shell', 'rm', remoteArchive], { isQuiet: true });
+    } finally {
+      await rm(localTar, { force: true });
+      await rm(localArchive, { force: true });
     }
   }
 
