@@ -10,8 +10,10 @@ import {
 } from 'vitest';
 
 import type { StartupProbeResult } from '../app-startup-progress.ts';
+import type { GzipTarForToyboxParams } from '../tar-checksum.ts';
 
 import { log } from '../../log.ts';
+import { noopAsync } from '../../noop.ts';
 import { strictProxy } from '../../strict-proxy.ts';
 import { ensureNonNullable } from '../../type-guards.ts';
 import {
@@ -36,6 +38,12 @@ vi.mock('../../log.ts', () => ({
   log: vi.fn()
 }));
 
+const mockGzipTarForToybox = vi.hoisted(() => vi.fn<(params: GzipTarForToyboxParams) => Promise<void>>().mockResolvedValue(undefined));
+
+vi.mock('../tar-checksum.ts', () => ({
+  gzipTarForToybox: mockGzipTarForToybox
+}));
+
 interface ExecOptions extends Record<string, unknown> {
   readonly cwd: string;
 }
@@ -49,10 +57,16 @@ const STARTED_PROBE: StartupProbeResult = {
   isLayoutReady: true
 };
 
+interface ExtractionGate {
+  readonly hold: () => Promise<void>;
+  readonly release: () => void;
+}
+
 interface MockBrowser {
   readonly activateApp: ReturnType<typeof vi.fn>;
   readonly deleteSession: ReturnType<typeof vi.fn>;
   readonly execute: ReturnType<typeof vi.fn>;
+  readonly getAppiumContext: ReturnType<typeof vi.fn>;
   readonly getContexts: ReturnType<typeof vi.fn>;
   readonly getWindowHandles: ReturnType<typeof vi.fn>;
   readonly pushFile: ReturnType<typeof vi.fn>;
@@ -61,11 +75,32 @@ interface MockBrowser {
   readonly switchToWindow: ReturnType<typeof vi.fn>;
 }
 
+/**
+ * Holds the device-side extraction open until released, as a long push does.
+ *
+ * @returns The gate.
+ */
+function createExtractionGate(): ExtractionGate {
+  const waiters: (() => void)[] = [];
+  return {
+    hold: async () =>
+      new Promise<void>((resolve) => {
+        waiters.push(resolve);
+      }),
+    release: (): void => {
+      for (const resolve of waiters) {
+        resolve();
+      }
+    }
+  };
+}
+
 function createMockBrowser(): MockBrowser {
   return {
     activateApp: vi.fn().mockResolvedValue(undefined),
     deleteSession: vi.fn().mockResolvedValue(undefined),
     execute: vi.fn().mockResolvedValue(null),
+    getAppiumContext: vi.fn().mockResolvedValue('WEBVIEW_md.obsidian'),
     getContexts: vi.fn().mockResolvedValue(['WEBVIEW_md.obsidian']),
     getWindowHandles: vi.fn().mockResolvedValue(['CDwindow-old', 'CDwindow-new']),
     pushFile: vi.fn().mockResolvedValue(undefined),
@@ -97,7 +132,7 @@ describe('AppiumTransport.pushFiles', () => {
     const options = tarCall[1] as ExecOptions;
 
     expect(command[0]).toBe('tar');
-    expect(command).toContain('czf');
+    expect(command).toContain('cf');
     expect(options.cwd).toBe(tmpdir());
   });
 
@@ -107,11 +142,11 @@ describe('AppiumTransport.pushFiles', () => {
     const tarCall = ensureNonNullable(mockExec.mock.calls[0]);
     const command = tarCall[0] as string[];
 
-    // The archive name (2nd positional arg after 'czf') should be just a filename, not an absolute path.
+    // The archive name (2nd positional arg after 'cf') should be just a filename, not an absolute path.
     const archiveArgument = ensureNonNullable(command[2]);
     expect(archiveArgument).not.toContain('/');
     expect(archiveArgument).not.toContain('\\');
-    expect(archiveArgument).toMatch(/^vault-.*\.tar\.gz$/);
+    expect(archiveArgument).toMatch(/^vault-.*\.tar$/);
   });
 
   it('should not include --force-local flag for cross-platform tar compatibility', async () => {
@@ -163,6 +198,73 @@ describe('AppiumTransport.pushFiles', () => {
     expect(command).toContain('-C');
     const cIndex = command.indexOf('-C');
     expect(command[cIndex + 1]).toBe('/sdcard/Documents/my-vault');
+  });
+
+  it('should gzip the host tar with its checksums rewritten before pushing it', async () => {
+    const calls: string[] = [];
+    mockExec.mockImplementation((command) => {
+      calls.push(Array.isArray(command) ? command.slice(0, 3).join(' ') : command);
+      return Promise.resolve('');
+    });
+    mockGzipTarForToybox.mockReset().mockImplementation(() => {
+      calls.push('gzip');
+      return noopAsync();
+    });
+
+    await transport.pushFiles('/tmp/vault', {});
+
+    const { sourcePath, targetPath } = ensureNonNullable(mockGzipTarForToybox.mock.calls[0])[0];
+    expect(sourcePath).toMatch(/vault-.*\.tar$/);
+    expect(targetPath).toBe(`${sourcePath}.gz`);
+    expect(calls.indexOf('gzip')).toBe(1);
+    expect(calls[2]).toBe('adb -s emulator-5554');
+  });
+
+  it('should ping the session while a push outlasts the keep-alive interval, and stop afterwards', async () => {
+    vi.useFakeTimers();
+    try {
+      const extraction = createExtractionGate();
+      mockExec.mockImplementation(async (command) => {
+        if (Array.isArray(command) && command.includes('xzf')) {
+          await extraction.hold();
+        }
+        return '';
+      });
+
+      const push = transport.pushFiles('/tmp/vault', {});
+      await vi.advanceTimersByTimeAsync(7.6 * 60_000);
+      expect(mockBrowser.getAppiumContext).toHaveBeenCalledTimes(7);
+
+      extraction.release();
+      await push;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(mockBrowser.getAppiumContext).toHaveBeenCalledTimes(7);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should carry on with the push when a keep-alive ping fails', async () => {
+    vi.useFakeTimers();
+    try {
+      mockBrowser.getAppiumContext.mockRejectedValue(new Error('ping refused'));
+      const extraction = createExtractionGate();
+      mockExec.mockImplementation(async (command) => {
+        if (Array.isArray(command) && command.includes('xzf')) {
+          await extraction.hold();
+        }
+        return '';
+      });
+
+      const push = transport.pushFiles('/tmp/vault', {});
+      await vi.advanceTimersByTimeAsync(60_000);
+      extraction.release();
+
+      await expect(push).resolves.toBeUndefined();
+      expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Session keep-alive ping failed: Error: ping refused'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
