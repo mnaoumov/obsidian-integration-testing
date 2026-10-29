@@ -72,7 +72,6 @@ import {
 import { resolveEmulatorBinaryPath } from '../android/adb/android-sdk.ts';
 import {
   checkIsAppiumDriverInstalled,
-  checkIsAppiumOutputOnlyNpmNotices,
   UIAUTOMATOR2_DRIVER_NAME,
   willAutoInstallAppiumDependencies
 } from '../android/appium/appium-dependencies.ts';
@@ -84,10 +83,16 @@ import {
   writeAppiumServerMarker
 } from '../android/appium/appium-server-marker.ts';
 import {
+  resolveAppiumDriverLoadTimeoutInMilliseconds,
   resolveAppiumStartTimeoutInMilliseconds,
   resolveScriptTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
 } from '../android/appium/appium-session-config.ts';
+import {
+  buildAppiumNotReadyMessage,
+  resolveAppiumStartupDeadline,
+  resolveAppiumStartupPhase
+} from '../android/appium/appium-startup-progress.ts';
 import {
   checkIsAppiumToolchainMarkerFresh,
   clearAppiumToolchainMarker,
@@ -350,6 +355,18 @@ const SERVER_LAUNCH_TIMEOUT_IN_MILLISECONDS = 120_000;
  */
 const SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS = 5000;
 
+interface AppiumStartBudget {
+  /**
+  How long Appium may take to load its drivers, counted from its first line.
+   */
+  readonly driverLoadTimeoutInMilliseconds: number;
+
+  /**
+  How long the launch may take, counted from the spawn until Appium's first line.
+   */
+  readonly startTimeoutInMilliseconds: number;
+}
+
 /**
  * How the requested app (asar) version will be applied to an owned instance; at
  * most one field is set (see {@link resolveAsarPlan}).
@@ -510,6 +527,11 @@ interface EstablishSessionParams {
   The Android package the session drives.
    */
   readonly appId: string;
+
+  /**
+  Resolved timeout in milliseconds for a replacement Appium server to load its drivers.
+   */
+  readonly appiumDriverLoadTimeoutInMilliseconds: number;
 
   /**
   The marker of the adopted server, when an earlier run of this harness left one.
@@ -701,6 +723,11 @@ interface RecordEmulatorLaunchParams {
 }
 
 interface StartAppiumAndEmulatorParams {
+  /**
+  Resolved timeout in milliseconds for the auto-started Appium server to load its drivers.
+   */
+  readonly appiumDriverLoadTimeoutInMilliseconds: number;
+
   /**
   Resolved timeout in milliseconds for the auto-started Appium server to become ready.
    */
@@ -1252,6 +1279,7 @@ class AppiumTransportFactory {
        */
       for (let attempt = 1; attempt <= EMULATOR_BOOT_ATTEMPT_COUNT; attempt++) {
         result = await this.startAppiumAndEmulator({
+          appiumDriverLoadTimeoutInMilliseconds: resolveAppiumDriverLoadTimeoutInMilliseconds(options),
           appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
           appiumUrl: url,
           avdName: options.avdName,
@@ -1342,6 +1370,7 @@ class AppiumTransportFactory {
 
       const sessionResult = await this.establishSessionOrDiagnoseDevice(result.emulatorCapture, {
         appId,
+        appiumDriverLoadTimeoutInMilliseconds: resolveAppiumDriverLoadTimeoutInMilliseconds(options),
         appiumServerMarker: result.appiumServerMarker,
         appiumStartTimeoutInMilliseconds: resolveAppiumStartTimeoutInMilliseconds(options),
         deviceId: actualDeviceId,
@@ -2320,7 +2349,7 @@ class AppiumTransportFactory {
     const launch = this.startAppiumServer(params.port, params.isAppiumConsoleVisible);
 
     try {
-      await this.waitForAppiumReady(params.url, params.appiumStartTimeoutInMilliseconds, launch);
+      await this.waitForAppiumReady(params.url, { driverLoadTimeoutInMilliseconds: params.appiumDriverLoadTimeoutInMilliseconds, startTimeoutInMilliseconds: params.appiumStartTimeoutInMilliseconds }, launch);
       this.log('Replacement Appium server is ready, retrying the session...');
       return { appiumProcess: launch.process, browser: await this.connectSession(params) };
     } catch (error: unknown) {
@@ -2429,7 +2458,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
+    const { appiumDriverLoadTimeoutInMilliseconds, appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -2479,7 +2508,7 @@ class AppiumTransportFactory {
      */
     const [appiumOutcome, deviceOutcome] = await Promise.allSettled([
       appiumLaunch
-        ? this.waitForAppiumReady(appiumUrl, appiumStartTimeoutInMilliseconds, appiumLaunch).then(() => {
+        ? this.waitForAppiumReady(appiumUrl, { driverLoadTimeoutInMilliseconds: appiumDriverLoadTimeoutInMilliseconds, startTimeoutInMilliseconds: appiumStartTimeoutInMilliseconds }, appiumLaunch).then(() => {
           this.log('Auto-started Appium server is ready.');
         })
         : noopAsync(),
@@ -2960,14 +2989,37 @@ class AppiumTransportFactory {
     }
   }
 
-  private async waitForAppiumReady(url: URL, timeoutInMilliseconds: number, launch: ProcessLaunch): Promise<void> {
+  private async waitForAppiumReady(url: URL, budget: AppiumStartBudget, launch: ProcessLaunch): Promise<void> {
     const start = Date.now();
+    const { driverLoadTimeoutInMilliseconds, startTimeoutInMilliseconds } = budget;
     this.log(
-      `Waiting for Appium at ${url.href} (timeout: ${String(timeoutInMilliseconds)}ms, poll: ${String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
+      `Waiting for Appium at ${url.href} (launch timeout: ${String(startTimeoutInMilliseconds)}ms, then driver-load timeout: ${String(driverLoadTimeoutInMilliseconds)}ms from Appium's first line, poll: ${String(APPIUM_START_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
-    const deadline = start + timeoutInMilliseconds;
+    /*
+     * Two budgets, because the two phases cost very different amounts on a
+     * loaded host: npx resolving the command, then Appium loading its drivers,
+     * which on 2026-10-29 took 360s cold. See `appium-startup-progress.ts`.
+     */
+    let appiumOutputSeenAt: number | undefined;
+    let deadline = resolveAppiumStartupDeadline({
+      appiumOutputSeenAtInMilliseconds: undefined,
+      driverLoadTimeoutInMilliseconds,
+      launchedAtInMilliseconds: start,
+      startTimeoutInMilliseconds
+    });
 
     while (Date.now() < deadline) {
+      if (appiumOutputSeenAt === undefined && resolveAppiumStartupPhase(launch.readOutput()) === 'loading-driver') {
+        appiumOutputSeenAt = Date.now();
+        this.log(`Appium is running after ${String(appiumOutputSeenAt - start)}ms and is loading its drivers (driver-load timeout: ${String(driverLoadTimeoutInMilliseconds)}ms).`);
+        deadline = resolveAppiumStartupDeadline({
+          appiumOutputSeenAtInMilliseconds: appiumOutputSeenAt,
+          driverLoadTimeoutInMilliseconds,
+          launchedAtInMilliseconds: start,
+          startTimeoutInMilliseconds
+        });
+      }
+
       /*
        * If the server process already died (crashed, or never started), stop
        * polling and surface why — otherwise a doomed server spins out the whole
@@ -2997,12 +3049,13 @@ class AppiumTransportFactory {
       throw buildDeathError(finalExitInfo);
     }
 
-    const outputTail = launch.readOutput().trim();
-    const outputSection = outputTail.length > 0 ? `\n\nAppium server output (tail):\n${outputTail}` : '';
-    const npxSection = checkIsAppiumOutputOnlyNpmNotices(outputTail)
-      ? ' Appium never printed a line of its own: npx was still resolving the command when the budget ran out, which is the host\'s load starving npm (an idle host starts the server in under 10s), not Appium failing.'
-      : '';
-    throw new Error(`Auto-started Appium server did not become ready within ${String(timeoutInMilliseconds)}ms.${npxSection}${outputSection}`);
+    throw new Error(buildAppiumNotReadyMessage({
+      driverLoadElapsedInMilliseconds: appiumOutputSeenAt === undefined ? undefined : Date.now() - appiumOutputSeenAt,
+      driverLoadTimeoutInMilliseconds,
+      outputTail: launch.readOutput(),
+      phase: appiumOutputSeenAt === undefined ? 'launching' : 'loading-driver',
+      startTimeoutInMilliseconds
+    }));
 
     function buildDeathError(exitInfo: ProcessExitInfo): Error {
       // A server that dies at startup may be a toolchain that has gone since it was verified, so the next run probes again.

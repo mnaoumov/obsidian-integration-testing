@@ -101,7 +101,8 @@ Besides the required `appiumUrl` and `avdName`, the transport accepts these opti
 | Option                                        | Purpose                                                                                                                | Default                |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | `appId`                                       | App package (Android) or bundle ID (iOS).                                                                              | `'md.obsidian'`        |
-| `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to become ready; only when the harness auto-starts it.                     | `180000`               |
+| `appiumDriverLoadTimeoutInMilliseconds`       | Max wait for the auto-started Appium server to load its drivers, counted from the first line Appium prints.            | `600000`               |
+| `appiumStartTimeoutInMilliseconds`            | Max wait for the auto-started Appium server to print its first line; only when the harness auto-starts it.             | `180000`               |
 | `appStartTimeoutInMilliseconds`               | Max wait for the app's cold start (`globalThis.app` to exist) after the vault (re)opens, before the layout clock runs. | `180000`               |
 | `deviceIdleTimeoutInMilliseconds`             | Max wait after boot for the emulator — started or reused — to go idle before the session. `0` skips.                   | `60000`                |
 | `isAppiumConsoleVisible`                      | Show the auto-started Appium server console window and live output. Hidden and quiet by default.                       | `false`                |

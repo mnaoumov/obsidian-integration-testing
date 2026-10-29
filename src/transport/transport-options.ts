@@ -16,13 +16,27 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly appId?: string;
 
   /**
+   * Timeout in milliseconds for an auto-started Appium server to load its
+   * drivers and start listening, counted from the first line Appium prints.
+   *
+   * Only applies when the harness auto-starts the Appium server. A cold load of
+   * the uiautomator2 driver reads about 3,400 files and was measured at 360s on
+   * a host at 100% CPU, against 36s once the files were cached, so this budget
+   * is wider than {@link appiumStartTimeoutInMilliseconds}.
+   *
+   * @default `600000`
+   */
+  readonly appiumDriverLoadTimeoutInMilliseconds?: number;
+
+  /**
    * Timeout in milliseconds for the auto-started Appium server to become ready
    * (its `/status` endpoint to respond).
    *
    * Only applies when the harness auto-starts the Appium server
    * ({@link shouldAutoStartAppium}); ignored when attaching to an
-   * already-running server. On a cold machine the `npx appium` server can take
-   * a while to finish booting, so raise this if startup times out.
+   * already-running server. This budget covers only the launch, until Appium
+   * prints its first line; loading its drivers after that has its own budget,
+   * {@link appiumDriverLoadTimeoutInMilliseconds}.
    *
    * @default `180000`
    */

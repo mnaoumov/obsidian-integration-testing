@@ -27,7 +27,8 @@ export const DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS = 180_000;
  * default when the option is omitted.
  *
  * This governs how long the factory polls the auto-started Appium server's
- * `/status` endpoint before giving up. Only relevant when the harness
+ * `/status` endpoint before Appium has printed a line of its own; after that
+ * the driver-load budget applies. Only relevant when the harness
  * auto-starts the server; when attaching to an already-running server the wait
  * is skipped entirely.
  *
@@ -39,6 +40,28 @@ export function resolveAppiumStartTimeoutInMilliseconds(
   options: ObsidianAndroidAppiumTransportOptions
 ): number {
   return options.appiumStartTimeoutInMilliseconds ?? DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS;
+}
+
+/**
+ * Default for {@link ObsidianAndroidAppiumTransportOptions.appiumDriverLoadTimeoutInMilliseconds}.
+ */
+export const DEFAULT_APPIUM_DRIVER_LOAD_TIMEOUT_IN_MILLISECONDS = 600_000;
+
+/**
+ * Resolves the auto-started Appium server's driver-load timeout, applying the
+ * default when the option is omitted.
+ *
+ * Its clock starts at the first line Appium prints, where
+ * {@link resolveAppiumStartTimeoutInMilliseconds}'s launch budget ends.
+ *
+ * @param options - The Android Appium transport options.
+ * @returns The timeout in milliseconds.
+ */
+export function resolveAppiumDriverLoadTimeoutInMilliseconds(
+  // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `ObsidianAndroidAppiumTransportOptions` is one transport options bag read by six helpers, so no per-owner name can satisfy them all.
+  options: ObsidianAndroidAppiumTransportOptions
+): number {
+  return options.appiumDriverLoadTimeoutInMilliseconds ?? DEFAULT_APPIUM_DRIVER_LOAD_TIMEOUT_IN_MILLISECONDS;
 }
 
 /**

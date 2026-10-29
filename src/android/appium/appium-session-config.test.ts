@@ -8,8 +8,10 @@ import type { ObsidianAndroidAppiumTransportOptions } from '../../transport/tran
 
 import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from '../../eval/eval-cap.ts';
 import {
+  DEFAULT_APPIUM_DRIVER_LOAD_TIMEOUT_IN_MILLISECONDS,
   DEFAULT_APPIUM_START_TIMEOUT_IN_MILLISECONDS,
   DEFAULT_SESSION_CONNECTION_RETRY_TIMEOUT_IN_MILLISECONDS,
+  resolveAppiumDriverLoadTimeoutInMilliseconds,
   resolveAppiumStartTimeoutInMilliseconds,
   resolveScriptTimeoutInMilliseconds,
   resolveSessionConnectionRetryTimeoutInMilliseconds
@@ -33,6 +35,23 @@ describe('resolveAppiumStartTimeoutInMilliseconds', () => {
       resolveAppiumStartTimeoutInMilliseconds({
         ...BASE_OPTIONS,
         appiumStartTimeoutInMilliseconds: CUSTOM_TIMEOUT_IN_MILLISECONDS
+      })
+    ).toBe(CUSTOM_TIMEOUT_IN_MILLISECONDS);
+  });
+});
+
+describe('resolveAppiumDriverLoadTimeoutInMilliseconds', () => {
+  it('should default to 600000ms when the option is omitted', () => {
+    expect(resolveAppiumDriverLoadTimeoutInMilliseconds(BASE_OPTIONS)).toBe(600_000);
+    expect(DEFAULT_APPIUM_DRIVER_LOAD_TIMEOUT_IN_MILLISECONDS).toBe(600_000);
+  });
+
+  it('should use the provided value when the option is set', () => {
+    const CUSTOM_TIMEOUT_IN_MILLISECONDS = 900_000;
+    expect(
+      resolveAppiumDriverLoadTimeoutInMilliseconds({
+        ...BASE_OPTIONS,
+        appiumDriverLoadTimeoutInMilliseconds: CUSTOM_TIMEOUT_IN_MILLISECONDS
       })
     ).toBe(CUSTOM_TIMEOUT_IN_MILLISECONDS);
   });
