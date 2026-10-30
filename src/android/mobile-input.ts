@@ -6,7 +6,7 @@
  *
  * Pure and synchronous by design: the WebView connection ({@link WebViewCdpConnection}) sends whatever this
  * returns, so every decision that is worth a test — the touch pair a tap expands into, the dwell a
- * long-press adds, the `rawKeyDown` → `char` → `keyUp` shape a key press mirrors from the desktop twin, the
+ * long-press adds, the single text-carrying `keyDown` a key press is sent as (one dispatch, not two), the
  * modifier bitmask — lives here rather than inside the transport's I/O path.
  *
  * The request travels renderer → host as JSON (the renderer computes the coordinates, because only it can
@@ -390,9 +390,13 @@ function resolveKeyCode(upperCasedCodePoint: number): string {
 /**
  * Builds the command sequence for a key press.
  *
- * Mirrors the desktop twin's trusted `keyDown` → `char` → `keyUp` in CDP's spelling: `rawKeyDown` fires
- * `keydown` alone, `char` fires `keypress` / `beforeinput` / `input`, `keyUp` fires `keyup`. A key that
- * produces no text (`Escape`) skips the `char`, exactly as a real one does.
+ * A key that produces text is ONE `keyDown` carrying that text, which Chromium expands into `keydown`,
+ * `keypress`, `beforeinput` and `input` inside a single dispatch. It used to be the desktop twin's
+ * `rawKeyDown` → `char` pair, two CDP commands that reached the page 40-230 ms apart. CodeMirror's Android
+ * key path read those as two keys: it replayed the trusted `keydown` as a synthetic Enter, then replayed
+ * the `char`'s `beforeinput insertLineBreak` as a second one, so one `pressKey({ key: 'Enter' })` inserted
+ * two line breaks. A key that produces no text (`Escape`) is a `rawKeyDown`, which fires `keydown` alone,
+ * exactly as a real one does. `keyUp` fires `keyup` in both cases.
  *
  * @param request - The key request.
  * @returns The commands to send, in order.
@@ -403,8 +407,10 @@ function toKeyCommands(request: MobileKeyInputRequest): CdpInputCommand[] {
   const base = { code, key: request.key, modifiers, windowsVirtualKeyCode };
 
   const commands: CdpInputCommand[] = [
-    { method: 'Input.dispatchKeyEvent', params: { ...base, type: 'rawKeyDown' } },
-    ...(text === undefined ? [] : [{ method: 'Input.dispatchKeyEvent', params: { ...base, text, type: 'char' } }]),
+    {
+      method: 'Input.dispatchKeyEvent',
+      params: text === undefined ? { ...base, type: 'rawKeyDown' } : { ...base, text, type: 'keyDown' }
+    },
     { method: 'Input.dispatchKeyEvent', params: { ...base, type: 'keyUp' } }
   ];
 

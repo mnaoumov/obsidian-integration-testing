@@ -166,15 +166,22 @@ describe('toCdpInputCommands: pointer', () => {
 });
 
 describe('toCdpInputCommands: key', () => {
-  it('should mirror the desktop rawKeyDown -> char -> keyUp shape for a printable character', () => {
+  it('should send a printable character as ONE text-carrying keyDown, then keyUp', () => {
     expect(toCdpInputCommands({ key: 'a', kind: 'key', modifiers: [] })).toEqual([
-      { method: 'Input.dispatchKeyEvent', params: { code: 'KeyA', key: 'a', modifiers: 0, type: 'rawKeyDown', windowsVirtualKeyCode: 65 } },
-      { method: 'Input.dispatchKeyEvent', params: { code: 'KeyA', key: 'a', modifiers: 0, text: 'a', type: 'char', windowsVirtualKeyCode: 65 } },
+      { method: 'Input.dispatchKeyEvent', params: { code: 'KeyA', key: 'a', modifiers: 0, text: 'a', type: 'keyDown', windowsVirtualKeyCode: 65 } },
       { method: 'Input.dispatchKeyEvent', params: { code: 'KeyA', key: 'a', modifiers: 0, type: 'keyUp', windowsVirtualKeyCode: 65 } }
     ]);
   });
 
-  it('should skip the char event for a key that produces no text, exactly as a real key does', () => {
+  it('should never split a key press into rawKeyDown and char, which CodeMirror on Android reads as two keys', () => {
+    for (const key of ['Enter', 'Tab', 'a']) {
+      const types = toCdpInputCommands({ key, kind: 'key', modifiers: [] }).map((command) => command.params['type']);
+
+      expect(types).toEqual(['keyDown', 'keyUp']);
+    }
+  });
+
+  it('should send a key that produces no text as a rawKeyDown, exactly as a real key does', () => {
     const commands = toCdpInputCommands({ key: 'Escape', kind: 'key', modifiers: [] });
 
     expect(commands.map((command) => command.params['type'])).toEqual(['rawKeyDown', 'keyUp']);
@@ -182,8 +189,8 @@ describe('toCdpInputCommands: key', () => {
   });
 
   it('should give Enter and Tab their real text, so a trusted Enter inserts a newline', () => {
-    const enterChar = toCdpInputCommands({ key: 'Enter', kind: 'key', modifiers: [] })[1];
-    const tabChar = toCdpInputCommands({ key: 'Tab', kind: 'key', modifiers: [] })[1];
+    const [enterChar] = toCdpInputCommands({ key: 'Enter', kind: 'key', modifiers: [] });
+    const [tabChar] = toCdpInputCommands({ key: 'Tab', kind: 'key', modifiers: [] });
 
     expect(enterChar?.params['text']).toBe('\r');
     expect(enterChar?.params['windowsVirtualKeyCode']).toBe(13);
@@ -202,26 +209,26 @@ describe('toCdpInputCommands: key', () => {
     const commands = toCdpInputCommands({ key: 'z', kind: 'key', modifiers: [] });
 
     expect(commands[0]?.params['windowsVirtualKeyCode']).toBe(90);
-    expect(commands[1]?.params['text']).toBe('z');
+    expect(commands[0]?.params['text']).toBe('z');
   });
 
   it('should carry a character with no stable physical key as text with an empty code', () => {
     const commands = toCdpInputCommands({ key: '€', kind: 'key', modifiers: [] });
 
     expect(commands[0]?.params['code']).toBe('');
-    expect(commands[1]?.params['text']).toBe('€');
+    expect(commands[0]?.params['text']).toBe('€');
   });
 
   it('should treat a single astral-plane code point as one character rather than a name', () => {
     const commands = toCdpInputCommands({ key: '😀', kind: 'key', modifiers: [] });
 
-    expect(commands[1]?.params['text']).toBe('😀');
+    expect(commands[0]?.params['text']).toBe('😀');
   });
 
   it('should apply modifiers to every event of the press', () => {
     const commands = toCdpInputCommands({ key: 'a', kind: 'key', modifiers: ['control'] });
 
-    expect(commands.map((command) => command.params['modifiers'])).toEqual([2, 2, 2]);
+    expect(commands.map((command) => command.params['modifiers'])).toEqual([2, 2]);
   });
 
   it('should throw on an unknown multi-character key name rather than press nothing', () => {
