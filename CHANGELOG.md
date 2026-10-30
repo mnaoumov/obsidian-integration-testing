@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 17.7.4
+
+- fix(android): send a mobile key press as one keyDown, so one Enter is one line break
+- docs(deps): record unpatched deepmerge advisory
+- build(deps): override re2js to ^2.9.1 for GHSA-gg6h-894w-4m9c
+- fix(android): give the auto-started Appium server a separate driver-load budget
+- build(deps): bump typescript-dev-toolkit to ^5.2.0
+
 ## 17.7.3
 
 - fix(android): accept long non-ASCII vault paths on the device and keep long pushes alive
