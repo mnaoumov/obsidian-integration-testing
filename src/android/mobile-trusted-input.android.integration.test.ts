@@ -201,6 +201,50 @@ describe('mobile trusted input', () => {
     expect(result.hasOnlyTrustedEvents).toBe(true);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
+  // One `pressKey({ key: 'Enter' })` used to insert TWO line breaks in a CodeMirror editor here: the key went
+  // out as `rawKeyDown` and a separate `char`, 40-230 ms apart, and CodeMirror's Android key path replayed each
+  // as its own Enter (6 of 6 runs on a plain note). Several rounds, because the doubling was a timing effect.
+  it('should insert exactly ONE line break for one Enter in a note editor, every time', async () => {
+    const documents = await evalInObsidian({
+      async callback({ app, lib, obsidianModule }): Promise<string[]> {
+        const ENTER_ROUND_COUNT = 5;
+        const SETTLE_IN_MILLISECONDS = 1000;
+        const file = app.vault.getFileByPath('note.md');
+        if (!file) {
+          throw new Error('note.md is missing from the vault.');
+        }
+
+        const leaf = app.workspace.getLeaf(true);
+        await leaf.openFile(file);
+        const view = leaf.view;
+        if (!(view instanceof obsidianModule.MarkdownView)) {
+          throw new TypeError('note.md did not open in a MarkdownView.');
+        }
+
+        const results: string[] = [];
+        try {
+          for (let round = 0; round < ENTER_ROUND_COUNT; round++) {
+            view.editor.setValue('line');
+            view.editor.focus();
+            view.editor.setCursor({ ch: 'line'.length, line: 0 });
+            await lib.pressKey({ key: 'Enter' });
+            await lib.waitUntil({ message: 'the Enter to reach the editor', predicate: () => view.editor.getValue() !== 'line' });
+            // A doubled Enter landed its second line break up to 230 ms after the first, so wait past it.
+            await sleep(SETTLE_IN_MILLISECONDS);
+            results.push(view.editor.getValue());
+          }
+
+          return results;
+        } finally {
+          leaf.detach();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(documents).toStrictEqual(['line\n', 'line\n', 'line\n', 'line\n', 'line\n']);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
   it('should obey real hit-testing, so a covered element is NOT clicked', async () => {
     // The mutation check established: a trusted tap goes to whatever is on top at that point, while a
     // dispatched event reaches its target through any overlay. If this passes, the tap is not a dispatch.
