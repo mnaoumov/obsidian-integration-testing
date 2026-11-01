@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 17.8.0
+
+- test(android): verify the plugin lifecycle helpers on the emulator
+- docs(readme): link the plugin lifecycle patterns guide
+- feat: add plugin lifecycle test patterns
+- docs(readme): name the questions the harness answers
+- docs: add a guide on driving Obsidian from a coding agent
+- fix(desktop): kill an owned instance by its CDP port when its PID no longer holds it
+- fix(desktop): keep a registered vault in the vault list when an attached connection closes it
+- fix(desktop): never close a vault window an attached connection did not open
+- docs: add issue-filing instructions for AI agents
+
 ## 17.7.4
 
 - fix(android): send a mobile key press as one keyDown, so one Enter is one line break
