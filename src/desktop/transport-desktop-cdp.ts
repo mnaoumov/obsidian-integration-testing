@@ -670,19 +670,24 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return;
     }
 
-    await this.openVaultInRunningInstance(vaultPath);
-    // Recorded only on success, and only here: this is the one branch that opens
-    // A window in an instance this transport did not launch, so it is the one
-    // branch that earns the right to close one (see `unregisterVault`).
-    this.selfRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
+    const didOpenWindow = await this.openVaultInRunningInstance(vaultPath);
+    // Recorded only on success, and only when this transport really opened the window: this is the one
+    // branch that opens a window in an instance this transport did not launch, so it is the one branch
+    // that earns the right to close one (see `unregisterVault`). A vault the instance ALREADY had open
+    // was adopted, not opened, and its window belongs to whoever opened it. Marking it here is how a
+    // `connectToCdp({ port, vault })` against the owner's own running Obsidian destroyed his only
+    // window on dispose, and with it the app.
+    if (didOpenWindow) {
+      this.selfRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
+    }
   }
 
   /**
    * Unregisters a vault by destroying its window and removing it from the registry.
    *
-   * Refuses when this transport does not own what it would be tearing down —
-   * see {@link shouldTearDownVaultWindow} for which of the two ownership flags
-   * means what, and why they are not interchangeable.
+   * Refuses when this transport does not own what it would be tearing down: an
+   * owned instance (killed wholesale instead), or a window this transport did not
+   * open itself — see {@link shouldTearDownVaultWindow}.
    *
    * @param vaultPath - The absolute path to the vault folder.
    */
@@ -690,7 +695,6 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const normalizedVaultPath = normalizeVaultPathForComparison(vaultPath);
     if (
       !shouldTearDownVaultWindow({
-        isHarnessOwnedInstance: this.isHarnessOwnedInstance,
         isOwnedInstance: Boolean(this.ownedConfig),
         isSelfRegistered: this.selfRegisteredVaultPaths.has(normalizedVaultPath)
       })
@@ -698,7 +702,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       log(
         this.ownedConfig
           ? `[cdp-transport] Skipping per-vault teardown; the owned instance is killed wholesale on dispose: ${vaultPath}`
-          : `[cdp-transport] Skipping per-vault teardown; this worker did not register the vault it was asked to unregister: ${vaultPath}`
+          : `[cdp-transport] Skipping per-vault teardown; this transport did not open the vault's window, so it leaves it open: ${vaultPath}`
       );
       return;
     }
@@ -753,6 +757,32 @@ export class DesktopCdpTransport implements ObsidianTransport {
       log('[cdp-transport] No CDP targets for removal IPC — removing directly from obsidian.json.');
       didRemoveVaultFromConfig(vaultPath);
     }
+  }
+
+  /**
+   * Adopts the window of a vault the running instance already has open, so
+   * registering it sends no `vault-open`.
+   *
+   * Every window is asked for its vault first ({@link waitForOpenVaultWindow}),
+   * because right after launch a busy instance answers some probes and not
+   * others: a single pass could miss the open window, send `vault-open` for it,
+   * and mark a window this transport never opened as its own.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   * @returns `true` when the vault was already open and its window is ready.
+   */
+  private async adoptAlreadyOpenVault(vaultPath: string): Promise<boolean> {
+    await this.waitForOpenVaultWindow();
+    let target: CdpTarget;
+    try {
+      target = await this.findTargetForVault(vaultPath);
+    } catch {
+      return false;
+    }
+
+    log(`[cdp-transport] Vault is already open in the running instance; adopting its window (${target.id}) without vault-open: ${vaultPath}`);
+    await this.waitForLayoutReady(vaultPath);
+    return true;
   }
 
   /**
@@ -1333,13 +1363,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * "instance already launched" path, so opening an additional vault never
    * relaunches the process (which would surface the vault picker).
    *
+   * A vault the instance already has open is **adopted** instead: no `vault-open`
+   * is sent, and the caller is told so, because a window this transport did not
+   * open is not one it may close (see {@link registerVault}).
+   *
    * @param vaultPath - The absolute path to the vault folder.
+   * @returns `true` when this call opened the vault's window, `false` when it was already open.
    */
-  private async openVaultInRunningInstance(vaultPath: string): Promise<void> {
+  private async openVaultInRunningInstance(vaultPath: string): Promise<boolean> {
     log(`[cdp-transport] Registering vault: ${vaultPath}`);
     const targets = await this.getPageTargets();
     if (targets.length === 0) {
       throw new Error('No Obsidian CDP targets available. Is Obsidian running?');
+    }
+
+    if (await this.adoptAlreadyOpenVault(vaultPath)) {
+      return false;
     }
 
     // The `vault-open` IPC is sent through an EXISTING window, so the helper namespace
@@ -1375,7 +1414,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         log('[cdp-transport] Vault target found.');
         await this.waitForLayoutReady(vaultPath);
         await this.dismissTrustDialog(vaultPath);
-        return;
+        return true;
       } catch {
         // Vault target not ready yet.
       }

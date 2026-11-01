@@ -140,7 +140,7 @@ export class TemporaryVault {
       if (this.#shouldRemoveDirectoryOnDispose) {
         await retryRm(this.path);
       } else {
-        log(`[temporary-vault] Unregistered but kept the vault directory, which this handle does not own: ${this.path}`);
+        log(`[temporary-vault] Kept the vault directory, which this handle does not own: ${this.path}`);
       }
     }
   }

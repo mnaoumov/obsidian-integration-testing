@@ -9,55 +9,30 @@ import { shouldTearDownVaultWindow } from './vault-teardown-verdict.ts';
 describe('shouldTearDownVaultWindow', () => {
   it('refuses for an owned instance, which is killed wholesale instead', () => {
     expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: false,
       isOwnedInstance: true,
       isSelfRegistered: true
     })).toBe(false);
 
     expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: false,
       isOwnedInstance: true,
       isSelfRegistered: false
     })).toBe(false);
   });
 
-  it('refuses when an attached worker did not register the vault itself', () => {
-    // The regression this module exists for: the shared setup vault's window is
-    // the instance's only one, so tearing it down quits the app for every worker.
+  it('refuses when an attached transport did not open the vault window itself', () => {
+    // Both regressions this module exists for. In a harness-owned instance the shared setup vault's window is the
+    // only one, and in plain attach mode an already-open vault is the owner's own window: tearing either down quits
+    // the app.
     expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: true,
       isOwnedInstance: false,
       isSelfRegistered: false
     })).toBe(false);
   });
 
-  it('allows an attached worker to tear down a vault it registered itself', () => {
+  it('allows an attached transport to tear down a vault window it opened itself', () => {
     expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: true,
       isOwnedInstance: false,
       isSelfRegistered: true
     })).toBe(true);
-  });
-
-  it('allows teardown in plain attach mode, whoever registered the vault', () => {
-    expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: false,
-      isOwnedInstance: false,
-      isSelfRegistered: true
-    })).toBe(true);
-
-    expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: false,
-      isOwnedInstance: false,
-      isSelfRegistered: false
-    })).toBe(true);
-  });
-
-  it('treats an owned instance as owned even when both flags are set', () => {
-    expect(shouldTearDownVaultWindow({
-      isHarnessOwnedInstance: true,
-      isOwnedInstance: true,
-      isSelfRegistered: true
-    })).toBe(false);
   });
 });

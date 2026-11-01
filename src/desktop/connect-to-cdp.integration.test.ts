@@ -174,6 +174,27 @@ describe('connect-to-cdp integration', () => {
     }
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 
+  it('leaves an already-open vault window alone when an attached connection to it is disposed', async () => {
+    // Attaching to somebody's running Obsidian with `vault` set to the vault it already has open used to send
+    // `vault-open` anyway, record the window as this connection's own, and destroy it on dispose. That was the
+    // instance's only window, so the app quit. The owned connection stands in for the owner's Obsidian here.
+    const owner = await connectToCdp();
+    try {
+      const attached = await connectToCdp({ port: owner.port, vault: owner.vault.path });
+      try {
+        expect(await attached.invoke('1 + 1')).toBe('2');
+      } finally {
+        await attached.dispose();
+      }
+
+      // The window survived, and so did the instance.
+      expect(await owner.invoke('app.vault.adapter.getBasePath()')).toBe(owner.vault.path);
+      expect(existsSync(owner.vault.path)).toBe(true);
+    } finally {
+      await owner.dispose();
+    }
+  }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
+
   it('opens a vault whose config folder is not .obsidian', async () => {
     const vaultPath = mkdtempSync(join(tmpdir(), 'connect-to-cdp-config-dir-'));
     try {
