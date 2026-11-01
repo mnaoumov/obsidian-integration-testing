@@ -226,6 +226,24 @@ describe('buildEmulatorReaperBootstrap', () => {
     expect(result.status).toBe(1);
     expect(String(result.stderr)).toContain('reaper blew up');
   });
+
+  /*
+   * This repo's own suites spawn the reaper from the `.ts` source, which plain Node can only load when every module
+   * in its graph is erasable. A parameter property in `adb-devices-failure.ts` once broke that: every reaper died at
+   * import, and a leftover emulator was then watched by nobody.
+   */
+  it('loads the real reaper module under plain Node', () => {
+    const moduleUrl = new URL('emulator-reaper.ts', import.meta.url).href;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '-e', `const m = await import(${JSON.stringify(moduleUrl)}); console.log(typeof m.${EMULATOR_REAPER_ENTRY_NAME});`],
+      { encoding: 'utf-8' }
+    );
+
+    expect(result.stderr).not.toContain('ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX');
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe('function');
+  });
 });
 
 describe('buildEmulatorReaperRelayBootstrap', () => {
