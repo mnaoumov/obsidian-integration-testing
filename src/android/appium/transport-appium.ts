@@ -470,6 +470,25 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Runs a full garbage collection in Obsidian Mobile's WebView, through `HeapProfiler.collectGarbage` on the same
+   * debugger connection the trusted-input channel uses (AGENTS.md L39).
+   *
+   * @param _cwd - Unused: the transport drives one WebView, whichever vault it shows.
+   * @throws Error when the WebView's debugger cannot be reached (iOS, a remote hub), since a leak check that
+   *   collected nothing would pass on a leak.
+   */
+  public async collectGarbage(_cwd: string): Promise<void> {
+    await this.ensureWebViewContext();
+    await this.ensureInputChannel();
+    const channel = this.inputChannel;
+    if (!channel?.isOpen) {
+      throw new Error('Cannot collect garbage on this device: the WebView debugger connection is unavailable (it needs local adb on Android).');
+    }
+
+    await channel.send('HeapProfiler.collectGarbage');
+  }
+
+  /**
    * Ends the Appium session.
    *
    * Only deletes the session if this transport owns it. Transports created

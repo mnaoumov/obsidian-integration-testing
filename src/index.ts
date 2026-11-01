@@ -237,6 +237,17 @@ export { registerLibResolver } from './namespace/lib-registry.ts';
 export type { OpenObsidianSettingsTabParams } from './namespace/open-obsidian-settings-tab.ts';
 export { openObsidianSettingsTab } from './namespace/open-obsidian-settings-tab.ts';
 export { DesktopOnlyPluginSkipError } from './plugin/desktop-only-plugin-skip-error.ts';
+export type {
+  DetectPluginUnloadLeakParams,
+  PluginLifecycleTarget,
+  PluginUnloadLeakResult,
+  ReloadPluginParams,
+  ReloadPluginResult
+} from './plugin/plugin-lifecycle.ts';
+export {
+  detectPluginUnloadLeak,
+  reloadPlugin
+} from './plugin/plugin-lifecycle.ts';
 export type { StaleBuildErrorConstructorParams } from './plugin/stale-build-error.ts';
 export { StaleBuildError } from './plugin/stale-build-error.ts';
 export type {
@@ -303,6 +314,8 @@ export {
 } from './vault/demo-vault/demo-vault-populate.ts';
 export type { ReadDemoVaultTreeParams } from './vault/demo-vault/demo-vault-tree.ts';
 export { readDemoVaultTree } from './vault/demo-vault/demo-vault-tree.ts';
+export type { GenerateLargeVaultParams } from './vault/large-vault-generator.ts';
+export { generateLargeVault } from './vault/large-vault-generator.ts';
 export type {
   PopulateFileContent,
   PopulateFilesParams,
