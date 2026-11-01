@@ -44,6 +44,7 @@ import {
   decodeBase64Png,
   isPng
 } from '../capture/capture-screenshot.ts';
+import { errorToString } from '../error-to-string.ts';
 import { EvalCapExceededError } from '../eval/eval-cap-exceeded-error.ts';
 import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from '../eval/eval-cap.ts';
 import { log } from '../log.ts';
@@ -60,6 +61,7 @@ import {
   getVaultId,
   isVaultRegistered
 } from '../vault/obsidian-config.ts';
+import { checkIsVaultListed } from '../vault/vault-list-membership.ts';
 import {
   areVaultPathsMatching,
   normalizeVaultPathForComparison
@@ -374,6 +376,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * keeps it alive.
    */
   private readonly pendingCommandsBySocket = new WeakMap<WebSocket, Map<number, PendingCommand>>();
+  /**
+   * Self-registered vault paths, normalized like {@link selfRegisteredVaultPaths}, that the instance's
+   * registry already listed before this transport sent `vault-open` for them: a vault the user keeps in the
+   * vault list but did not have open. Tearing one down closes the window this transport opened and leaves its
+   * registry entry alone, because `vault-remove` would drop it from the user's vault list.
+   */
+  private readonly preRegisteredVaultPaths = new Set<string>();
   /**
    * Vault paths THIS transport opened via {@link registerVault}, normalized by
    * {@link normalizeVaultPathForComparison}. A worker attached to a
@@ -708,6 +717,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     this.selfRegisteredVaultPaths.delete(normalizedVaultPath);
+    const wasRegisteredBefore = this.preRegisteredVaultPaths.delete(normalizedVaultPath);
 
     try {
       await ensureNamespaceBootstrapped(this, vaultPath);
@@ -729,6 +739,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     if (this.activeVaultPath === vaultPath) {
       this.disconnect();
+    }
+
+    if (wasRegisteredBefore) {
+      // The window is this transport's, the registry entry is not: the vault was in the vault list before
+      // `vault-open`, so `vault-remove` would delete the user's own entry.
+      log(`[cdp-transport] Closed the vault's window and kept its registry entry, which predates this transport: ${vaultPath}`);
+      return;
     }
 
     await delay(VAULT_CLOSE_DELAY_IN_MILLISECONDS);
@@ -1394,6 +1411,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const ipcWs = await this.connectToTarget(existingTarget);
     try {
       await ensureNamespaceBootstrapped(this, existingVaultPath);
+      if (checkIsVaultListed(await this.readVaultRegistry(ipcWs), vaultPath)) {
+        log(`[cdp-transport] Vault is already in the instance's vault list; its entry will be kept on teardown: ${vaultPath}`);
+        this.preRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
+      }
       const ipcExpression = `window.__obsidianIntegrationTesting.ipcSendSync(${JSON.stringify({ channel: 'vault-open', channelArguments: [vaultPath, false] })})`;
       await this.sendCommand(ipcWs, 'Runtime.evaluate', {
         awaitPromise: true,
@@ -1493,6 +1514,27 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return value;
     } finally {
       ws.close();
+    }
+  }
+
+  /**
+   * Reads the instance's vault registry over the `vault-list` IPC, through an already-open window.
+   *
+   * @param ws - A connection to an open vault window.
+   * @returns The registry the main process reported, or `undefined` when it could not be read.
+   */
+  private async readVaultRegistry(ws: WebSocket): Promise<unknown> {
+    try {
+      const response = await this.sendCommand(ws, 'Runtime.evaluate', {
+        // Old Obsidian has no `window.electron`; its node-integrated renderer reaches IPC through `require` (L26).
+        expression: 'JSON.stringify((window.electron ? window.electron.ipcRenderer : require(\'electron\').ipcRenderer).sendSync(\'vault-list\'))',
+        returnByValue: true
+      });
+      const value = response.result?.result?.value;
+      return typeof value === 'string' ? JSON.parse(value) : undefined;
+    } catch (error) {
+      log(`[cdp-transport] Could not read the vault registry; treating the vault as already listed: ${errorToString(error)}`);
+      return undefined;
     }
   }
 
