@@ -116,13 +116,22 @@ export interface ResolveAdbDevicesFailureParams {
  */
 export class AdbDevicesFailedError extends Error {
   /**
+   * The classified failure.
+   */
+  public readonly failure: AdbDevicesFailure;
+
+  /**
    * Creates the error.
+   *
+   * A plain field rather than a parameter property: the emulator reaper loads this module under plain Node, whose
+   * type stripping refuses parameter properties (AGENTS.md L56).
    *
    * @param failure - The classified failure.
    */
-  public constructor(public readonly failure: AdbDevicesFailure) {
+  public constructor(failure: AdbDevicesFailure) {
     super(buildAdbDevicesFailureMessage(failure));
     this.name = 'AdbDevicesFailedError';
+    this.failure = failure;
   }
 }
 
