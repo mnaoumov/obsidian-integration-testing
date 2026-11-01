@@ -68,6 +68,13 @@ describe('installPluginIntoVault', () => {
     expect(readWrittenEnableList()).toEqual([PLUGIN_ID]);
   });
 
+  it('writes an empty enable list when the plugin is to be enabled after the vault opens', async () => {
+    await installPluginIntoVault({ distPath: DIST_PATH, pluginId: PLUGIN_ID, shouldEnableOnLoad: false, vaultPath: VAULT_PATH });
+
+    expect(mockCp).toHaveBeenCalledWith(DIST_PATH, join(VAULT_PATH, '.obsidian', 'plugins', PLUGIN_ID), { recursive: true });
+    expect(readWrittenEnableList()).toEqual([]);
+  });
+
   it('honours a configDirectory override, which the vault is the one reading', async () => {
     // Installing into `.obsidian` while the vault reads `.obsidian-desktop` puts the plugin where nothing
     // looks for it, and the enable that follows reports only the generic "enabled but not loaded" -- the

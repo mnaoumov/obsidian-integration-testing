@@ -122,6 +122,22 @@ export interface CoreSetupOptions {
   readonly installPlugin?: boolean | undefined;
 
   /**
+   * When the plugin under test is first loaded.
+   *
+   * - `'app-start'` lists it in `community-plugins.json` before the vault opens, so Obsidian loads it during startup,
+   *   while the layout is still being restored.
+   * - `'after-layout-ready'` leaves it out of that list, and the harness enables it once the vault has opened and its
+   *   layout is ready — the path a user takes when they turn the plugin on in settings.
+   *
+   * A plugin can break on one and not the other (an `onload` that reads the workspace before `onLayoutReady`, or one
+   * that waits for a `layout-ready` that already fired), so a suite is worth running both ways: two projects that
+   * differ only in this option. Ignored with `installPlugin: false`.
+   *
+   * @default 'app-start'
+   */
+  readonly pluginEnableTiming?: 'after-layout-ready' | 'app-start' | undefined;
+
+  /**
    * Files and folders to write into the vault **before** Obsidian opens it, so
    * its startup scan indexes them in one pass (see {@link TemporaryVault.populate}).
    * Use this for large fixtures — writing thousands of notes after open and
@@ -210,6 +226,12 @@ interface CopyPluginIntoVaultParams {
   The project root to resolve the built plugin from.
    */
   readonly projectRoot: string;
+
+  /**
+  Whether the plugin goes into `community-plugins.json`, so it loads with the vault. See
+  {@link CoreSetupOptions.pluginEnableTiming}.
+   */
+  readonly shouldEnableOnLoad: boolean;
 
   /**
   The temp vault to copy the plugin into.
@@ -398,7 +420,14 @@ export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupRes
     let pluginId: string | undefined;
 
     if (shouldInstallPlugin) {
-      pluginId = await copyPluginIntoVault({ configDirectory, label, projectRoot, temporaryVault, transport });
+      pluginId = await copyPluginIntoVault({
+        configDirectory,
+        label,
+        projectRoot,
+        shouldEnableOnLoad: checkShouldEnableOnLoad(params),
+        temporaryVault,
+        transport
+      });
     } else {
       log(`[integration-setup:${label}] Skipping plugin install (installPlugin: false) — registering an empty vault.`);
     }
@@ -667,6 +696,17 @@ function augmentTransportOptions(
 }
 
 /**
+ * Whether the plugin under test goes into `community-plugins.json`, so it loads with the vault. See
+ * {@link CoreSetupOptions.pluginEnableTiming}.
+ *
+ * @param params - The setup options.
+ * @returns `false` only for `pluginEnableTiming: 'after-layout-ready'`.
+ */
+function checkShouldEnableOnLoad(params: CoreSetupOptions | undefined): boolean {
+  return params?.pluginEnableTiming !== 'after-layout-ready';
+}
+
+/**
  * Copies the built plugin into the temp vault and marks it as a community plugin.
  *
  * Reads `manifest.json` from the newer of `dist/dev`/`dist/build`, rejects a
@@ -680,7 +720,7 @@ function augmentTransportOptions(
  * @returns The plugin id read from the manifest.
  */
 async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<string> {
-  const { configDirectory, label, projectRoot, temporaryVault, transport } = params;
+  const { configDirectory, label, projectRoot, shouldEnableOnLoad, temporaryVault, transport } = params;
   const distPath = await resolveDistPath(projectRoot);
   const manifestJson = JSON.parse(await readFile(join(distPath, 'manifest.json'), 'utf-8')) as PluginManifest;
   const pluginId = manifestJson.id;
@@ -701,8 +741,11 @@ async function copyPluginIntoVault(params: CopyPluginIntoVaultParams): Promise<s
   // installed.
   log(`[integration-setup:${label}] Using ${distPath} (${buildStat.mtime.toISOString()}).`);
 
-  await installPluginIntoVault({ configDirectory, distPath, pluginId, vaultPath: temporaryVault.path });
-  log(`[integration-setup:${label}] Installed "${pluginId}" into ${configDirectory ?? DEFAULT_CONFIG_DIRECTORY}/plugins (and enabled it there).`);
+  await installPluginIntoVault({ configDirectory, distPath, pluginId, shouldEnableOnLoad, vaultPath: temporaryVault.path });
+  const enableClause = shouldEnableOnLoad
+    ? 'and enabled it there, so it loads with the vault'
+    : 'not enabled there: it is enabled once the layout is ready (pluginEnableTiming: after-layout-ready)';
+  log(`[integration-setup:${label}] Installed "${pluginId}" into ${configDirectory ?? DEFAULT_CONFIG_DIRECTORY}/plugins (${enableClause}).`);
 
   return pluginId;
 }
