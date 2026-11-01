@@ -77,6 +77,13 @@ export interface CreateSetupOptions {
   readonly installPlugin?: boolean;
 
   /**
+   * When the plugin under test is first loaded: during startup (`'app-start'`, the default) or once the vault's
+   * layout is ready (`'after-layout-ready'`), the way a user turns it on in settings. Run a suite both ways with two
+   * setups that differ only in this. See {@link CoreSetupOptions.pluginEnableTiming}.
+   */
+  readonly pluginEnableTiming?: 'after-layout-ready' | 'app-start';
+
+  /**
    * Returns files/folders to write into the vault before Obsidian opens it (see
    * {@link CoreSetupOptions.populate}). A thunk so large fixtures are built lazily,
    * once, in the setup process.
@@ -117,6 +124,7 @@ export function createSetup(options?: CreateSetupOptions): JestGlobalSetup {
     setupResult = await coreSetup({
       enableCommunityPlugins: options?.enableCommunityPlugins,
       installPlugin: options?.installPlugin,
+      pluginEnableTiming: options?.pluginEnableTiming,
       populate: await options?.populate?.(),
       transportOptions
     });

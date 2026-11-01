@@ -61,6 +61,18 @@ export interface ObsidianTransport {
   readonly captureScreenshot?: (params: CaptureScreenshotParams) => Promise<Uint8Array>;
 
   /**
+   * Runs a full garbage collection in the renderer serving the given vault.
+   *
+   * What makes a leak test exact: after it, an object that nothing still references is gone, so a `WeakRef` to it
+   * reads `undefined`. Optional and platform-specific: implemented by {@link DesktopCdpTransport} and, over the
+   * WebView's debugger, by {@link AppiumTransport} on Android.
+   *
+   * @param cwd - The vault whose renderer to collect in.
+   * @returns A {@link Promise} that resolves once the collection has run.
+   */
+  readonly collectGarbage?: (cwd: string) => Promise<void>;
+
+  /**
    * Disposes of transport resources (e.g. WebSocket connections, Appium sessions).
    */
   // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The factory wraps disposal to also clean up the owned instance.

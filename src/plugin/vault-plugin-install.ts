@@ -61,6 +61,15 @@ export interface InstallPluginIntoVaultParams {
   readonly pluginId: string;
 
   /**
+   * Whether to list the plugin in `community-plugins.json`, so Obsidian loads it while the vault opens. `false`
+   * writes an empty list instead, and the plugin is first loaded by an enable after the layout is ready — the path a
+   * user takes when they turn the plugin on in settings.
+   *
+   * @default true
+   */
+  readonly shouldEnableOnLoad?: boolean | undefined;
+
+  /**
    * The absolute path of the harness-owned vault to install into.
    */
   readonly vaultPath: string;
@@ -79,10 +88,10 @@ export interface InstallPluginIntoVaultParams {
  * @param params - The vault to install into, its config folder, and the build to install.
  */
 export async function installPluginIntoVault(params: InstallPluginIntoVaultParams): Promise<void> {
-  const { configDirectory = DEFAULT_CONFIG_DIRECTORY, distPath, pluginId, vaultPath } = params;
+  const { configDirectory = DEFAULT_CONFIG_DIRECTORY, distPath, pluginId, shouldEnableOnLoad = true, vaultPath } = params;
 
   const pluginDirectory = join(vaultPath, configDirectory, PLUGINS_DIR, pluginId);
   await mkdir(pluginDirectory, { recursive: true });
   await cp(distPath, pluginDirectory, { recursive: true });
-  await writeFile(join(vaultPath, configDirectory, COMMUNITY_PLUGINS_JSON), JSON.stringify([pluginId]));
+  await writeFile(join(vaultPath, configDirectory, COMMUNITY_PLUGINS_JSON), JSON.stringify(shouldEnableOnLoad ? [pluginId] : []));
 }

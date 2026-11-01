@@ -277,8 +277,13 @@ interface CdpExceptionObject {
 }
 
 interface CdpResponse {
+  readonly error?: CdpResponseError;
   readonly id: number;
   readonly result?: CdpResponseResult;
+}
+
+interface CdpResponseError {
+  readonly message: string;
 }
 
 interface CdpResponseResult {
@@ -488,6 +493,22 @@ export class DesktopCdpTransport implements ObsidianTransport {
       if (deviceMetricsOverride) {
         await this.sendCommand(ws, 'Emulation.clearDeviceMetricsOverride', {});
       }
+    }
+  }
+
+  /**
+   * Runs a full garbage collection in the renderer of the window showing the given vault, through CDP
+   * `HeapProfiler.collectGarbage`. The renderer has no `gc()` of its own unless launched with `--expose-gc`, and an
+   * attached Obsidian was launched by someone else.
+   *
+   * @param cwd - The vault whose window to collect in.
+   * @throws Error if CDP refuses the command.
+   */
+  public async collectGarbage(cwd: string): Promise<void> {
+    const ws = await this.ensureConnection(cwd);
+    const response = await this.sendCommand(ws, 'HeapProfiler.collectGarbage', {});
+    if (response.error) {
+      throw new Error(`CDP HeapProfiler.collectGarbage failed: ${response.error.message}`);
     }
   }
 
