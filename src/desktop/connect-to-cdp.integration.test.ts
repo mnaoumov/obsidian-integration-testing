@@ -100,6 +100,28 @@ async function sampleWindowState(): Promise<string> {
 
 const WINDOW_STATE_EXPR = `(${getFunctionExpressionString(sampleWindowState)})()`;
 
+/**
+ * The fields of CDP's `/json/version` answer this suite reads.
+ */
+interface CdpVersionInfo {
+  /**
+  The browser target's socket URL; its id is new for every Electron main process.
+  */
+  readonly webSocketDebuggerUrl: string;
+}
+
+/**
+ * Reads the browser socket URL, which identifies the Electron main process serving the port.
+ *
+ * @param cdpUrl - The instance's CDP base URL.
+ * @returns The browser target's socket URL.
+ */
+async function readBrowserWebSocketUrl(cdpUrl: string): Promise<string> {
+  const response = await fetch(`${cdpUrl}/json/version`);
+  const info = await response.json() as CdpVersionInfo;
+  return info.webSocketDebuggerUrl;
+}
+
 describe('connect-to-cdp integration', () => {
   it('opens a temp vault, evaluates, and removes the vault on dispose', async () => {
     const connection = await connectToCdp();
@@ -167,6 +189,30 @@ describe('connect-to-cdp integration', () => {
     } finally {
       await connection.dispose();
     }
+  }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
+
+  it('kills an owned instance that relaunched itself into a new process', async () => {
+    // Obsidian's `relaunch` IPC is `app.relaunch(); app.quit()`: the launched PID
+    // exits and a new main process takes over the same CDP port, outside the tree
+    // the harness holds. Dispose used to kill only that dead PID and leave the
+    // relaunched instance running.
+    const connection = await connectToCdp({ isObsidianAppVisible: false });
+    const browserIdBefore = await readBrowserWebSocketUrl(connection.cdpUrl);
+    try {
+      await connection.invoke('(window.electron.ipcRenderer.sendSync("relaunch"), "sent")').catch(() => {
+        // The renderer may die before it answers; the relaunch is what matters.
+      });
+      await vi.waitFor(async () => {
+        const browserIdAfter = await readBrowserWebSocketUrl(connection.cdpUrl);
+        expect(browserIdAfter).not.toBe(browserIdBefore);
+      }, { interval: 500, timeout: 60_000 });
+    } finally {
+      await connection.dispose();
+    }
+
+    await vi.waitFor(async () => {
+      await expect(fetch(`${connection.cdpUrl}/json/version`)).rejects.toThrow();
+    }, { interval: 500, timeout: 15_000 });
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 
   it('never removes a real vault directory on dispose', async () => {

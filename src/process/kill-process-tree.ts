@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 
 import { log } from '../log.ts';
+import { checkIsProcessAlive } from './process-liveness.ts';
 
 /**
  * Kills a child process and its entire process tree.
@@ -40,11 +41,13 @@ export function killProcessTree(child: ChildProcess): void {
 export function killProcessTreeByPid(pid: number): void {
   if (process.platform === 'win32') {
     try {
-      execFileSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+      // Piped rather than ignored, so a failure names its cause: "not found" (already exited) and "Access is denied" need different answers.
+      execFileSync('taskkill', ['/F', '/T', '/PID', String(pid)], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
     } catch (error: unknown) {
       log(
-        `[kill-process-tree] taskkill for PID ${String(pid)} failed (may have already exited): ${error instanceof Error ? error.message : 'unknown error'}`
+        `[kill-process-tree] taskkill for PID ${String(pid)} failed (may have already exited): ${error instanceof Error ? error.message.trim() : 'unknown error'}`
       );
+      terminateIfStillAlive(pid);
     }
     return;
   }
@@ -55,6 +58,31 @@ export function killProcessTreeByPid(pid: number): void {
     log(
       `[kill-process-tree] SIGKILL for PID ${String(pid)} failed (may have already exited): ${error instanceof Error ? error.message : 'unknown error'}`
     );
+  }
+}
+
+/**
+ * Terminates a process directly when `taskkill` failed but the process lives on.
+ *
+ * `taskkill /T` walks the tree through WMI, and a host whose WMI is unwell fails
+ * the whole call with `ERROR: The requested object does not exist.` while the
+ * process keeps running — measured on an owned Obsidian instance, which then
+ * outlived its run. `process.kill` is a plain `TerminateProcess` with no WMI in
+ * the way. It reaches the one process only, which is enough for an Electron
+ * browser process: its children exit when it does.
+ *
+ * @param pid - The PID `taskkill` failed to kill.
+ */
+function terminateIfStillAlive(pid: number): void {
+  if (!checkIsProcessAlive(pid)) {
+    return;
+  }
+
+  try {
+    process.kill(pid, 'SIGKILL');
+    log(`[kill-process-tree] PID ${String(pid)} was still alive after taskkill failed; terminated it directly (its own children were not walked).`);
+  } catch (error: unknown) {
+    log(`[kill-process-tree] Direct termination of PID ${String(pid)} failed too: ${error instanceof Error ? error.message : 'unknown error'}`);
   }
 }
 
