@@ -26,7 +26,11 @@ import { createServer } from 'node:net';
 import type { ProcessExitInfo } from '../../process/process-exit-message.ts';
 
 import { log } from '../../log.ts';
-import { killProcessTree } from '../../process/kill-process-tree.ts';
+import {
+  killProcessTree,
+  killProcessTreeByPid
+} from '../../process/kill-process-tree.ts';
+import { listPortOwnerPidsSync } from '../../process/port-owner-query.ts';
 import { attachProcessCapture } from '../../process/process-capture.ts';
 import {
   clearOwnedInstanceExitMarker,
@@ -110,6 +114,8 @@ const DEFAULT_CDP_HOST = '127.0.0.1';
 const CDP_READY_POLL_INTERVAL_IN_MILLISECONDS = 1000;
 const CDP_READY_TIMEOUT_IN_MILLISECONDS = 60_000;
 const OBSIDIAN_OUTPUT_TAIL_MAX_LENGTH = 8000;
+// The kill is synchronous and also runs from a `process.on('exit')` handler, so the query gets the short sync-teardown budget.
+const PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS = 5000;
 
 interface CdpTarget {
   readonly type: string;
@@ -227,8 +233,36 @@ export async function launchOwnedObsidianInstance(
     isKillExpected = true;
     clearOwnedInstanceExitMarker(port);
     livenessServer.close();
+    // Read before the kill: once the launched tree is gone, its own listener no longer shows, and what remains is exactly the hand-off.
+    const portOwnerPids = listOwnedInstancePortOwnerPids(port);
     killProcessTree(child);
+    for (const pid of portOwnerPids) {
+      if (pid === child.pid) {
+        continue;
+      }
+      log(
+        `[obsidian-instance] CDP port ${String(port)} is held by PID ${String(pid)}, not by the launched PID ${String(child.pid)}: the instance handed itself to another process (an Obsidian relaunch does this). Killing that tree too.`
+      );
+      killProcessTreeByPid(pid);
+    }
   }
+}
+
+/**
+ * Lists the PIDs listening on an owned instance's CDP port, for a caller that
+ * wants to know whether the instance is really gone.
+ *
+ * @param port - The instance's CDP port.
+ * @returns The listening PIDs; empty when nothing holds the port or the query failed (a failure is logged).
+ */
+export function listOwnedInstancePortOwnerPids(port: number): number[] {
+  return listPortOwnerPidsSync({
+    log: (message) => {
+      log(`[obsidian-instance] ${message}`);
+    },
+    port,
+    timeoutInMilliseconds: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS
+  });
 }
 
 /**

@@ -50,6 +50,7 @@ import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from '../eval/eval-cap.ts';
 import { log } from '../log.ts';
 import { ensureNamespaceBootstrapped } from '../namespace/namespace-bootstrap.ts';
 import { exec } from '../process/exec.ts';
+import { killProcessTreeByPid } from '../process/kill-process-tree.ts';
 import {
   OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS,
   resolveSandboxLaunchArguments,
@@ -81,7 +82,10 @@ import { ConfigDirectoryFallbackError } from './config-directory-fallback-error.
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
 import { DETERMINISTIC_RASTER_LAUNCH_FLAGS } from './owned-instance/deterministic-raster.ts';
 import { resolveObsidianExecutable } from './owned-instance/obsidian-executable.ts';
-import { launchOwnedObsidianInstance } from './owned-instance/obsidian-instance.ts';
+import {
+  launchOwnedObsidianInstance,
+  listOwnedInstancePortOwnerPids
+} from './owned-instance/obsidian-instance.ts';
 import { readOwnedInstanceExitMarker } from './owned-instance/owned-instance-exit-marker.ts';
 import {
   buildOwnedInstanceExitedErrorFromMarker,
@@ -316,6 +320,9 @@ type PendingCommand = (response: CdpResponse) => void;
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10_000;
 const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
+// A survivor of the owned kill is re-killed this many times before dispose stops trying and reports it.
+const OWNED_SURVIVOR_KILL_ROUND_COUNT = 3;
+const OWNED_SURVIVOR_SETTLE_IN_MILLISECONDS = 1000;
 const NO_OUTPUT = '(no output)';
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30_000;
@@ -498,6 +505,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     this.ownedInstance?.kill();
+    await this.killOwnedInstanceSurvivors();
     const { userDataDirectory } = this.ownedConfig;
     const deadline = Date.now() + USER_DATA_RM_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
@@ -506,9 +514,18 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
       await delay(USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS);
     }
-    if (!didRemoveDirectory(userDataDirectory)) {
-      log(`[cdp-transport] Could not remove owned user-data directory within ${String(USER_DATA_RM_TIMEOUT_IN_MILLISECONDS)}ms (non-fatal): ${userDataDirectory}`);
+    if (didRemoveDirectory(userDataDirectory)) {
+      return;
     }
+
+    // A directory still held is the one symptom a surviving instance leaves, so say whether one survived rather than leave it to be found by hand.
+    const survivorPids = this.ownedInstance ? listOwnedInstancePortOwnerPids(this.ownedInstance.port) : [];
+    const survivorClause = survivorPids.length > 0
+      ? `; WARNING: CDP port ${String(this.ownedInstance?.port)} is still held by PID(s) ${survivorPids.join(', ')}, so the owned instance outlived its kill`
+      : '';
+    log(
+      `[cdp-transport] Could not remove owned user-data directory within ${String(USER_DATA_RM_TIMEOUT_IN_MILLISECONDS)}ms (non-fatal): ${userDataDirectory}${survivorClause}`
+    );
   }
 
   /**
@@ -1232,6 +1249,37 @@ export class DesktopCdpTransport implements ObsidianTransport {
     });
 
     return pendingCommands;
+  }
+
+  /**
+   * Verifies the owned instance's CDP port was released by its kill, and kills
+   * whatever still listens there, a few rounds at most.
+   *
+   * The kill already reaches a process the instance relaunched into, but one
+   * `taskkill` of a tree whose children are still starting can fail, and a
+   * relaunched instance then outlives the run. The port is the evidence: nothing
+   * but the instance may hold it.
+   */
+  private async killOwnedInstanceSurvivors(): Promise<void> {
+    const port = this.ownedInstance?.port;
+    if (port === undefined) {
+      return;
+    }
+
+    for (let round = 1; round <= OWNED_SURVIVOR_KILL_ROUND_COUNT; round++) {
+      const survivorPids = listOwnedInstancePortOwnerPids(port);
+      if (survivorPids.length === 0) {
+        return;
+      }
+
+      log(
+        `[cdp-transport] CDP port ${String(port)} is still held by PID(s) ${survivorPids.join(', ')} after the owned instance was killed; killing again (round ${String(round)} of ${String(OWNED_SURVIVOR_KILL_ROUND_COUNT)}).`
+      );
+      for (const pid of survivorPids) {
+        killProcessTreeByPid(pid);
+      }
+      await delay(OWNED_SURVIVOR_SETTLE_IN_MILLISECONDS);
+    }
   }
 
   /**

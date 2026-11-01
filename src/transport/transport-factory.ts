@@ -14,7 +14,6 @@ import type {
 
 import {
   execFile,
-  execFileSync,
   spawn
 } from 'node:child_process';
 import { getServers } from 'node:dns';
@@ -42,10 +41,7 @@ import type {
 import type { AvdProbeResult } from '../android/avd/avd-probe-verdict.ts';
 import type { LaunchedDeviceCandidate } from '../android/avd/launched-device-selection.ts';
 import type { EmulatorLivenessProbeOutcome } from '../android/emulator/emulator-liveness.ts';
-import type {
-  HostCommandQuery,
-  HostProcessQueryResult
-} from '../android/emulator/emulator-reclaim.ts';
+import type { HostProcessQueryResult } from '../android/emulator/emulator-reclaim.ts';
 import type { InstallerCompatibility } from '../desktop/compatibility/installer-compatibility.ts';
 import type {
   DesktopCdpTransportConfig,
@@ -210,13 +206,13 @@ import {
 } from '../process/kill-process-tree.ts';
 import {
   buildPortOwnerQueryMessage,
-  normalizeSyncExecError,
   resolvePortOwnerQueryOutcome
 } from '../process/port-owner-query-verdict.ts';
 import {
-  parsePosixLsofPids,
-  parseWindowsNetstatPids
-} from '../process/port-owner.ts';
+  buildPortOwnerQuery,
+  listPortOwnerPidsSync,
+  parsePortOwnerPids
+} from '../process/port-owner-query.ts';
 import {
   appendProcessOutputTail,
   buildProcessExitMessage
@@ -618,18 +614,6 @@ interface InstalledShell {
  * A spawned child process (the Android emulator or the Appium server) together
  * with helpers to inspect its captured output and exit status.
  */
-interface ParsePortOwnerPidsParams {
-  /**
-  Raw stdout of the platform's port query.
-   */
-  readonly output: string;
-
-  /**
-  The port that was queried.
-   */
-  readonly port: number;
-}
-
 interface ProcessLaunch {
   /**
   The spawned process.
@@ -2034,29 +2018,13 @@ class AppiumTransportFactory {
    * @returns The listening PIDs, or an empty list when nothing holds the port or the query failed.
    */
   private listPortOwnerPidsSync(port: number): number[] {
-    const query = buildPortOwnerQuery(port);
-    const startedAtInMilliseconds = Date.now();
-    try {
-      const output = execFileSync(query.command, query.commandArguments, {
-        encoding: 'utf-8',
-        maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES,
-        timeout: SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS
-      });
-      return parsePortOwnerPids({ output, port });
-    } catch (error) {
-      const failure = normalizeSyncExecError(error);
-      this.logPortOwnerQueryFailure({
-        command: [query.command, ...query.commandArguments].join(' '),
-        elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
-        exitCode: failure.exitCode,
-        outcome: resolvePortOwnerQueryOutcome({ ...failure, hasFailed: true, platform: process.platform }),
-        port,
-        signal: failure.signal,
-        standardError: failure.standardError,
-        timeoutInMilliseconds: SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS
-      });
-      return [];
-    }
+    return listPortOwnerPidsSync({
+      log: (message) => {
+        this.log(message);
+      },
+      port,
+      timeoutInMilliseconds: SYNC_TEARDOWN_QUERY_TIMEOUT_IN_MILLISECONDS
+    });
   }
 
   private log(message: string): void {
@@ -3570,21 +3538,6 @@ async function assertHarnessOwnedInstanceIsServing(host: string, port: number): 
 }
 
 /**
- * Builds the platform's "who holds this port" query.
- *
- * `netstat` cannot filter by port, so the whole table comes back and the parser
- * does the matching; `lsof` filters server-side and answers with bare PIDs.
- *
- * @param port - The port to query.
- * @returns The command and arguments to run.
- */
-function buildPortOwnerQuery(port: number): HostCommandQuery {
-  return process.platform === 'win32'
-    ? { command: 'netstat', commandArguments: ['-ano'] }
-    : { command: 'lsof', commandArguments: ['-ti', `tcp:${String(port)}`] };
-}
-
-/**
  * Creates a desktop CDP transport. When an explicit `port` is given the
  * transport attaches to an already-running Obsidian on that port; otherwise it
  * launches and owns an isolated instance (the default, hermetic mode).
@@ -3677,18 +3630,6 @@ function getSettledFailure(outcomes: readonly PromiseSettledResult<unknown>[]): 
 async function importWebdriverio(): Promise<WebdriverioModule> {
   // eslint-disable-next-line no-restricted-syntax -- `webdriverio` is Appium-only, so it must be loaded lazily: a static import would drag the whole WebDriver stack into every consumer of this package's index, and `chalk` with it (see the doc comment).
   return await import('webdriverio');
-}
-
-/**
- * Parses a port-owner listing with the platform's parser.
- *
- * @param params - The raw output and the port that was queried.
- * @returns The PIDs holding the port.
- */
-function parsePortOwnerPids(params: ParsePortOwnerPidsParams): number[] {
-  return process.platform === 'win32'
-    ? parseWindowsNetstatPids({ netstatOutput: params.output, port: params.port })
-    : parsePosixLsofPids(params.output);
 }
 
 /**
