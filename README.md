@@ -25,6 +25,7 @@ Full documentation lives at **[mnaoumov.dev/obsidian-integration-testing](https:
 - [Android testing](https://mnaoumov.dev/obsidian-integration-testing/guides/android/) — Appium setup, AVD provisioning, troubleshooting.
 - [Version matrix](https://mnaoumov.dev/obsidian-integration-testing/guides/version-matrix/) — run the suites across the supported Obsidian range.
 - [Leftover cleanup](https://mnaoumov.dev/obsidian-integration-testing/guides/leftover-cleanup/) — what a dead run leaks, and how the sweeps handle it.
+- [Plugin lifecycle patterns](https://mnaoumov.dev/obsidian-integration-testing/guides/plugin-lifecycle/) — enabled late, a fresh install, a corrupt `data.json`, leaks on unload, a large generated vault.
 - [Ad-hoc debugging](https://mnaoumov.dev/obsidian-integration-testing/guides/debugging/) — `connectToCdp` and the CLI.
 - [Driving Obsidian from an agent](https://mnaoumov.dev/obsidian-integration-testing/guides/agents/) — let a coding agent see, click, type into and photograph a real Obsidian.
 - [API reference](https://mnaoumov.dev/obsidian-integration-testing/api/) — every exported function, class and type, generated from the TSDoc.
