@@ -6,6 +6,12 @@ A set of helpers that simplify integration testing of [Obsidian](https://obsidia
 
 Your tests run inside a **real Obsidian** — the real `App`, the real vault, the real workspace, internal APIs included. By default the harness launches and owns an isolated instance in a temporary `--user-data-dir`, so your own Obsidian (its config, vault registry, open window, auto-update) is never touched. The same test code runs on the desktop app over `CDP` and on Obsidian Mobile over Appium.
 
+## What it answers
+
+- **"How do I test my plugin across several Obsidian versions?"** Pin `obsidianVersion` to any public or catalyst build, and the harness downloads that build and runs your suites in it. `runObsidianVersionMatrix` runs them on the latest public and the latest catalyst build in one command, and runs once when the two are the same build. See [Version matrix](https://mnaoumov.dev/obsidian-integration-testing/guides/version-matrix/).
+- **"How do I let a coding agent see and drive the vault UI?"** Keep an isolated Obsidian open with the bundled CLI, and let the agent's scripts attach with `connectToCdp` to read state, click and type with trusted input, and save screenshots. See [Driving Obsidian from an agent](https://mnaoumov.dev/obsidian-integration-testing/guides/agents/).
+- **"How do I test keyboard input, `:hover` and settings UI for real?"** Trusted input goes through Chromium's own input pipeline, so CodeMirror and handlers that check `isTrusted` see what a user produces. See [Simulating user input](https://mnaoumov.dev/obsidian-integration-testing/guides/user-input/).
+
 ## Documentation
 
 Full documentation lives at **[mnaoumov.dev/obsidian-integration-testing](https://mnaoumov.dev/obsidian-integration-testing/)**.
@@ -20,6 +26,7 @@ Full documentation lives at **[mnaoumov.dev/obsidian-integration-testing](https:
 - [Version matrix](https://mnaoumov.dev/obsidian-integration-testing/guides/version-matrix/) — run the suites across the supported Obsidian range.
 - [Leftover cleanup](https://mnaoumov.dev/obsidian-integration-testing/guides/leftover-cleanup/) — what a dead run leaks, and how the sweeps handle it.
 - [Ad-hoc debugging](https://mnaoumov.dev/obsidian-integration-testing/guides/debugging/) — `connectToCdp` and the CLI.
+- [Driving Obsidian from an agent](https://mnaoumov.dev/obsidian-integration-testing/guides/agents/) — let a coding agent see, click, type into and photograph a real Obsidian.
 - [API reference](https://mnaoumov.dev/obsidian-integration-testing/api/) — every exported function, class and type, generated from the TSDoc.
 
 ## Installation
