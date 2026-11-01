@@ -26,6 +26,14 @@
  * to a harness-owned instance may tear down only a vault it registered itself.**
  * Everything else in that instance belongs to the global setup that launched it.
  *
+ * Plain attach mode — `connectToCdp({ port })` against somebody's own running
+ * Obsidian — takes the same rule, and needs it more. It used to tear down
+ * whatever it was asked to, so attaching to the owner's running Obsidian with
+ * `vault` set to the vault it already had open destroyed that vault's window on
+ * dispose: his only window, so the app quit. "Self-registered" now means this
+ * transport opened the window itself; a vault that was already open is adopted
+ * and never recorded, so nothing here closes it.
+ *
  * Kept out of the integration-only transport module (excluded from unit tests,
  * `LF:0` in coverage) for the same reason `vault-path-match.ts` is — so the
  * decision is unit-testable while the transport keeps only the plumbing.
@@ -36,17 +44,12 @@
  */
 export interface ShouldTearDownVaultWindowParams {
   /**
-  Whether this transport is a worker attached to an instance the harness launched elsewhere.
-   */
-  readonly isHarnessOwnedInstance: boolean;
-
-  /**
   Whether this transport launched and owns the instance itself.
    */
   readonly isOwnedInstance: boolean;
 
   /**
-  Whether this transport is the one that registered the vault being unregistered.
+  Whether this transport opened the window of the vault being unregistered itself.
    */
   readonly isSelfRegistered: boolean;
 }
@@ -60,16 +63,14 @@ export interface ShouldTearDownVaultWindowParams {
  */
 export function shouldTearDownVaultWindow(params: ShouldTearDownVaultWindowParams): boolean {
   const {
-    isHarnessOwnedInstance,
     isOwnedInstance,
     isSelfRegistered
   } = params;
 
   /*
    * The owned instance is killed wholesale on dispose, and its registry lives in the isolated user-data config —
-   * there is nothing to unregister from. When attached to someone else's instance, only this transport's own vaults
-   * come down. Otherwise this is plain attach mode — a foreign Obsidian the harness opened a vault in, which outlives
-   * the run and must be left as it was found.
+   * there is nothing to unregister from. Attached to anyone else's instance, the harness's or a foreign one that
+   * outlives the run, only a window this transport opened comes down; everything else is left as it was found.
    */
-  return !isOwnedInstance && (!isHarnessOwnedInstance || isSelfRegistered);
+  return !isOwnedInstance && isSelfRegistered;
 }
