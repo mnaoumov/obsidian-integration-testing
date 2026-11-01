@@ -1,11 +1,19 @@
 {
   "name": "obsidian-integration-testing",
   "version": "17.7.4",
-  "description": "Simplifies integration testing of Obsidian plugins.",
+  "description": "Integration testing of Obsidian plugins inside a real Obsidian: any version, desktop or Android, driven by tests or by a coding agent.",
   "keywords": [
-    "obsidian",
-    "testing",
+    "ai-agent",
+    "appium",
+    "cdp",
+    "e2e",
+    "end-to-end",
     "integration",
+    "jest",
+    "obsidian",
+    "obsidian-plugin",
+    "screenshot",
+    "testing",
     "vitest"
   ],
   "homepage": "https://github.com/mnaoumov/obsidian-integration-testing#readme",
