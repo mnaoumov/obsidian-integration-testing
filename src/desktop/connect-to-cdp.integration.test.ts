@@ -10,8 +10,11 @@ import { join } from 'node:path';
 import {
   describe,
   expect,
-  it
+  it,
+  vi
 } from 'vitest';
+
+import type { CdpConnection } from './connect-to-cdp.ts';
 
 import { getFunctionExpressionString } from '../eval/function-expression.ts';
 import { connectToCdp } from './connect-to-cdp.ts';
@@ -37,6 +40,16 @@ interface ObsidianModuleProbe {
   Whether community plugins were already on before the call.
   */
   readonly wasEnabled: boolean;
+}
+
+/**
+ * One entry of the registry Obsidian's `vault-list` IPC returns.
+ */
+interface RegisteredVault {
+  /**
+  The vault's folder.
+  */
+  readonly path: string;
 }
 
 /**
@@ -195,6 +208,57 @@ describe('connect-to-cdp integration', () => {
     }
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 
+  it('keeps a registered but closed vault in the vault list when an attached connection to it is disposed', async () => {
+    // Attaching with `vault` set to a vault the instance lists but does not have open sends `vault-open`, so the
+    // window is the connection's own and comes down on dispose. Its `vault-remove` used to come with it, which
+    // deleted the entry from the instance's `obsidian.json`: an attach dropped a real vault from the owner's list.
+    const owner = await connectToCdp();
+    const closedVaultPath = mkdtempSync(join(tmpdir(), 'connect-to-cdp-closed-'));
+    try {
+      await owner.evalInObsidian({
+        async callback({ closedVaultPath: pathToOpen, lib }): Promise<void> {
+          const remote = globalThis.electron.remote;
+          globalThis.electron.ipcRenderer.sendSync('vault-open', pathToOpen, false);
+          await lib.waitUntil({
+            message: 'the second vault window to open',
+            predicate: () => remote.BrowserWindow.getAllWindows().length === 2,
+            timeoutInMilliseconds: 20_000
+          });
+          const ownWindow = remote.getCurrentWindow();
+          for (const browserWindow of remote.BrowserWindow.getAllWindows()) {
+            if (browserWindow.id !== ownWindow.id) {
+              browserWindow.destroy();
+            }
+          }
+          await lib.waitUntil({
+            message: 'the second vault window to close',
+            predicate: () => remote.BrowserWindow.getAllWindows().length === 1,
+            timeoutInMilliseconds: 20_000
+          });
+        },
+        input: { closedVaultPath }
+      });
+      expect(await readRegisteredVaultPaths(owner)).toContain(closedVaultPath);
+
+      const attached = await connectToCdp({ port: owner.port, vault: closedVaultPath });
+      try {
+        expect(await attached.invoke('app.vault.adapter.getBasePath()')).toBe(closedVaultPath);
+      } finally {
+        await attached.dispose();
+      }
+
+      // The connection closed the window it opened and left the registry entry it found.
+      await vi.waitFor(async () => {
+        expect(await owner.invoke('electron.remote.BrowserWindow.getAllWindows().length')).toBe('1');
+      }, { timeout: 20_000 });
+      expect(await readRegisteredVaultPaths(owner)).toContain(closedVaultPath);
+      expect(existsSync(closedVaultPath)).toBe(true);
+    } finally {
+      await owner.dispose();
+      rmSync(closedVaultPath, { force: true, recursive: true });
+    }
+  }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
+
   it('opens a vault whose config folder is not .obsidian', async () => {
     const vaultPath = mkdtempSync(join(tmpdir(), 'connect-to-cdp-config-dir-'));
     try {
@@ -252,6 +316,21 @@ describe('connect-to-cdp integration', () => {
     }
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 });
+
+/**
+ * Reads the vault paths the instance behind a connection lists in its registry, over Obsidian's `vault-list` IPC.
+ *
+ * @param connection - A connection to the instance.
+ * @returns The registered vault paths.
+ */
+async function readRegisteredVaultPaths(connection: CdpConnection): Promise<string[]> {
+  return await connection.evalInObsidian({
+    callback(): string[] {
+      const registry = globalThis.electron.ipcRenderer.sendSync('vault-list') as Record<string, RegisteredVault>;
+      return Object.values(registry).map((entry) => entry.path);
+    }
+  });
+}
 
 /**
  * Writes a minimal `app.json` into a vault config folder, carrying a marker value
