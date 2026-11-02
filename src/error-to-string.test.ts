@@ -1,12 +1,32 @@
 import {
   describe,
   expect,
-  it
+  it,
+  vi
 } from 'vitest';
 
 import { errorToString } from './error-to-string.ts';
 
 describe('errorToString', () => {
+  it('should recover the original stack when a source-map formatter throws and restore that formatter', () => {
+    function brokenPrepareStackTrace(): never {
+      throw new TypeError('code.charCodeAt is not a function');
+    }
+    const prepareStackTrace = vi.spyOn(Error, 'prepareStackTrace').mockImplementation(brokenPrepareStackTrace);
+    const error = new Error('Missing injected plugin fix-require-modules');
+
+    try {
+      const result = errorToString(error);
+      expect(result).toContain('Error: Missing injected plugin fix-require-modules');
+      expect(result).toContain('error-to-string.test.ts:');
+      expect(result).not.toContain('<unprintable>');
+      expect(result).not.toContain('could not format');
+      expect(Error).toHaveProperty('prepareStackTrace', prepareStackTrace);
+    } finally {
+      prepareStackTrace.mockRestore();
+    }
+  });
+
   it('should preserve missing-plugin bootstrap instructions when source-map stack preparation throws', () => {
     const message = 'Missing injected plugin fix-require-modules. Run the demo-vault bootstrap to install it.';
     const error = new Error(message);
