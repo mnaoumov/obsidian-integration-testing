@@ -78,6 +78,30 @@ function getErrorLines(error: unknown): ErrorLine[] {
 }
 
 /**
+ * Reads the original stack, retrying without a broken V8 source-map hook rather than losing the frames.
+ *
+ * @param error - The error whose stack to read.
+ * @returns The stack, when the engine supplies one.
+ */
+function getErrorStack(error: Error): string | undefined {
+  try {
+    return error.stack;
+  } catch {
+    const originalPrepareStackTrace = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    try {
+      Reflect.deleteProperty(Error, 'prepareStackTrace');
+      return error.stack;
+    } finally {
+      if (originalPrepareStackTrace) {
+        Object.defineProperty(Error, 'prepareStackTrace', originalPrepareStackTrace);
+      } else {
+        Reflect.deleteProperty(Error, 'prepareStackTrace');
+      }
+    }
+  }
+}
+
+/**
  * Builds the last-resort representation of an error that {@link errorToString} failed to format.
  *
  * @param error - The error that could not be formatted.
@@ -86,7 +110,7 @@ function getErrorLines(error: unknown): ErrorLine[] {
  */
 function getFallbackErrorString(error: unknown, formattingError: unknown): string {
   const errorString = safeToString(() => String(error));
-  const stack = safeToString(() => error instanceof Error ? error.stack ?? '' : '');
+  const stack = safeToString(() => error instanceof Error ? getErrorStack(error) ?? '' : '');
   const lines = stack.startsWith(errorString) ? [stack] : [errorString, stack];
   lines.push(`(errorToString could not format this error: ${safeToString(() => String(formattingError))})`);
   return lines.filter((line) => line !== '').join('\n');
@@ -94,11 +118,12 @@ function getFallbackErrorString(error: unknown, formattingError: unknown): strin
 
 function getOwnErrorLines(error: Error): ErrorLine[] {
   const headerLines = getErrorHeader(error).split('\n').map((text) => toTitleLine(text));
-  if (error.stack === undefined) {
+  const stack = getErrorStack(error);
+  if (stack === undefined) {
     return headerLines;
   }
 
-  const stackLines = error.stack.split('\n');
+  const stackLines = stack.split('\n');
   // On an engine without a header line, the `.stack` is frames only, in its own `name@url:line:col` form, so the message is nowhere in it:
   // Prepend the header, and take every stack line as a frame.
   return hasStackHeader()
@@ -117,7 +142,7 @@ function getOwnErrorLines(error: Error): ErrorLine[] {
  * @returns `true` if `.stack` carries the header line.
  */
 function hasStackHeader(): boolean {
-  const firstLine = new Error(STACK_HEADER_PROBE_MESSAGE).stack?.split('\n', 1)[0];
+  const firstLine = getErrorStack(new Error(STACK_HEADER_PROBE_MESSAGE))?.split('\n', 1)[0];
   return firstLine === `Error: ${STACK_HEADER_PROBE_MESSAGE}`;
 }
 
