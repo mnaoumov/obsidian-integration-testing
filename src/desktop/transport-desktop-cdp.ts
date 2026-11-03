@@ -50,7 +50,7 @@ import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from '../eval/eval-cap.ts';
 import { log } from '../log.ts';
 import { ensureNamespaceBootstrapped } from '../namespace/namespace-bootstrap.ts';
 import { exec } from '../process/exec.ts';
-import { killProcessTreeByPid } from '../process/kill-process-tree.ts';
+import { killProcessTreeByPidAsync } from '../process/kill-process-tree.ts';
 import {
   OWNED_NEVER_BACKGROUND_LAUNCH_FLAGS,
   resolveSandboxLaunchArguments,
@@ -84,7 +84,7 @@ import { DETERMINISTIC_RASTER_LAUNCH_FLAGS } from './owned-instance/deterministi
 import { resolveObsidianExecutable } from './owned-instance/obsidian-executable.ts';
 import {
   launchOwnedObsidianInstance,
-  listOwnedInstancePortOwnerPids
+  listOwnedInstancePortOwnerPidsAsync
 } from './owned-instance/obsidian-instance.ts';
 import { readOwnedInstanceExitMarker } from './owned-instance/owned-instance-exit-marker.ts';
 import {
@@ -525,7 +525,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return;
     }
 
-    this.ownedInstance?.kill();
+    await this.ownedInstance?.killAsync();
     await this.killOwnedInstanceSurvivors();
     const { userDataDirectory } = this.ownedConfig;
     const deadline = Date.now() + USER_DATA_RM_TIMEOUT_IN_MILLISECONDS;
@@ -540,7 +540,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     // A directory still held is the one symptom a surviving instance leaves, so say whether one survived rather than leave it to be found by hand.
-    const survivorPids = this.ownedInstance ? listOwnedInstancePortOwnerPids(this.ownedInstance.port) : [];
+    const survivorPids = this.ownedInstance ? await listOwnedInstancePortOwnerPidsAsync(this.ownedInstance.port) : [];
     const survivorClause = survivorPids.length > 0
       ? `; WARNING: CDP port ${String(this.ownedInstance?.port)} is still held by PID(s) ${survivorPids.join(', ')}, so the owned instance outlived its kill`
       : '';
@@ -1288,7 +1288,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     for (let round = 1; round <= OWNED_SURVIVOR_KILL_ROUND_COUNT; round++) {
-      const survivorPids = listOwnedInstancePortOwnerPids(port);
+      const survivorPids = await listOwnedInstancePortOwnerPidsAsync(port);
       if (survivorPids.length === 0) {
         return;
       }
@@ -1297,7 +1297,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
         `[cdp-transport] CDP port ${String(port)} is still held by PID(s) ${survivorPids.join(', ')} after the owned instance was killed; killing again (round ${String(round)} of ${String(OWNED_SURVIVOR_KILL_ROUND_COUNT)}).`
       );
       for (const pid of survivorPids) {
-        killProcessTreeByPid(pid);
+        await killProcessTreeByPidAsync(pid);
       }
       await delay(OWNED_SURVIVOR_SETTLE_IN_MILLISECONDS);
     }
@@ -1320,7 +1320,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     log('[cdp-transport] Killing running owned instance before (re)launch.');
     this.disconnect();
     const previousCdpUrl = this.cdpUrl;
-    this.ownedInstance.kill();
+    await this.ownedInstance.killAsync();
     this.ownedInstance = undefined;
     await this.waitForInstanceExit(previousCdpUrl);
   }
