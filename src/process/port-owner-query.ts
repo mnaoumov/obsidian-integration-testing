@@ -14,7 +14,10 @@
 
 /* v8 ignore start -- Integration-time process management covered by integration tests, not unit tests. */
 
-import { execFileSync } from 'node:child_process';
+import {
+  execFile,
+  execFileSync
+} from 'node:child_process';
 import process from 'node:process';
 
 import {
@@ -28,9 +31,9 @@ import {
 } from './port-owner.ts';
 
 /**
- * Parameters for {@link listPortOwnerPidsSync}.
+ * Parameters shared by {@link listPortOwnerPids} and {@link listPortOwnerPidsSync}.
  */
-export interface ListPortOwnerPidsSyncParams {
+export interface ListPortOwnerPidsParams {
   /**
   Where a failed query is reported.
    */
@@ -42,7 +45,7 @@ export interface ListPortOwnerPidsSyncParams {
   readonly port: number;
 
   /**
-  How long the query may block before it is killed.
+  How long the query may run before it is killed.
    */
   readonly timeoutInMilliseconds: number;
 }
@@ -96,6 +99,49 @@ export function buildPortOwnerQuery(port: number): PortOwnerQuery {
 }
 
 /**
+ * Lists port owners without blocking the harness event loop during teardown.
+ *
+ * @param params - The port, the budget, and where to report a failure.
+ * @returns The listening PIDs, or an empty list after a logged failure.
+ */
+export function listPortOwnerPids(params: ListPortOwnerPidsParams): Promise<number[]> {
+  const query = buildPortOwnerQuery(params.port);
+  const startedAtInMilliseconds = Date.now();
+  return new Promise((resolve) => {
+    execFile(query.command, [...query.commandArguments], {
+      encoding: 'utf-8',
+      maxBuffer: PORT_OWNER_QUERY_MAX_BUFFER_IN_BYTES,
+      timeout: params.timeoutInMilliseconds,
+      windowsHide: true
+    }, (error, stdout, stderr) => {
+      const exitCode = typeof error?.code === 'number' ? error.code : null;
+      const outcome = resolvePortOwnerQueryOutcome({
+        errorCode: error?.code ?? null,
+        hasFailed: error !== null,
+        isKilled: error?.killed ?? false,
+        platform: process.platform,
+        standardError: stderr,
+        standardOutput: stdout
+      });
+      const message = buildPortOwnerQueryMessage({
+        command: [query.command, ...query.commandArguments].join(' '),
+        elapsedInMilliseconds: Date.now() - startedAtInMilliseconds,
+        exitCode,
+        outcome,
+        port: params.port,
+        signal: error?.signal ?? null,
+        standardError: stderr,
+        timeoutInMilliseconds: params.timeoutInMilliseconds
+      });
+      if (message !== undefined) {
+        params.log(message);
+      }
+      resolve(outcome === 'answered' ? parsePortOwnerPids({ output: stdout, port: params.port }) : []);
+    });
+  });
+}
+
+/**
  * Synchronously lists the PIDs listening on a port, for a caller that cannot
  * await (a `process.on('exit')` teardown, or a synchronous `kill()`).
  *
@@ -106,7 +152,8 @@ export function buildPortOwnerQuery(port: number): PortOwnerQuery {
  * @param params - The port, the budget, and where to report a failure.
  * @returns The listening PIDs, or an empty list when nothing holds the port or the query failed.
  */
-export function listPortOwnerPidsSync(params: ListPortOwnerPidsSyncParams): number[] {
+// eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: both execution modes share the same port-query parameters.
+export function listPortOwnerPidsSync(params: ListPortOwnerPidsParams): number[] {
   const query = buildPortOwnerQuery(params.port);
   const startedAtInMilliseconds = Date.now();
   try {

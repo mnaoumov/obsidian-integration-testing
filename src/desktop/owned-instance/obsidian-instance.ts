@@ -28,9 +28,13 @@ import type { ProcessExitInfo } from '../../process/process-exit-message.ts';
 import { log } from '../../log.ts';
 import {
   killProcessTree,
-  killProcessTreeByPid
+  killProcessTreeByPid,
+  killProcessTreeByPidAsync
 } from '../../process/kill-process-tree.ts';
-import { listPortOwnerPidsSync } from '../../process/port-owner-query.ts';
+import {
+  listPortOwnerPids,
+  listPortOwnerPidsSync
+} from '../../process/port-owner-query.ts';
 import { attachProcessCapture } from '../../process/process-capture.ts';
 import {
   clearOwnedInstanceExitMarker,
@@ -84,6 +88,11 @@ export interface OwnedObsidianInstance {
   readonly kill: () => void;
 
   /**
+  Kills the instance without blocking the harness event loop during normal teardown.
+   */
+  readonly killAsync: () => Promise<void>;
+
+  /**
    * Loopback port the instance's renderer connects back to so it destroys
    * itself if this harness process dies without cleaning up. See
    * `parent-liveness.ts` for why the parent/child relationship alone is not
@@ -114,7 +123,7 @@ const DEFAULT_CDP_HOST = '127.0.0.1';
 const CDP_READY_POLL_INTERVAL_IN_MILLISECONDS = 1000;
 const CDP_READY_TIMEOUT_IN_MILLISECONDS = 60_000;
 const OBSIDIAN_OUTPUT_TAIL_MAX_LENGTH = 8000;
-// The kill is synchronous and also runs from a `process.on('exit')` handler, so the query gets the short sync-teardown budget.
+// Both normal async cleanup and the synchronous process-exit fallback use a bounded query.
 const PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS = 5000;
 
 interface CdpTarget {
@@ -198,6 +207,7 @@ export async function launchOwnedObsidianInstance(
     return {
       cdpUrl,
       kill,
+      killAsync,
       parentLivenessPort: livenessServer.port,
       port,
       readExitInfo: () => capture.readExitInfo(),
@@ -215,7 +225,7 @@ export async function launchOwnedObsidianInstance(
      * dead child that also never served CDP does.
      */
     const exitInfo = capture.readExitInfo();
-    kill();
+    await killAsync();
     if (exitInfo) {
       throw new OwnedInstanceExitedError({
         cdpUrl,
@@ -246,6 +256,24 @@ export async function launchOwnedObsidianInstance(
       killProcessTreeByPid(pid);
     }
   }
+
+  async function killAsync(): Promise<void> {
+    isKillExpected = true;
+    clearOwnedInstanceExitMarker(port);
+    livenessServer.close();
+    const portOwnerPids = await listOwnedInstancePortOwnerPidsAsync(port);
+    if (child.pid !== undefined) {
+      await killProcessTreeByPidAsync(child.pid);
+    }
+    for (const pid of portOwnerPids) {
+      if (pid === child.pid) {
+        continue;
+      }
+
+      log(`[obsidian-instance] Killing handed-off CDP port ${String(port)} owner PID ${String(pid)}.`);
+      await killProcessTreeByPidAsync(pid);
+    }
+  }
 }
 
 /**
@@ -257,6 +285,22 @@ export async function launchOwnedObsidianInstance(
  */
 export function listOwnedInstancePortOwnerPids(port: number): number[] {
   return listPortOwnerPidsSync({
+    log: (message) => {
+      log(`[obsidian-instance] ${message}`);
+    },
+    port,
+    timeoutInMilliseconds: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS
+  });
+}
+
+/**
+ * Lists an owned instance's port owners without blocking the event loop.
+ *
+ * @param port - The instance's CDP port.
+ * @returns The listening PIDs; empty after a logged query failure.
+ */
+export function listOwnedInstancePortOwnerPidsAsync(port: number): Promise<number[]> {
+  return listPortOwnerPids({
     log: (message) => {
       log(`[obsidian-instance] ${message}`);
     },

@@ -12,7 +12,10 @@ import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 
 import { log } from '../log.ts';
+import { exec } from './exec.ts';
 import { checkIsProcessAlive } from './process-liveness.ts';
+
+const TASKKILL_TIMEOUT_IN_MILLISECONDS = 5000;
 
 /**
  * Kills a child process and its entire process tree.
@@ -42,7 +45,11 @@ export function killProcessTreeByPid(pid: number): void {
   if (process.platform === 'win32') {
     try {
       // Piped rather than ignored, so a failure names its cause: "not found" (already exited) and "Access is denied" need different answers.
-      execFileSync('taskkill', ['/F', '/T', '/PID', String(pid)], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+      execFileSync('taskkill', ['/F', '/T', '/PID', String(pid)], {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: TASKKILL_TIMEOUT_IN_MILLISECONDS
+      });
     } catch (error: unknown) {
       log(
         `[kill-process-tree] taskkill for PID ${String(pid)} failed (may have already exited): ${error instanceof Error ? error.message.trim() : 'unknown error'}`
@@ -58,6 +65,29 @@ export function killProcessTreeByPid(pid: number): void {
     log(
       `[kill-process-tree] SIGKILL for PID ${String(pid)} failed (may have already exited): ${error instanceof Error ? error.message : 'unknown error'}`
     );
+  }
+}
+
+/**
+ * Kills a process tree without blocking the harness event loop. A stalled
+ * Windows WMI tree walk is bounded and falls back to direct termination.
+ *
+ * @param pid - The process whose tree to kill.
+ */
+export async function killProcessTreeByPidAsync(pid: number): Promise<void> {
+  if (process.platform !== 'win32') {
+    killProcessTreeByPid(pid);
+    return;
+  }
+
+  try {
+    await exec(['taskkill', '/F', '/T', '/PID', String(pid)], {
+      isQuiet: true,
+      timeoutInMilliseconds: TASKKILL_TIMEOUT_IN_MILLISECONDS
+    });
+  } catch (error: unknown) {
+    log(`[kill-process-tree] taskkill for PID ${String(pid)} failed: ${error instanceof Error ? error.message.trim() : 'unknown error'}`);
+    terminateIfStillAlive(pid);
   }
 }
 
