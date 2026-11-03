@@ -151,7 +151,8 @@ export interface CdpConnection extends AsyncDisposable {
  */
 export interface ConnectToCdpOptions {
   /**
-   * Timeout in milliseconds for individual CDP commands.
+   * Timeout in milliseconds for individual CDP commands, HTTP target reads and
+   * WebSocket handshakes. Owned startup also caps these by its remaining readiness budget.
    *
    * A test's closure travels as one `Runtime.evaluate` command, so this is also
    * the desktop per-eval cap. The default is `DEFAULT_EVAL_CAP_IN_MILLISECONDS`,
@@ -337,18 +338,28 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   // `options.vault === undefined` discriminator the disposal above turns on. A
   // caller-supplied vault is a real one the user keeps, and a debugging session
   // has no business rewriting its settings.
-  if (options?.vault === undefined) {
-    await ensureHeadlessVaultConfig({
-      configDirectory: resolveOwnedConfigDirectory(transportOptions),
-      label: transportOptions.type,
-      vaultPath: vault.path
-    });
-  }
+  try {
+    if (options?.vault === undefined) {
+      await ensureHeadlessVaultConfig({
+        configDirectory: resolveOwnedConfigDirectory(transportOptions),
+        label: transportOptions.type,
+        vaultPath: vault.path
+      });
+    }
 
-  // Registering the vault is what launches the owned instance (provisions the
-  // asar, opens the vault, and bootstraps the helper namespace), or opens the
-  // vault in the attached instance.
-  await vault.register(transport);
+    // Registering the vault is what launches the owned instance (provisions the
+    // asar, opens the vault, and bootstraps the helper namespace), or opens the
+    // vault in the attached instance.
+    await vault.register(transport);
+  } catch (error: unknown) {
+    // No connection is returned on failure, so the caller cannot dispose these resources.
+    try {
+      await transport.dispose?.();
+    } finally {
+      await vault.dispose(transport);
+    }
+    throw error;
+  }
 
   const { host, port } = resolveEndpoint(transport, options);
   const cdpUrl = `http://${host}:${String(port)}`;

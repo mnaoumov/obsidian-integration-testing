@@ -113,7 +113,8 @@ export interface DesktopCdpTransportConfig {
   readonly cdpPort?: number;
 
   /**
-   * Timeout in milliseconds for individual CDP commands.
+   * Timeout in milliseconds for individual CDP commands, HTTP target reads and
+   * WebSocket handshakes. Owned startup also caps these by its remaining readiness budget.
    *
    * A test's closure travels as one `Runtime.evaluate` command, so this is also
    * the desktop per-eval cap. The default is `DEFAULT_EVAL_CAP_IN_MILLISECONDS`,
@@ -377,6 +378,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private messageId = 0;
   private readonly ownedConfig: OwnedInstanceConfig | undefined;
   private ownedInstance: OwnedObsidianInstance | undefined;
+  // Startup operations share the readiness deadline instead of each spending a fresh command budget.
+  private ownedReadinessDeadline: number | undefined;
   /**
    * The in-flight commands of every socket this transport has opened, keyed by
    * the CDP message id each is waiting for. One entry per command, added by
@@ -594,7 +597,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
        */
       if (error instanceof CdpCommandTimeoutError) {
         throw new EvalCapExceededError({
-          capInMilliseconds: this.commandTimeoutInMilliseconds,
+          capInMilliseconds: error.timeoutInMilliseconds,
           cause: error,
           optionName: 'commandTimeoutInMilliseconds',
           transportName: 'desktop (CDP)'
@@ -1024,14 +1027,26 @@ export class DesktopCdpTransport implements ObsidianTransport {
    */
   private async connectToTarget(target: CdpTarget): Promise<WebSocket> {
     const ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise<void>((resolve, reject) => {
-      ws.addEventListener('open', (): void => {
-        resolve();
+    const timeoutInMilliseconds = this.getCommandTimeout();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        timeout = setTimeout(() => {
+          reject(new CdpCommandTimeoutError({ method: 'WebSocket.connect', timeoutInMilliseconds }));
+        }, timeoutInMilliseconds);
+        ws.addEventListener('open', (): void => {
+          resolve();
+        }, { once: true });
+        ws.addEventListener('error', (): void => {
+          reject(new Error(`Failed to connect to CDP target: ${target.webSocketDebuggerUrl}`));
+        }, { once: true });
       });
-      ws.addEventListener('error', (): void => {
-        reject(new Error(`Failed to connect to CDP target: ${target.webSocketDebuggerUrl}`));
-      });
-    });
+    } catch (error: unknown) {
+      ws.close();
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
     return ws;
   }
 
@@ -1178,6 +1193,17 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * Caps a startup operation by the time left in the shared readiness budget.
+   *
+   * @returns The operation's timeout in milliseconds.
+   */
+  private getCommandTimeout(): number {
+    return this.ownedReadinessDeadline === undefined
+      ? this.commandTimeoutInMilliseconds
+      : Math.max(1, Math.min(this.commandTimeoutInMilliseconds, this.ownedReadinessDeadline - Date.now()));
+  }
+
+  /**
    * Fetches the list of page-type targets from the CDP `/json` endpoint.
    *
    * @returns The list of page targets.
@@ -1199,7 +1225,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     let response: Response;
     try {
-      response = await fetch(`${this.cdpUrl}/json`);
+      response = await fetch(`${this.cdpUrl}/json`, { signal: AbortSignal.timeout(this.getCommandTimeout()) });
     } catch (error: unknown) {
       /*
        * An unreachable endpoint means different things in the two modes, and
@@ -1210,7 +1236,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
        * foreign Obsidian that is simply not running, which `ensureObsidianRunning`
        * handles by starting one; that path must keep seeing the raw failure.
        */
-      if (this.ownedConfig || this.isHarnessOwnedInstance) {
+      if ((this.ownedConfig || this.isHarnessOwnedInstance) && !(error instanceof DOMException && error.name === 'TimeoutError')) {
         throw this.buildOwnedInstanceExitedError();
       }
       throw error;
@@ -1708,12 +1734,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async sendCommand(ws: WebSocket, method: string, params: Record<string, unknown>): Promise<CdpResponse> {
     const id = ++this.messageId;
     const pendingCommands = this.getPendingCommands(ws);
+    const timeoutInMilliseconds = this.getCommandTimeout();
 
     return new Promise<CdpResponse>((resolve, reject) => {
       const timeout = setTimeout(() => {
         pendingCommands.delete(id);
-        reject(new CdpCommandTimeoutError({ method, timeoutInMilliseconds: this.commandTimeoutInMilliseconds }));
-      }, this.commandTimeoutInMilliseconds);
+        reject(new CdpCommandTimeoutError({ method, timeoutInMilliseconds }));
+      }, timeoutInMilliseconds);
 
       pendingCommands.set(id, (response) => {
         clearTimeout(timeout);
@@ -1743,9 +1770,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
       try {
-        const response = await fetch(`${cdpUrl}/json`);
+        const response = await fetch(`${cdpUrl}/json`, { signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) });
         await response.body?.cancel();
-      } catch {
+      } catch (error: unknown) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          throw new Error(`Could not verify that the previous owned instance at ${cdpUrl} exited before the timeout.`, { cause: error });
+        }
         // The endpoint is gone: the process has exited and released the lock.
         await delay(INSTANCE_EXIT_SETTLE_DELAY_IN_MILLISECONDS);
         return;
@@ -1833,43 +1863,52 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private async waitForOwnedVaultReady(vaultPath: string): Promise<void> {
     log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
     const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
-    let documentCompleteSince: null | number = null;
-    let isReady = false;
-    while (Date.now() < deadline) {
-      try {
-        await this.findTargetForVault(vaultPath);
-        await this.waitForLayoutReady(vaultPath);
-        await this.dismissTrustDialog(vaultPath);
-        isReady = true;
-        break;
-      } catch {
-        // The vault is not ready yet — also drop the cached CDP connection before
-        // retrying. Old (Electron 10-era) Obsidian reloads the owned window during
-        // boot, which can leave the cached WebSocket pinned to a stale execution
-        // context; reconnecting each attempt re-binds to the live context.
-        this.disconnect();
-      }
+    this.ownedReadinessDeadline = deadline;
+    try {
+      let documentCompleteSince: null | number = null;
+      let isReady = false;
+      let lastReadinessError: unknown;
+      while (Date.now() < deadline) {
+        try {
+          await this.findTargetForVault(vaultPath);
+          await this.waitForLayoutReady(vaultPath);
+          await this.dismissTrustDialog(vaultPath);
+          isReady = true;
+          break;
+        } catch (error: unknown) {
+          lastReadinessError = error;
+          // The vault is not ready yet — also drop the cached CDP connection before
+          // retrying. Old (Electron 10-era) Obsidian reloads the owned window during
+          // boot, which can leave the cached WebSocket pinned to a stale execution
+          // context; reconnecting each attempt re-binds to the live context.
+          this.disconnect();
+        }
 
-      if (this.deadBootGraceInMilliseconds > 0) {
-        const observation = await this.probeRendererBootState();
-        if (observation) {
-          if (observation.isDocumentComplete && documentCompleteSince === null) {
-            documentCompleteSince = Date.now();
-          }
-          const hasGraceElapsed = documentCompleteSince !== null
-            && Date.now() - documentCompleteSince >= this.deadBootGraceInMilliseconds;
-          if (resolveRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
-            log('[cdp-transport] Owned renderer failed to initialize (dead boot); failing fast.');
-            throw new RendererFailedToInitializeError(vaultPath);
+        if (this.deadBootGraceInMilliseconds > 0 && Date.now() < deadline) {
+          const observation = await this.probeRendererBootState();
+          if (observation) {
+            if (observation.isDocumentComplete && documentCompleteSince === null) {
+              documentCompleteSince = Date.now();
+            }
+            const hasGraceElapsed = documentCompleteSince !== null
+              && Date.now() - documentCompleteSince >= this.deadBootGraceInMilliseconds;
+            if (resolveRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
+              log('[cdp-transport] Owned renderer failed to initialize (dead boot); failing fast.');
+              throw new RendererFailedToInitializeError(vaultPath);
+            }
           }
         }
+
+        await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
       }
 
-      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
-    }
-
-    if (!isReady) {
-      throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+      if (!isReady) {
+        throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms: ${errorToString(lastReadinessError)}`, {
+          cause: lastReadinessError
+        });
+      }
+    } finally {
+      this.ownedReadinessDeadline = undefined;
     }
 
     // The vault is ready. Run the post-boot compatibility checks here — OUTSIDE the
