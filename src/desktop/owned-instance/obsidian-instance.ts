@@ -357,7 +357,7 @@ async function waitForCdpReady(cdpUrl: string): Promise<void> {
   const deadline = Date.now() + CDP_READY_TIMEOUT_IN_MILLISECONDS;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${cdpUrl}/json`);
+      const response = await fetch(`${cdpUrl}/json`, { signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())) });
       const targets = await response.json() as CdpTarget[];
       if (targets.some((target) => target.type === 'page')) {
         return;
