@@ -36,6 +36,7 @@ import {
   listPortOwnerPidsSync
 } from '../../process/port-owner-query.ts';
 import { attachProcessCapture } from '../../process/process-capture.ts';
+import { checkIsProcessAlive } from '../../process/process-liveness.ts';
 import {
   clearOwnedInstanceExitMarker,
   writeOwnedInstanceExitMarker
@@ -290,7 +291,7 @@ export function listOwnedInstancePortOwnerPids(port: number): number[] {
     },
     port,
     timeoutInMilliseconds: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS
-  });
+  }).filter(checkIsProcessAlive);
 }
 
 /**
@@ -299,14 +300,16 @@ export function listOwnedInstancePortOwnerPids(port: number): number[] {
  * @param port - The instance's CDP port.
  * @returns The listening PIDs; empty after a logged query failure.
  */
-export function listOwnedInstancePortOwnerPidsAsync(port: number): Promise<number[]> {
-  return listPortOwnerPids({
+export async function listOwnedInstancePortOwnerPidsAsync(port: number): Promise<number[]> {
+  const pids = await listPortOwnerPids({
     log: (message) => {
       log(`[obsidian-instance] ${message}`);
     },
     port,
     timeoutInMilliseconds: PORT_OWNER_QUERY_TIMEOUT_IN_MILLISECONDS
   });
+  // A netstat snapshot may list a listener that exited while the query ran.
+  return pids.filter(checkIsProcessAlive);
 }
 
 /**

@@ -16,6 +16,8 @@ import { exec } from './exec.ts';
 import { checkIsProcessAlive } from './process-liveness.ts';
 
 const TASKKILL_TIMEOUT_IN_MILLISECONDS = 5000;
+const PROCESS_EXIT_TIMEOUT_IN_MILLISECONDS = 1000;
+const PROCESS_EXIT_POLL_INTERVAL_IN_MILLISECONDS = 50;
 
 /**
  * Kills a child process and its entire process tree.
@@ -75,8 +77,13 @@ export function killProcessTreeByPid(pid: number): void {
  * @param pid - The process whose tree to kill.
  */
 export async function killProcessTreeByPidAsync(pid: number): Promise<void> {
+  if (!checkIsProcessAlive(pid)) {
+    return;
+  }
+
   if (process.platform !== 'win32') {
     killProcessTreeByPid(pid);
+    await waitForProcessExit(pid);
     return;
   }
 
@@ -86,9 +93,14 @@ export async function killProcessTreeByPidAsync(pid: number): Promise<void> {
       timeoutInMilliseconds: TASKKILL_TIMEOUT_IN_MILLISECONDS
     });
   } catch (error: unknown) {
+    // Exiting between the listener snapshot and taskkill is successful cleanup.
+    if (!checkIsProcessAlive(pid)) {
+      return;
+    }
     log(`[kill-process-tree] taskkill for PID ${String(pid)} failed: ${error instanceof Error ? error.message.trim() : 'unknown error'}`);
     terminateIfStillAlive(pid);
   }
+  await waitForProcessExit(pid);
 }
 
 /**
@@ -113,6 +125,21 @@ function terminateIfStillAlive(pid: number): void {
     log(`[kill-process-tree] PID ${String(pid)} was still alive after taskkill failed; terminated it directly (its own children were not walked).`);
   } catch (error: unknown) {
     log(`[kill-process-tree] Direct termination of PID ${String(pid)} failed too: ${error instanceof Error ? error.message : 'unknown error'}`);
+  }
+}
+
+/**
+ * Gives a terminated process time to release its handles before the caller
+ * checks for survivors. Command completion does not imply process exit.
+ *
+ * @param pid - The process whose exit to observe.
+ */
+async function waitForProcessExit(pid: number): Promise<void> {
+  const deadline = Date.now() + PROCESS_EXIT_TIMEOUT_IN_MILLISECONDS;
+  while (checkIsProcessAlive(pid) && Date.now() < deadline) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, PROCESS_EXIT_POLL_INTERVAL_IN_MILLISECONDS);
+    });
   }
 }
 
