@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 17.8.1
+
+- fix(desktop): bound startup waits and clean up failed connections
+- fix: restore source maps for cached Vitest modules
+- fix(desktop): avoid blocking worker shutdown during cleanup
+- fix: recover stacks when source maps fail
+- docs: link to the Obsidian resources page
+
 ## 17.8.0
 
 - test(android): verify the plugin lifecycle helpers on the emulator
