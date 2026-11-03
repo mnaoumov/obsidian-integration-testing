@@ -6530,14 +6530,21 @@
   },
   "1.15.0": {
     "changelogUrl": {
+      "desktop": "https://obsidian.md/changelog/2026-11-02-desktop-v1.15.0/",
       "desktopCatalyst": "https://obsidian.md/changelog/2026-10-22-desktop-v1.15.0/",
+      "mobile": "https://obsidian.md/changelog/2026-11-02-mobile-v1.15.0/",
       "mobileCatalyst": "https://obsidian.md/changelog/2026-10-22-mobile-v1.15.0/"
     },
-    "channel": "catalyst",
+    "channel": "public+catalyst",
     "downloads": {
-      "asar": "https://releases.obsidian.md/release/obsidian-1.15.0.asar.gz"
+      "apk": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.15.0/Obsidian-1.15.0.apk",
+      "asar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.15.0/obsidian-1.15.0.asar.gz",
+      "dmg": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.15.0/Obsidian-1.15.0.dmg",
+      "exe": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.15.0/Obsidian-1.15.0.exe",
+      "tar": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.15.0/obsidian-1.15.0.tar.gz"
     },
     "minRecommendedInstallerVersion": "1.1.9",
-    "minRecommendedElectronVersion": "28.2.3"
+    "minRecommendedElectronVersion": "28.2.3",
+    "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.15.0"
   }
 }
