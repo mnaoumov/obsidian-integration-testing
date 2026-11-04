@@ -102,6 +102,22 @@ The callback is serialized and executed inside Obsidian, so it must be self-cont
 - `minRecommendedElectronVersion`, `minRecommendedInstallerVersion` and `minRunnableInstallerVersion`: the Electron and installer floors.
 - `runtimeVersions` and `ecmaScriptVersion`: the `process.versions` the version's own installer ships.
 
+## See also
+
+[My other Obsidian resources](https://mnaoumov.dev/obsidian/)
+
+| Library | Features | How `obsidian-integration-testing` differs |
+| --- | --- | --- |
+| [`@obsidian-plugin-toolkit/e2e`](https://github.com/jon-dez/obsidian-plugin-toolkit/tree/main/packages/e2e) | Helpers on top of `wdio-obsidian-service`; screencast recording; interactive pause checkpoints; Obsidian URL and clipboard helpers | Same goal as `@obsidian-plugin-toolkit/e2e`, which needs `wdio-obsidian-service`: launches and drives Obsidian itself; omits its recording and interactive checkpoints |
+| [`obsidian-e2e`](https://github.com/chhoumann/obsidian-e2e) | Vitest fixtures over a live vault and the `obsidian` CLI; per-test sandboxes; plugin harness; matchers; worktree-isolated instance runner; Android emulator runner; screenshot and recording CLI | Same goal as `obsidian-e2e`: needs no locally installed Obsidian or `obsidian` CLI; downloads and pins app and installer versions; supports Jest as well as Vitest; omits its matchers, worktree runner and screen recordings |
+| [`obsidian-e2e-toolkit`](https://github.com/22-2/obsidian-e2e-toolkit) | Playwright `test` / `expect` fixtures for Obsidian; `app` evaluation and note, `data.json` helpers; plugin download from GitHub releases; coverage collection and reports; scaffold generator | Same goal as `obsidian-e2e-toolkit`: runs under Vitest or Jest rather than Playwright Test; adds Android and version pinning; omits its coverage reports and scaffold generator |
+| [`obsidian-e2e-visual-test-kit`](https://github.com/mrlnlms/obsidian-e2e-visual-test-kit) | WebdriverIO config preset on `wdio-obsidian-service`; navigation helpers such as `openFile` and `waitForPlugin`; visual baseline comparison | Same goal as `obsidian-e2e-visual-test-kit`: needs no WebdriverIO; captures byte-reproducible screenshots; omits its visual baseline comparison |
+| [`obsidian-launcher`](https://github.com/jesse-r-s-hines/wdio-obsidian-service/tree/main/packages/obsidian-launcher) | Downloads Obsidian app and installer versions; launches isolated instances; installs local and community plugins and themes; CLI and JavaScript API | Covers what `obsidian-launcher` does for desktop launching; adds test-framework setup, in-app evaluation, trusted input and Android; omits theme installation |
+| [`obsidian-playwright-template`](https://github.com/gpanakkal/obsidian-playwright-template) | Copy-in template; Playwright tests on temporary vaults in a separate Obsidian installation; CI workflow; hot plugin reload; Playwright code generation | Same goal as `obsidian-playwright-template`: installed as a package rather than copied files; supports Vitest and Jest; adds version pinning and Android; omits hot reload and code generation |
+| [`wdio-obsidian-service`](https://github.com/jesse-r-s-hines/wdio-obsidian-service) | WebdriverIO service; downloads app and installer versions, beta included; Windows, macOS, Linux and Android; isolated parallel instances; vault switching; helper functions; CI | Same goal as `wdio-obsidian-service`: runs under Vitest or Jest rather than the WebdriverIO runner; drives desktop over CDP; adds trusted input helpers, reproducible screenshots and an installer-compatibility catalog; omits its WebdriverIO browser API and parallel instance pool |
+
+Last searched for similar libraries on 2026-11-04.
+
 ## Support
 
 <!-- markdownlint-disable MD033 -->
@@ -115,10 +131,6 @@ The callback is serialized and executed inside Obsidian, so it must be self-cont
 Open issues through the [issue forms](https://github.com/mnaoumov/obsidian-integration-testing/issues/new/choose), not as blank issues.
 
 Filing from the CLI or the API (`gh issue create --body`, or an AI agent filing for you) skips the form, and `gh issue create --template` cannot load an issue form. In that case, open the matching form in [`.github/ISSUE_TEMPLATE/`](https://github.com/mnaoumov/obsidian-integration-testing/tree/HEAD/.github/ISSUE_TEMPLATE), copy every field as a `### <label>` heading in the form's order, and fill in each one. Always state the version you used and your operating system.
-
-## My other Obsidian resources
-
-[My other Obsidian resources](https://mnaoumov.dev/obsidian/)
 
 ## License
 
