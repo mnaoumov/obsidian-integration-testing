@@ -139,6 +139,25 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly emulatorDnsServers?: readonly string[];
 
   /**
+   * Budget for the framework-ready gate, in milliseconds.
+   *
+   * The idle and network gates say the Android framework WAS serving; under a
+   * starved guest (a one-core emulator on a busy host) `system_server` can die
+   * after both have passed and restart, and a session created into that spends
+   * its whole retry budget failing as a bare timeout. The gate runs before the
+   * harness writes any device setting and again just before the Appium session
+   * is created: it waits until the `settings`, `package`, `activity`, `input`
+   * and `connectivity` services are registered, and when it sees that
+   * `system_server` restarted since the boot (its start count or pid changed)
+   * it logs the restart, re-runs the idle gate and waits again. A framework that
+   * does not come back within this budget fails the run with the restart named
+   * and the guest's crash and watchdog log lines attached. Set `0` to skip it.
+   *
+   * @default `180000`
+   */
+  readonly frameworkReadyTimeoutInMilliseconds?: number;
+
+  /**
    * Whether the auto-started Appium server console window is shown.
    *
    * When `false` (the default), the `npx appium` server process is spawned with
