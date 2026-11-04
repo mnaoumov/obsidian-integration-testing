@@ -32,7 +32,8 @@ import { TemporaryVault } from '../vault/temporary-vault.ts';
  * connection alone budget 180s each — so this raises it by exactly what the new
  * phase can cost, rather than re-deriving a worst case nothing waits out.
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+// Raised by 300s more when a one-core emulator boot got a 600s budget (L19).
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 840_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 /**

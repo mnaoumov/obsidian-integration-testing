@@ -7,7 +7,8 @@ import {
 import {
   buildEmulatorArguments,
   buildEmulatorEnvironment,
-  NETSIM_LOG_FILTER
+  NETSIM_LOG_FILTER,
+  resolveEmulatorCoreCount
 } from './emulator-arguments.ts';
 
 describe('buildEmulatorEnvironment', () => {
@@ -108,6 +109,7 @@ describe('emulator CPU budget', () => {
   ])('should resolve requested %s and budget %s to %s cores', (cpuCount, bulkCores, expected) => {
     const input = buildEmulatorArguments({ avdName: 'test', bulkCores, cpuCount, isHidden: true, shouldReuseSnapshot: false });
     expect(input[input.indexOf('-cores') + 1]).toBe(String(expected));
+    expect(resolveEmulatorCoreCount({ bulkCores, cpuCount })).toBe(expected);
   });
 
   it.each(['', '0', '-1', '1.5', 'NaN', 'Infinity', '2junk', '9007199254740992'])('should reject invalid budget %s', (bulkCores) => {

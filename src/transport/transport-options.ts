@@ -107,6 +107,21 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly deviceIdleTimeoutInMilliseconds?: number;
 
   /**
+   * Budget in milliseconds for an auto-started emulator to appear in
+   * `adb devices` and report `sys.boot_completed`, one clock for both. Must be a
+   * positive safe integer.
+   *
+   * When omitted it scales with the guest core count the emulator is launched
+   * with (see {@link emulatorCpuCount}): `600000` at one core, where measured
+   * cold boots ran ~250-290 s, and `300000` at two or more, sized for the
+   * ~90-220 s measured at four. A reused device's boot wait uses this value
+   * too, or `300000`.
+   *
+   * @default `600000` at one guest core, `300000` otherwise
+   */
+  readonly emulatorBootTimeoutInMilliseconds?: number;
+
+  /**
    * Guest CPU count for an auto-started emulator, capped by BULK_CORES when set.
    * Both values must be positive safe integers. Reused devices are unchanged.
    *

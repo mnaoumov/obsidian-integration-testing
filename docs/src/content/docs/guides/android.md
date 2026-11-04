@@ -250,3 +250,5 @@ Either way, run the health check in [AVD provisioning](#avd-provisioning) first 
 ### Emulator CPU budget
 
 Auto-started emulators receive `-cores` explicitly. The `emulatorCpuCount` transport option defaults to `4`; when `BULK_CORES` is set, the smaller value wins. For example, `BULK_CORES=2` caps even `emulatorCpuCount: 8` at two guest CPUs. Both values must be positive safe integers; invalid values fail before launch. This applies to Vitest, Jest and manual transport creation. Already-running devices and the shared AVD configuration are unchanged.
+
+The emulator gets one budget to appear in `adb devices` and report a finished boot, and it scales with that guest core count: 600 seconds at one core, where measured cold boots took about 250-290 seconds, and 300 seconds at two or more. A device that was already running gets 300 seconds. Set `emulatorBootTimeoutInMilliseconds` to a positive integer to choose the budget yourself. The boot log line and the timeout error both name the budget and the core count.

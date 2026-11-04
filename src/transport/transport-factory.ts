@@ -40,6 +40,7 @@ import type {
 } from '../android/avd/avd-name-channel.ts';
 import type { AvdProbeResult } from '../android/avd/avd-probe-verdict.ts';
 import type { LaunchedDeviceCandidate } from '../android/avd/launched-device-selection.ts';
+import type { EmulatorBootBudget } from '../android/emulator/emulator-boot-budget.ts';
 import type { EmulatorLivenessProbeOutcome } from '../android/emulator/emulator-liveness.ts';
 import type { HostProcessQueryResult } from '../android/emulator/emulator-reclaim.ts';
 import type { InstallerCompatibility } from '../desktop/compatibility/installer-compatibility.ts';
@@ -137,9 +138,15 @@ import {
 import {
   buildEmulatorArguments,
   buildEmulatorEnvironment,
-  NETSIM_LOG_FILTER
+  NETSIM_LOG_FILTER,
+  resolveEmulatorCoreCount
 } from '../android/emulator/emulator-arguments.ts';
 import { selectEmulatorBackendPids } from '../android/emulator/emulator-backend.ts';
+import {
+  buildEmulatorBootTimeoutMessage,
+  describeEmulatorBootBudget,
+  resolveEmulatorBootBudget
+} from '../android/emulator/emulator-boot-budget.ts';
 import {
   buildEmulatorLivenessMessage,
   resolveEmulatorLivenessVerdict
@@ -301,14 +308,6 @@ const DEVICE_LIVENESS_ATTEMPT_COUNT = 2;
  */
 const EMULATOR_BOOT_ATTEMPT_COUNT = 2;
 const EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS = 2000;
-/*
- * One budget for the device to appear AND finish booting, sized for the top of
- * the measured ~90-220s cold boot with load on top. It was 120s, inside that
- * range: on 2026-10-23, at 100% host CPU, three runs in a row spent 69-114s
- * waiting for the device to appear and were left 10-54s for `sys.boot_completed`,
- * so both boot attempts of every run failed.
- */
-const EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS = 300_000;
 const EMULATOR_LIST_TIMEOUT_IN_MILLISECONDS = 10_000;
 const EMULATOR_OUTPUT_TAIL_MAX_LENGTH = 8000;
 const HTTP_MULTIPLE_CHOICES = 300;
@@ -457,6 +456,11 @@ interface EnsureDeviceConnectedParams {
   Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it).
    */
   readonly deviceIdleTimeoutInMilliseconds: number;
+
+  /**
+  The `emulatorBootTimeoutInMilliseconds` transport option, when set; omitted, the budget scales with the guest core count.
+   */
+  readonly emulatorBootTimeoutInMilliseconds?: number | undefined;
 
   /**
   Requested guest CPU count, capped by BULK_CORES at launch.
@@ -611,6 +615,21 @@ interface InstalledShell {
 }
 
 /**
+ * The budgets a newly launched emulator is held to.
+ */
+interface NewDeviceBudgets {
+  /**
+  The boot budget, which bounds both the appearance and the boot, scaled by the launched core count.
+   */
+  readonly bootBudget: EmulatorBootBudget;
+
+  /**
+  The two post-boot readiness budgets.
+   */
+  readonly timeouts: DeviceReadinessTimeouts;
+}
+
+/**
  * A spawned child process (the Android emulator or the Appium server) together
  * with helpers to inspect its captured output and exit status.
  */
@@ -731,6 +750,11 @@ interface StartAppiumAndEmulatorParams {
   Resolved timeout in milliseconds for the post-boot device-idle wait (`0` skips it).
    */
   readonly deviceIdleTimeoutInMilliseconds: number;
+
+  /**
+  The `emulatorBootTimeoutInMilliseconds` transport option, when set; omitted, the budget scales with the guest core count.
+   */
+  readonly emulatorBootTimeoutInMilliseconds?: number | undefined;
 
   /**
   Requested guest CPU count, capped by BULK_CORES at launch.
@@ -1268,6 +1292,7 @@ class AppiumTransportFactory {
           appiumUrl: url,
           avdName: options.avdName,
           deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
+          emulatorBootTimeoutInMilliseconds: options.emulatorBootTimeoutInMilliseconds,
           emulatorCpuCount: options.emulatorCpuCount,
           emulatorDnsServers: options.emulatorDnsServers,
           isAppiumConsoleVisible: options.isAppiumConsoleVisible,
@@ -1616,7 +1641,7 @@ class AppiumTransportFactory {
    *
    * Without this preflight a missing AVD name is only discovered after
    * {@link startEmulator} spawns `emulator -avd <name>` and the boot never
-   * completes — a full {@link EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS} spin ending
+   * completes — a full emulator boot budget spin ending
    * in a generic "no new device appeared". Instead this lists the configured
    * AVDs up front and throws an actionable error naming the available ones. AVD
    * creation is deliberately not automated (it requires a system-image download,
@@ -1684,7 +1709,7 @@ class AppiumTransportFactory {
         }));
       }
       case 'reuse': {
-        return await this.reuseConnectedDevice(avdName, probeVerdict.deviceId, timeouts);
+        return await this.reuseConnectedDevice(avdName, probeVerdict.deviceId, timeouts, resolveEmulatorBootBudget({ overrideInMilliseconds: params.emulatorBootTimeoutInMilliseconds }));
       }
       case 'start-new': {
         break;
@@ -1710,6 +1735,14 @@ class AppiumTransportFactory {
     if (shouldReuseSnapshot) {
       this.logSnapshotAge(avdName);
     }
+    /*
+     * Scaled by the core count this launch actually gets, so a bulk run capped
+     * to one processor is not held to a budget measured at four cores.
+     */
+    const bootBudget = resolveEmulatorBootBudget({
+      coreCount: resolveEmulatorCoreCount({ bulkCores: process.env['BULK_CORES'], cpuCount: params.emulatorCpuCount }),
+      overrideInMilliseconds: params.emulatorBootTimeoutInMilliseconds
+    });
     const launchedAtInMilliseconds = Date.now();
     const emulator = this.startEmulator(params, shouldReuseSnapshot);
     const isRecordedFromLaunch = this.recordEmulatorLaunch({ avdName, emulator, launchedAtInMilliseconds, preLaunchEmulatorPids: emulatorPidsBefore });
@@ -1723,7 +1756,7 @@ class AppiumTransportFactory {
      */
     let actualDeviceId: string;
     try {
-      actualDeviceId = await this.waitForNewDevice(avdName, deviceIdsBefore, emulator, timeouts, (deviceId) => {
+      actualDeviceId = await this.waitForNewDevice(avdName, deviceIdsBefore, emulator, { bootBudget, timeouts }, (deviceId) => {
         this.recordEmulatorLaunchDevice({ avdName, deviceId, launchedAtInMilliseconds });
       });
     } catch (error: unknown) {
@@ -2333,9 +2366,10 @@ class AppiumTransportFactory {
    * @param avdName - The AVD it is serving.
    * @param deviceId - The device to adopt.
    * @param timeouts - The two post-boot readiness budgets.
+   * @param bootBudget - The budget for the device to report a finished boot; a reused device's core count is unknown.
    * @returns The adopted device, owning the emulator's PIDs only when it is a leftover this harness started.
    */
-  private async reuseConnectedDevice(avdName: string, deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<EnsureDeviceConnectedResult> {
+  private async reuseConnectedDevice(avdName: string, deviceId: string, timeouts: DeviceReadinessTimeouts, bootBudget: EmulatorBootBudget): Promise<EnsureDeviceConnectedResult> {
     /*
      * A device this run did not start is not this run's to stop — unless this
      * harness started it and nothing live is responsible for it any more. Then
@@ -2363,7 +2397,7 @@ class AppiumTransportFactory {
        * that has been up for seconds is exactly one with no validated network
        * yet.
        */
-      await this.waitForBoot(deviceId, Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS, undefined);
+      await this.waitForBoot(deviceId, Date.now() + bootBudget.timeoutInMilliseconds, undefined, bootBudget);
       await this.waitForDeviceReady(deviceId, timeouts);
       await this.wakeScreen(deviceId);
     } catch (error: unknown) {
@@ -2426,7 +2460,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumDriverLoadTimeoutInMilliseconds, appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
+    const { appiumDriverLoadTimeoutInMilliseconds, appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorBootTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -2480,7 +2514,7 @@ class AppiumTransportFactory {
           this.log('Auto-started Appium server is ready.');
         })
         : noopAsync(),
-      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
+      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorBootTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
     ]);
 
     const deviceResult = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : undefined;
@@ -3070,8 +3104,9 @@ class AppiumTransportFactory {
    * @param deviceId - The device UDID to poll.
    * @param deadline - The absolute time at which to give up.
    * @param emulator - The emulator this run started, so its early death fails fast instead of polling out the deadline. Omitted for a reused device, which this run did not launch and cannot inspect.
+   * @param bootBudget - The budget the deadline was set from, named in the timeout message with the core count it was scaled by.
    */
-  private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch | undefined): Promise<void> {
+  private async waitForBoot(deviceId: string, deadline: number, emulator: ProcessLaunch | undefined, bootBudget: EmulatorBootBudget): Promise<void> {
     const bootWaitStart = Date.now();
     const remainingMs = Math.max(0, deadline - bootWaitStart);
     this.log(
@@ -3117,7 +3152,7 @@ class AppiumTransportFactory {
      * reader got — a budget, with the explanation captured and discarded.
      */
     throw new Error(appendProcessOutputTail(
-      `Device "${deviceId}" connected but did not finish booting within ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms (it was connected for the last ${String(Date.now() - bootWaitStart)}ms of that budget).`,
+      buildEmulatorBootTimeoutMessage({ bootBudget, connectedForInMilliseconds: Date.now() - bootWaitStart, deviceId }),
       { output: emulator?.readOutput() ?? '', outputLabel: 'Emulator output' }
     ));
   }
@@ -3283,7 +3318,9 @@ class AppiumTransportFactory {
    * @param avdName - The AVD this run launched.
    * @param deviceIdsBefore - The devices connected before the launch.
    * @param emulator - The launcher, polled for an early exit.
-   * @param timeouts - The two post-boot readiness budgets.
+   * @param budgets - The boot budget, which bounds both the appearance and the boot, and the two post-boot readiness budgets.
+   * @param budgets.bootBudget - The boot budget, scaled by the launched core count.
+   * @param budgets.timeouts - The two post-boot readiness budgets.
    * @param onDeviceAppeared - Called with the new device the moment it is listed, before the readiness gates.
    * @returns The new device's id.
    */
@@ -3291,13 +3328,14 @@ class AppiumTransportFactory {
     avdName: string,
     deviceIdsBefore: string[],
     emulator: ProcessLaunch,
-    timeouts: DeviceReadinessTimeouts,
+    budgets: NewDeviceBudgets,
     onDeviceAppeared: (deviceId: string) => void
   ): Promise<string> {
+    const { bootBudget, timeouts } = budgets;
     this.log(
-      `Waiting for a new device to appear in ADB (timeout: ${String(EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS)}ms, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
+      `Waiting for a new device to appear in ADB (${describeEmulatorBootBudget(bootBudget)}, poll: ${String(EMULATOR_BOOT_POLL_INTERVAL_IN_MILLISECONDS)}ms)...`
     );
-    const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS;
+    const deadline = Date.now() + bootBudget.timeoutInMilliseconds;
 
     /*
      * Each device is reported once, not on every poll. A device ruled out stays
@@ -3372,7 +3410,7 @@ class AppiumTransportFactory {
         const actualDeviceId = launched.deviceId;
         this.log(`Device ${actualDeviceId} appeared in ADB, serving AVD "${avdName}"; waiting for boot to complete...`);
         onDeviceAppeared(actualDeviceId);
-        await this.waitForBoot(actualDeviceId, deadline, emulator);
+        await this.waitForBoot(actualDeviceId, deadline, emulator, bootBudget);
         await this.waitForDeviceReady(actualDeviceId, timeouts);
         await this.wakeScreen(actualDeviceId);
         return actualDeviceId;
@@ -3395,14 +3433,16 @@ class AppiumTransportFactory {
 
     // As in `waitForBoot`: an emulator that hangs has as much to say as one that dies.
     throw new Error(appendProcessOutputTail(
-      buildNoLaunchedDeviceMessage({
-        lastListedDevices,
-        lastListingFailure,
-        listingFailureCount,
-        pollCount,
-        retriedListingCount: this.emulators.retriedListingCount - retriedListingCountBefore,
-        timeoutInMilliseconds: EMULATOR_BOOT_TIMEOUT_IN_MILLISECONDS
-      }),
+      `${
+        buildNoLaunchedDeviceMessage({
+          lastListedDevices,
+          lastListingFailure,
+          listingFailureCount,
+          pollCount,
+          retriedListingCount: this.emulators.retriedListingCount - retriedListingCountBefore,
+          timeoutInMilliseconds: bootBudget.timeoutInMilliseconds
+        })
+      } (${describeEmulatorBootBudget(bootBudget)}.)`,
       { output: emulator.readOutput(), outputLabel: 'Emulator output' }
     ));
   }
