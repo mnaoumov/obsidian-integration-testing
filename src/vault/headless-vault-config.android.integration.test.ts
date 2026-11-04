@@ -50,7 +50,8 @@ import { TemporaryVault } from './temporary-vault.ts';
  * that never reports a validated default network, plus the 180s the emulator boot budget rose by
  * (120s -> 300s).
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+// Raised by 300s more when a one-core emulator boot got a 600s budget (L19).
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 840_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 describe('headless vault defaults on Android', () => {

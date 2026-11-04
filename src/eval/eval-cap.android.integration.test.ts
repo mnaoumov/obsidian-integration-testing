@@ -43,7 +43,8 @@ import { evalInObsidian } from './eval-in-obsidian.ts';
  * connection alone are 180s each, plus what the network-ready gate and the
  * 300s emulator boot budget can add.
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+// Raised by 300s more when a one-core emulator boot got a 600s budget (L19).
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 840_000;
 // Comfortably past the 30s default cap, so the transport gives up first.
 const OVER_CAP_SLEEP_IN_MILLISECONDS = 40_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;

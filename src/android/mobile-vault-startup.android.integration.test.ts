@@ -15,7 +15,8 @@ import { ensureNonNullable } from '../type-guards.ts';
 import { TemporaryVault } from '../vault/temporary-vault.ts';
 import { probeMobileVaultStartup } from './mobile-vault-startup.ts';
 
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+// Raised by 300s more when a one-core emulator boot got a 600s budget (L19).
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 840_000;
 const STARTUP_TIMEOUT_IN_MILLISECONDS = 180_000;
 const POLL_INTERVAL_IN_MILLISECONDS = 500;
 const oldVault = new TemporaryVault();

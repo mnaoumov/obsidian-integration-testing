@@ -66,7 +66,8 @@ import { raiseSoftKeyboard } from './soft-keyboard.ts';
  * the network-ready gate (L45) can add on a guest that never reports a validated default network, plus
  * the 180s the emulator boot budget rose by (120s -> 300s).
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+// Raised by 300s more when a one-core emulator boot got a 600s budget (L19).
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 840_000;
 
 /*
  * A raise costs a keyboard retract (up to ~2s), one or two touches with a 1.5s settle each, and a handful of

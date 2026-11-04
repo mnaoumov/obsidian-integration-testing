@@ -37,7 +37,8 @@ const LEAKY_PLUGIN_ID = 'oit-leak-leaky';
  * The same budget the other Android suites carry: emulator boot, the Appium session and the network-ready gate
  * (L45) all land in the first registration.
  */
-const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 540_000;
+// Raised by 300s more when a one-core emulator boot got a 600s budget (L19).
+const REGISTRATION_TIMEOUT_IN_MILLISECONDS = 840_000;
 const TEST_TIMEOUT_IN_MILLISECONDS = 120_000;
 
 function pluginFiles(id: string, body: string): Record<string, string> {

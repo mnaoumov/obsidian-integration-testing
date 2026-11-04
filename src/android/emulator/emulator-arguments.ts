@@ -114,18 +114,11 @@ export interface EmulatorEnvironment {
  * @returns The argument array to pass to the emulator binary.
  */
 export function buildEmulatorArguments(params: BuildEmulatorArgumentsParams): string[] {
-  const cpuCount = params.cpuCount ?? DEFAULT_EMULATOR_CPU_COUNT;
-  if (!Number.isSafeInteger(cpuCount) || cpuCount < 1) {
-    throw new Error('emulatorCpuCount must be a positive safe integer.');
-  }
-  const bulkCores = params.bulkCores === undefined ? cpuCount : Number(params.bulkCores);
-  if (!Number.isSafeInteger(bulkCores) || bulkCores < 1) {
-    throw new Error('BULK_CORES must be a positive safe integer.');
-  }
+  const coreCount = resolveEmulatorCoreCount(params);
   const dnsServers = params.dnsServers ?? params.hostDnsServers ?? [];
   return [
     '-cores',
-    String(Math.min(cpuCount, bulkCores)),
+    String(coreCount),
     '-avd',
     params.avdName,
     /*
@@ -156,4 +149,26 @@ export function buildEmulatorEnvironment(baseEnvironment: NodeJS.ProcessEnv): Em
       environment: { ...baseEnvironment, [RUST_LOG_VARIABLE_NAME]: NETSIM_LOG_FILTER },
       isNetsimLogGuarded: true
     };
+}
+
+/**
+ * Resolves the guest core count `buildEmulatorArguments` passes as `-cores`:
+ * the requested count (default 4), capped by `BULK_CORES` when set. Exported so
+ * the boot budget is scaled by the count actually launched rather than a
+ * re-derivation of it.
+ *
+ * @param params - The requested count and the BULK_CORES value.
+ * @returns The guest core count.
+ * @throws If either value is not a positive safe integer.
+ */
+export function resolveEmulatorCoreCount(params: Pick<BuildEmulatorArgumentsParams, 'bulkCores' | 'cpuCount'>): number {
+  const cpuCount = params.cpuCount ?? DEFAULT_EMULATOR_CPU_COUNT;
+  if (!Number.isSafeInteger(cpuCount) || cpuCount < 1) {
+    throw new Error('emulatorCpuCount must be a positive safe integer.');
+  }
+  const bulkCores = params.bulkCores === undefined ? cpuCount : Number(params.bulkCores);
+  if (!Number.isSafeInteger(bulkCores) || bulkCores < 1) {
+    throw new Error('BULK_CORES must be a positive safe integer.');
+  }
+  return Math.min(cpuCount, bulkCores);
 }
