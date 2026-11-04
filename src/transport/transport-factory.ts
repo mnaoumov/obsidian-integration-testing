@@ -43,6 +43,12 @@ import type { LaunchedDeviceCandidate } from '../android/avd/launched-device-sel
 import type { EmulatorBootBudget } from '../android/emulator/emulator-boot-budget.ts';
 import type { EmulatorLivenessProbeOutcome } from '../android/emulator/emulator-liveness.ts';
 import type { HostProcessQueryResult } from '../android/emulator/emulator-reclaim.ts';
+import type {
+  FrameworkProbe,
+  FrameworkProbeVerdict,
+  SystemServerIdentity,
+  SystemServerRestart
+} from '../android/framework-readiness.ts';
 import type { InstallerCompatibility } from '../desktop/compatibility/installer-compatibility.ts';
 import type {
   DesktopCdpTransportConfig,
@@ -174,6 +180,15 @@ import {
   buildTeardownMessage,
   resolveTeardownOutcome
 } from '../android/emulator/teardown-verdict.ts';
+import {
+  buildFrameworkNotReadyMessage,
+  buildFrameworkProbeScript,
+  describeSystemServerIdentity,
+  describeSystemServerRestart,
+  parseFrameworkProbeOutput,
+  resolveFrameworkProbeVerdict,
+  resolveFrameworkReadyTimeoutInMilliseconds
+} from '../android/framework-readiness.ts';
 import {
   resolveInstallerCompatibilityAction,
   willThrowOnIncompatibleInstaller,
@@ -414,6 +429,11 @@ interface DeviceReadinessTimeouts {
   readonly deviceIdleTimeoutInMilliseconds: number;
 
   /**
+  Resolved timeout in milliseconds for the framework-ready gate (`0` skips it).
+   */
+  readonly frameworkReadyTimeoutInMilliseconds: number;
+
+  /**
   Resolved timeout in milliseconds for the network-ready wait (`0` skips it).
    */
   readonly networkReadyTimeoutInMilliseconds: number;
@@ -471,6 +491,11 @@ interface EnsureDeviceConnectedParams {
   DNS override for an auto-started emulator.
    */
   readonly emulatorDnsServers?: readonly string[] | undefined;
+
+  /**
+  Resolved timeout in milliseconds for the framework-ready gate (`0` skips it).
+   */
+  readonly frameworkReadyTimeoutInMilliseconds: number;
 
   /**
   Whether the auto-started emulator window is shown (omitted → hidden).
@@ -767,6 +792,11 @@ interface StartAppiumAndEmulatorParams {
   readonly emulatorDnsServers?: readonly string[] | undefined;
 
   /**
+  Resolved timeout in milliseconds for the framework-ready gate (`0` skips it).
+   */
+  readonly frameworkReadyTimeoutInMilliseconds: number;
+
+  /**
   Whether the auto-started Appium server console window is shown (omitted → hidden).
    */
   readonly isAppiumConsoleVisible?: boolean | undefined;
@@ -989,6 +1019,11 @@ interface WebdriverioModule {
  */
 class AppiumTransportFactory {
   private readonly emulators: EmulatorReclaimer;
+  /**
+   * The `system_server` identity each device reported when its boot wait
+   * ended, so the framework-ready gate can tell a restart from a slow start.
+   */
+  private readonly systemServerBaselines = new Map<string, SystemServerIdentity | undefined>();
   private readonly type: string;
 
   public constructor(type: string) {
@@ -1295,6 +1330,7 @@ class AppiumTransportFactory {
           emulatorBootTimeoutInMilliseconds: options.emulatorBootTimeoutInMilliseconds,
           emulatorCpuCount: options.emulatorCpuCount,
           emulatorDnsServers: options.emulatorDnsServers,
+          frameworkReadyTimeoutInMilliseconds: resolveFrameworkReadyTimeoutInMilliseconds(options),
           isAppiumConsoleVisible: options.isAppiumConsoleVisible,
           isEmulatorVisible: options.isEmulatorVisible,
           networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options),
@@ -1336,7 +1372,19 @@ class AppiumTransportFactory {
          * only say the device is "not in the list of connected devices" — an
          * error that names the one thing that is not wrong.
          */
-        const diagnosis = await this.diagnoseDevice(actualDeviceId, result.emulatorCapture);
+        /*
+         * Then the framework gate, the second time: a `system_server` that died
+         * between the readiness gates and here would otherwise surface as a
+         * 180s session timeout. A framework that does not come back is a
+         * diagnosis like a wedged device, so an emulator this run owns gets the
+         * same one fresh boot.
+         */
+        const diagnosis = await this.diagnoseDevice(actualDeviceId, result.emulatorCapture)
+          ?? await this.waitForFrameworkReady(actualDeviceId, {
+            deviceIdleTimeoutInMilliseconds: resolveDeviceIdleTimeoutInMilliseconds(options),
+            frameworkReadyTimeoutInMilliseconds: resolveFrameworkReadyTimeoutInMilliseconds(options),
+            networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options)
+          });
         if (diagnosis === undefined) {
           break;
         }
@@ -1678,8 +1726,8 @@ class AppiumTransportFactory {
   }
 
   private async ensureDeviceConnected(params: EnsureDeviceConnectedParams): Promise<EnsureDeviceConnectedResult> {
-    const { avdName, deviceIdleTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds } = params;
-    const timeouts: DeviceReadinessTimeouts = { deviceIdleTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds };
+    const { avdName, deviceIdleTimeoutInMilliseconds, frameworkReadyTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds } = params;
+    const timeouts: DeviceReadinessTimeouts = { deviceIdleTimeoutInMilliseconds, frameworkReadyTimeoutInMilliseconds, networkReadyTimeoutInMilliseconds };
     /*
      * Before the device listing, so a leftover stopped here is not listed. Only
      * OTHER AVDs: a leftover of this one is worth adopting (and owning) below.
@@ -2197,6 +2245,69 @@ class AppiumTransportFactory {
   }
 
   /**
+   * Waits for a booted emulator to become idle before the session is
+   * established — whether this run started it or found it already running.
+   *
+   * `sys.boot_completed` fires before the guest is actually idle — package
+   * optimization and services keep churning — so establishing the Appium
+   * session immediately makes every serialized UiAutomator2 `adb` round-trip
+   * contend with that work and inflates session establishment ~3x. This polls
+   * a later, quieter signal (boot animation stopped + package manager serving,
+   * via {@link checkDeviceIdle}) and returns as soon as it is satisfied.
+   *
+   * A **reused** device needs this every bit as much as a started one: being
+   * listed in `adb devices` says only that adbd answers, and the churn it does
+   * not gate is paid later by whatever polls the WebView.
+   *
+   * Best-effort: if the guest does not report idle within the budget it logs a
+   * warning and proceeds (a slow session is better than a failed run), and a
+   * budget of `0` skips the wait entirely.
+   *
+   * @param deviceId - The device UDID to poll.
+   * @param timeoutInMilliseconds - Maximum time to wait; `0` skips the wait.
+   */
+  /**
+   * Runs one framework probe ({@link buildFrameworkProbeScript}) in a single
+   * `adb shell` round-trip.
+   *
+   * @param deviceId - The device UDID.
+   * @returns The parsed probe, or `undefined` when adb did not answer.
+   */
+  private probeFramework(deviceId: string): Promise<FrameworkProbe | undefined> {
+    return new Promise((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'shell', buildFrameworkProbeScript()],
+        { timeout: ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          // `service check` exits 0 either way, so an error here is adb itself failing or the guest not answering.
+          resolve(error ? undefined : parseFrameworkProbeOutput(stdout));
+        }
+      );
+    });
+  }
+
+  /**
+   * Reads one logcat buffer, for a failure message.
+   *
+   * @param deviceId - The device UDID.
+   * @param buffer - The buffer name, e.g. `crash` or `system`.
+   * @returns The buffer's text, or `undefined` when it could not be read.
+   */
+  private readLogcatBuffer(deviceId: string, buffer: string): Promise<string | undefined> {
+    return new Promise((resolve) => {
+      execFile(
+        'adb',
+        ['-s', deviceId, 'logcat', '-d', '-b', buffer],
+        { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS },
+        (error, stdout) => {
+          resolve(error ? undefined : stdout);
+        }
+      );
+    });
+  }
+
+  /**
    * Replaces a leftover server an earlier run failed to stop, instead of
    * adopting it.
    *
@@ -2320,6 +2431,23 @@ class AppiumTransportFactory {
   }
 
   /**
+   * Records which `system_server` the device is running now that its boot wait
+   * has ended, so a later restart can be told from a slow start.
+   *
+   * @param deviceId - The device UDID.
+   */
+  private async recordSystemServerBaseline(deviceId: string): Promise<void> {
+    const probe = await this.probeFramework(deviceId);
+    const identity = probe?.identity;
+    this.systemServerBaselines.set(deviceId, identity);
+    this.log(
+      identity === undefined
+        ? `Could not read the system_server identity on device ${deviceId} at boot; a restart is detected from the first identity read later.`
+        : `Device ${deviceId} system_server at boot: ${describeSystemServerIdentity(identity)}.`
+    );
+  }
+
+  /**
    * Replaces a wedged server this harness started earlier and retries the
    * session once.
    *
@@ -2384,7 +2512,6 @@ class AppiumTransportFactory {
     );
 
     try {
-      await this.suppressErrorDialogs(deviceId);
       /*
        * A reused device gets the SAME settle gate a harness-started one gets.
        * Appearing in `adb devices` says only that adbd is up: the guest can
@@ -2398,8 +2525,17 @@ class AppiumTransportFactory {
        * yet.
        */
       await this.waitForBoot(deviceId, Date.now() + bootBudget.timeoutInMilliseconds, undefined, bootBudget);
+      await this.recordSystemServerBaseline(deviceId);
       await this.waitForDeviceReady(deviceId, timeouts);
       await this.wakeScreen(deviceId);
+      /*
+       * The dialog suppression used to come first here, before the boot wait,
+       * so on a device still booting it reached a `settings` service that did
+       * not exist yet. It now follows the framework gate, as it does for a
+       * started device.
+       */
+      await this.waitForFrameworkReadyBeforeSettings(deviceId, timeouts);
+      await this.suppressErrorDialogs(deviceId);
     } catch (error: unknown) {
       // As with a launch that fails its gates: a rejection here hands the caller nothing to stop.
       if (ownedEmulatorPids.length > 0) {
@@ -2460,7 +2596,7 @@ class AppiumTransportFactory {
   }
 
   private async startAppiumAndEmulator(params: StartAppiumAndEmulatorParams): Promise<StartAppiumAndEmulatorResult> {
-    const { appiumDriverLoadTimeoutInMilliseconds, appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorBootTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
+    const { appiumDriverLoadTimeoutInMilliseconds, appiumStartTimeoutInMilliseconds, appiumUrl, avdName, deviceIdleTimeoutInMilliseconds, emulatorBootTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, frameworkReadyTimeoutInMilliseconds, isAppiumConsoleVisible, isEmulatorVisible, networkReadyTimeoutInMilliseconds, port, shouldAutoInstallAppiumDependencies, shouldAutoStartAppium, shouldReuseEmulatorSnapshot } = params;
 
     let needsAppiumStart = false;
     let appiumServerMarker: AppiumServerMarker | undefined;
@@ -2514,7 +2650,7 @@ class AppiumTransportFactory {
           this.log('Auto-started Appium server is ready.');
         })
         : noopAsync(),
-      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorBootTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
+      this.ensureDeviceConnected({ avdName, deviceIdleTimeoutInMilliseconds, emulatorBootTimeoutInMilliseconds, emulatorCpuCount, emulatorDnsServers, frameworkReadyTimeoutInMilliseconds, isEmulatorVisible, networkReadyTimeoutInMilliseconds, shouldReuseEmulatorSnapshot })
     ]);
 
     const deviceResult = deviceOutcome.status === 'fulfilled' ? deviceOutcome.value : undefined;
@@ -3157,28 +3293,6 @@ class AppiumTransportFactory {
     ));
   }
 
-  /**
-   * Waits for a booted emulator to become idle before the session is
-   * established — whether this run started it or found it already running.
-   *
-   * `sys.boot_completed` fires before the guest is actually idle — package
-   * optimization and services keep churning — so establishing the Appium
-   * session immediately makes every serialized UiAutomator2 `adb` round-trip
-   * contend with that work and inflates session establishment ~3x. This polls
-   * a later, quieter signal (boot animation stopped + package manager serving,
-   * via {@link checkDeviceIdle}) and returns as soon as it is satisfied.
-   *
-   * A **reused** device needs this every bit as much as a started one: being
-   * listed in `adb devices` says only that adbd answers, and the churn it does
-   * not gate is paid later by whatever polls the WebView.
-   *
-   * Best-effort: if the guest does not report idle within the budget it logs a
-   * warning and proceeds (a slow session is better than a failed run), and a
-   * budget of `0` skips the wait entirely.
-   *
-   * @param deviceId - The device UDID to poll.
-   * @param timeoutInMilliseconds - Maximum time to wait; `0` skips the wait.
-   */
   private async waitForDeviceIdle(deviceId: string, timeoutInMilliseconds: number): Promise<void> {
     if (timeoutInMilliseconds <= 0) {
       this.log(`Skipping post-boot idle wait for device ${deviceId} (timeout is 0).`);
@@ -3227,6 +3341,95 @@ class AppiumTransportFactory {
   private async waitForDeviceReady(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<void> {
     await this.waitForDeviceIdle(deviceId, timeouts.deviceIdleTimeoutInMilliseconds);
     await this.waitForNetworkValidated(deviceId, timeouts.networkReadyTimeoutInMilliseconds);
+  }
+
+  /**
+   * Waits until the framework services an Appium session needs are registered,
+   * recovering from a `system_server` restart on the way.
+   *
+   * See `framework-readiness.ts` for the trace this exists for. A restart is a
+   * detected event, not a guess: the start count (or pid) recorded when the boot
+   * wait ended has changed. It is logged, the new identity becomes the baseline,
+   * and the idle gate runs again before services are waited on, because a
+   * framework that has just restarted is the churning guest that gate exists
+   * for.
+   *
+   * @param deviceId - The device UDID.
+   * @param timeouts - The readiness budgets; the framework one bounds the whole wait.
+   * @returns `undefined` when the framework is ready (or the gate is off), otherwise the failure message.
+   */
+  private async waitForFrameworkReady(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<string | undefined> {
+    const timeoutInMilliseconds = timeouts.frameworkReadyTimeoutInMilliseconds;
+    if (timeoutInMilliseconds <= 0) {
+      this.log(`Skipping the framework-ready gate for device ${deviceId} (timeout is 0).`);
+      return undefined;
+    }
+
+    const start = Date.now();
+    const deadline = start + timeoutInMilliseconds;
+    const restarts: SystemServerRestart[] = [];
+    let lastVerdict: FrameworkProbeVerdict | undefined;
+
+    while (Date.now() < deadline) {
+      const probe = await this.probeFramework(deviceId);
+      const elapsed = String(Date.now() - start);
+      if (probe === undefined) {
+        this.log(`Device ${deviceId} did not answer the framework probe (elapsed: ${elapsed}ms). Retrying...`);
+      } else {
+        if (this.systemServerBaselines.get(deviceId) === undefined && probe.identity !== undefined) {
+          this.systemServerBaselines.set(deviceId, probe.identity);
+        }
+
+        const verdict = resolveFrameworkProbeVerdict({ baseline: this.systemServerBaselines.get(deviceId), probe });
+        lastVerdict = verdict;
+
+        if (verdict.kind === 'ready') {
+          this.log(`Device ${deviceId} framework is ready after ${elapsed}ms.`);
+          return undefined;
+        }
+
+        if (verdict.kind === 'restarted') {
+          restarts.push(verdict);
+          this.systemServerBaselines.set(deviceId, verdict.to);
+          this.log(
+            `system_server restarted on device ${deviceId} (${describeSystemServerRestart(verdict)}, elapsed: ${elapsed}ms); waiting for the device to settle and its services to come back...`
+          );
+          await this.waitForDeviceIdle(deviceId, Math.min(timeouts.deviceIdleTimeoutInMilliseconds, Math.max(0, deadline - Date.now())));
+          continue;
+        }
+
+        this.log(`Device ${deviceId} framework services not registered yet: ${verdict.missingServices.join(', ')} (elapsed: ${elapsed}ms). Retrying...`);
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, DEVICE_IDLE_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+
+    const [crashLog, systemLog] = await Promise.all([
+      this.readLogcatBuffer(deviceId, 'crash'),
+      this.readLogcatBuffer(deviceId, 'system')
+    ]);
+    const message = buildFrameworkNotReadyMessage({ crashLog, deviceId, lastVerdict, restarts, systemLog, timeoutInMilliseconds });
+    this.log(message);
+    return message;
+  }
+
+  /**
+   * The first framework gate, before the harness writes any device setting.
+   *
+   * Its failure is logged, not thrown: the second gate, just before `remote()`,
+   * runs the same wait again and is the one whose failure feeds the fresh-boot
+   * retry, so throwing here would bypass that retry.
+   *
+   * @param deviceId - The device UDID.
+   * @param timeouts - The readiness budgets.
+   */
+  private async waitForFrameworkReadyBeforeSettings(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<void> {
+    const failure = await this.waitForFrameworkReady(deviceId, timeouts);
+    if (failure !== undefined) {
+      this.log(`Warning: proceeding past the first framework gate on device ${deviceId}; the gate before the session decides.`);
+    }
   }
 
   /**
@@ -3411,8 +3614,10 @@ class AppiumTransportFactory {
         this.log(`Device ${actualDeviceId} appeared in ADB, serving AVD "${avdName}"; waiting for boot to complete...`);
         onDeviceAppeared(actualDeviceId);
         await this.waitForBoot(actualDeviceId, deadline, emulator, bootBudget);
+        await this.recordSystemServerBaseline(actualDeviceId);
         await this.waitForDeviceReady(actualDeviceId, timeouts);
         await this.wakeScreen(actualDeviceId);
+        await this.waitForFrameworkReadyBeforeSettings(actualDeviceId, timeouts);
         return actualDeviceId;
       }
 
