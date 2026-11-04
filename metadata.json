@@ -6546,5 +6546,16 @@
     "minRecommendedInstallerVersion": "1.1.9",
     "minRecommendedElectronVersion": "28.2.3",
     "releaseUrl": "https://github.com/obsidianmd/obsidian-releases/releases/tag/v1.15.0"
+  },
+  "1.15.1": {
+    "changelogUrl": {
+      "desktopCatalyst": "https://obsidian.md/changelog/2026-11-03-desktop-v1.15.1/",
+      "mobileCatalyst": "https://obsidian.md/changelog/2026-11-03-mobile-v1.15.1/"
+    },
+    "channel": "catalyst",
+    "downloads": {
+      "asar": "https://releases.obsidian.md/release/obsidian-1.15.1.asar.gz"
+    },
+    "minRecommendedInstallerVersion": "1.1.9"
   }
 }
