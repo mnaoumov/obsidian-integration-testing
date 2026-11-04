@@ -702,6 +702,10 @@ sd
 
 - fix(cli-transport): run enablePluginsInLocalStorage in existing vault window
 
+## 2.5.8
+
+- No changes since 2.5.6.
+
 ## 2.5.6
 
 - fix(cli-transport): use existing registered vault for IPC eval instead of process.
