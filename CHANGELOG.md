@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 17.8.3
+
+- test: give the public API barrel suite a budget that survives a loaded host
+- fix(android): gate the Appium session on system_server and its services
+
 ## 17.8.2
 
 - fix(android): scale the emulator boot budget with the guest core count
