@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 17.8.2
+
+- fix(android): scale the emulator boot budget with the guest core count
+- chore: refresh metadata.json
+- chore: integrate refreshed Obsidian metadata
+- fix(desktop): wait for owned process exit before retrying cleanup
+
 ## 17.8.1
 
 - fix(desktop): bound startup waits and clean up failed connections
