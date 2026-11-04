@@ -75,7 +75,10 @@ const TS_CONFIG_PATH = resolve(ROOT_DIR, 'tsconfig.json');
 // its timeout.
 // `test:coverage` makes that far worse: v8 instrumentation slows the very same load by roughly 10x (3.1 s
 // plain, past 30 s instrumented), so this budget has to clear the instrumented cost, not the plain one.
-const BIG_TIMEOUT_IN_MILLISECONDS = 120_000;
+// Host load multiplies it again: with the CPU pinned at 100% by parallel work, the file took 76 s with no
+// instrumentation at all, and the instrumented run of a release preflight overran 120 s (2026-11-04). A
+// budget only costs time when the test hangs, so it is sized for the loaded, instrumented case.
+const BIG_TIMEOUT_IN_MILLISECONDS = 600_000;
 
 /**
  * One node of `package.json`'s `exports` tree: a built file, or a nested condition map leading to one.
