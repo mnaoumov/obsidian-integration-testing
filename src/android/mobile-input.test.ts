@@ -150,6 +150,18 @@ describe('toCdpInputCommands: pointer', () => {
     expect(gesture?.params['duration']).toBeGreaterThan(500);
   });
 
+  it('should hold a long press for the hold the request asks for', () => {
+    const [gesture] = toCdpInputCommands({ holdInMilliseconds: 4000.4, kind: 'longPress', modifiers: [], x: 1, y: 2 });
+
+    expect(gesture?.params['duration']).toBe(4000);
+  });
+
+  it.each([NaN, Infinity, 300])('should fall back to the default hold for %s', (holdInMilliseconds) => {
+    const [gesture] = toCdpInputCommands({ holdInMilliseconds, kind: 'longPress', modifiers: [], x: 1, y: 2 });
+
+    expect(gesture?.params['duration']).toBe(1500);
+  });
+
   // The gesture API takes no modifier bitmask, and a touch screen has no modifier keys to hold during a
   // press — so a modifier a caller passes is dropped rather than mistranslated into the tap's spelling.
   it('should not carry modifiers on a long press, which has nowhere to put them', () => {

@@ -84,6 +84,24 @@ interface ProbeResult {
   readonly hasOnlyTrustedEvents: boolean;
 }
 
+/**
+ * What the Reading-view link test reports back: the note open after the press, and how many items the
+ * menu had.
+ */
+interface ReadingViewLinkResult {
+  readonly activeFilePath: string;
+  readonly menuItemCount: number;
+}
+
+/**
+ * What the retried long-press test reports back: how many `contextmenu` events the page swallowed, and
+ * how many reached the pressed element.
+ */
+interface RetriedLongPressResult {
+  readonly swallowedCount: number;
+  readonly targetContextMenuCount: number;
+}
+
 describe('mobile trusted input', () => {
   const vault = new TemporaryVault();
 
@@ -562,6 +580,112 @@ describe('mobile trusted input', () => {
     expect(result.events.some(($event) => $event.type === 'contextmenu' && $event.isTrusted)).toBe(true);
     // The consumer-visible effect: Obsidian's own file menu, which is what every converted suite needs.
     expect(result.menuItems).toContain('Rename...');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The shape that failed twice in a row on a one-core guest under load (2026-11-04): a long press on an
+  // internal link in Reading view. A tap there FOLLOWS the link, so besides the menu this asserts the note
+  // is still the one open: a press Android took for a tap and that `clickElement` pressed again must not
+  // have navigated on the way.
+  it('should open the link menu from a long press on a Reading-view link, without following the link', async () => {
+    const result = await evalInObsidian({
+      async callback({ app, lib, obsidianModule }): Promise<ReadingViewLinkResult> {
+        const SOURCE_PATH = 'long-press-source.md';
+        const TARGET_PATH = 'long-press-target.md';
+
+        if (!app.vault.getFileByPath(TARGET_PATH)) {
+          await app.vault.create(TARGET_PATH, '# target\n');
+        }
+
+        const source = app.vault.getFileByPath(SOURCE_PATH) ?? await app.vault.create(SOURCE_PATH, 'See [[long-press-target]] here.\n');
+
+        app.workspace.leftSplit.collapse();
+        app.workspace.rightSplit.collapse();
+        const leaf = app.workspace.getLeaf(false);
+        await leaf.setViewState({ active: true, state: { file: source.path, mode: 'preview' }, type: 'markdown' });
+
+        function findVisibleLink(): HTMLElement | undefined {
+          const containerEl = leaf.view instanceof obsidianModule.MarkdownView ? leaf.view.containerEl : undefined;
+          const links = containerEl ? [...containerEl.querySelectorAll<HTMLElement>(':scope .markdown-preview-view a.internal-link')] : [];
+          return links.find((link) => {
+            const rect = link.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            return rect.width > 0
+              && centerX >= 0 && centerX <= globalThis.innerWidth
+              && centerY >= 0 && centerY <= globalThis.innerHeight;
+          });
+        }
+
+        await lib.waitUntil({
+          message: 'Reading view to render the internal link on screen',
+          predicate: () => findVisibleLink() !== undefined
+        });
+        const link = findVisibleLink();
+        if (!link) {
+          throw new Error('Reading view rendered no visible internal link to long-press.');
+        }
+
+        try {
+          await lib.clickElement({ button: 'right', element: link });
+          await lib.waitUntil({
+            message: 'the long press on the link to open a `.menu`',
+            predicate: () => document.querySelector('.menu') !== null
+          });
+
+          return {
+            activeFilePath: app.workspace.getActiveFile()?.path ?? '',
+            menuItemCount: document.querySelectorAll('.menu-item').length
+          };
+        } finally {
+          for (const menu of document.querySelectorAll('.menu')) {
+            menu.remove();
+          }
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result.menuItemCount).toBeGreaterThan(0);
+    expect(result.activeFilePath).toBe('long-press-source.md');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  // The guest cannot be made to misread a press on demand, so the second press is reached the way a
+  // misread looks to the page: the first `contextmenu` never arrives. A window listener registered first
+  // swallows exactly one, and the press made again must deliver the next.
+  it('should press again when the first long press produced no contextmenu', async () => {
+    const result = await evalInObsidian({
+      async callback({ lib }): Promise<RetriedLongPressResult> {
+        const target = document.body.createDiv();
+        target.setCssStyles({ height: '200px', left: '50px', position: 'fixed', top: '200px', width: '200px', zIndex: '9999' });
+        const state = { swallowedCount: 0, targetContextMenuCount: 0 };
+        function swallowFirst($event: Event): void {
+          if (state.swallowedCount > 0) {
+            return;
+          }
+
+          state.swallowedCount++;
+          $event.preventDefault();
+          $event.stopImmediatePropagation();
+        }
+
+        function countOnTarget(): void {
+          state.targetContextMenuCount++;
+        }
+
+        globalThis.addEventListener('contextmenu', swallowFirst, { capture: true });
+        target.addEventListener('contextmenu', countOnTarget);
+        try {
+          await lib.clickElement({ button: 'right', element: target });
+          return { swallowedCount: state.swallowedCount, targetContextMenuCount: state.targetContextMenuCount };
+        } finally {
+          globalThis.removeEventListener('contextmenu', swallowFirst, { capture: true });
+          target.remove();
+        }
+      },
+      vaultPath: vault.path
+    });
+
+    expect(result).toStrictEqual({ swallowedCount: 1, targetContextMenuCount: 1 });
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   // A long press that Android takes for a tap reaches the page as a click with no `contextmenu`, and a

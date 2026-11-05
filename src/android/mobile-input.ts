@@ -105,6 +105,13 @@ export interface MobileKeyInputRequest {
  */
 export interface MobilePointerInputRequest {
   /**
+   * How long a `longPress` holds the touch down, in milliseconds. Omitted, it is the default 1500ms hold, which is
+   * also the floor: a shorter hold is raised to it. Ignored for a `tap`. Mobile `clickElement` passes a longer
+   * hold when it presses again after Android took the first press for a tap.
+   */
+  readonly holdInMilliseconds?: number;
+
+  /**
    * `tap` is the touch analog of a left click; `longPress` is the mobile context-menu gesture, i.e. what a
    * desktop right click means here.
    */
@@ -166,6 +173,17 @@ interface EvaluateResult {
  * see {@link toPointerCommands} for why the dwell alone was never going to be enough.
  */
 const LONG_PRESS_DWELL_IN_MILLISECONDS = 1500;
+
+/**
+ * Resolves the hold a long press asks for. A hold that is missing, not finite, or not past Android's
+ * recognition threshold falls back to the default, because a shorter one can only ever be a tap.
+ *
+ * @param holdInMilliseconds - The hold the renderer asked for.
+ * @returns The hold to send.
+ */
+function resolveLongPressHold(holdInMilliseconds: number | undefined): number {
+  return holdInMilliseconds === undefined || !Number.isFinite(holdInMilliseconds) || holdInMilliseconds < LONG_PRESS_DWELL_IN_MILLISECONDS ? LONG_PRESS_DWELL_IN_MILLISECONDS : Math.round(holdInMilliseconds);
+}
 
 const NO_MODIFIERS = 0;
 const MODIFIER_BIT_ALT = 1;
@@ -449,7 +467,7 @@ function toPointerCommands(request: MobilePointerInputRequest): CdpInputCommand[
       {
         method: 'Input.synthesizeTapGesture',
         params: {
-          duration: LONG_PRESS_DWELL_IN_MILLISECONDS,
+          duration: resolveLongPressHold(request.holdInMilliseconds),
           gestureSourceType: 'touch',
           x: request.x,
           y: request.y
