@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 17.9.0
+
+- feat(desktop): run the owned instance on a persistent user-data profile
+- docs: link the changelog from the README
+- docs: add a See also section comparing similar libraries
+
 ## 17.8.3
 
 - test: give the public API barrel suite a budget that survives a loaded host
