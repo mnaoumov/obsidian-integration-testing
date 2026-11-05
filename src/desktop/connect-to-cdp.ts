@@ -231,6 +231,22 @@ export interface ConnectToCdpOptions {
   readonly obsidianVersion?: string;
 
   /**
+   * Absolute path to a **persistent** user-data profile for the owned instance,
+   * reused instead of a fresh temporary one and never deleted. Use it for a profile
+   * the owner signed in to once by hand, so a suite can drive Obsidian Sync and
+   * Obsidian Publish. With it the harness merges the vault into the profile's own
+   * `obsidian.json` (reusing the id the profile already gives that vault, which is
+   * what Sync keys its connection to), keeps every other vault, and refuses a second
+   * concurrent run on the same profile with `PersistentProfileInUseError`. Open the
+   * vault in place (`connectToCdp({ vault })`, or `new TemporaryVault(path)`) rather
+   * than a temporary copy, since Sync is connected to the real folder. Ignored in
+   * attach mode ({@link port} set).
+   *
+   * @default `undefined`
+   */
+  readonly persistentUserDataDirectory?: string;
+
+  /**
    * CDP port of an already-running Obsidian to **attach** to. When omitted, an
    * isolated instance is launched on an automatically chosen free port.
    *
@@ -436,6 +452,7 @@ function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTra
     isObsidianAppVisible: options?.isObsidianAppVisible ?? true,
     obsidianInstallerVersion: options?.obsidianInstallerVersion,
     obsidianVersion: options?.obsidianVersion,
+    persistentUserDataDirectory: options?.persistentUserDataDirectory,
     port: options?.port,
     shouldDisableSandbox: options?.shouldDisableSandbox,
     shouldThrowOnIncompatibleInstaller: options?.shouldThrowOnIncompatibleInstaller,

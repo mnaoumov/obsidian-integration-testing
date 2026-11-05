@@ -183,6 +183,11 @@ export { connectToCdp } from './desktop/connect-to-cdp.ts';
 export type { OwnedInstanceExitedErrorConstructorParams } from './desktop/owned-instance/owned-instance-exited-error.ts';
 export { OwnedInstanceExitedError } from './desktop/owned-instance/owned-instance-exited-error.ts';
 export type {
+  PersistentProfileInUseErrorConstructorParams,
+  PersistentProfileLock
+} from './desktop/owned-instance/persistent-profile.ts';
+export { PersistentProfileInUseError } from './desktop/owned-instance/persistent-profile.ts';
+export type {
   DesktopCdpTransportConfig,
   OwnedInstanceAsar,
   OwnedInstanceConfig,
