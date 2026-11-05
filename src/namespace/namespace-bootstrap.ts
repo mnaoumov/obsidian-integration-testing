@@ -345,6 +345,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface MobilePointerInputRequest {
+    readonly holdInMilliseconds?: number;
     readonly kind: 'longPress' | 'tap';
     readonly modifiers: readonly string[];
     readonly x: number;
@@ -384,6 +385,20 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    * normally already in by then; this only covers the renderer running the host's answer ahead of it.
    */
   const LONG_PRESS_CONTEXT_MENU_GRACE_IN_MILLISECONDS = 1000;
+
+  /**
+   * The hold (in ms) of the second long press mobile `clickElement({ button: 'right' })` makes when Android
+   * took the first one (the host's default 1500ms hold) for a tap. A one-core guest under load can run its
+   * UI thread late by more than the first hold's margin over the recognizer's timeout; this one leaves
+   * about 3.5s of margin, and the two presses together stay well inside the 30s eval cap.
+   */
+  const LONG_PRESS_RETRY_HOLD_IN_MILLISECONDS = 4000;
+
+  /**
+   * The mouse-compatibility events Chromium derives from a TAP. A recognized long press produces none of
+   * them, so swallowing them while a long press runs only ever cancels a press Android took for a tap.
+   */
+  const TAP_COMPATIBILITY_EVENT_TYPES = ['mousedown', 'mouseup', 'click'] as const;
 
   /**
    * Default maximum time (in ms) {@link openSettingsTab} waits for the settings
@@ -1043,55 +1058,110 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       assertCenterHitsElement(element, rect);
     }
 
-    async function clickCenter(): Promise<void> {
-      await clickMouse({
-        button,
-        modifiers,
-        window: targetWindow,
-        x: rect.left + rect.width / CENTER_DIVISOR,
-        y: rect.top + rect.height / CENTER_DIVISOR
-      });
-    }
+    const centerX = rect.left + rect.width / CENTER_DIVISOR;
+    const centerY = rect.top + rect.height / CENTER_DIVISOR;
 
     if (checkIsMobile() && button === 'right') {
-      await longPressAndExpectContextMenu(element, targetWindow, clickCenter);
+      assertMainWindowOnMobile('clickElement', targetWindow);
+      const electronModifiers = toElectronModifiers(modifiers);
+      await longPressAndExpectContextMenu(element, targetWindow, async (holdInMilliseconds) => {
+        await requestHostInput({
+          ...(holdInMilliseconds !== undefined && { holdInMilliseconds }),
+          kind: 'longPress',
+          modifiers: electronModifiers,
+          x: Math.round(centerX),
+          y: Math.round(centerY)
+        });
+      });
       return;
     }
 
-    await clickCenter();
+    await clickMouse({
+      button,
+      modifiers,
+      window: targetWindow,
+      x: centerX,
+      y: centerY
+    });
   }
 
   /*
    * Runs a mobile long-press and refuses to report it as done unless a `contextmenu` followed. Android's
    * gesture recognizer decides whether a held touch is a long press, and when it decides otherwise the
-   * page sees a plain tap: the element is clicked, and nothing opens its menu. A caller waiting on that menu
-   * would otherwise time out much later on a wait that names the menu, never the gesture.
+   * page sees a plain tap. On a one-core guest under load that happens often enough to fail a suite twice
+   * in a row (a Reading-view link, 2026-11-04), so the press is made safe to repeat and is repeated once:
    *
-   * The listener sits on the window in the capture phase, ahead of any handler that stops propagation.
+   * 1. While the presses run, the trusted `mousedown` / `mouseup` / `click` a tap derives are swallowed in
+   *    the capture phase. A recognized long press produces none of them, so this cancels exactly the tap a
+   *    misread press would have been: a link is not followed, a file is not opened.
+   * 2. A press answered by a click, or by nothing within the grace, is made again with a longer hold.
+   * 3. Only when the second press fails too does it throw, saying what each press produced.
+   *
+   * Both listeners sit on the window in the capture phase, ahead of any handler that stops propagation.
    */
-  async function longPressAndExpectContextMenu(element: HTMLElement, targetWindow: Window, longPress: () => Promise<void>): Promise<void> {
-    const state = { hasContextMenu: false };
-    function listener(): void {
-      state.hasContextMenu = true;
+  async function longPressAndExpectContextMenu(
+    element: HTMLElement,
+    targetWindow: Window,
+    longPress: (holdInMilliseconds: number | undefined) => Promise<void>
+  ): Promise<void> {
+    const state = { contextMenuCount: 0, tapCount: 0 };
+    function contextMenuListener(): void {
+      state.contextMenuCount++;
     }
 
-    targetWindow.addEventListener('contextmenu', listener, { capture: true });
+    function tapListener($event: Event): void {
+      if (!$event.isTrusted) {
+        return;
+      }
+
+      $event.preventDefault();
+      $event.stopImmediatePropagation();
+      if ($event.type === 'click') {
+        state.tapCount++;
+      }
+    }
+
+    const holds = [undefined, LONG_PRESS_RETRY_HOLD_IN_MILLISECONDS];
+    const outcomes: string[] = [];
+
+    targetWindow.addEventListener('contextmenu', contextMenuListener, { capture: true });
+    for (const type of TAP_COMPATIBILITY_EVENT_TYPES) {
+      targetWindow.addEventListener(type, tapListener, { capture: true });
+    }
+
     try {
-      // Only the wait is reported as a missing `contextmenu`; a gesture the host failed to inject keeps its own error.
-      await longPress();
-      await waitUntil({
-        intervalInMilliseconds: INPUT_POLL_INTERVAL_IN_MILLISECONDS,
-        predicate: () => state.hasContextMenu,
-        timeoutInMilliseconds: LONG_PRESS_CONTEXT_MENU_GRACE_IN_MILLISECONDS
-      }).catch((error: unknown) => {
-        throw new Error(
-          `\`clickElement({ button: 'right' })\` long-pressed ${describeElement(element)}, but no \`contextmenu\` followed: `
-            + 'Android took the gesture for a tap, so the element was most likely tapped instead and no context menu opened.',
-          { cause: error }
-        );
-      });
+      for (const holdInMilliseconds of holds) {
+        const tapCountBefore = state.tapCount;
+        // A gesture the host failed to inject keeps its own error; only the missing `contextmenu` is reported here.
+        await longPress(holdInMilliseconds);
+        try {
+          await waitUntil({
+            intervalInMilliseconds: INPUT_POLL_INTERVAL_IN_MILLISECONDS,
+            predicate: () => state.contextMenuCount > 0 || state.tapCount > tapCountBefore,
+            timeoutInMilliseconds: LONG_PRESS_CONTEXT_MENU_GRACE_IN_MILLISECONDS
+          });
+        } catch {
+          // Neither a `contextmenu` nor a tap within the grace: recorded below, and pressed again.
+        }
+
+        if (state.contextMenuCount > 0) {
+          return;
+        }
+
+        const holdLabel = `${String(holdInMilliseconds ?? 'default')} ms hold`;
+        outcomes.push(state.tapCount > tapCountBefore ? `${holdLabel}: taken for a tap (its click was swallowed)` : `${holdLabel}: nothing`);
+      }
+
+      throw new Error(
+        `\`clickElement({ button: 'right' })\` long-pressed ${describeElement(element)} ${String(holds.length)} times, but no \`contextmenu\` followed: `
+          + `${outcomes.join('; ')}. Android took the gesture for a tap, and no context menu opened. The taps' mouse events were swallowed, `
+          + 'so the page did not act on them.'
+      );
     } finally {
-      targetWindow.removeEventListener('contextmenu', listener, { capture: true });
+      targetWindow.removeEventListener('contextmenu', contextMenuListener, { capture: true });
+      for (const type of TAP_COMPATIBILITY_EVENT_TYPES) {
+        targetWindow.removeEventListener(type, tapListener, { capture: true });
+      }
     }
   }
 

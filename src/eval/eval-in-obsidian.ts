@@ -346,11 +346,13 @@ export interface Lib {
    * **On mobile a `'right'` long-press must produce a `contextmenu`, or it
    * throws.** Android's recognizer can take a held touch for a tap when the
    * device is under load, and the page then sees a click on the element and no
-   * menu. So after the gesture the mobile path waits up to 1 s for a
-   * `contextmenu` on the element's window and throws a named error when none
-   * came, rather than letting a later wait for the menu time out without
-   * naming the gesture. It does not retry, since the tap has already acted on
-   * the page. {@link Lib.clickMouse} checks nothing.
+   * menu. So while the gesture runs, the mobile path swallows the trusted
+   * `mousedown` / `mouseup` / `click` a tap produces (a recognized long press
+   * produces none), which keeps a misread press from acting on the page. It
+   * then waits up to 1 s for a `contextmenu` on the element's window; when a
+   * tap or nothing came instead, it presses once more with a 4 s hold, and
+   * throws a named error only when that press fails too.
+   * {@link Lib.clickMouse} checks nothing and swallows nothing.
    *
    * @param params - The element to click, the button to press and any modifiers
    *   to hold.
