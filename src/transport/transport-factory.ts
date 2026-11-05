@@ -27,7 +27,10 @@ import {
   homedir,
   tmpdir
 } from 'node:os';
-import { join } from 'node:path';
+import {
+  isAbsolute,
+  join
+} from 'node:path';
 import process from 'node:process';
 
 import type { AdbDeviceEntry } from '../android/adb/adb-device-list.ts';
@@ -4063,9 +4066,26 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
     ...(asar && { asar }),
     ...(compatibility && { compatibility }),
     exePath: ensureNonNullable(exePath),
-
-    userDataDirectory: createOwnedUserDataDirectory()
+    ...(options?.persistentUserDataDirectory !== undefined && { isPersistentUserDataDirectory: true }),
+    userDataDirectory: options?.persistentUserDataDirectory === undefined
+      ? createOwnedUserDataDirectory()
+      : resolvePersistentUserDataDirectory(options.persistentUserDataDirectory)
   };
+}
+
+/**
+ * Validates and creates a persistent user-data profile directory.
+ *
+ * @param path - The `persistentUserDataDirectory` option.
+ * @returns The absolute path.
+ * @throws Error when the path is not absolute.
+ */
+function resolvePersistentUserDataDirectory(path: string): string {
+  if (!isAbsolute(path)) {
+    throw new Error(`persistentUserDataDirectory must be an absolute path, got: ${path}`);
+  }
+  mkdirSync(path, { recursive: true });
+  return path;
 }
 
 /**

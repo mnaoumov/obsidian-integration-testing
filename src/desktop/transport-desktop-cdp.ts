@@ -22,6 +22,7 @@
 import { randomBytes } from 'node:crypto';
 import {
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync
 } from 'node:fs';
@@ -93,6 +94,10 @@ import {
 } from './owned-instance/owned-instance-exited-error.ts';
 import { buildOwnedObsidianJson } from './owned-instance/owned-vault-seed.ts';
 import { buildParentLivenessWatchdogExpression } from './owned-instance/parent-liveness.ts';
+import {
+  acquirePersistentProfileLock,
+  mergePersistentObsidianJson
+} from './owned-instance/persistent-profile.ts';
 import { getVersionMetadata } from './versions/obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './versions/obsidian-version-switch.ts';
 
@@ -246,8 +251,19 @@ export interface OwnedInstanceConfig {
   readonly exePath: string;
 
   /**
-   * Absolute path to the isolated user-data directory. Created and owned by the
-   * transport, and deleted on dispose.
+   * Whether {@link userDataDirectory} is a persistent profile the caller keeps (the
+   * `persistentUserDataDirectory` option): the transport then merges into its
+   * `obsidian.json` instead of overwriting it, holds a lock on it while the instance
+   * runs, and never deletes it.
+   *
+   * @default `false`
+   */
+  readonly isPersistentUserDataDirectory?: boolean;
+
+  /**
+   * Absolute path to the user-data directory. A temporary one is created and owned
+   * by the transport, and deleted on dispose; a persistent one
+   * ({@link isPersistentUserDataDirectory}) is kept.
    */
 
   readonly userDataDirectory: string;
@@ -307,6 +323,13 @@ interface CdpTarget {
 interface CdpValue {
   readonly type: string;
   readonly value?: unknown;
+}
+
+interface DesktopCdpTransportSeedOwnedObsidianJsonParams {
+  readonly config: OwnedInstanceConfig;
+  readonly shouldAutoOpenVault: boolean;
+  readonly vaultId: string;
+  readonly vaultPath: string;
 }
 
 /**
@@ -398,6 +421,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * registry entry alone, because `vault-remove` would drop it from the user's vault list.
    */
   private readonly preRegisteredVaultPaths = new Set<string>();
+  // Releases the persistent profile's lock; set while an owned instance holds one.
+  private releasePersistentProfileLock: (() => void) | undefined;
   /**
    * Vault paths THIS transport opened via {@link registerVault}, normalized by
    * {@link normalizeVaultPathForComparison}. A worker attached to a
@@ -530,6 +555,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     await this.ownedInstance?.killAsync();
     await this.killOwnedInstanceSurvivors();
+    if (this.ownedConfig.isPersistentUserDataDirectory) {
+      this.releaseProfileLock();
+      return;
+    }
     const { userDataDirectory } = this.ownedConfig;
     const deadline = Date.now() + USER_DATA_RM_TIMEOUT_IN_MILLISECONDS;
     while (Date.now() < deadline) {
@@ -564,6 +593,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
     }
 
     this.ownedInstance?.kill();
+    if (this.ownedConfig.isPersistentUserDataDirectory) {
+      this.releaseProfileLock();
+      return;
+    }
     if (!didRemoveDirectory(this.ownedConfig.userDataDirectory)) {
       log(`[cdp-transport] Owned user-data directory not removed synchronously (process may still hold handles): ${this.ownedConfig.userDataDirectory}`);
     }
@@ -1645,11 +1678,16 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const config = ensureNonNullable(this.ownedConfig);
 
     mkdirSync(config.userDataDirectory, { recursive: true });
+    if (config.isPersistentUserDataDirectory && !this.releasePersistentProfileLock) {
+      // Taken before anything is written into the profile, so a refused run leaves it exactly as it found it.
+      this.releasePersistentProfileLock = acquirePersistentProfileLock(config.userDataDirectory);
+      log(`[cdp-transport] Using the persistent user-data profile ${config.userDataDirectory}; it is kept on dispose.`);
+    }
     if (config.asar) {
       copyAsarIntoUserData(config.asar.path, config.asar.version, config.userDataDirectory);
     }
 
-    const vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
+    let vaultId = randomBytes(VAULT_ID_BYTE_LENGTH).toString('hex');
 
     // A config-folder override is a `localStorage` entry, and `localStorage` needs a
     // renderer, so the vault must NOT auto-open: the instance boots to the starter
@@ -1674,8 +1712,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
       // `obsidian.json` as it opens a vault (it stamps the entry `open: true`), so a
       // relaunch that inherited the previous attempt's file would sail past the
       // starter screen the override needs.
-      const obsidianJson = buildOwnedObsidianJson({ shouldAutoOpenVault, ts: Date.now(), vaultId, vaultPath });
-      writeFileSync(join(config.userDataDirectory, 'obsidian.json'), JSON.stringify(obsidianJson));
+      vaultId = this.seedOwnedObsidianJson({ config, shouldAutoOpenVault, vaultId, vaultPath });
 
       const instance = await launchOwnedObsidianInstance({
         cdpHost: this.cdpHost,
@@ -1721,6 +1758,45 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
     }
     throw lastError instanceof Error ? lastError : new Error(`Owned vault at ${vaultPath} did not become ready`);
+  }
+
+  /**
+   * Releases the persistent profile's lock, if this transport holds one.
+   */
+  private releaseProfileLock(): void {
+    try {
+      this.releasePersistentProfileLock?.();
+    } catch (error: unknown) {
+      log(`[cdp-transport] Could not release the persistent profile lock (non-fatal): ${errorToString(error)}`);
+    }
+    this.releasePersistentProfileLock = undefined;
+  }
+
+  /**
+   * Writes the owned instance's `obsidian.json`: a fresh one-vault registry into a
+   * temporary profile, or the vault merged into a persistent profile's own registry,
+   * reusing the id that registry already gives the vault.
+   *
+   * @param params - The owned config, the vault, its candidate id and whether it auto-opens.
+   * @returns The id the vault is registered under.
+   */
+  private seedOwnedObsidianJson(params: DesktopCdpTransportSeedOwnedObsidianJsonParams): string {
+    const { config, shouldAutoOpenVault, vaultId, vaultPath } = params;
+    const obsidianJsonPath = join(config.userDataDirectory, 'obsidian.json');
+    if (!config.isPersistentUserDataDirectory) {
+      writeFileSync(obsidianJsonPath, JSON.stringify(buildOwnedObsidianJson({ shouldAutoOpenVault, ts: Date.now(), vaultId, vaultPath })));
+      return vaultId;
+    }
+
+    let existing: unknown;
+    try {
+      existing = JSON.parse(readFileSync(obsidianJsonPath, 'utf-8'));
+    } catch {
+      existing = undefined;
+    }
+    const merged = mergePersistentObsidianJson({ existing, newVaultId: vaultId, shouldAutoOpenVault, ts: Date.now(), vaultPath });
+    writeFileSync(obsidianJsonPath, JSON.stringify(merged.json));
+    return merged.vaultId;
   }
 
   /**
