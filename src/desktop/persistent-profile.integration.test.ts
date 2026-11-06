@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync
@@ -17,11 +18,17 @@ import {
 
 import { connectToCdp } from './connect-to-cdp.ts';
 import {
+  checkIsUpdatedAsarFileName,
+  PERSISTENT_PROFILE_HELD_ASARS_DIRECTORY_NAME
+} from './owned-instance/persistent-profile-updates.ts';
+import {
   PERSISTENT_PROFILE_LOCK_FILE_NAME,
   PersistentProfileInUseError
 } from './owned-instance/persistent-profile.ts';
 
 const LAUNCH_TIMEOUT_IN_MILLISECONDS = 240_000;
+const UPDATER_ASAR_FILE_NAME = 'obsidian-99.0.0.asar';
+const UPDATER_ASAR_CONTENT = 'not an asar: stands in for an updater download';
 const KEPT_VAULT_ID = 'a1b2c3d4e5f60718';
 const FOREIGN_VAULT_ID = 'f0f0f0f0f0f0f0f0';
 const MARKER_KEY = 'obsidian-integration-testing-persistent-profile-marker';
@@ -103,4 +110,36 @@ describe('persistentUserDataDirectory', () => {
       await second.dispose();
     }
   }, LAUNCH_TIMEOUT_IN_MILLISECONDS * 2);
+
+  it('should hold the profile\'s updated asars aside and disable the updater for the run, then restore both', async () => {
+    // Not a real asar: had the shell been left to pick it up (it outranks every real version), the boot would fail.
+    const updaterAsar = join(profile, UPDATER_ASAR_FILE_NAME);
+    writeFileSync(updaterAsar, UPDATER_ASAR_CONTENT);
+    const registryBefore = readRegistry(profile);
+    expect(Object.hasOwn(registryBefore, 'updateDisabled')).toBe(false);
+
+    const connection = await connectToCdp({ isObsidianAppVisible: false, persistentUserDataDirectory: profile, vault: vaultPath });
+    try {
+      expect(existsSync(updaterAsar)).toBe(false);
+      expect(readFileSync(join(profile, PERSISTENT_PROFILE_HELD_ASARS_DIRECTORY_NAME, UPDATER_ASAR_FILE_NAME), 'utf-8')).toBe(UPDATER_ASAR_CONTENT);
+      expect(readRegistry(profile)['updateDisabled']).toBe(true);
+      const appId = await connection.evalInObsidian({
+        callback({ app }): string {
+          return app.appId;
+        }
+      });
+      expect(appId).toBe(KEPT_VAULT_ID);
+    } finally {
+      await connection.dispose();
+    }
+
+    expect(readdirSync(profile).filter((fileName) => checkIsUpdatedAsarFileName(fileName))).toEqual([UPDATER_ASAR_FILE_NAME]);
+    expect(readFileSync(updaterAsar, 'utf-8')).toBe(UPDATER_ASAR_CONTENT);
+    expect(existsSync(join(profile, PERSISTENT_PROFILE_HELD_ASARS_DIRECTORY_NAME))).toBe(false);
+    expect(Object.hasOwn(readRegistry(profile), 'updateDisabled')).toBe(false);
+  }, LAUNCH_TIMEOUT_IN_MILLISECONDS);
 });
+
+function readRegistry(profile: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(profile, 'obsidian.json'), 'utf-8')) as Record<string, unknown>;
+}

@@ -11,7 +11,8 @@
  * - **`obsidian.json` is merged, never overwritten.** The profile's registry already
  *   lists the vault the owner connected to Sync, under the id Sync keys its
  *   connection to, so the vault is reused under that id, every other vault is kept,
- *   and only the auto-open markers change.
+ *   and only the auto-open markers and `updateDisabled` change (the latter only for
+ *   the run, see `persistent-profile-updates.ts`).
  * - **One instance per profile.** Two Electron processes on one user-data directory
  *   corrupt each other's `localStorage`, and Electron's own single-instance lock would
  *   hand the second launch to the first and exit. So the harness takes a lock file in
@@ -207,6 +208,8 @@ export function mergePersistentObsidianJson(params: MergePersistentObsidianJsonP
     ...rest,
     // eslint-disable-next-line camelcase -- Obsidian's own obsidian.json field name (old versions' auto-open marker).
     ...params.shouldAutoOpenVault && { last_open: vaultId },
+    // Stops the app's updater for the run; `restorePersistentProfileUpdates` puts the profile's own value back.
+    updateDisabled: true,
     vaults
   };
   return { json, vaultId };
