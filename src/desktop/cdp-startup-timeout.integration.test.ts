@@ -94,6 +94,7 @@ it('caps nested startup commands by the readiness budget even with a longer comm
     isServing = true;
     return Promise.resolve({
       cdpUrl: 'http://127.0.0.1:1',
+      expectExit: noop,
       kill: noop,
       killAsync: async () => {
         isServing = false;

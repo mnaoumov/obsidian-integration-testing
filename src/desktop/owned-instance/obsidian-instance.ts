@@ -84,6 +84,12 @@ export interface OwnedObsidianInstance {
   readonly cdpUrl: string;
 
   /**
+   * Records that the harness is about to end the instance itself (a graceful quit),
+   * so its exit is logged as asked for and leaves no exit marker.
+   */
+  readonly expectExit: () => void;
+
+  /**
   Kills the instance and its entire process tree.
    */
   readonly kill: () => void;
@@ -207,6 +213,9 @@ export async function launchOwnedObsidianInstance(
     log(`[obsidian-instance] Owned Obsidian is serving CDP at ${cdpUrl}.`);
     return {
       cdpUrl,
+      expectExit: (): void => {
+        isKillExpected = true;
+      },
       kill,
       killAsync,
       parentLivenessPort: livenessServer.port,
