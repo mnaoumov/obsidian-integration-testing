@@ -94,6 +94,7 @@ import {
 } from './owned-instance/owned-instance-exited-error.ts';
 import { buildOwnedObsidianJson } from './owned-instance/owned-vault-seed.ts';
 import { buildParentLivenessWatchdogExpression } from './owned-instance/parent-liveness.ts';
+import { holdPersistentProfileUpdates } from './owned-instance/persistent-profile-updates.ts';
 import {
   acquirePersistentProfileLock,
   mergePersistentObsidianJson
@@ -423,6 +424,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly preRegisteredVaultPaths = new Set<string>();
   // Releases the persistent profile's lock; set while an owned instance holds one.
   private releasePersistentProfileLock: (() => void) | undefined;
+  // Puts back the persistent profile's held-aside updater state; set while a run holds it.
+  private restorePersistentProfileUpdates: (() => void) | undefined;
   /**
    * Vault paths THIS transport opened via {@link registerVault}, normalized by
    * {@link normalizeVaultPathForComparison}. A worker attached to a
@@ -556,6 +559,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
     await this.ownedInstance?.killAsync();
     await this.killOwnedInstanceSurvivors();
     if (this.ownedConfig.isPersistentUserDataDirectory) {
+      // Windows briefly holds the killed process's handle on the asar it loaded, so the restore is retried like the directory removal below.
+      const deadline = Date.now() + USER_DATA_RM_TIMEOUT_IN_MILLISECONDS;
+      while (!this.tryRestoreProfileUpdates(Date.now() >= deadline)) {
+        await delay(USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS);
+      }
       this.releaseProfileLock();
       return;
     }
@@ -594,6 +602,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
 
     this.ownedInstance?.kill();
     if (this.ownedConfig.isPersistentUserDataDirectory) {
+      this.tryRestoreProfileUpdates(true);
       this.releaseProfileLock();
       return;
     }
@@ -1682,6 +1691,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
       // Taken before anything is written into the profile, so a refused run leaves it exactly as it found it.
       this.releasePersistentProfileLock = acquirePersistentProfileLock(config.userDataDirectory);
       log(`[cdp-transport] Using the persistent user-data profile ${config.userDataDirectory}; it is kept on dispose.`);
+      // Before the run's asar is provisioned: the shell loads the highest `obsidian-*.asar` in the profile, which would override the pin.
+      this.restorePersistentProfileUpdates = holdPersistentProfileUpdates(config.userDataDirectory);
     }
     if (config.asar) {
       copyAsarIntoUserData(config.asar.path, config.asar.version, config.userDataDirectory);
@@ -1832,6 +1843,28 @@ export class DesktopCdpTransport implements ObsidianTransport {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  /**
+   * Puts the persistent profile's held-aside updater state back, if this transport holds it.
+   *
+   * @param isLastAttempt - Whether a failure is final: it is then logged, and the hold
+   * is left for the next run on the profile to restore.
+   * @returns Whether the caller is done: restored, nothing held, or the last attempt failed.
+   */
+  private tryRestoreProfileUpdates(isLastAttempt: boolean): boolean {
+    try {
+      this.restorePersistentProfileUpdates?.();
+    } catch (error: unknown) {
+      if (!isLastAttempt) {
+        return false;
+      }
+      log(
+        `[cdp-transport] Could not put back the persistent profile's held-aside updater state (non-fatal); the next run on the profile restores it: ${errorToString(error)}`
+      );
+    }
+    this.restorePersistentProfileUpdates = undefined;
+    return true;
   }
 
   /**

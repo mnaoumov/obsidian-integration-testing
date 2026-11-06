@@ -66,6 +66,7 @@ describe('mergePersistentObsidianJson', () => {
     expect(result.json).toEqual({
       cli: true,
       last_open: 'research',
+      updateDisabled: true,
       vaults: {
         other: { path: '/vaults/other', ts: 1 },
         research: { open: true, path: '/vaults/Research', sync: 'kept', ts: TS }
@@ -76,7 +77,7 @@ describe('mergePersistentObsidianJson', () => {
   it('should register an unlisted vault under the new id', () => {
     const result = mergePersistentObsidianJson({ existing: undefined, newVaultId: 'fresh', shouldAutoOpenVault: true, ts: TS, vaultPath: '/v' });
 
-    expect(result).toEqual({ json: { last_open: 'fresh', vaults: { fresh: { open: true, path: '/v', ts: TS } } }, vaultId: 'fresh' });
+    expect(result).toEqual({ json: { last_open: 'fresh', updateDisabled: true, vaults: { fresh: { open: true, path: '/v', ts: TS } } }, vaultId: 'fresh' });
   });
 
   it('should withhold both auto-open markers when asked to', () => {
@@ -84,13 +85,13 @@ describe('mergePersistentObsidianJson', () => {
 
     const result = mergePersistentObsidianJson({ existing, newVaultId: 'fresh', shouldAutoOpenVault: false, ts: TS, vaultPath: '/v' });
 
-    expect(result).toEqual({ json: { vaults: { a: { path: '/v', ts: TS }, broken: 'not an entry' } }, vaultId: 'a' });
+    expect(result).toEqual({ json: { updateDisabled: true, vaults: { a: { path: '/v', ts: TS }, broken: 'not an entry' } }, vaultId: 'a' });
   });
 
   it('should read a registry whose vaults field is not an object as empty', () => {
     const result = mergePersistentObsidianJson({ existing: { vaults: [] }, newVaultId: 'fresh', shouldAutoOpenVault: false, ts: TS, vaultPath: '/v' });
 
-    expect(result.json).toEqual({ vaults: { fresh: { path: '/v', ts: TS } } });
+    expect(result.json).toEqual({ updateDisabled: true, vaults: { fresh: { path: '/v', ts: TS } } });
   });
 });
 
