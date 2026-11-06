@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 17.9.1
+
+- fix(desktop): let a persistent profile's instance quit before the kill
+- fix(desktop): hold a persistent profile's updater state aside for the run
+- test(android): close the long-press menu so its backdrop does not cover the next test
+- fix(android): press again when a long press is taken for a tap
+
 ## 17.9.0
 
 - feat(desktop): run the owned instance on a persistent user-data profile
