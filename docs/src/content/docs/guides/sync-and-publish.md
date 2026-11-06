@@ -24,6 +24,7 @@ It is also accepted by the `obsidian-cdp` transport options, so `createSetup` an
 2. Merges the vault into the profile's own `obsidian.json` instead of overwriting it. Every other vault stays registered, and a vault the profile already lists keeps its id. Sync keys its connection to that id, so a new one would leave the vault disconnected.
 3. Refuses a second run on the same profile, from this process or another one, with `PersistentProfileInUseError`. Two instances on one profile corrupt its `localStorage`. A lock left by a run that died is taken over.
 4. Keeps Obsidian's own updates out of the run, so `obsidianVersion` is honoured (next section).
+5. Lets Obsidian quit on `dispose()` before it kills the process, so what the run wrote to `localStorage` or IndexedDB (a sign-in, for example) reaches disk. Chromium writes storage lazily, and a hard kill a few seconds after a write loses it. An instance that does not quit within 30 seconds is killed anyway.
 
 ## Updates and `obsidianVersion`
 

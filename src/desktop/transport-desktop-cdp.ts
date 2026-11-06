@@ -376,6 +376,11 @@ const STARTER_SCREEN_POLL_INTERVAL_IN_MILLISECONDS = 250;
 const OWNED_WINDOW_OFFSCREEN_MARGIN_IN_PIXELS = 200;
 const OWNED_WINDOW_HIDE_TIMEOUT_IN_MILLISECONDS = 20_000;
 const OWNED_WINDOW_HIDE_POLL_INTERVAL_IN_MILLISECONDS = 250;
+// A persistent profile's instance is asked to quit before the hard kill, so Chromium writes its storage to disk; this bounds the wait for it to exit.
+// One quit took 15.0 s under bulk load (2026-11-05), so the budget has twice that.
+const PERSISTENT_PROFILE_QUIT_TIMEOUT_IN_MILLISECONDS = 30_000;
+const PERSISTENT_PROFILE_QUIT_POLL_INTERVAL_IN_MILLISECONDS = 250;
+const PERSISTENT_PROFILE_CLOSE_DELAY_IN_MILLISECONDS = 200;
 
 /**
  * Transport that communicates with Desktop Obsidian via Chrome DevTools Protocol.
@@ -556,6 +561,9 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return;
     }
 
+    if (this.ownedConfig.isPersistentUserDataDirectory) {
+      await this.quitPersistentInstanceGracefully();
+    }
     await this.ownedInstance?.killAsync();
     await this.killOwnedInstanceSurvivors();
     if (this.ownedConfig.isPersistentUserDataDirectory) {
@@ -1652,6 +1660,65 @@ export class DesktopCdpTransport implements ObsidianTransport {
     } finally {
       ws.close();
     }
+  }
+
+  /**
+   * Asks a persistent profile's instance to quit, and waits for it to exit,
+   * before the hard kill.
+   *
+   * Chromium writes `localStorage` to its LevelDB store lazily: the renderer
+   * batches its commits to the browser process, which writes them later still.
+   * A `taskkill /F` seconds after a write drops it, so a value set in a run (a
+   * Sync or Publish sign-in among them) was never read back by the next launch.
+   * Closing every window unloads it, which commits the renderer's pending changes,
+   * and the app then quits on its last window closing, which shuts the storage
+   * service down cleanly.
+   *
+   * Best-effort: an instance that does not exit within the budget is killed as
+   * before, and the reason is logged.
+   */
+  private async quitPersistentInstanceGracefully(): Promise<void> {
+    const instance = this.ownedInstance;
+    if (!instance || instance.readExitInfo()) {
+      return;
+    }
+
+    // The close waits a moment so the answer is sent first: closed at once, the window took the reply with it, and the evaluate hung for its whole command timeout (4 of 12 disposes, 2026-11-05).
+    const closeExpression = `(() => { setTimeout(() => { window.close(); }, ${String(PERSISTENT_PROFILE_CLOSE_DELAY_IN_MILLISECONDS)}); return 'closing'; })()`;
+
+    instance.expectExit();
+    try {
+      // Every window closes, so Electron's last-window-closed handler quits the app.
+      const targets = await this.getPageTargets();
+      for (const target of targets) {
+        const ws = await this.connectToTarget(target);
+        try {
+          const response = await this.sendCommand(ws, 'Runtime.evaluate', { expression: closeExpression, returnByValue: true });
+          if (response.result?.result?.value !== 'closing') {
+            throw new Error(`Unexpected answer from ${target.url}: ${JSON.stringify(response)}`);
+          }
+        } finally {
+          ws.close();
+        }
+      }
+    } catch (error: unknown) {
+      // The close may be under way even so, so the wait below still runs.
+      log(`[cdp-transport] Asking the persistent-profile instance to quit got no clean answer; waiting for it to exit anyway: ${errorToString(error)}`);
+    }
+    const startedAt = Date.now();
+    const deadline = startedAt + PERSISTENT_PROFILE_QUIT_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      // The launched process exiting is not enough after a relaunch hand-off: the CDP port must be free too.
+      const portOwnerPids = instance.readExitInfo() ? await listOwnedInstancePortOwnerPidsAsync(instance.port) : undefined;
+      if (portOwnerPids?.length === 0) {
+        log(`[cdp-transport] The persistent-profile instance quit after ${String(Date.now() - startedAt)}ms, with its storage written to disk.`);
+        return;
+      }
+      await delay(PERSISTENT_PROFILE_QUIT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+    log(
+      `[cdp-transport] The persistent-profile instance did not exit within ${String(PERSISTENT_PROFILE_QUIT_TIMEOUT_IN_MILLISECONDS)}ms of being asked to quit; killing it, so storage written in the last seconds may be lost.`
+    );
   }
 
   /**
