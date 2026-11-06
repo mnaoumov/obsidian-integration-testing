@@ -6556,6 +6556,7 @@
     "downloads": {
       "asar": "https://releases.obsidian.md/release/obsidian-1.15.1.asar.gz"
     },
-    "minRecommendedInstallerVersion": "1.1.9"
+    "minRecommendedInstallerVersion": "1.1.9",
+    "minRecommendedElectronVersion": "28.2.3"
   }
 }
