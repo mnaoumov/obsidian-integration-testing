@@ -567,9 +567,23 @@ describe('mobile trusted input', () => {
           };
         } finally {
           navFile.removeEventListener('contextmenu', listener, { capture: true });
-          // A real menu leaks into the next test unless it is taken down (**L11**).
-          for (const menu of document.querySelectorAll('.menu')) {
-            menu.remove();
+          // A real menu leaks into the next test unless it is taken down (**L11**). On mobile it is closed
+          // with Escape rather than removed: the menu draws a `.suggestion-bg` backdrop beside its `.menu`,
+          // and removing only the `.menu` left that backdrop over the page, where it took the next test's tap.
+          if (document.querySelector('.menu')) {
+            await lib.pressKey({ key: 'Escape' });
+            try {
+              await lib.waitUntil({
+                message: 'Escape to close the menu and its backdrop',
+                predicate: () => document.querySelector('.menu, .suggestion-bg') === null
+              });
+            } catch {
+              // The removal below is the fallback, so a menu that ignores Escape still cannot leak.
+            }
+          }
+
+          for (const element of document.querySelectorAll('.menu, .suggestion-bg')) {
+            element.remove();
           }
         }
       },
@@ -637,8 +651,21 @@ describe('mobile trusted input', () => {
             menuItemCount: document.querySelectorAll('.menu-item').length
           };
         } finally {
-          for (const menu of document.querySelectorAll('.menu')) {
-            menu.remove();
+          // Closed the way the file-menu test closes its menu, for the same backdrop reason.
+          if (document.querySelector('.menu')) {
+            await lib.pressKey({ key: 'Escape' });
+            try {
+              await lib.waitUntil({
+                message: 'Escape to close the link menu and its backdrop',
+                predicate: () => document.querySelector('.menu, .suggestion-bg') === null
+              });
+            } catch {
+              // The removal below is the fallback.
+            }
+          }
+
+          for (const element of document.querySelectorAll('.menu, .suggestion-bg')) {
+            element.remove();
           }
         }
       },
