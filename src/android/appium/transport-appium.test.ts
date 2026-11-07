@@ -9,6 +9,7 @@ import {
   vi
 } from 'vitest';
 
+import type { AppReadyAfterWindowRecoveryProbe } from '../app-ready-after-window-recovery.ts';
 import type { StartupProbeResult } from '../app-startup-progress.ts';
 import type { GzipTarForToyboxParams } from '../tar-checksum.ts';
 
@@ -20,6 +21,7 @@ import {
   drainAndroidWriteLossRewrites,
   installAndroidWriteLossGuard
 } from '../android-write-loss-guard.ts';
+import { probeAppReadyAfterWindowRecovery } from '../app-ready-after-window-recovery.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
 import { AppiumTransport } from './transport-appium.ts';
 
@@ -54,6 +56,15 @@ interface ExecOptions extends Record<string, unknown> {
 const STARTED_PROBE: StartupProbeResult = {
   hasApp: true,
   hasWorkspace: true,
+  isLayoutReady: true
+};
+
+/**
+ * What the post-recovery readiness probe reports once Obsidian is fully up in the recovered window.
+ */
+const READY_AFTER_RECOVERY: AppReadyAfterWindowRecoveryProbe = {
+  hasApp: true,
+  hasPlugins: true,
   isLayoutReady: true
 };
 
@@ -724,27 +735,91 @@ describe('AppiumTransport.evaluate', () => {
     expect(result).toBe('(no output)');
   });
 
+  /**
+   * Routes the readiness probe the transport sends after a window recovery to `probeResults` (one per call,
+   * the last repeated), and every other script to `evalResults`.
+   */
+  function routeExecute(evalResults: readonly (Error | string)[], probeResults: readonly unknown[] = [READY_AFTER_RECOVERY]): void {
+    let evalIndex = 0;
+    let probeIndex = 0;
+    mockBrowser.execute.mockImplementation((script: unknown): unknown => {
+      if (script === probeAppReadyAfterWindowRecovery) {
+        const result = probeResults[Math.min(probeIndex, probeResults.length - 1)];
+        probeIndex++;
+        return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
+      }
+      const result = evalResults[Math.min(evalIndex, evalResults.length - 1)];
+      evalIndex++;
+      return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
+    });
+  }
+
+  function countEvalCalls(): number {
+    return mockBrowser.execute.mock.calls.filter(([script]) => script !== probeAppReadyAfterWindowRecovery).length;
+  }
+
   it('re-attaches ChromeDriver and retries the same eval once when it found its window closed', async () => {
-    mockBrowser.execute
-      .mockRejectedValueOnce(new Error('no such window: target window already closed\nfrom unknown error: web view not found'))
-      .mockResolvedValue('"ok"');
+    routeExecute([new Error('no such window: target window already closed\nfrom unknown error: web view not found'), '"ok"']);
 
     await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).resolves.toBe('"ok"');
     expect(mockBrowser.switchToWindow).toHaveBeenCalledWith('CDwindow-new');
-    expect(mockBrowser.execute).toHaveBeenCalledTimes(2);
+    expect(countEvalCalls()).toBe(2);
   });
 
   it('retries a closed window only once, and re-attaches again on the next eval', async () => {
-    mockBrowser.execute
-      .mockRejectedValueOnce(new Error('no such window: target window already closed'))
-      .mockRejectedValueOnce(new Error('no such window: target window already closed'))
-      .mockResolvedValue('"ok"');
+    routeExecute([new Error('no such window: target window already closed'), new Error('no such window: target window already closed'), '"ok"']);
 
     await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).rejects.toThrow('no such window');
-    expect(mockBrowser.execute).toHaveBeenCalledTimes(2);
+    expect(countEvalCalls()).toBe(2);
 
     await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).resolves.toBe('"ok"');
     expect(mockBrowser.switchToWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for Obsidian\'s app in the recovered window before retrying the eval', async () => {
+    vi.useFakeTimers();
+    try {
+      const notReady: AppReadyAfterWindowRecoveryProbe = { hasApp: false, hasPlugins: false, isLayoutReady: false };
+      const noPlugins: AppReadyAfterWindowRecoveryProbe = { hasApp: true, hasPlugins: false, isLayoutReady: false };
+      routeExecute([new Error('no such window: target window already closed'), '"ok"'], [notReady, noPlugins, READY_AFTER_RECOVERY]);
+
+      const result = transport.evaluate('"hello"', { cwd: '/tmp' });
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toBe('"ok"');
+
+      const scripts = mockBrowser.execute.mock.calls.map(([script]) => script === probeAppReadyAfterWindowRecovery ? 'probe' : 'eval');
+      expect(scripts).toEqual(['eval', 'probe', 'probe', 'probe', 'eval']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails with a named error when the recovered window never gets Obsidian\'s app', async () => {
+    vi.useFakeTimers();
+    try {
+      transport = new AppiumTransport({
+        appStartTimeoutInMilliseconds: 2000,
+        browser: strictProxy<Browser>(mockBrowser),
+        deviceId: 'emulator-5554',
+        platform: 'android'
+      });
+      routeExecute([new Error('no such window: target window already closed'), '"ok"'], [{ hasApp: false, hasPlugins: false, isLayoutReady: false }]);
+
+      const result = transport.evaluate('"hello"', { cwd: '/tmp' });
+      const assertion = expect(result).rejects.toThrow('After a WebView window recovery, Obsidian Mobile was not ready within 2000ms');
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(countEvalCalls()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails at once when the session ends while waiting after a window recovery', async () => {
+    routeExecute([new Error('no such window: target window already closed'), '"ok"'], [new Error('A session is either terminated or not started')]);
+
+    await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).rejects.toThrow('The Appium session ended while waiting for Obsidian');
+    expect(countEvalCalls()).toBe(1);
   });
 
   it('does not retry an error that is not a closed window', async () => {

@@ -84,6 +84,11 @@ import {
   installAndroidWriteLossGuard
 } from '../android-write-loss-guard.ts';
 import {
+  checkIsAppReadyAfterWindowRecovery,
+  describeAppReadyAfterWindowRecoveryProbe,
+  probeAppReadyAfterWindowRecovery
+} from '../app-ready-after-window-recovery.ts';
+import {
   buildStartupTimeoutMessage,
   checkAppStarted,
   checkLayoutReady,
@@ -842,6 +847,7 @@ export class AppiumTransport implements ObsidianTransport {
     if (this.isWebViewWindowStale) {
       // Clears the flag before it can call back in here, so this never recurses.
       await this.recoverWebViewWindow();
+      await this.waitForAppAfterWindowRecovery();
     }
 
     if (this.isInWebViewContext) {
@@ -1272,6 +1278,13 @@ export class AppiumTransport implements ObsidianTransport {
   private async recoverWebViewWindow(): Promise<void> {
     this.isWebViewWindowStale = false;
 
+    /*
+     * The page the trusted-input channel was attached to may be the one that closed. Dropping the channel
+     * makes the next eval reconnect to the page that is there now, instead of sending input to a target
+     * that never answers (a 30 s `Input.dispatchTouchEvent` timeout after a recovery, AGENTS.md L81).
+     */
+    await this.disposeInputChannel();
+
     try {
       const handles = await this.browser.getWindowHandles();
       const handle = handles.at(-1);
@@ -1366,6 +1379,66 @@ export class AppiumTransport implements ObsidianTransport {
 
     process.off('exit', this.disposeInputChannelOnExit);
     this.disposeInputChannelOnExit = null;
+  }
+
+  /**
+   * After {@link recoverWebViewWindow}, waits until the page ChromeDriver now holds has Obsidian's `app`,
+   * its plugin registry and a laid-out workspace.
+   *
+   * A closed window is often a page being replaced, so the recovered one can still be loading. An eval run
+   * there failed inside the harness's wrapper with `Cannot read properties of undefined (reading
+   * 'plugins')`, which surfaced as a test failure (AGENTS.md L81). The budget is the app-start one, since a
+   * replaced page can mean an app cold start. A window that closes again is recovered again, at most every
+   * {@link WINDOW_RECOVERY_INTERVAL_IN_MILLISECONDS}, and an ended session fails at once.
+   *
+   * @throws Error when the page is not ready within the app-start budget.
+   */
+  private async waitForAppAfterWindowRecovery(): Promise<void> {
+    const start = Date.now();
+    const deadline = start + this.appStartTimeoutInMilliseconds;
+    let lastRecoveryAt = start;
+    let lastDescription = 'the WebView did not answer the probe';
+    let pollCount = 0;
+
+    while (Date.now() < deadline) {
+      pollCount++;
+      let probe: unknown;
+      try {
+        probe = await this.browser.execute(probeAppReadyAfterWindowRecovery);
+      } catch (error: unknown) {
+        const failure = classifyWebViewProbeFailure(error);
+        if (failure === 'session-terminated') {
+          throw new Error(`The Appium session ended while waiting for Obsidian after a WebView window recovery: ${errorToString(error)}`, {
+            cause: error
+          });
+        }
+        if (failure === 'window-closed' && Date.now() - lastRecoveryAt >= WINDOW_RECOVERY_INTERVAL_IN_MILLISECONDS) {
+          log(`[appium-transport] The recovered WebView window closed too (${errorToString(error)}); recovering again.`);
+          await this.recoverWebViewWindow();
+          lastRecoveryAt = Date.now();
+        }
+      }
+
+      if (checkIsAppReadyAfterWindowRecovery(probe)) {
+        if (pollCount > 1) {
+          log(`[appium-transport] Obsidian is ready in the recovered WebView window after ${String(Date.now() - start)}ms (${String(pollCount)} probe(s)).`);
+        }
+        this.isInWebViewContext = true;
+        return;
+      }
+
+      const description = describeAppReadyAfterWindowRecoveryProbe(probe);
+      if (description !== lastDescription || pollCount === 1) {
+        log(`[appium-transport] Waiting for Obsidian in the recovered WebView window: ${description} (elapsed=${String(Date.now() - start)}ms).`);
+      }
+      lastDescription = description;
+      await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+
+    throw new Error(
+      `After a WebView window recovery, Obsidian Mobile was not ready within ${String(this.appStartTimeoutInMilliseconds)}ms `
+        + `(${String(pollCount)} probe(s)); last reading: ${lastDescription}.`
+    );
   }
 
   /**
