@@ -81,7 +81,8 @@ const ANDROID_TEST_FILES = [
   'src/vault/headless-vault-config.android.integration.test.ts',
   'src/android/soft-keyboard/soft-keyboard.android.integration.test.ts',
   'src/android/android-write-loss-guard.android.integration.test.ts',
-  'src/plugin/plugin-lifecycle.android.integration.test.ts'
+  'src/plugin/plugin-lifecycle.android.integration.test.ts',
+  'src/android/activity-resume.android.integration.test.ts'
 ];
 
 // Its desktop counterpart runs serially for the reason L11 gives consumers: trusted input targets the
