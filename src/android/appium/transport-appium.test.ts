@@ -724,15 +724,34 @@ describe('AppiumTransport.evaluate', () => {
     expect(result).toBe('(no output)');
   });
 
-  it('re-attaches ChromeDriver on the next eval after one found its window closed', async () => {
+  it('re-attaches ChromeDriver and retries the same eval once when it found its window closed', async () => {
     mockBrowser.execute
+      .mockRejectedValueOnce(new Error('no such window: target window already closed\nfrom unknown error: web view not found'))
+      .mockResolvedValue('"ok"');
+
+    await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).resolves.toBe('"ok"');
+    expect(mockBrowser.switchToWindow).toHaveBeenCalledWith('CDwindow-new');
+    expect(mockBrowser.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a closed window only once, and re-attaches again on the next eval', async () => {
+    mockBrowser.execute
+      .mockRejectedValueOnce(new Error('no such window: target window already closed'))
       .mockRejectedValueOnce(new Error('no such window: target window already closed'))
       .mockResolvedValue('"ok"');
 
     await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).rejects.toThrow('no such window');
-    expect(mockBrowser.switchToWindow).not.toHaveBeenCalled();
+    expect(mockBrowser.execute).toHaveBeenCalledTimes(2);
 
     await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).resolves.toBe('"ok"');
-    expect(mockBrowser.switchToWindow).toHaveBeenCalledWith('CDwindow-new');
+    expect(mockBrowser.switchToWindow).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry an error that is not a closed window', async () => {
+    mockBrowser.execute.mockRejectedValueOnce(new Error('javascript error: boom'));
+
+    await expect(transport.evaluate('"hello"', { cwd: '/tmp' })).rejects.toThrow('boom');
+    expect(mockBrowser.execute).toHaveBeenCalledTimes(1);
+    expect(mockBrowser.switchToWindow).not.toHaveBeenCalled();
   });
 });

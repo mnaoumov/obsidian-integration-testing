@@ -529,56 +529,22 @@ export class AppiumTransport implements ObsidianTransport {
    */
   // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `TransportEvalOptions` is one bag shared by the `evaluate` of both transports, so no per-owner name can satisfy both.
   public async evaluate(expression: string, _options: TransportEvalOptions): Promise<string> {
-    await this.ensureWebViewContext();
-    await this.ensureInputChannel();
-
     try {
-      /*
-       * The cap is enforced HERE, on the Node side, and not by the `timeouts.script` capability the
-       * Session also declares. Measured on a live emulator: the capability is accepted and reads
-       * Back as 30000 in the WebView context, and nothing ever enforces it — over-cap closures in both the
-       * Sleeping and the spinning shape, with and without an explicit `setTimeouts`, ran past a 60s ceiling
-       * Without WebDriver raising `script timeout` even once. What actually happens past roughly half a
-       * Minute is worse than a late answer: the closure COMPLETES in the guest on schedule (timers armed at
-       * 30s and 40s fired within ~13ms of nominal, on a visible and focused page) and its Execute Script
-       * Response never reaches this client — so the promise below simply never settles.
-       *
-       * A hang is the one failure mode a test author cannot act on, so the wait is bounded here.
-       */
-      const result = await this.evaluateWithinCap(`return (${expression})`);
-
-      return result ?? NO_OUTPUT;
+      return await this.evaluateOnce(expression);
     } catch (error: unknown) {
       /*
-       * A cap overrun is the one failure here that says nothing about the context: the closure outstayed
-       * Its budget, the WebView is still the WebView. Resetting the flag would charge the NEXT eval a
-       * ~17s `switchContext` (**L19**) to recover from something that was never lost.
+       * ChromeDriver answers `no such window` when the page it was attached to is gone, before it runs
+       * The script, so the closure never started and running it again is safe. An intent that brings
+       * Obsidian's activity back to the front (a share sheet, `am start`) leaves exactly that dead handle
+       * (AGENTS.md L81). So the window is re-attached and the eval retried ONCE, in place: failing this
+       * Eval and fixing only the next one made every caller write its own retry.
        */
-      if (error instanceof EvalCapExceededError) {
+      if (classifyWebViewProbeFailure(error) !== 'window-closed') {
         throw error;
       }
 
-      // Context may have been lost mid-execution (e.g. page reload).
-      this.isInWebViewContext = false;
-      if (classifyWebViewProbeFailure(error) === 'window-closed') {
-        this.isWebViewWindowStale = true;
-      }
-
-      /*
-       * Kept as a fast path even though this driver was measured never raising it: it costs nothing,
-       * It is the correct translation if a future driver does enforce the capability, and it keeps the two
-       * Transports reporting one error for one condition.
-       */
-      if (isScriptTimeoutError(error)) {
-        throw new EvalCapExceededError({
-          capInMilliseconds: this.scriptTimeoutInMilliseconds,
-          cause: error,
-          optionName: 'scriptTimeoutInMilliseconds',
-          transportName: 'Android (Appium)'
-        });
-      }
-
-      throw error;
+      log(`[appium-transport] Eval found ChromeDriver's window closed; re-attaching the WebView and retrying once: ${errorToString(error)}`);
+      return await this.evaluateOnce(expression);
     }
   }
 
@@ -910,6 +876,66 @@ export class AppiumTransport implements ObsidianTransport {
     }
 
     throw new Error(`No ${WEBVIEW_CONTEXT_PREFIX} context found within ${String(this.webviewTimeoutInMilliseconds)}ms. Is the Obsidian app fully loaded?`);
+  }
+
+  /**
+   * One attempt of {@link AppiumTransport.evaluate}.
+   *
+   * @param expression - The JavaScript expression to evaluate.
+   * @returns The normalized result string.
+   */
+  private async evaluateOnce(expression: string): Promise<string> {
+    await this.ensureWebViewContext();
+    await this.ensureInputChannel();
+
+    try {
+      /*
+       * The cap is enforced HERE, on the Node side, and not by the `timeouts.script` capability the
+       * Session also declares. Measured on a live emulator: the capability is accepted and reads
+       * Back as 30000 in the WebView context, and nothing ever enforces it — over-cap closures in both the
+       * Sleeping and the spinning shape, with and without an explicit `setTimeouts`, ran past a 60s ceiling
+       * Without WebDriver raising `script timeout` even once. What actually happens past roughly half a
+       * Minute is worse than a late answer: the closure COMPLETES in the guest on schedule (timers armed at
+       * 30s and 40s fired within ~13ms of nominal, on a visible and focused page) and its Execute Script
+       * Response never reaches this client — so the promise below simply never settles.
+       *
+       * A hang is the one failure mode a test author cannot act on, so the wait is bounded here.
+       */
+      const result = await this.evaluateWithinCap(`return (${expression})`);
+
+      return result ?? NO_OUTPUT;
+    } catch (error: unknown) {
+      /*
+       * A cap overrun is the one failure here that says nothing about the context: the closure outstayed
+       * Its budget, the WebView is still the WebView. Resetting the flag would charge the NEXT eval a
+       * ~17s `switchContext` (**L19**) to recover from something that was never lost.
+       */
+      if (error instanceof EvalCapExceededError) {
+        throw error;
+      }
+
+      // Context may have been lost mid-execution (e.g. page reload).
+      this.isInWebViewContext = false;
+      if (classifyWebViewProbeFailure(error) === 'window-closed') {
+        this.isWebViewWindowStale = true;
+      }
+
+      /*
+       * Kept as a fast path even though this driver was measured never raising it: it costs nothing,
+       * It is the correct translation if a future driver does enforce the capability, and it keeps the two
+       * Transports reporting one error for one condition.
+       */
+      if (isScriptTimeoutError(error)) {
+        throw new EvalCapExceededError({
+          capInMilliseconds: this.scriptTimeoutInMilliseconds,
+          cause: error,
+          optionName: 'scriptTimeoutInMilliseconds',
+          transportName: 'Android (Appium)'
+        });
+      }
+
+      throw error;
+    }
   }
 
   /**
