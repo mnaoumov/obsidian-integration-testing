@@ -91,6 +91,29 @@ class P extends Plugin {
 module.exports = P; exports.default = P;
 `;
 
+/**
+ * A dummy listed in `community-plugins.json` itself rather than in `enableCommunityPlugins`, so nothing but
+ * Obsidian's own startup ever loads it. Its `onload` records what the workspace looked like, which the
+ * companion test reads: a startup load runs before `workspace.loadLayout()` sets `rootSplit`.
+ */
+export const STARTUP_PROBE_PLUGIN_ID = 'enable-extra-startup-probe';
+
+/*
+ * The startup probe. The record lives on `window` rather than on the plugin, so it is readable without
+ * assuming the plugin loaded at all.
+ */
+const STARTUP_PROBE_PLUGIN_SOURCE = `const { Plugin } = require('obsidian');
+class P extends Plugin {
+  onload() {
+    window.obsidianIntegrationTestingStartupProbe = {
+      isLayoutReady: this.app.workspace.layoutReady === true,
+      isRootSplitNull: this.app.workspace.rootSplit === null
+    };
+  }
+}
+module.exports = P; exports.default = P;
+`;
+
 let demoVaultPath: string | undefined;
 
 const setupPair = createSetup({
@@ -127,13 +150,11 @@ function buildDemoVaultPopulateForTest(): PopulateFilesParams {
   demoVaultPath = mkdtempSync(join(tmpdir(), 'enable-community-plugins-demo-vault-'));
   writeFileSync(join(demoVaultPath, 'note.md'), '# Demo note\n');
 
-  for (const pluginId of EXTRA_PLUGIN_IDS) {
+  const pluginIds = [...EXTRA_PLUGIN_IDS, STARTUP_PROBE_PLUGIN_ID];
+  for (const pluginId of pluginIds) {
     const pluginDirectory = join(demoVaultPath, '.obsidian', 'plugins', pluginId);
     mkdirSync(pluginDirectory, { recursive: true });
-    writeFileSync(
-      join(pluginDirectory, 'main.js'),
-      pluginId === PATCHING_PLUGIN_ID ? PATCHING_PLUGIN_SOURCE : PLAIN_PLUGIN_SOURCE
-    );
+    writeFileSync(join(pluginDirectory, 'main.js'), resolvePluginSource(pluginId));
     writeFileSync(
       join(pluginDirectory, 'manifest.json'),
       JSON.stringify({
@@ -148,8 +169,33 @@ function buildDemoVaultPopulateForTest(): PopulateFilesParams {
     );
   }
 
-  return buildDemoVaultPopulate({
-    demoVaultPath,
-    injectPlugins: EXTRA_PLUGIN_IDS.map((pluginId) => ({ pluginId }))
-  });
+  return {
+    ...buildDemoVaultPopulate({
+      demoVaultPath,
+      injectPlugins: pluginIds.map((pluginId) => ({ pluginId }))
+    }),
+    // `installPlugin: false` leaves this file to the populate map, so the startup probe is the only plugin
+    // enabled when the vault opens.
+    '.obsidian/community-plugins.json': JSON.stringify([STARTUP_PROBE_PLUGIN_ID])
+  };
+}
+
+/**
+ * Picks a dummy plugin's `main.js`.
+ *
+ * @param pluginId - The dummy's id.
+ * @returns Its source.
+ */
+function resolvePluginSource(pluginId: string): string {
+  switch (pluginId) {
+    case PATCHING_PLUGIN_ID: {
+      return PATCHING_PLUGIN_SOURCE;
+    }
+    case STARTUP_PROBE_PLUGIN_ID: {
+      return STARTUP_PROBE_PLUGIN_SOURCE;
+    }
+    default: {
+      return PLAIN_PLUGIN_SOURCE;
+    }
+  }
 }

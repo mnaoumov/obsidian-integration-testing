@@ -20,7 +20,7 @@ import { createSetup } from 'obsidian-integration-testing/vitest-global-setup-pl
 export const { setup, teardown } = createSetup({ pluginEnableTiming: 'after-layout-ready' });
 ```
 
-The default, `'app-start'`, lists the plugin in `community-plugins.json` before the vault opens. `'after-layout-ready'` leaves it out, and the harness enables it once the layout is ready. To run every suite both ways, define two projects that differ only in the global setup they use. The option is available on the Jest adapter too.
+The default, `'app-start'`, lists the plugin in `community-plugins.json` before the vault opens, so Obsidian loads it during startup, before the workspace layout exists (`app.workspace.rootSplit` is still `null` in its `onload`). On desktop a fresh harness profile opens the vault with community plugins off, so the harness turns them on and reloads the window once to get that startup load. The setup log says which timing the plugin got. `'after-layout-ready'` leaves it out, and the harness enables it once the layout is ready. To run every suite both ways, define two projects that differ only in the global setup they use. The option is available on the Jest adapter too.
 
 ## A fresh install and a corrupt `data.json`
 

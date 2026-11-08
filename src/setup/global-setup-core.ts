@@ -27,6 +27,7 @@ import {
 import process, { loadEnvFile } from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import type { CommonArguments } from '../eval/eval-in-obsidian.ts';
 import type { EnablePluginResult } from '../plugin/enable-plugin.ts';
 import type { ObsidianTransportOptions } from '../transport/transport-options.ts';
 import type { ObsidianTransport } from '../transport/transport.ts';
@@ -305,6 +306,46 @@ interface EnablePluginInVaultParams {
 }
 
 /**
+ * Parameters for {@link logPluginStartupLoad}.
+ */
+interface LogPluginStartupLoadParams {
+  /**
+  Short label for log messages.
+   */
+  readonly label: string;
+
+  /**
+  The id of the plugin under test.
+   */
+  readonly pluginId: string;
+
+  /**
+  Whether the plugin was enabled in `community-plugins.json`, so it should have loaded with the vault.
+   */
+  readonly shouldEnableOnLoad: boolean;
+
+  /**
+  The temp vault the plugin was copied into.
+   */
+  readonly temporaryVault: TemporaryVault;
+
+  /**
+  The transport to evaluate against.
+   */
+  readonly transport: ObsidianTransport;
+}
+
+/**
+ * The input {@link logPluginStartupLoad} sends into Obsidian.
+ */
+interface PluginStartupLoadInput {
+  /**
+  The id of the plugin under test.
+   */
+  readonly pluginId: string;
+}
+
+/**
  * Parameters for {@link skipIfDesktopOnly}.
  */
 interface SkipIfDesktopOnlyParams {
@@ -452,6 +493,7 @@ export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupRes
     log(`[integration-setup:${label}] Vault registered.`);
 
     if (pluginId !== undefined) {
+      await logPluginStartupLoad({ label, pluginId, shouldEnableOnLoad: checkShouldEnableOnLoad(params), temporaryVault, transport });
       await enablePluginInVault({ label, pluginId, temporaryVault, transport, transportOptions });
     }
 
@@ -907,6 +949,44 @@ function findProjectRoot(): string {
  */
 function getLockScope(transportOptions: ObsidianTransportOptions | undefined): string | undefined {
   return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_SETUP_LOCK_SCOPE : undefined;
+}
+
+/**
+ * Says which enable timing actually happened for the plugin under test: whether it was already loaded
+ * when the vault became ready (it loaded during startup) or is loaded only now, after the layout, by
+ * {@link enablePluginInVault}. The install line states the intent; this line states the outcome, so a
+ * suite that means to test a startup load can see that it got one.
+ *
+ * @param params - The plugin, the vault and the intended timing.
+ */
+async function logPluginStartupLoad(params: LogPluginStartupLoadParams): Promise<void> {
+  const { label, pluginId, shouldEnableOnLoad, temporaryVault, transport } = params;
+  let isLoaded: boolean;
+  try {
+    isLoaded = await evalInObsidian({
+      callback({ app, pluginId: id }: CommonArguments & PluginStartupLoadInput): boolean {
+        return Object.hasOwn(app.plugins.plugins, id);
+      },
+      input: { pluginId },
+      shouldSkipPreflightChecks: true,
+      transport,
+      vaultPath: temporaryVault.path
+    });
+  } catch (error: unknown) {
+    log(`[integration-setup:${label}] Could not check whether "${pluginId}" loaded at startup (non-fatal): ${errorToString(error)}`);
+    return;
+  }
+
+  if (isLoaded) {
+    log(`[integration-setup:${label}] Plugin "${pluginId}" loaded during startup, before the layout was ready.`);
+  } else if (shouldEnableOnLoad) {
+    log(
+      `[integration-setup:${label}] WARNING: Plugin "${pluginId}" was enabled to load with the vault but did not load at startup; `
+        + 'it is enabled now, after the layout, so this run does not test its startup load.'
+    );
+  } else {
+    log(`[integration-setup:${label}] Plugin "${pluginId}" was not loaded at startup, as pluginEnableTiming: after-layout-ready asks; enabling it now.`);
+  }
 }
 
 /**
