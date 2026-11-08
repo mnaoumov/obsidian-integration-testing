@@ -39,6 +39,7 @@ import type { ElectronCompatibility } from './compatibility/electron-compatibili
 import type { InstallerCompatibility } from './compatibility/installer-compatibility.ts';
 import type { RendererBootObservation } from './compatibility/renderer-boot-detection.ts';
 import type { OwnedObsidianInstance } from './owned-instance/obsidian-instance.ts';
+import type { StartupPluginLoad } from './owned-instance/startup-plugin-load.ts';
 
 import {
   buildDeviceMetricsOverride,
@@ -99,6 +100,12 @@ import {
   acquirePersistentProfileLock,
   mergePersistentObsidianJson
 } from './owned-instance/persistent-profile.ts';
+import {
+  buildEnableCommunityPluginsAndReloadExpression,
+  checkShouldReloadForStartupPlugins,
+  parseStartupPluginLoad,
+  STARTUP_PLUGIN_LOAD_PROBE_EXPRESSION
+} from './owned-instance/startup-plugin-load.ts';
 import { getVersionMetadata } from './versions/obsidian-metadata.ts';
 import { copyAsarIntoUserData } from './versions/obsidian-version-switch.ts';
 
@@ -1590,6 +1597,63 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * The readiness poll of {@link waitForOwnedVaultReady}.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async pollOwnedVaultReady(vaultPath: string): Promise<void> {
+    log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    this.ownedReadinessDeadline = deadline;
+    try {
+      let documentCompleteSince: null | number = null;
+      let isReady = false;
+      let lastReadinessError: unknown;
+      while (Date.now() < deadline) {
+        try {
+          await this.findTargetForVault(vaultPath);
+          await this.waitForLayoutReady(vaultPath);
+          await this.dismissTrustDialog(vaultPath);
+          isReady = true;
+          break;
+        } catch (error: unknown) {
+          lastReadinessError = error;
+          // The vault is not ready yet — also drop the cached CDP connection before
+          // retrying. Old (Electron 10-era) Obsidian reloads the owned window during
+          // boot, which can leave the cached WebSocket pinned to a stale execution
+          // context; reconnecting each attempt re-binds to the live context.
+          this.disconnect();
+        }
+
+        if (this.deadBootGraceInMilliseconds > 0 && Date.now() < deadline) {
+          const observation = await this.probeRendererBootState();
+          if (observation) {
+            if (observation.isDocumentComplete && documentCompleteSince === null) {
+              documentCompleteSince = Date.now();
+            }
+            const hasGraceElapsed = documentCompleteSince !== null
+              && Date.now() - documentCompleteSince >= this.deadBootGraceInMilliseconds;
+            if (resolveRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
+              log('[cdp-transport] Owned renderer failed to initialize (dead boot); failing fast.');
+              throw new RendererFailedToInitializeError(vaultPath);
+            }
+          }
+        }
+
+        await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+      }
+
+      if (!isReady) {
+        throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms: ${errorToString(lastReadinessError)}`, {
+          cause: lastReadinessError
+        });
+      }
+    } finally {
+      this.ownedReadinessDeadline = undefined;
+    }
+  }
+
+  /**
    * Samples the vault renderer's bootstrap state — whether the document is
    * `complete`, whether `window.app` exists, and the `<body>` child count — from
    * the first page target, for dead-boot detection. This works even when the app
@@ -1624,6 +1688,21 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Probes which enabled community plugins the owned window loaded at startup.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   * @returns The probe result; `unsupported` when the probe itself failed.
+   */
+  private async probeStartupPluginLoad(vaultPath: string): Promise<StartupPluginLoad> {
+    try {
+      return parseStartupPluginLoad(await this.evaluate(STARTUP_PLUGIN_LOAD_PROBE_EXPRESSION, { cwd: vaultPath }));
+    } catch (error: unknown) {
+      log(`[cdp-transport] Could not probe the startup plugin load (non-fatal): ${errorToString(error)}`);
+      return { state: 'unsupported' };
     }
   }
 
@@ -1851,6 +1930,56 @@ export class DesktopCdpTransport implements ObsidianTransport {
   }
 
   /**
+   * When the owned window opened its vault in restricted mode, so the enabled
+   * community plugins were not loaded at startup, turns restricted mode off and
+   * reloads the window once, so they load during startup as they do for a user.
+   * See `startup-plugin-load.ts`.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   * @returns Whether the window was reloaded.
+   */
+  private async reloadIfStartupPluginsSkipped(vaultPath: string): Promise<boolean> {
+    const load = await this.probeStartupPluginLoad(vaultPath);
+    if (load.state === 'loaded') {
+      if (load.loadedPluginIds.length > 0) {
+        log(`[cdp-transport] Community plugins loaded at startup: ${load.loadedPluginIds.join(', ')}.`);
+      }
+      return false;
+    }
+    if (!checkShouldReloadForStartupPlugins(load)) {
+      return false;
+    }
+
+    // `isEnabled()` is usually true by now even in the restricted-mode case: the trust-dialog dismissal
+    // during readiness writes the key after `Plugins.initialize` has already returned.
+    log(
+      `[cdp-transport] Enabled community plugins were not loaded at startup (${load.skippedPluginIds.join(', ')}): `
+        + `the vault opened in restricted mode, as a fresh profile does (isEnabled() now reads ${String(load.isCommunityPluginsEnabled)}). `
+        + `Setting enable-plugin-${load.appId} and reloading the window so they load during startup.`
+    );
+    await this.evaluate(buildEnableCommunityPluginsAndReloadExpression(load.appId), { cwd: vaultPath });
+    this.disconnect();
+    await this.waitForReloadedWindow(vaultPath);
+    return true;
+  }
+
+  /**
+   * Logs which plugins the reloaded window loaded at startup, and names any it
+   * still skipped. A skip after the reload is left to the setup's own enable,
+   * which reports a load error.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async reportStartupPluginLoadAfterReload(vaultPath: string): Promise<void> {
+    const load = await this.probeStartupPluginLoad(vaultPath);
+    if (load.state === 'skipped') {
+      log(`[cdp-transport] After the reload these enabled plugins were still not loaded at startup: ${load.skippedPluginIds.join(', ')}.`);
+    } else if (load.state === 'loaded') {
+      log(`[cdp-transport] After the reload, community plugins loaded at startup: ${load.loadedPluginIds.join(', ') || '(none)'}.`);
+    }
+  }
+
+  /**
    * Writes the owned instance's `obsidian.json`: a fresh one-vault registry into a
    * temporary profile, or the vault merged into a persistent profile's own registry,
    * reusing the id that registry already gives the vault.
@@ -2037,54 +2166,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   private async waitForOwnedVaultReady(vaultPath: string): Promise<void> {
-    log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
-    this.ownedReadinessDeadline = deadline;
-    try {
-      let documentCompleteSince: null | number = null;
-      let isReady = false;
-      let lastReadinessError: unknown;
-      while (Date.now() < deadline) {
-        try {
-          await this.findTargetForVault(vaultPath);
-          await this.waitForLayoutReady(vaultPath);
-          await this.dismissTrustDialog(vaultPath);
-          isReady = true;
-          break;
-        } catch (error: unknown) {
-          lastReadinessError = error;
-          // The vault is not ready yet — also drop the cached CDP connection before
-          // retrying. Old (Electron 10-era) Obsidian reloads the owned window during
-          // boot, which can leave the cached WebSocket pinned to a stale execution
-          // context; reconnecting each attempt re-binds to the live context.
-          this.disconnect();
-        }
-
-        if (this.deadBootGraceInMilliseconds > 0 && Date.now() < deadline) {
-          const observation = await this.probeRendererBootState();
-          if (observation) {
-            if (observation.isDocumentComplete && documentCompleteSince === null) {
-              documentCompleteSince = Date.now();
-            }
-            const hasGraceElapsed = documentCompleteSince !== null
-              && Date.now() - documentCompleteSince >= this.deadBootGraceInMilliseconds;
-            if (resolveRendererBootState({ ...observation, hasGraceElapsed }) === 'dead') {
-              log('[cdp-transport] Owned renderer failed to initialize (dead boot); failing fast.');
-              throw new RendererFailedToInitializeError(vaultPath);
-            }
-          }
-        }
-
-        await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
-      }
-
-      if (!isReady) {
-        throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms: ${errorToString(lastReadinessError)}`, {
-          cause: lastReadinessError
-        });
-      }
-    } finally {
-      this.ownedReadinessDeadline = undefined;
+    await this.pollOwnedVaultReady(vaultPath);
+    if (await this.reloadIfStartupPluginsSkipped(vaultPath)) {
+      await this.pollOwnedVaultReady(vaultPath);
+      await this.reportStartupPluginLoadAfterReload(vaultPath);
     }
 
     // The vault is ready. Run the post-boot compatibility checks here — OUTSIDE the
@@ -2092,6 +2177,30 @@ export class DesktopCdpTransport implements ObsidianTransport {
     // swallowed as "not ready yet" and looping until the readiness timeout.
     await this.checkRuntimeCompatibility(vaultPath);
     log('[cdp-transport] Owned vault is ready.');
+  }
+
+  /**
+   * Waits until the window scheduled to reload has done so: its harness namespace,
+   * bootstrapped during readiness, is gone from the live page. Without this the
+   * next readiness poll could pass against the page that is about to be replaced.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   */
+  private async waitForReloadedWindow(vaultPath: string): Promise<void> {
+    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    while (Date.now() < deadline) {
+      await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
+      try {
+        const value = await this.evaluate('JSON.stringify(window.__obsidianIntegrationTesting === undefined)', { cwd: vaultPath });
+        if (value === 'true') {
+          return;
+        }
+      } catch {
+        // The page is mid-reload — keep polling.
+      }
+      this.disconnect();
+    }
+    throw new Error(`The owned window for ${vaultPath} did not reload within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms.`);
   }
 
   /**

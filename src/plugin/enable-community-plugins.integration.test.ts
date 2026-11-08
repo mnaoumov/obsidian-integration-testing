@@ -56,6 +56,21 @@ describe('enableCommunityPlugins', () => {
   });
 });
 
+describe('a plugin enabled in community-plugins.json', () => {
+  it('loads during startup, before the workspace layout exists', async () => {
+    const probe = await evalInObsidian({
+      callback(): unknown {
+        // The property name is duplicated from the startup probe's source in the global setup.
+        return Reflect.get(globalThis, 'obsidianIntegrationTestingStartupProbe') ?? null;
+      }
+    });
+
+    // A fresh owned profile opens its vault in restricted mode; without the harness turning that off and
+    // reloading, the probe never loads at all (nothing else enables it), and the record is missing.
+    expect(probe).toEqual({ isLayoutReady: false, isRootSplitNull: true });
+  });
+});
+
 describe('a plugin patching a slot the enable helper also patches', () => {
   it('keeps its `app.plugins.loadPlugin` patch', async () => {
     const isPatchStillInstalled = await evalInObsidian({
