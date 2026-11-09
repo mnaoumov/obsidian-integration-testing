@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 17.10.0
+
+- feat: re #2
+- chore: collect runtime versions
+- docs(changelog): regroup the published release notes for readers
+- fix(desktop): load enabled plugins during startup on a fresh owned profile
+- fix(android): wait for Obsidian's app after a WebView window recovery
+- fix(android): retry an eval once when ChromeDriver's window was closed
+- chore: refresh metadata.json
+
 ## 17.9.1
 
 This release has 3 fixes. 1 maintenance commit (tests, build, CI, refactoring, dependencies) is not listed.
