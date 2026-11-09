@@ -52,6 +52,21 @@ export interface CdpInputCommand {
 }
 
 /**
+ * Commits the open IME composition with the given text. With no composition open it inserts the text.
+ */
+export interface MobileCommitCompositionInputRequest {
+  /**
+   * Discriminant.
+   */
+  readonly kind: 'commitComposition';
+
+  /**
+   * The text the composition is committed as.
+   */
+  readonly text: string;
+}
+
+/**
  * What the renderer hands to the host binding: one request, plus the id to answer it on.
  *
  * The renderer builds this literal inside the serialized bootstrap closure, which cannot import (**L15**),
@@ -72,7 +87,7 @@ export interface MobileInputEnvelope {
 /**
  * Anything the renderer can ask the host to inject.
  */
-export type MobileInputRequest = MobileKeyInputRequest | MobilePointerInputRequest;
+export type MobileInputRequest = MobileCommitCompositionInputRequest | MobileKeyInputRequest | MobilePointerInputRequest | MobileSetCompositionInputRequest;
 
 /**
  * A trusted key press to inject on mobile.
@@ -131,6 +146,31 @@ export interface MobilePointerInputRequest {
    * The viewport y coordinate, in CSS pixels.
    */
   readonly y: number;
+}
+
+/**
+ * Opens an IME composition, or replaces the text of the open one.
+ */
+export interface MobileSetCompositionInputRequest {
+  /**
+   * Discriminant.
+   */
+  readonly kind: 'setComposition';
+
+  /**
+   * Where the selection ends inside {@link text}, in UTF-16 code units.
+   */
+  readonly selectionEnd: number;
+
+  /**
+   * Where the selection starts inside {@link text}, in UTF-16 code units.
+   */
+  readonly selectionStart: number;
+
+  /**
+   * The composition's text.
+   */
+  readonly text: string;
 }
 
 /**
@@ -326,7 +366,21 @@ export function codePointOf(text: string): number {
  * @returns The commands to send, in order.
  */
 export function toCdpInputCommands(request: MobileInputRequest): CdpInputCommand[] {
-  return request.kind === 'key' ? toKeyCommands(request) : toPointerCommands(request);
+  switch (request.kind) {
+    case 'commitComposition': {
+      return [{ method: 'Input.insertText', params: { text: request.text } }];
+    }
+    case 'key': {
+      return toKeyCommands(request);
+    }
+    case 'setComposition': {
+      const { selectionEnd, selectionStart, text } = request;
+      return [{ method: 'Input.imeSetComposition', params: { selectionEnd, selectionStart, text } }];
+    }
+    default: {
+      return toPointerCommands(request);
+    }
+  }
 }
 
 /**

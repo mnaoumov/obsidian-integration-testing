@@ -74,6 +74,9 @@ const INSTANCE_DEATH_TEST_FILE = 'src/desktop/owned-instance/owned-instance-deat
 // `helpers/vitest-projects.ts`, which asserts a workflow really does run what no package script does. They
 // share one project rather than taking one each, because each project boots its own emulator session — the
 // cost that dominates an Android run — and these files are serialized within it anyway.
+// The composition helpers drive global focus, so this file runs in the serial desktop project. It is written to
+// run on Android too, and joins `ANDROID_TEST_FILES` once it has passed on a device (L88).
+const IME_COMPOSITION_TEST_FILE = 'src/namespace/ime-composition.integration.test.ts';
 const ANDROID_TEST_FILES = [
   'src/android/mobile-vault-startup.android.integration.test.ts',
   'src/android/mobile-trusted-input.android.integration.test.ts',
@@ -175,7 +178,8 @@ export const config = defineConfig({
             FAILED_SETUP_TEST_FILE,
             INSTANCE_DEATH_TEST_FILE,
             ...ANDROID_TEST_FILES,
-            DESKTOP_TRUSTED_INPUT_TEST_FILE
+            DESKTOP_TRUSTED_INPUT_TEST_FILE,
+            IME_COMPOSITION_TEST_FILE
           ],
           include: [INTEGRATION_TEST_FILES],
           name: VitestProject.IntegrationTests,
@@ -305,7 +309,7 @@ export const config = defineConfig({
           environment: 'node',
           exclude: SHARED_EXCLUDE,
           fileParallelism: false,
-          include: [DESKTOP_TRUSTED_INPUT_TEST_FILE],
+          include: [DESKTOP_TRUSTED_INPUT_TEST_FILE, IME_COMPOSITION_TEST_FILE],
           maxWorkers: 1,
           name: VitestProject.DesktopTrustedInputIntegrationTests,
           setupFiles: [METADATA_SETUP_FILE]
