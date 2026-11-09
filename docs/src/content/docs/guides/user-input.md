@@ -21,6 +21,9 @@ The trusted helpers flow through the real input pipeline, so text lands **only i
 | Helper                                         | Purpose                                                                                                                                                                                                                          |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typeIntoEditor({ editor, text })`             | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                                  |
+| `composeIntoEditor({ editor, text, chunking })` | Focuses `editor` (caret to end) and enters `text` through IME composition, one composition per `'word'` (default) or `'character'`, then polls until the document reflects it. |
+| `setComposition({ text, selectionStart, selectionEnd, window })` | Opens an IME composition in the focused element or replaces the open one's text, and leaves it open. An empty `text` cancels it. Does **not** poll. |
+| `commitComposition({ text, window })`          | Commits the open composition as `text`. With none open, inserts `text` with no composition events. Does **not** poll. |
 | `pressKey({ key, modifiers, window })`         | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
 | `hoverElement({ element })`                    | Moves the pointer to `element`'s center, then polls until `element.matches(':hover')`. **Throws** if it never does.                                                                                                              |
 | `unhoverElement({ element })`                  | Moves the pointer just outside `element`'s bounding box, then polls until it no longer matches `:hover`. **Throws** if it still does.                                                                                            |
@@ -144,12 +147,40 @@ A right click opens a **real** context menu, and it stays open. A suite that dri
 Trusted input targets the single shared window's **global** focus and pointer, so test files that depend on either must not run in parallel against the one shared Obsidian instance — they race for focus, and a `detachLeavesOfType('markdown')` in one file wipes another's editor. Run that Vitest project with `fileParallelism: false` and `maxWorkers: 1`.
 :::
 
+## IME composition
+
+Key presses never open a composition, but much real input arrives as one: Gboard keeps the current word in a composition, CJK input methods compose every word, and fcitx and ibus on Wayland can send each character as its own. While a composition is open, CodeMirror sets `view.composing`, and a plugin that reacts to typing has to wait for it to end.
+
+`composeIntoEditor` covers the usual shapes. With `chunking: 'word'`, each word grows one character at a time and its trailing whitespace is part of the commit, so `'brb '` commits as `'brb '`. To type the separator separately, compose `'brb'` and follow it with `pressKey`.
+
+`setComposition` and `commitComposition` hold a composition open, so a test can assert on that state:
+
+```ts
+await evalInObsidian({
+  callback: async ({ app, lib: { commitComposition, setComposition, waitUntil }, obsidianModule }) => {
+    const editor = app.workspace.getActiveViewOfType(obsidianModule.MarkdownView)?.editor;
+    if (!editor) {
+      throw new Error('No active Markdown view.');
+    }
+
+    editor.focus();
+    await setComposition({ text: 'brb' });
+    await waitUntil({ predicate: () => editor.getValue().endsWith('brb') });
+    // `editor.cm.composing` is true here: the plugin must not rewrite the text yet.
+
+    await commitComposition({ text: 'brb ' });
+  }
+});
+```
+
+The commit's `compositionend` reports `isTrusted: false` on desktop, while the rest of the composition reports `true`, so do not filter that event on `isTrusted`.
+
 ## Popout windows
 
 Every Obsidian window, the main one and each popout, is its own Electron web contents, so trusted input sent to one never reaches another. The helpers pick the window like this:
 
-- `clickElement`, `hoverElement` and `unhoverElement` use the window that owns `element`, and `typeIntoEditor` uses the window that owns `editor`. An element or editor in a popout is driven in that popout with nothing extra to pass.
-- `pressKey`, `moveMouse`, `clickMouse` and `dragMouse` take an optional `window`, and default to the main window. A key goes to the DOM-focused element of the window you name, and coordinates are in that window's viewport.
+- `clickElement`, `hoverElement` and `unhoverElement` use the window that owns `element`, and `typeIntoEditor` and `composeIntoEditor` use the window that owns `editor`. An element or editor in a popout is driven in that popout with nothing extra to pass.
+- `pressKey`, `moveMouse`, `clickMouse`, `dragMouse`, `setComposition` and `commitComposition` take an optional `window`, and default to the main window. A key goes to the DOM-focused element of the window you name, and coordinates are in that window's viewport.
 
 ```ts
 await evalInObsidian({
@@ -203,6 +234,7 @@ These helpers work on Android as well, but not all of them, and not identically.
 | `clickMouse({ button: 'right' })`                   | A **long-press** — the gesture that opens Obsidian Mobile's context menu.                                                                                      |
 | `clickMouse({ button: 'middle' })`                  | **Throws.** Touch has no middle button.                                                                                                                        |
 | `pressKey` / `typeIntoEditor`                       | Work. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, arrows) and single printable characters; any other multi-character name throws.             |
+| `composeIntoEditor` / `setComposition` / `commitComposition` | Sent to the WebView over CDP, so a real keyboard's own `InputConnection` path is not exercised. **Not yet verified on a device.** |
 | `moveMouse` / `hoverElement` / `unhoverElement`     | **Throw.** Touch input has no hover state.                                                                                                                     |
 | `dragMouse`                                         | **Throws.** It injects mouse events; a touch drag would be a gesture of its own, and none is implemented.                                                      |
 

@@ -118,6 +118,20 @@ describe('toCdpModifiers', () => {
   });
 });
 
+describe('toCdpInputCommands: composition', () => {
+  it('should open or update a composition with its selection', () => {
+    expect(toCdpInputCommands({ kind: 'setComposition', selectionEnd: 2, selectionStart: 1, text: 'br' })).toEqual([
+      { method: 'Input.imeSetComposition', params: { selectionEnd: 2, selectionStart: 1, text: 'br' } }
+    ]);
+  });
+
+  it('should commit a composition with insertText', () => {
+    expect(toCdpInputCommands({ kind: 'commitComposition', text: 'brb ' })).toEqual([
+      { method: 'Input.insertText', params: { text: 'brb ' } }
+    ]);
+  });
+});
+
 describe('toCdpInputCommands: pointer', () => {
   it('should expand a tap into a touch pair, releasing with an empty touchPoints list', () => {
     expect(toCdpInputCommands({ kind: 'tap', modifiers: [], x: 10.5, y: 20.5 })).toEqual([

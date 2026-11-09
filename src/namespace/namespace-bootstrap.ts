@@ -15,12 +15,15 @@ import type {
 import type {
   ClickElementParams,
   ClickMouseParams,
+  CommitCompositionParams,
+  ComposeIntoEditorParams,
   CreateNoteParams,
   DragMouseParams,
   HoverElementParams,
   MoveMouseParams,
   OpenSettingsTabParams,
   PressKeyParams,
+  SetCompositionParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
   WaitUntilParams
@@ -311,6 +314,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   interface EditorViewLike {
+    readonly composing?: boolean;
     readonly dom?: Node;
   }
 
@@ -336,7 +340,19 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    * closure is serialized via `toString()` and cannot import (**L15**). The two are one wire format; change
    * them together.
    */
-  type MobileInputRequest = MobileKeyInputRequest | MobilePointerInputRequest;
+  type MobileInputRequest = MobileCommitCompositionInputRequest | MobileKeyInputRequest | MobilePointerInputRequest | MobileSetCompositionInputRequest;
+
+  interface MobileCommitCompositionInputRequest {
+    readonly kind: 'commitComposition';
+    readonly text: string;
+  }
+
+  interface MobileSetCompositionInputRequest {
+    readonly kind: 'setComposition';
+    readonly selectionEnd: number;
+    readonly selectionStart: number;
+    readonly text: string;
+  }
 
   interface MobileKeyInputRequest {
     readonly key: string;
@@ -512,12 +528,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       const lib = {
         clickElement,
         clickMouse,
+        commitComposition,
+        composeIntoEditor,
         createNote,
         dragMouse,
         hoverElement,
         moveMouse,
         openSettingsTab,
         pressKey,
+        setComposition,
         typeIntoEditor,
         unhoverElement,
         waitUntil
@@ -623,19 +642,11 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   (globalThis as unknown as Partial<IntegrationTestingHolder>).__obsidianIntegrationTesting = ns;
 
   async function typeIntoEditor(typeParams: TypeIntoEditorParams): Promise<void> {
-    const FOCUS_SETTLE_DELAY_IN_MILLISECONDS = 300;
-
     const { editor, text } = typeParams;
     const valueBeforeTyping = editor.getValue();
     const targetWindow = getEditorWindow(editor);
 
-    // Focus the editor and place the caret at the end of the document.
-    editor.focus();
-    const lastLine = editor.lastLine();
-    editor.setCursor(lastLine, editor.getLine(lastLine).length);
-
-    // Let any focus trap (a `setTimeout(0)` re-focus) fire before typing, so stolen focus is detected.
-    await sleep(FOCUS_SETTLE_DELAY_IN_MILLISECONDS);
+    await focusEditorAtEnd(editor);
 
     // Typing is pressing each character key in turn: `pressKey` injects the same trusted
     // `keyDown` -> `char` -> `keyUp` a real user produces — text lands only if the editor holds focus.
@@ -647,6 +658,110 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     const startTime = Date.now();
     while (editor.getValue() === valueBeforeTyping && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+
+  async function focusEditorAtEnd(editor: TypeIntoEditorParams['editor']): Promise<void> {
+    const FOCUS_SETTLE_DELAY_IN_MILLISECONDS = 300;
+
+    // Focus the editor and place the caret at the end of the document.
+    editor.focus();
+    const lastLine = editor.lastLine();
+    editor.setCursor(lastLine, editor.getLine(lastLine).length);
+
+    // Let any focus trap (a `setTimeout(0)` re-focus) fire before typing, so stolen focus is detected.
+    await sleep(FOCUS_SETTLE_DELAY_IN_MILLISECONDS);
+  }
+
+  /*
+   * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib` (L17), and left out of the `trustedInput` seam,
+   * like `dragMouse`: a composition is driven to make it observable to a test.
+   */
+  async function composeIntoEditor(composeParams: ComposeIntoEditorParams): Promise<void> {
+    const { chunking = 'word', editor, text } = composeParams;
+    const valueBeforeComposing = editor.getValue();
+    const targetWindow = getEditorWindow(editor);
+    // eslint-disable-next-line no-restricted-syntax -- Approved double cast: probes an optional-member view of `Editor.cm`, as `getEditorWindow` does.
+    const editorView = (editor as unknown as EditorLike).cm;
+
+    await focusEditorAtEnd(editor);
+
+    // A word's trailing whitespace belongs to its commit, the way a keyboard commits a word with its space.
+    const chunks = text.match(chunking === 'character' ? /./gsu : /\S+\s*|\s+/gu) ?? [];
+
+    for (const chunk of chunks) {
+      const composedText = chunk.trimEnd() || chunk;
+      let prefix = '';
+      for (const char of composedText) {
+        prefix += char;
+        await setComposition({ text: prefix, window: targetWindow });
+      }
+
+      await commitComposition({ text: chunk, window: targetWindow });
+
+      // CodeMirror leaves `composing` set briefly after the commit, and a next chunk started inside that
+      // window would be read as the same composition.
+      const commitTime = Date.now();
+      while (editorView?.composing && Date.now() - commitTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
+        await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+      }
+    }
+
+    // Silent on timeout, like `typeIntoEditor`: a read-only editor rejecting the text is an expected outcome.
+    const startTime = Date.now();
+    while (editor.getValue() === valueBeforeComposing && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
+      await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
+    }
+  }
+
+  async function setComposition(compositionParams: SetCompositionParams): Promise<void> {
+    const { text } = compositionParams;
+    const selectionEnd = compositionParams.selectionEnd ?? compositionParams.selectionStart ?? text.length;
+    const selectionStart = compositionParams.selectionStart ?? selectionEnd;
+    const targetWindow = compositionParams.window;
+
+    if (checkIsMobile()) {
+      assertMainWindowOnMobile('setComposition', targetWindow);
+      await requestHostInput({ kind: 'setComposition', selectionEnd, selectionStart, text });
+      return;
+    }
+
+    await sendDesktopInputCommand(targetWindow, 'Input.imeSetComposition', { selectionEnd, selectionStart, text });
+  }
+
+  async function commitComposition(compositionParams: CommitCompositionParams): Promise<void> {
+    const { text } = compositionParams;
+    const targetWindow = compositionParams.window;
+
+    if (checkIsMobile()) {
+      assertMainWindowOnMobile('commitComposition', targetWindow);
+      await requestHostInput({ kind: 'commitComposition', text });
+      return;
+    }
+
+    await sendDesktopInputCommand(targetWindow, 'Input.insertText', { text });
+  }
+
+  /*
+   * Electron's `sendInputEvent` has no IME event, so a composition goes through the window's own debugger.
+   * It attaches per command and leaves a debugger someone else attached alone. Going through the target
+   * window's web contents, as the other helpers do, also aims a composition at a popout correctly.
+   */
+  async function sendDesktopInputCommand(targetWindow: undefined | Window, method: string, commandParams: Record<string, unknown>): Promise<void> {
+    const CDP_PROTOCOL_VERSION = '1.3';
+
+    const webContentsDebugger = getTargetWebContents(targetWindow).debugger;
+    const shouldAttach = !webContentsDebugger.isAttached();
+    if (shouldAttach) {
+      webContentsDebugger.attach(CDP_PROTOCOL_VERSION);
+    }
+
+    try {
+      await webContentsDebugger.sendCommand(method, commandParams);
+    } finally {
+      if (shouldAttach) {
+        webContentsDebugger.detach();
+      }
     }
   }
 

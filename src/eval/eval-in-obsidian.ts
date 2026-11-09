@@ -134,6 +134,27 @@ export interface ClickMouseParams {
 }
 
 /**
+ * Parameters for {@link Lib.commitComposition}.
+ */
+export interface CommitCompositionParams {
+  /**
+   * The text the composition is committed as. It replaces the composition's
+   * current text, so it may differ from it, for example by carrying a
+   * trailing separator.
+   */
+  readonly text: string;
+
+  /**
+   * The Obsidian window holding the composition: the main window or a popout.
+   *
+   * **On mobile** there are no popouts, so any window but the main one throws.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
+}
+
+/**
  * Common arguments automatically provided to every {@link evalInObsidian} callback.
  */
 export interface CommonArguments {
@@ -161,6 +182,33 @@ export interface CommonArguments {
    * The `obsidian` module, resolved at runtime inside the Obsidian process.
    */
   readonly obsidianModule: typeof obsidian;
+}
+
+/**
+ * Parameters for {@link Lib.composeIntoEditor}.
+ */
+export interface ComposeIntoEditorParams {
+  /**
+   * How {@link ComposeIntoEditorParams.text} is split into compositions.
+   *
+   * - `'word'`: one composition per word, growing a character at a time. A
+   *   word's trailing whitespace is part of its commit.
+   * - `'character'`: one composition per character.
+   *
+   * @default `'word'`
+   */
+  readonly chunking?: 'character' | 'word';
+
+  /**
+   * The editor to compose into. It is focused, with the caret at the end of
+   * the document, first. The composition goes to the window that owns it.
+   */
+  readonly editor: Editor;
+
+  /**
+   * The text to compose.
+   */
+  readonly text: string;
 }
 
 /**
@@ -401,6 +449,37 @@ export interface Lib {
   readonly clickMouse: (this: void, params: ClickMouseParams) => Promise<void>;
 
   /**
+   * Commits the open IME composition, firing `compositionend`, through the
+   * browser's input layer. The counterpart of {@link Lib.setComposition}.
+   *
+   * With no composition open the text is simply inserted, with no composition
+   * events. It does not poll for any effect. **Must be awaited.**
+   *
+   * @param params - The committed text and the window.
+   * @returns A {@link Promise} that resolves once the commit has been injected.
+   */
+  readonly commitComposition: (this: void, params: CommitCompositionParams) => Promise<void>;
+
+  /**
+   * Types text into an {@link Editor} through IME composition
+   * (`compositionstart` / `compositionupdate` / `compositionend`), not key
+   * presses, as Gboard and CJK input methods deliver it.
+   *
+   * It focuses the editor (caret to end), runs one composition per word or per
+   * character, and polls until the document changes or a bounded timeout
+   * elapses, which is the expected outcome for a read-only editor.
+   *
+   * **On Android** the composition is sent to the WebView over CDP, so it can
+   * exercise only the page's and CodeMirror's composition handling, not a real
+   * keyboard's `InputConnection` path. This path has not been verified on a
+   * device yet.
+   *
+   * @param params - The editor, the text and how to split it.
+   * @returns A {@link Promise} that resolves once the text has settled.
+   */
+  readonly composeIntoEditor: (this: void, params: ComposeIntoEditorParams) => Promise<void>;
+
+  /**
    * Creates a note and does not return until its content is verifiably on
    * disk, rewriting it if it is not.
    *
@@ -591,6 +670,21 @@ export interface Lib {
   readonly pressKey: (this: void, params: PressKeyParams) => Promise<void>;
 
   /**
+   * Opens an IME composition in the focused element, or replaces the text of
+   * the open one, firing the real composition events. The composition stays
+   * open until {@link Lib.commitComposition}, which is what a test needs to
+   * assert on a state where CodeMirror's `view.composing` is set.
+   *
+   * The caller focuses the target first. It does not poll for any effect.
+   * **Must be awaited.** See {@link Lib.composeIntoEditor} for the Android
+   * limit.
+   *
+   * @param params - The composition's text, its selection and the window.
+   * @returns A {@link Promise} that resolves once the composition has been injected.
+   */
+  readonly setComposition: (this: void, params: SetCompositionParams) => Promise<void>;
+
+  /**
    * Types text into a CodeMirror {@link Editor} using **trusted** Electron
    * keyboard input.
    *
@@ -764,6 +858,42 @@ export interface PressKeyParams {
    * for a popout leaf. Each Obsidian window is its own Electron web contents,
    * so the key goes to the DOM-focused element of the window named here,
    * whichever window the OS has focused, and never reaches another window.
+   *
+   * **On mobile** there are no popouts, so any window but the main one throws.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
+}
+
+/**
+ * Parameters for {@link Lib.setComposition}.
+ */
+export interface SetCompositionParams {
+  /**
+   * Where the selection ends inside {@link SetCompositionParams.text}, in
+   * UTF-16 code units.
+   *
+   * @default {@link SetCompositionParams.selectionStart} when it is given, else the end of the text
+   */
+  readonly selectionEnd?: number;
+
+  /**
+   * Where the selection starts inside {@link SetCompositionParams.text}, in
+   * UTF-16 code units.
+   *
+   * @default {@link SetCompositionParams.selectionEnd} when it is given, else the end of the text
+   */
+  readonly selectionStart?: number;
+
+  /**
+   * The composition's text. It replaces the text of a composition already
+   * open. An empty string cancels the composition.
+   */
+  readonly text: string;
+
+  /**
+   * The Obsidian window to compose in: the main window or a popout.
    *
    * **On mobile** there are no popouts, so any window but the main one throws.
    *

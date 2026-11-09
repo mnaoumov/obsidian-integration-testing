@@ -218,7 +218,9 @@ export { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from './eval/eval-cap.ts';
 export type {
   ClickElementParams,
   ClickMouseParams,
+  CommitCompositionParams,
   CommonArguments,
+  ComposeIntoEditorParams,
   CreateNoteParams,
   DragMouseParams,
   EvalInObsidianParams,
@@ -230,6 +232,7 @@ export type {
   MoveMouseParams,
   OpenSettingsTabParams,
   PressKeyParams,
+  SetCompositionParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
   WaitUntilParams
