@@ -346,6 +346,15 @@ describe('desktop trusted input', () => {
           await lib.waitUntil({ message: 'the connection-drop menu to open', predicate: () => document.querySelector('.menu') !== null });
 
           const titles = [...document.querySelectorAll('.menu .menu-item-title')].map((titleEl) => titleEl.textContent);
+          /*
+           * `Menu.showAtPosition` attaches the menu's DOM at once but registers its Escape handler in `onload`,
+           * which it defers with `setTimeout(..., 0)`. Chromium runs input ahead of timers, so on a loaded
+           * renderer a trusted Escape sent as soon as the menu appears can arrive before that handler exists,
+           * and the menu stays open. A zero-delay timer queued now runs after the menu's, so it has loaded.
+           */
+          await new Promise<void>((resolve) => {
+            globalThis.setTimeout(resolve, 0);
+          });
           await lib.pressKey({ key: 'Escape' });
           await lib.waitUntil({ message: 'the menu to close', predicate: () => document.querySelector('.menu') === null });
           return titles;
