@@ -151,10 +151,16 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * hosts share. JavaScript is single-threaded, so two `Runtime.evaluate` calls racing for the same
      * id are serialized and exactly one sees `true`.
      *
+     * A composition request's claim also carries the text of a composition the PAGE ended before the
+     * request reached it. On Android the WebView can end a composition, committing its text, before the
+     * harness commits it (**L88**). The host uses that text to send only what is still missing, so the text
+     * does not land twice.
+     *
      * @param id - The request id to claim.
-     * @returns `true` for the first caller to claim this id, `false` for every later one.
+     * @returns `false` for every caller after the first. The first gets `true`, or, for a composition
+     * request after the page ended the harness's composition early, the text that composition committed.
      */
-    readonly claimInput: (id: string) => boolean;
+    readonly claimInput: (id: string) => boolean | string;
 
     /**
      * Intentionally NOT mirrored in `@mnaoumov/obsidian-lib`: transport-only. It
@@ -373,6 +379,15 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly resolve: () => void;
   }
 
+  // What the page did while one mobile composition request was being injected (L88).
+  interface CompositionFlight {
+    // The texts of compositions the page ended after the claim and before the injection's own input.
+    readonly endedTexts: string[];
+    // The `inputType` of every `beforeinput` while the request was being injected.
+    readonly inputTypes: Set<string>;
+    readonly kind: 'commitComposition' | 'setComposition';
+  }
+
   /**
    * Delay (in ms) before invoking `electronWindow.destroy()` so the eval that
    * triggered the call has time to return its result to the caller. Without
@@ -447,6 +462,12 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   const CREATE_NOTE_REPAIR_ATTEMPT_COUNT = 3;
 
   /**
+   * How many times a mobile composition request is sent before a page that keeps ending the composition
+   * mid-request is reported rather than repaired again (L88).
+   */
+  const COMPOSITION_REPAIR_ATTEMPT_COUNT = 3;
+
+  /**
    * Prefix used by {@link errorToString}'s nested-error separator lines, matching
    * the `    at` prefix of a V8 stack-trace frame so the separators blend into
    * the surrounding stack. Kept identical to `@mnaoumov/typescript-lib`'s `errorToString`.
@@ -471,19 +492,40 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // run drives input, and it dies with the page.
   const claimedInputIds = new Set<string>();
 
+  // Each composition request in flight, so `claimInput` can tell a composition request apart and the
+  // requester can read what the page did while it was injected.
+  const compositionFlights = new Map<string, CompositionFlight>();
+  // The composition request between its claim and its answer, whose events the listeners record.
+  let activeCompositionFlight: CompositionFlight | null = null;
+  // Whether a composition the harness opened is still open, as far as the harness knows.
+  let isHarnessCompositionOpen = false;
+  // The text of a harness composition the page ended before the harness committed it (L88).
+  let earlyEndedCompositionText: null | string = null;
+  let areCompositionListenersInstalled = false;
+
   const ns: IntegrationTestingNamespace = {
     get app() {
       // eslint-disable-next-line @typescript-eslint/no-deprecated -- `app` getter reads `window.app` which is set by Obsidian.
       return globalThis.app;
     },
 
-    claimInput(this: IntegrationTestingNamespace, id: string): boolean {
+    claimInput(this: IntegrationTestingNamespace, id: string): boolean | string {
       if (claimedInputIds.has(id)) {
         return false;
       }
 
       claimedInputIds.add(id);
-      return true;
+      const compositionFlight = compositionFlights.get(id);
+      if (compositionFlight === undefined) {
+        return true;
+      }
+
+      const endedText = earlyEndedCompositionText;
+      earlyEndedCompositionText = null;
+      // From here on a `compositionend` is the injection's own: a commit ends the composition by design.
+      isHarnessCompositionOpen = compositionFlight.kind === 'setComposition';
+      activeCompositionFlight = compositionFlight;
+      return endedText ?? true;
     },
 
     contexts: existingContexts,
@@ -610,6 +652,11 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       }
 
       pendingInputs.delete(id);
+      // The injection is over, so later events are no longer this request's.
+      if (activeCompositionFlight !== null && activeCompositionFlight === compositionFlights.get(id)) {
+        activeCompositionFlight = null;
+      }
+
       if (errorMessage === null) {
         pending.resolve();
         return;
@@ -722,7 +769,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     if (checkIsMobile()) {
       assertMainWindowOnMobile('setComposition', targetWindow);
-      await requestHostInput({ kind: 'setComposition', selectionEnd, selectionStart, text });
+      await setCompositionOnMobile({ kind: 'setComposition', selectionEnd, selectionStart, text });
       return;
     }
 
@@ -735,7 +782,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     if (checkIsMobile()) {
       assertMainWindowOnMobile('commitComposition', targetWindow);
-      await requestHostInput({ kind: 'commitComposition', text });
+      await commitCompositionOnMobile(text);
       return;
     }
 
@@ -779,7 +826,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   // connection independent of the Appium session that is currently blocked awaiting this very closure
   // (see L39). `bindingName` is a host-installed global; calling it delivers the request, and the host
   // answers by calling `ns.resolveInput`.
-  async function requestHostInput(request: MobileInputRequest): Promise<void> {
+  async function requestHostInput(request: MobileInputRequest): Promise<CompositionFlight | null> {
     const bindingName = bootstrapParams.inputBindingName;
     // eslint-disable-next-line no-restricted-syntax -- Approved cast: the binding is installed by the host at runtime via `Runtime.addBinding`, so it cannot be declared on `Window`.
     const binding = (globalThis as unknown as Record<string, unknown>)[bindingName] as ((payload: string) => void) | undefined;
@@ -792,7 +839,27 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     nextInputId++;
     const id = String(nextInputId);
+    let compositionFlight: CompositionFlight | null = null;
+    if (request.kind === 'commitComposition' || request.kind === 'setComposition') {
+      ensureCompositionListeners();
+      compositionFlight = { endedTexts: [], inputTypes: new Set<string>(), kind: request.kind };
+      compositionFlights.set(id, compositionFlight);
+    }
 
+    try {
+      await sendHostInput(id, binding, request);
+    } finally {
+      if (activeCompositionFlight !== null && activeCompositionFlight === compositionFlight) {
+        activeCompositionFlight = null;
+      }
+
+      compositionFlights.delete(id);
+    }
+
+    return compositionFlight;
+  }
+
+  async function sendHostInput(id: string, binding: (payload: string) => void, request: MobileInputRequest): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       pendingInputs.set(id, { reject, resolve });
       globalThis.setTimeout(() => {
@@ -806,6 +873,101 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
       binding(JSON.stringify({ id, request }));
     });
+  }
+
+  // Records a harness composition the page ends on its own. On Android the WebView can end a composition,
+  // committing its text, before the harness commits it (L88). Measured on `obsidian_test` (2026-11-09):
+  // CodeMirror ended 3 of 6 compositions 40 ms to 1.8 s after they opened. An end before a request's claim
+  // is handed to the host, which then sends only what is still missing. An end between the claim and the
+  // injection is recorded on the request's flight, and the requester repairs the document. Without either,
+  // the composed text landed twice.
+  function ensureCompositionListeners(): void {
+    if (areCompositionListenersInstalled) {
+      return;
+    }
+
+    areCompositionListenersInstalled = true;
+    globalThis.addEventListener('beforeinput', ($event: InputEvent) => {
+      if (activeCompositionFlight === null) {
+        return;
+      }
+
+      activeCompositionFlight.inputTypes.add($event.inputType);
+    }, { capture: true });
+
+    globalThis.addEventListener('compositionend', ($event: CompositionEvent) => {
+      if (activeCompositionFlight !== null && !activeCompositionFlight.inputTypes.has('insertCompositionText')) {
+        activeCompositionFlight.endedTexts.push($event.data);
+        return;
+      }
+
+      if (!isHarnessCompositionOpen) {
+        return;
+      }
+
+      isHarnessCompositionOpen = false;
+      earlyEndedCompositionText = $event.data;
+    }, { capture: true });
+  }
+
+  // Runs on mobile only, so `Array.prototype.at` is safe here despite L26.
+  function readLastEndedText(flight: CompositionFlight | null): string | undefined {
+    return flight === null ? undefined : flight.endedTexts.at(-1);
+  }
+
+  // Deletes a text just before the caret on mobile, one trusted Backspace per grapheme.
+  async function deleteBeforeCaretOnMobile(text: string): Promise<void> {
+    const graphemes = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)];
+    for (const _grapheme of graphemes) {
+      await requestHostInput({ key: 'Backspace', kind: 'key', modifiers: [] });
+    }
+  }
+
+  // Commits on mobile, repairing a commit the page doubled by ending the composition after the claim (L88).
+  async function commitCompositionOnMobile(text: string): Promise<void> {
+    for (let attempt = 1; attempt <= COMPOSITION_REPAIR_ATTEMPT_COUNT; attempt++) {
+      const flight = await requestHostInput({ kind: 'commitComposition', text });
+      const endedText = readLastEndedText(flight);
+      if (endedText === undefined || !flight?.inputTypes.has('insertText')) {
+        return;
+      }
+
+      if (attempt >= COMPOSITION_REPAIR_ATTEMPT_COUNT) {
+        throw new Error(
+          `commitComposition: the page ended the composition while the commit was being sent, ${String(attempt)} times in a row, `
+            + `so ${JSON.stringify(endedText)} and ${JSON.stringify(text)} both landed.`
+        );
+      }
+
+      // The ended composition committed `endedText`, and the commit then inserted `text` after it.
+      await deleteBeforeCaretOnMobile(endedText + text);
+    }
+
+    // Unreachable: the last attempt either returns or throws.
+  }
+
+  // Sets a composition on mobile, repairing one the page split by ending the old composition after the claim (L88).
+  async function setCompositionOnMobile(request: MobileSetCompositionInputRequest): Promise<void> {
+    for (let attempt = 1; attempt <= COMPOSITION_REPAIR_ATTEMPT_COUNT; attempt++) {
+      const flight = await requestHostInput(request);
+      const endedText = readLastEndedText(flight);
+      if (endedText === undefined) {
+        return;
+      }
+
+      if (attempt >= COMPOSITION_REPAIR_ATTEMPT_COUNT) {
+        throw new Error(
+          `setComposition: the page ended the composition while the next one was being sent, ${String(attempt)} times in a row, `
+            + `so ${JSON.stringify(endedText)} stayed in the document before ${JSON.stringify(request.text)}.`
+        );
+      }
+
+      // The old composition committed `endedText`, and a new one holding `request.text` opened after it.
+      await commitCompositionOnMobile(request.text);
+      await deleteBeforeCaretOnMobile(endedText + request.text);
+    }
+
+    // Unreachable: the last attempt either returns or throws.
   }
 
   // A pointer helper that has no touch analog is a hard error, never a silent no-op: `:hover` does not

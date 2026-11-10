@@ -234,7 +234,7 @@ These helpers work on Android as well, but not all of them, and not identically.
 | `clickMouse({ button: 'right' })`                   | A **long-press** — the gesture that opens Obsidian Mobile's context menu.                                                                                      |
 | `clickMouse({ button: 'middle' })`                  | **Throws.** Touch has no middle button.                                                                                                                        |
 | `pressKey` / `typeIntoEditor`                       | Work. Named keys (`Enter`, `Escape`, `Tab`, `Backspace`, `Delete`, arrows) and single printable characters; any other multi-character name throws.             |
-| `composeIntoEditor` / `setComposition` / `commitComposition` | Sent to the WebView over CDP, so a real keyboard's own `InputConnection` path is not exercised. **Not yet verified on a device.** |
+| `composeIntoEditor` / `setComposition` / `commitComposition` | Sent to the WebView over CDP, so a real keyboard's own `InputConnection` path is not exercised. The WebView can end an open composition on its own, committing its text; the harness then sends only what is still missing, so the text lands once. `editor.cm.composing` can therefore read `false` before the commit. |
 | `moveMouse` / `hoverElement` / `unhoverElement`     | **Throw.** Touch input has no hover state.                                                                                                                     |
 | `dragMouse`                                         | **Throws.** It injects mouse events; a touch drag would be a gesture of its own, and none is implemented.                                                      |
 

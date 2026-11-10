@@ -2,8 +2,7 @@
  * @file
  *
  * Proves the IME composition helpers reach CodeMirror as real compositions. It runs in
- * `integration-tests:desktop-trusted-input`, and is written to run on Android once it has passed on a
- * device (AGENTS.md L88).
+ * `integration-tests:desktop-trusted-input` and in `integration-tests:android` (AGENTS.md L88).
  */
 
 import {
@@ -150,15 +149,26 @@ describe('IME composition', () => {
         }
 
         const { editor } = leaf.view;
+
+        async function waitForValue(expectedValue: string, message: string): Promise<void> {
+          try {
+            // The one-core Android guest takes seconds to inject the Backspace presses of an early-ended composition (L88).
+            await waitUntil({ message, predicate: () => editor.getValue() === expectedValue, timeoutInMilliseconds: 15_000 });
+          } catch (error) {
+            throw new Error(`${String(error)}; the document holds ${JSON.stringify(editor.getValue())}`, { cause: error });
+          }
+        }
+
         editor.focus();
         await setComposition({ text: 'br' });
         await setComposition({ text: 'brb' });
-        await waitUntil({ message: 'the composition to reach the document', predicate: () => editor.getValue() === 'brb' });
-        const isComposingWhileOpen = editor.cm.composing;
+        await waitForValue('brb', 'the composition to reach the document');
+        // The Android WebView can end a composition on its own at any time (L88), so it is only read on desktop.
+        const isComposingWhileOpen = obsidianModule.Platform.isMobile || editor.cm.composing;
         const valueWhileOpen = editor.getValue();
 
         await commitComposition({ text: 'brb ' });
-        await waitUntil({ message: 'the commit to reach the document', predicate: () => editor.getValue() === 'brb ' });
+        await waitForValue('brb ', 'the commit to reach the document');
         await waitUntil({ message: 'the composition to end', predicate: () => !editor.cm.composing });
 
         const valueAfterCommit = editor.getValue();
