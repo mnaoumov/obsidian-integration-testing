@@ -33,6 +33,7 @@ const TEST_TIMEOUT_IN_MILLISECONDS = 60_000;
 interface DragProbeResult {
   readonly buttons: number[];
   readonly events: ObservedEvent[];
+  readonly heldMoveCount: number;
 }
 
 /**
@@ -230,19 +231,27 @@ describe('desktop trusted input', () => {
 
         const events: ObservedEvent[] = [];
         const buttons: number[] = [];
+        const heldMoveCoalescedCounts: number[] = [];
         for (const type of ['pointerdown', 'pointermove', 'pointerup']) {
           target.addEventListener(type, ($event: Event) => {
+            const isAfterPointerDown = events.some(($observed) => $observed.type === 'pointerdown');
             events.push({ isTrusted: $event.isTrusted, type: $event.type });
-            if ($event.type === 'pointermove' && $event instanceof PointerEvent) {
-              buttons.push($event.buttons);
+            // Only the moves after the press are held moves; the leading hover move reports no button.
+            if ($event.type !== 'pointermove' || !($event instanceof PointerEvent) || !isAfterPointerDown) {
+              return;
             }
+            buttons.push($event.buttons);
+            // Chromium aligns pointermove to frames and coalesces moves that reach the renderer in one frame,
+            // which a loaded host does, so the injected moves are counted through the coalesced list.
+            heldMoveCoalescedCounts.push(Math.max(1, $event.getCoalescedEvents().length));
           });
         }
 
         try {
           await lib.dragMouse({ from: { x: 44, y: 280 }, steps: 5, to: { x: 304, y: 280 } });
           await lib.waitUntil({ message: 'the pointerup ending the drag', predicate: () => events.some(($event) => $event.type === 'pointerup') });
-          return { buttons, events };
+          const heldMoveCount = heldMoveCoalescedCounts.reduce((sum, count) => sum + count, 0);
+          return { buttons, events, heldMoveCount };
         } finally {
           target.remove();
         }
@@ -254,10 +263,11 @@ describe('desktop trusted input', () => {
     const counts = countByType(result.events);
     expect(counts['pointerdown']).toBe(1);
     expect(counts['pointerup']).toBe(1);
-    // The leading hover move may or may not land as a move of its own, so at least the five held ones.
-    expect(counts['pointermove']).toBeGreaterThanOrEqual(5);
-    // The held moves are the last five; each must report the left button down, or a drag handler ends the drag.
-    expect(result.buttons.slice(-5)).toStrictEqual([1, 1, 1, 1, 1]);
+    // All five held moves reach the page, though a loaded renderer may deliver two of them as one event.
+    expect(result.heldMoveCount).toBe(5);
+    // Every move after the press must report the left button down, or a drag handler ends the drag.
+    expect(result.buttons.length).toBeGreaterThanOrEqual(1);
+    expect(result.buttons.every((pressed) => pressed === 1)).toBe(true);
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   /*
