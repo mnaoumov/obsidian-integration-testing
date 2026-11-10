@@ -126,10 +126,13 @@ describe('IME composition', () => {
         }
 
         const { editor } = leaf.view;
+        const popoutWindow = leaf.view.containerEl.win;
         await composeIntoEditor({ editor, text: 'brb ' });
         await waitUntil({ message: 'the composition to reach the popout editor', predicate: () => editor.getValue() === 'brb ' });
         const result = editor.getValue();
         leaf.detach();
+        // Closing the popout hands focus back to the main window later; a next test focusing its editor before that would lose it.
+        await waitUntil({ message: 'the popout window to close', predicate: () => popoutWindow.closed });
         return result;
       },
       vaultPath: vault.path
@@ -155,11 +158,36 @@ describe('IME composition', () => {
             // The one-core Android guest takes seconds to inject the Backspace presses of an early-ended composition (L88).
             await waitUntil({ message, predicate: () => editor.getValue() === expectedValue, timeoutInMilliseconds: 15_000 });
           } catch (error) {
-            throw new Error(`${String(error)}; the document holds ${JSON.stringify(editor.getValue())}`, { cause: error });
+            const activeElement = editor.cm.contentDOM.ownerDocument.activeElement;
+            const focusState = `the editor has focus: ${String(editor.hasFocus())}, the active element: ${activeElement?.tagName ?? 'none'}.${activeElement?.className ?? ''}`;
+            throw new Error(`${String(error)}; the document holds ${JSON.stringify(editor.getValue())}; ${focusState}`, { cause: error });
           }
         }
 
-        editor.focus();
+        /*
+         * A composition goes to whatever holds focus, and under load the workspace can move focus after the note
+         * opens (a leaf activation, a popout closing). So the editor must hold focus across two reads a settle apart.
+         */
+        async function focusEditor(): Promise<void> {
+          const FOCUS_SETTLE_IN_MILLISECONDS = 300;
+          let focusedSince = 0;
+          await waitUntil({
+            message: 'the editor to hold focus',
+            predicate: () => {
+              if (!editor.hasFocus()) {
+                editor.focus();
+                focusedSince = 0;
+                return false;
+              }
+
+              focusedSince ||= Date.now();
+              return Date.now() - focusedSince >= FOCUS_SETTLE_IN_MILLISECONDS;
+            },
+            timeoutInMilliseconds: 15_000
+          });
+        }
+
+        await focusEditor();
         await setComposition({ text: 'br' });
         await setComposition({ text: 'brb' });
         await waitForValue('brb', 'the composition to reach the document');
