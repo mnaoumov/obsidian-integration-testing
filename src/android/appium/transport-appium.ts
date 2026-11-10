@@ -100,6 +100,7 @@ import {
   buildResolveInputExpression,
   checkInputClaimGranted,
   MOBILE_INPUT_BINDING_NAME,
+  readEarlyEndedCompositionText,
   toCdpInputCommands
 } from '../mobile-input.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
@@ -1044,7 +1045,7 @@ export class AppiumTransport implements ObsidianTransport {
         return;
       }
 
-      await connection.sendAll(toCdpInputCommands(request));
+      await connection.sendAll(toCdpInputCommands(request, readEarlyEndedCompositionText(claim)));
       await connection.send('Runtime.evaluate', { expression: buildResolveInputExpression(id) });
     } catch (error: unknown) {
       const message = errorToString(error);

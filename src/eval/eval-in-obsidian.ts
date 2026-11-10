@@ -471,8 +471,10 @@ export interface Lib {
    *
    * **On Android** the composition is sent to the WebView over CDP, so it can
    * exercise only the page's and CodeMirror's composition handling, not a real
-   * keyboard's `InputConnection` path. This path has not been verified on a
-   * device yet.
+   * keyboard's `InputConnection` path. The WebView can end an open composition
+   * on its own, committing its text, before the commit arrives; the harness
+   * then sends only the text that is still missing, or repairs a text that
+   * landed twice, so it lands once.
    *
    * @param params - The editor, the text and how to split it.
    * @returns A {@link Promise} that resolves once the text has settled.

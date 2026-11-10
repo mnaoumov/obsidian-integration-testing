@@ -360,22 +360,59 @@ export function codePointOf(text: string): number {
 }
 
 /**
+ * Reads the text of a composition the page ended early out of a {@link buildClaimInputExpression} result.
+ *
+ * The renderer's claim answers a composition request with that text instead of `true` when the page ended
+ * the harness's composition before the request reached it (**L88**).
+ *
+ * @param result - The raw `Runtime.evaluate` result object.
+ * @returns The text the early-ended composition committed, or `undefined` when there was none.
+ */
+export function readEarlyEndedCompositionText(result: unknown): string | undefined {
+  if (typeof result !== 'object' || result === null) {
+    return undefined;
+  }
+
+  const value = (result as EvaluateResult).result?.value;
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
  * Translates a mobile input request into the ordered CDP commands that realize it.
  *
+ * **A composition the page ended early is accounted for here** (**L88**). On Android the WebView can end a
+ * composition, committing its text, before the harness commits it.
+ * A commit then sends only the part of its text that is still missing (nothing when the text is all
+ * there). A commit whose text does not start with what was committed, and a new composition, first delete
+ * the committed text with one Backspace press per grapheme, so the composition replaces it as an input method's would.
+ *
  * @param request - What the renderer asked the host to inject.
+ * @param earlyEndedCompositionText - The text a composition the page ended early committed, if any.
  * @returns The commands to send, in order.
  */
-export function toCdpInputCommands(request: MobileInputRequest): CdpInputCommand[] {
+export function toCdpInputCommands(request: MobileInputRequest, earlyEndedCompositionText?: string): CdpInputCommand[] {
   switch (request.kind) {
     case 'commitComposition': {
-      return [{ method: 'Input.insertText', params: { text: request.text } }];
+      if (earlyEndedCompositionText === undefined) {
+        return [{ method: 'Input.insertText', params: { text: request.text } }];
+      }
+
+      if (request.text.startsWith(earlyEndedCompositionText)) {
+        const remainder = request.text.slice(earlyEndedCompositionText.length);
+        return remainder ? [{ method: 'Input.insertText', params: { text: remainder } }] : [];
+      }
+
+      return [...toBackspaceCommands(earlyEndedCompositionText), { method: 'Input.insertText', params: { text: request.text } }];
     }
     case 'key': {
       return toKeyCommands(request);
     }
     case 'setComposition': {
       const { selectionEnd, selectionStart, text } = request;
-      return [{ method: 'Input.imeSetComposition', params: { selectionEnd, selectionStart, text } }];
+      return [
+        ...toBackspaceCommands(earlyEndedCompositionText ?? ''),
+        { method: 'Input.imeSetComposition', params: { selectionEnd, selectionStart, text } }
+      ];
     }
     default: {
       return toPointerCommands(request);
@@ -457,6 +494,18 @@ function resolveKeyCode(upperCasedCodePoint: number): string {
   }
 
   return upperCasedCodePoint >= DIGIT_ZERO_CODE_POINT && upperCasedCodePoint <= DIGIT_NINE_CODE_POINT ? `Digit${String.fromCodePoint(upperCasedCodePoint)}` : '';
+}
+
+/**
+ * Builds the Backspace presses that delete a text just before the caret, one per grapheme, which is what
+ * one Backspace deletes in CodeMirror.
+ *
+ * @param text - The text to delete.
+ * @returns The commands to send, in order.
+ */
+function toBackspaceCommands(text: string): CdpInputCommand[] {
+  const graphemes = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)];
+  return graphemes.flatMap(() => toKeyCommands({ key: 'Backspace', kind: 'key', modifiers: [] }));
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   buildResolveInputExpression,
   checkInputClaimGranted,
   codePointOf,
+  readEarlyEndedCompositionText,
   toCdpInputCommands,
   toCdpModifiers
 } from './mobile-input.ts';
@@ -129,6 +130,56 @@ describe('toCdpInputCommands: composition', () => {
     expect(toCdpInputCommands({ kind: 'commitComposition', text: 'brb ' })).toEqual([
       { method: 'Input.insertText', params: { text: 'brb ' } }
     ]);
+  });
+});
+
+describe('toCdpInputCommands: a composition the page ended early', () => {
+  const backspace = toCdpInputCommands({ key: 'Backspace', kind: 'key', modifiers: [] });
+
+  it('should commit only the text that is still missing', () => {
+    expect(toCdpInputCommands({ kind: 'commitComposition', text: 'brb ' }, 'brb')).toEqual([
+      { method: 'Input.insertText', params: { text: ' ' } }
+    ]);
+  });
+
+  it('should send nothing when the early end already committed the whole text', () => {
+    expect(toCdpInputCommands({ kind: 'commitComposition', text: 'brb' }, 'brb')).toEqual([]);
+  });
+
+  it('should delete a committed text the commit does not extend, then insert the commit', () => {
+    expect(toCdpInputCommands({ kind: 'commitComposition', text: 'the' }, 'teh')).toEqual([
+      ...backspace,
+      ...backspace,
+      ...backspace,
+      { method: 'Input.insertText', params: { text: 'the' } }
+    ]);
+  });
+
+  it('should delete the committed text before opening the next composition, one press per grapheme', () => {
+    expect(toCdpInputCommands({ kind: 'setComposition', selectionEnd: 3, selectionStart: 3, text: 'b👍🏽b' }, 'b👍🏽')).toEqual([
+      ...backspace,
+      ...backspace,
+      { method: 'Input.imeSetComposition', params: { selectionEnd: 3, selectionStart: 3, text: 'b👍🏽b' } }
+    ]);
+  });
+});
+
+describe('readEarlyEndedCompositionText', () => {
+  it('should read the text a claim answered with', () => {
+    expect(readEarlyEndedCompositionText({ result: { type: 'string', value: 'brb' } })).toBe('brb');
+  });
+
+  it.each([
+    ['a plain claim', { result: { type: 'boolean', value: true } }],
+    ['an empty result', {}],
+    ['a null result', null],
+    ['a non-object result', 'unexpected']
+  ])('should read nothing from %s', (_description, result) => {
+    expect(readEarlyEndedCompositionText(result)).toBeUndefined();
+  });
+
+  it('should still grant the claim that carries the text', () => {
+    expect(checkInputClaimGranted({ result: { type: 'string', value: 'brb' } })).toBe(true);
   });
 });
 
