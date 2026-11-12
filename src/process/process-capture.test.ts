@@ -126,7 +126,7 @@ describe('attachProcessCapture', () => {
   it('should report no exit info while the process is running', () => {
     const capture = attach(makeChild());
 
-    expect(capture.readExitInfo()).toBeUndefined();
+    expect(capture.readExitInfo()).toBeNull();
   });
 
   it('should record the exit code and signal', () => {

@@ -69,15 +69,15 @@ const DECIMAL_RADIX = 10;
  *
  * @param chromeVersion - A Chromium version string (e.g. `'114.0.5735.289'`);
  *   only the leading major segment is significant.
- * @returns The ECMAScript-edition label (e.g. `'ES2022'`), or `undefined` when the
+ * @returns The ECMAScript-edition label (e.g. `'ES2022'`), or `null` when the
  *   version cannot be parsed or its Chromium major predates the earliest tracked edition.
  */
-export function deriveEcmaScriptVersion(chromeVersion: string): string | undefined {
+export function deriveEcmaScriptVersion(chromeVersion: string): null | string {
   // `parseInt` reads the leading integer, so `'114.0.5735.289'` yields 114.
   // A non-numeric string yields `NaN` — no split, so no dead index-access branch.
   const chromeMajor = Number.parseInt(chromeVersion, DECIMAL_RADIX);
   if (Number.isNaN(chromeMajor)) {
-    return undefined;
+    return null;
   }
 
   for (const breakpoint of ECMA_SCRIPT_BREAKPOINTS) {
@@ -86,5 +86,5 @@ export function deriveEcmaScriptVersion(chromeVersion: string): string | undefin
     }
   }
 
-  return undefined;
+  return null;
 }

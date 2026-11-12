@@ -101,9 +101,9 @@ async function listEmulatorDeviceCandidates(): Promise<EmulatorDeviceCandidate[]
  * @returns A {@link Promise} that resolves to the AVD name, or `''` when no channel identified it.
  */
 async function probeAvdName(deviceId: string): Promise<string> {
-  let channel: AvdNameChannel | undefined = FIRST_AVD_NAME_CHANNEL;
+  let channel: AvdNameChannel | null = FIRST_AVD_NAME_CHANNEL;
 
-  while (channel !== undefined) {
+  while (channel !== null) {
     let didChannelRespond = true;
     let reportedAvdName = '';
 

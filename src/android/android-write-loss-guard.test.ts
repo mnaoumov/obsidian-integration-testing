@@ -174,9 +174,9 @@ describe('drainAndroidWriteLossRewrites', () => {
 
 describe('buildAndroidWriteLossReport', () => {
   it('should say nothing when nothing was re-written', () => {
-    expect(buildAndroidWriteLossReport([])).toBeUndefined();
-    expect(buildAndroidWriteLossReport(undefined)).toBeUndefined();
-    expect(buildAndroidWriteLossReport({ hasApp: true })).toBeUndefined();
+    expect(buildAndroidWriteLossReport([])).toBeNull();
+    expect(buildAndroidWriteLossReport(undefined)).toBeNull();
+    expect(buildAndroidWriteLossReport({ hasApp: true })).toBeNull();
   });
 
   it('should name every rewrite', () => {

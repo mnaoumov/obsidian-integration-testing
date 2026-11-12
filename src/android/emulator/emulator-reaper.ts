@@ -167,7 +167,7 @@ export interface ResolveEmulatorReaperWatchParams {
   /**
   The AVD's marker as it reads now, if any.
    */
-  readonly marker: EmulatorMarker | undefined;
+  readonly marker: EmulatorMarker | null;
 }
 
 /**
@@ -259,26 +259,26 @@ export function buildEmulatorReaperRelayBootstrap(): string {
  * Decodes the reaper's command-line arguments.
  *
  * @param argv - The arguments after the module URL.
- * @returns The arguments, or `undefined` when they are not the two {@link buildEmulatorReaperArguments} writes.
+ * @returns The arguments, or `null` when they are not the two {@link buildEmulatorReaperArguments} writes.
  */
-export function parseEmulatorReaperArguments(argv: readonly string[]): EmulatorReaperArguments | undefined {
+export function parseEmulatorReaperArguments(argv: readonly string[]): EmulatorReaperArguments | null {
   const [avdName, startedAtText, ...rest] = argv;
   if (!avdName || startedAtText === undefined || rest.length > 0) {
-    return undefined;
+    return null;
   }
 
   const startedAtInMilliseconds = Number(startedAtText);
-  return !Number.isSafeInteger(startedAtInMilliseconds) || startedAtInMilliseconds <= 0 ? undefined : { avdName, startedAtInMilliseconds };
+  return !Number.isSafeInteger(startedAtInMilliseconds) || startedAtInMilliseconds <= 0 ? null : { avdName, startedAtInMilliseconds };
 }
 
 /**
  * Decides how the reaper log is opened, so it can never grow without bound.
  *
- * @param sizeInBytes - The log's current size, or `undefined` when there is none.
+ * @param sizeInBytes - The log's current size, or `null` when there is none.
  * @returns `'a'` to append, or `'w'` to start it afresh once it has passed the cap.
  */
-export function resolveEmulatorReaperLogOpenFlag(sizeInBytes: number | undefined): 'a' | 'w' {
-  return sizeInBytes !== undefined && sizeInBytes > EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES ? 'w' : 'a';
+export function resolveEmulatorReaperLogOpenFlag(sizeInBytes: null | number): 'a' | 'w' {
+  return sizeInBytes !== null && sizeInBytes > EMULATOR_REAPER_LOG_MAX_SIZE_IN_BYTES ? 'w' : 'a';
 }
 
 /**
@@ -289,7 +289,7 @@ export function resolveEmulatorReaperLogOpenFlag(sizeInBytes: number | undefined
  */
 export function resolveEmulatorReaperWatch(params: ResolveEmulatorReaperWatchParams): EmulatorReaperWatchVerdict {
   const { marker } = params;
-  if (marker === undefined) {
+  if (marker === null) {
     return 'emulator-stopped';
   }
 
@@ -342,7 +342,7 @@ export async function runEmulatorReaper(argv: readonly string[]): Promise<void> 
       return;
     }
 
-    let lock: SetupLock | undefined;
+    let lock: null | SetupLock;
     try {
       lock = tryAcquireSetupLock({
         label: LOCK_LABEL,
@@ -447,11 +447,11 @@ function getReaperLogDirectory(): string {
   return join(tmpdir(), HARNESS_TEMP_DIR_NAME);
 }
 
-function readFileSize(path: string): number | undefined {
+function readFileSize(path: string): null | number {
   try {
     return statSync(path).size;
   } catch {
-    return undefined;
+    return null;
   }
 }
 

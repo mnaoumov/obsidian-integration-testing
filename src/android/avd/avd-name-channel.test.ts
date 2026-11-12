@@ -111,7 +111,7 @@ describe('resolveNextAvdNameChannel', () => {
   });
 
   it('should end after the console, whatever it answered', () => {
-    expect(resolveNextAvdNameChannel({ channel: 'console', didChannelRespond: false })).toBeUndefined();
+    expect(resolveNextAvdNameChannel({ channel: 'console', didChannelRespond: false })).toBeNull();
   });
 
   it('should refuse an unknown channel rather than silently ending the sequence', () => {

@@ -84,9 +84,9 @@ export interface CheckIsAppiumToolchainMarkerFreshParams {
   readonly driverName: string;
 
   /**
-   * The marker read, or `undefined` when there is none.
+   * The marker read, or `null` when there is none.
    */
-  readonly marker: AppiumToolchainMarker | undefined;
+  readonly marker: AppiumToolchainMarker | null;
 
   /**
    * The current time (`Date.now()` epoch milliseconds).
@@ -165,23 +165,23 @@ export function describeProbeDuration(durationInMilliseconds: number): string {
 /**
  * Reads the marker.
  *
- * @returns The marker, or `undefined` when there is none or it is unreadable or malformed.
+ * @returns The marker, or `null` when there is none or it is unreadable or malformed.
  */
-export function readAppiumToolchainMarker(): AppiumToolchainMarker | undefined {
+export function readAppiumToolchainMarker(): AppiumToolchainMarker | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(getMarkerFilePath(), 'utf-8'));
   } catch {
-    return undefined;
+    return null;
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    return undefined;
+    return null;
   }
 
   const { appiumVersion, checkedAtInMilliseconds, driverName } = parsed as Record<string, unknown>;
   return typeof appiumVersion !== 'string' || typeof checkedAtInMilliseconds !== 'number' || typeof driverName !== 'string'
-    ? undefined
+    ? null
     : { appiumVersion, checkedAtInMilliseconds, driverName };
 }
 

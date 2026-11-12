@@ -31,8 +31,8 @@ import {
 import { IntegrationSetupFailedError } from '../transport/integration-setup-failed-error.ts';
 import { TemporaryVault } from '../vault/temporary-vault.ts';
 
-setSetupErrorResolver(() => inject('setupError'));
-setTransportOptionsResolver(() => inject('obsidianTransport'));
+setSetupErrorResolver(() => inject('setupError') ?? null);
+setTransportOptionsResolver(() => inject('obsidianTransport') ?? null);
 setVaultPathResolver(() => inject('temporaryVaultPath'));
 
 /**

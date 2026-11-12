@@ -150,7 +150,7 @@ describe('normalizeTarHeader', () => {
     const header = buildBsdtarHeader({ name: 'a.md' });
     header.write(' '.repeat(8), CHECKSUM_OFFSET, 'ascii');
 
-    expect(() => normalizeTarHeader(header)).toThrow(/stores checksum undefined/);
+    expect(() => normalizeTarHeader(header)).toThrow(/stores checksum null/);
   });
 });
 

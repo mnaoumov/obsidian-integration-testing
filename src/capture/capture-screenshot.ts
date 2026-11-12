@@ -123,13 +123,13 @@ const CAPTURE_DEVICE_SCALE_FACTOR = 1;
  * capture to a window is the transport's job, not the payload's.
  *
  * @param params - The requested capture size.
- * @returns The CDP payload, or `undefined` when no size was requested (capture the window as it is).
+ * @returns The CDP payload, or `null` when no size was requested (capture the window as it is).
  * @throws Error if exactly one of the two dimensions is given — a half-specified size cannot be honoured.
  */
-export function buildDeviceMetricsOverride(params: Except<CaptureScreenshotParams, 'cwd'>): Record<string, unknown> | undefined {
+export function buildDeviceMetricsOverride(params: Except<CaptureScreenshotParams, 'cwd'>): null | Record<string, unknown> {
   const { heightInPixels, widthInPixels } = params;
   if (heightInPixels === undefined && widthInPixels === undefined) {
-    return undefined;
+    return null;
   }
 
   if (heightInPixels === undefined || widthInPixels === undefined) {

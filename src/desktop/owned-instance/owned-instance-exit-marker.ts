@@ -129,14 +129,14 @@ export function clearOwnedInstanceExitMarker(port: number): void {
  * Reads the marker for a port.
  *
  * @param port - The CDP port.
- * @returns The marker, or `undefined` when there is none, it is unreadable, or it does not describe this port.
+ * @returns The marker, or `null` when there is none, it is unreadable, or it does not describe this port.
  */
-export function readOwnedInstanceExitMarker(port: number): OwnedInstanceExitMarker | undefined {
+export function readOwnedInstanceExitMarker(port: number): null | OwnedInstanceExitMarker {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(getMarkerFilePath(port), 'utf-8'));
   } catch {
-    return undefined;
+    return null;
   }
 
   return parseMarker(parsed, port);
@@ -179,16 +179,16 @@ function getMarkerFilePath(port: number): string {
   return join(getMarkerDirectory(), `${String(port)}${MARKER_FILE_SUFFIX}`);
 }
 
-function parseMarker(parsed: unknown, port: number): OwnedInstanceExitMarker | undefined {
+function parseMarker(parsed: unknown, port: number): null | OwnedInstanceExitMarker {
   if (typeof parsed !== 'object' || parsed === null) {
-    return undefined;
+    return null;
   }
 
   const record = parsed as Record<string, unknown>;
   const { code, exitedAtInMilliseconds, outputTail, pid, port: markedPort, signal, spawnError } = record;
 
   return typeof exitedAtInMilliseconds !== 'number' || markedPort !== port
-    ? undefined
+    ? null
     : {
       code: typeof code === 'number' ? code : null,
       exitedAtInMilliseconds,

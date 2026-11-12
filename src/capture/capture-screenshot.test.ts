@@ -32,8 +32,8 @@ function buildPngHeader(widthInPixels: number, heightInPixels: number): Uint8Arr
 }
 
 describe('buildDeviceMetricsOverride', () => {
-  it('should return undefined when no size is requested', () => {
-    expect(buildDeviceMetricsOverride({})).toBeUndefined();
+  it('should return null when no size is requested', () => {
+    expect(buildDeviceMetricsOverride({})).toBeNull();
   });
 
   it('should pin the viewport to the requested size', () => {

@@ -163,16 +163,16 @@ describe('getVaultId', () => {
     expect(getVaultId(String.raw`F:\Obsidian`)).toBe('5e01ed323ddcc367');
   });
 
-  it('should return undefined when vault path is not in obsidian.json', () => {
+  it('should return null when vault path is not in obsidian.json', () => {
     mockReadFileSync.mockReturnValue(OBSIDIAN_JSON);
-    expect(getVaultId(String.raw`F:\nonexistent`)).toBeUndefined();
+    expect(getVaultId(String.raw`F:\nonexistent`)).toBeNull();
   });
 
-  it('should return undefined when obsidian.json does not exist', () => {
+  it('should return null when obsidian.json does not exist', () => {
     mockReadFileSync.mockImplementation(() => {
       throw new Error('ENOENT');
     });
-    expect(getVaultId(String.raw`F:\Obsidian`)).toBeUndefined();
+    expect(getVaultId(String.raw`F:\Obsidian`)).toBeNull();
   });
 
   it('should match case-insensitively on Windows', () => {

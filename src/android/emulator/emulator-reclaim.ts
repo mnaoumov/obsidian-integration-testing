@@ -340,7 +340,7 @@ export class EmulatorReclaimer {
    * that made the switch), run in parallel. A filtered call may legitimately
    * find nothing, but only when it says so: a clean exit with neither a row nor
    * `tasklist`'s own no-match notice is still a failed query, and comes back as
-   * `undefined` exactly like one that did not run — never as an empty list a
+   * `null` exactly like one that did not run — never as an empty list a
    * caller could read as "no emulator is running".
    *
    * Each failed call logs **one** line, from `host-process-query-verdict.ts`,
@@ -357,14 +357,14 @@ export class EmulatorReclaimer {
    * run does not own is the one thing **L46** forbids. The row count goes into
    * the log instead, as the evidence that the command was working.
    *
-   * @returns The host's emulator processes, or `undefined` when a query failed.
+   * @returns The host's emulator processes, or `null` when a query failed.
    */
-  public async queryEmulatorProcesses(): Promise<ProcessListEntry[] | undefined> {
+  public async queryEmulatorProcesses(): Promise<null | ProcessListEntry[]> {
     const answers = await Promise.all(buildEmulatorProcessQueries(process.platform).map((query) => this.runEmulatorProcessQuery(query)));
     const processes: ProcessListEntry[] = [];
     for (const answer of answers) {
-      if (answer === undefined) {
-        return undefined;
+      if (answer === null) {
+        return null;
       }
       processes.push(...answer);
     }
@@ -393,7 +393,7 @@ export class EmulatorReclaimer {
     }
 
     const processes = await this.queryEmulatorProcesses();
-    if (processes === undefined) {
+    if (processes === null) {
       // Without a listing every marker would read as stale, and deleting them would leave the leftovers impossible to convict.
       this.log(`Cannot judge ${String(markers.length)} emulator marker(s) without a host process listing; leaving them for a later run.`);
       return;
@@ -592,9 +592,9 @@ export class EmulatorReclaimer {
    * Runs one of the emulator process queries and classifies how it ended.
    *
    * @param query - The query.
-   * @returns Its parsed rows, or `undefined` when it failed.
+   * @returns Its parsed rows, or `null` when it failed.
    */
-  private async runEmulatorProcessQuery(query: EmulatorProcessQuery): Promise<ProcessListEntry[] | undefined> {
+  private async runEmulatorProcessQuery(query: EmulatorProcessQuery): Promise<null | ProcessListEntry[]> {
     const startedAtInMilliseconds = Date.now();
     const result = await new Promise<HostProcessQueryResult>((resolve) => {
       execFile(
@@ -627,11 +627,11 @@ export class EmulatorReclaimer {
       standardError: result.standardError,
       timeoutInMilliseconds: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
     });
-    if (message !== undefined) {
+    if (message !== null) {
       this.log(message);
     }
 
-    return outcome === 'listed' ? processes : undefined;
+    return outcome === 'listed' ? processes : null;
   }
 
   /**

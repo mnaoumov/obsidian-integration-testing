@@ -226,26 +226,26 @@ describe('buildDemoVaultPopulate', () => {
 
 describe('resolveInjectedPluginStaleReason', () => {
   it('should accept any installed copy when neither a pin nor a minimum is declared', () => {
-    expect(resolveInjectedPluginStaleReason({ installedVersion: '1.0.0', plugin: { pluginId: 'p' } })).toBeUndefined();
-    expect(resolveInjectedPluginStaleReason({ installedVersion: undefined, plugin: { pluginId: 'p' } })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '1.0.0', plugin: { pluginId: 'p' } })).toBeNull();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: null, plugin: { pluginId: 'p' } })).toBeNull();
   });
 
   it('should judge minVersion numerically, segment by segment', () => {
     const plugin = { minVersion: '13.8.0', pluginId: 'p' };
 
-    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.10.0', plugin })).toBeUndefined();
-    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.8.0', plugin })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.10.0', plugin })).toBeNull();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '13.8.0', plugin })).toBeNull();
     expect(resolveInjectedPluginStaleReason({ installedVersion: '13.7.1', plugin }))
       .toBe('the installed copy reports 13.7.1, older than `minVersion` 13.8.0');
   });
 
   it('should treat a manifest with no version as below any minVersion', () => {
-    expect(resolveInjectedPluginStaleReason({ installedVersion: undefined, plugin: { minVersion: '1.0.0', pluginId: 'p' } }))
+    expect(resolveInjectedPluginStaleReason({ installedVersion: null, plugin: { minVersion: '1.0.0', pluginId: 'p' } }))
       .toBe('the installed copy reports no version, older than `minVersion` 1.0.0');
   });
 
   it('should hold a pinned version in both directions, ignoring a leading v on the tag', () => {
-    expect(resolveInjectedPluginStaleReason({ installedVersion: '2.0.0', plugin: { pluginId: 'p', version: 'v2.0.0' } })).toBeUndefined();
+    expect(resolveInjectedPluginStaleReason({ installedVersion: '2.0.0', plugin: { pluginId: 'p', version: 'v2.0.0' } })).toBeNull();
     expect(resolveInjectedPluginStaleReason({ installedVersion: '2.1.0', plugin: { pluginId: 'p', version: '2.0.0' } }))
       .toBe('the installed copy reports 2.1.0, but `version` pins 2.0.0');
     expect(resolveInjectedPluginStaleReason({ installedVersion: '1.9.0', plugin: { pluginId: 'p', version: '2.0.0' } }))
@@ -256,7 +256,7 @@ describe('resolveInjectedPluginStaleReason', () => {
     expect(resolveInjectedPluginStaleReason({
       installedVersion: '1.0.0',
       plugin: { minVersion: '2.0.0', pluginId: 'p', sourceDirectory: 'dist', version: '3.0.0' }
-    })).toBeUndefined();
+    })).toBeNull();
   });
 });
 

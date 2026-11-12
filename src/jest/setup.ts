@@ -35,7 +35,7 @@ declare global {
 }
 /* eslint-enable vars-on-top -- End of `declare global` block. */
 
-setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions);
-setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVaultPath);
+setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions ?? null);
+setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVaultPath ?? null);
 
 /* v8 ignore stop */

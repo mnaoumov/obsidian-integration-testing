@@ -40,16 +40,16 @@ describe('extractMinRecommendedElectronVersion', () => {
   });
 
   it('should not read a different version as a match', () => {
-    expect(extractMinRecommendedElectronVersion({ appJs: MINIFIED_APP_JS, version: '1.14.4' })).toBeUndefined();
+    expect(extractMinRecommendedElectronVersion({ appJs: MINIFIED_APP_JS, version: '1.14.4' })).toBeNull();
   });
 
   it('should treat a dot in the version literally', () => {
-    expect(extractMinRecommendedElectronVersion({ appJs: 'goe="1x14x5",moe="28.2.3";', version: '1.14.5' })).toBeUndefined();
+    expect(extractMinRecommendedElectronVersion({ appJs: 'goe="1x14x5",moe="28.2.3";', version: '1.14.5' })).toBeNull();
   });
 
   it('should refuse an ambiguous answer', () => {
     const appJs = `${MINIFIED_APP_JS}x="1.14.5",y="30.0.0";`;
-    expect(extractMinRecommendedElectronVersion({ appJs, version: '1.14.5' })).toBeUndefined();
+    expect(extractMinRecommendedElectronVersion({ appJs, version: '1.14.5' })).toBeNull();
   });
 
   it('should accept the same answer twice', () => {

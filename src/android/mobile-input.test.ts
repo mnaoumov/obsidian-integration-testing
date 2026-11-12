@@ -175,7 +175,7 @@ describe('readEarlyEndedCompositionText', () => {
     ['a null result', null],
     ['a non-object result', 'unexpected']
   ])('should read nothing from %s', (_description, result) => {
-    expect(readEarlyEndedCompositionText(result)).toBeUndefined();
+    expect(readEarlyEndedCompositionText(result)).toBeNull();
   });
 
   it('should still grant the claim that carries the text', () => {

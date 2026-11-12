@@ -83,14 +83,14 @@ function getErrorLines(error: unknown): ErrorLine[] {
  * @param error - The error whose stack to read.
  * @returns The stack, when the engine supplies one.
  */
-function getErrorStack(error: Error): string | undefined {
+function getErrorStack(error: Error): null | string {
   try {
-    return error.stack;
+    return error.stack ?? null;
   } catch {
     const originalPrepareStackTrace = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
     try {
       Reflect.deleteProperty(Error, 'prepareStackTrace');
-      return error.stack;
+      return error.stack ?? null;
     } finally {
       if (originalPrepareStackTrace) {
         Object.defineProperty(Error, 'prepareStackTrace', originalPrepareStackTrace);
@@ -119,7 +119,7 @@ function getFallbackErrorString(error: unknown, formattingError: unknown): strin
 function getOwnErrorLines(error: Error): ErrorLine[] {
   const headerLines = getErrorHeader(error).split('\n').map((text) => toTitleLine(text));
   const stack = getErrorStack(error);
-  if (stack === undefined) {
+  if (stack === null) {
     return headerLines;
   }
 

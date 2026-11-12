@@ -174,16 +174,16 @@ export interface ResolvePortOwnerQueryOutcomeParams {
  * Builds the single line the query logs for an outcome.
  *
  * @param params - The outcome plus the command, the port, the budget and what the child left behind.
- * @returns The warning to log, or `undefined` when the query answered.
+ * @returns The warning to log, or `null` when the query answered.
  */
-export function buildPortOwnerQueryMessage(params: BuildPortOwnerQueryMessageParams): string | undefined {
+export function buildPortOwnerQueryMessage(params: BuildPortOwnerQueryMessageParams): null | string {
   const cost = `after ${formatDuration(params.elapsedInMilliseconds)}`;
   const subject = `\`${params.command}\` (asking who listens on port ${String(params.port)})`;
   const consequence = `Nothing is known about what still holds port ${String(params.port)}, so the escalation has no PID to kill — this is not the same as nothing holding it.`;
 
   switch (params.outcome) {
     case 'answered': {
-      return undefined;
+      return null;
     }
     case 'crashed': {
       return `Warning: ${subject} died ${cost} without explaining itself (exit ${formatExitCode(params.exitCode)}, nothing on stderr). Suspect a crash or an interfering security product, and try the command by hand. ${consequence}`;

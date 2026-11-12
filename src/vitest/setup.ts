@@ -26,8 +26,8 @@ import {
   setVaultPathResolver
 } from '../transport/context-provider.ts';
 
-setSetupErrorResolver(() => inject('setupError'));
-setTransportOptionsResolver(() => inject('obsidianTransport'));
+setSetupErrorResolver(() => inject('setupError') ?? null);
+setTransportOptionsResolver(() => inject('obsidianTransport') ?? null);
 setVaultPathResolver(() => inject('temporaryVaultPath'));
 
 /* v8 ignore stop */

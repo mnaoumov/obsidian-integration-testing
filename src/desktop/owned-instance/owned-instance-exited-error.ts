@@ -117,10 +117,10 @@ export class OwnedInstanceExitedError extends Error {
  * still built, naming the instance without claiming to know how it died.
  *
  * @param cdpUrl - The CDP URL the dead instance was serving.
- * @param marker - The exit marker read for its port, or `undefined` when there is none.
+ * @param marker - The exit marker read for its port, or `null` when there is none.
  * @returns The error to throw in place of a refused connection.
  */
-export function buildOwnedInstanceExitedErrorFromMarker(cdpUrl: string, marker: OwnedInstanceExitMarker | undefined): OwnedInstanceExitedError {
+export function buildOwnedInstanceExitedErrorFromMarker(cdpUrl: string, marker: null | OwnedInstanceExitMarker): OwnedInstanceExitedError {
   return new OwnedInstanceExitedError(
     marker
       ? {

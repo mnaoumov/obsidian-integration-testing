@@ -65,7 +65,7 @@ describe('checkIsAppiumToolchainMarkerFresh', () => {
   });
 
   it('should not trust a missing marker', () => {
-    expect(checkIsAppiumToolchainMarkerFresh({ driverName: DRIVER_NAME, marker: undefined, nowInMilliseconds: NOW_IN_MILLISECONDS })).toBe(false);
+    expect(checkIsAppiumToolchainMarkerFresh({ driverName: DRIVER_NAME, marker: null, nowInMilliseconds: NOW_IN_MILLISECONDS })).toBe(false);
   });
 
   it('should not trust a marker for another driver', () => {
@@ -96,22 +96,22 @@ describe('readAppiumToolchainMarker', () => {
     mockReadFileSync.mockImplementation(() => {
       throw new Error('ENOENT');
     });
-    expect(readAppiumToolchainMarker()).toBeUndefined();
+    expect(readAppiumToolchainMarker()).toBeNull();
   });
 
   it('should read malformed JSON as none', () => {
     mockReadFileSync.mockReturnValue('{');
-    expect(readAppiumToolchainMarker()).toBeUndefined();
+    expect(readAppiumToolchainMarker()).toBeNull();
   });
 
   it('should read a non-object as none', () => {
     mockReadFileSync.mockReturnValue('null');
-    expect(readAppiumToolchainMarker()).toBeUndefined();
+    expect(readAppiumToolchainMarker()).toBeNull();
   });
 
   it('should read a marker with a mistyped field as none', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ appiumVersion: '3.7.0', checkedAtInMilliseconds: '5', driverName: DRIVER_NAME }));
-    expect(readAppiumToolchainMarker()).toBeUndefined();
+    expect(readAppiumToolchainMarker()).toBeNull();
   });
 });
 

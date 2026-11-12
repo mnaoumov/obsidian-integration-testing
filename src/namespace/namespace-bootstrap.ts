@@ -911,8 +911,8 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   // Runs on mobile only, so `Array.prototype.at` is safe here despite L26.
-  function readLastEndedText(flight: CompositionFlight | null): string | undefined {
-    return flight === null ? undefined : flight.endedTexts.at(-1);
+  function readLastEndedText(flight: CompositionFlight | null): null | string {
+    return flight === null ? null : flight.endedTexts.at(-1) ?? null;
   }
 
   // Deletes a text just before the caret on mobile, one trusted Backspace per grapheme.
@@ -928,7 +928,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     for (let attempt = 1; attempt <= COMPOSITION_REPAIR_ATTEMPT_COUNT; attempt++) {
       const flight = await requestHostInput({ kind: 'commitComposition', text });
       const endedText = readLastEndedText(flight);
-      if (endedText === undefined || !flight?.inputTypes.has('insertText')) {
+      if (endedText === null || !flight?.inputTypes.has('insertText')) {
         return;
       }
 
@@ -951,7 +951,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     for (let attempt = 1; attempt <= COMPOSITION_REPAIR_ATTEMPT_COUNT; attempt++) {
       const flight = await requestHostInput(request);
       const endedText = readLastEndedText(flight);
-      if (endedText === undefined) {
+      if (endedText === null) {
         return;
       }
 

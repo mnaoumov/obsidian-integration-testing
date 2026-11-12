@@ -17,9 +17,9 @@ import {
 
 describe('context-provider', () => {
   describe('getSetupError', () => {
-    it('should return undefined when no resolver is registered', () => {
-      setSetupErrorResolver(() => undefined);
-      expect(getSetupError()).toBeUndefined();
+    it('should return null when no resolver is registered', () => {
+      setSetupErrorResolver(() => null);
+      expect(getSetupError()).toBeNull();
     });
 
     it('should return the value from the registered resolver', () => {
@@ -34,9 +34,9 @@ describe('context-provider', () => {
   });
 
   describe('getTransportOptions', () => {
-    it('should return undefined when no resolver is registered', () => {
-      setTransportOptionsResolver(() => undefined);
-      expect(getTransportOptions()).toBeUndefined();
+    it('should return null when no resolver is registered', () => {
+      setTransportOptionsResolver(() => null);
+      expect(getTransportOptions()).toBeNull();
     });
 
     it('should return the value from the registered resolver', () => {
@@ -47,9 +47,9 @@ describe('context-provider', () => {
   });
 
   describe('getVaultPath', () => {
-    it('should return undefined when no resolver is registered', () => {
-      setVaultPathResolver(() => undefined);
-      expect(getVaultPath()).toBeUndefined();
+    it('should return null when no resolver is registered', () => {
+      setVaultPathResolver(() => null);
+      expect(getVaultPath()).toBeNull();
     });
 
     it('should return the value from the registered resolver', () => {

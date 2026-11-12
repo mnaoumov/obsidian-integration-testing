@@ -180,12 +180,12 @@ export type ResolveHostQueryFailureParams = Pick<ResolveHostProcessQueryOutcomeP
  *
  * One line, never two: the contradictory pair in this file's header is the
  * defect this replaces. `listed` has nothing to report, so it returns
- * `undefined` rather than a cheerful line on the hot path.
+ * `null` rather than a cheerful line on the hot path.
  *
  * @param params - The outcome plus the command, the budget and what the child left behind.
- * @returns The warning to log, or `undefined` when the listing succeeded.
+ * @returns The warning to log, or `null` when the listing succeeded.
  */
-export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessageParams): string | undefined {
+export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessageParams): null | string {
   const cost = `after ${formatDuration(params.elapsedInMilliseconds)}`;
   const consequence = params.consequence ?? 'Teardown falls back to `adb devices` alone and has no PID to escalate to.';
 
@@ -194,7 +194,7 @@ export function buildHostProcessQueryMessage(params: BuildHostProcessQueryMessag
       return `Warning: \`${params.command}\` died ${cost} without explaining itself (exit ${formatExitCode(params.exitCode)}, nothing on stderr, ${String(params.partialRowCount)} process(es) listed) — it did not refuse the request, since it always explains a refusal on stderr. Suspect a crash or an interfering security product, and try the command by hand. ${consequence}`;
     }
     case 'listed': {
-      return undefined;
+      return null;
     }
     case 'not-found': {
       return `Warning: \`${params.command}\` could not be run at all ${cost}: the executable was not found on PATH. ${consequence}`;

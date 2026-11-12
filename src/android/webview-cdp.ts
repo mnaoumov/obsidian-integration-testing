@@ -290,7 +290,7 @@ export async function connectToWebViewCdp(params: ConnectToWebViewCdpParams): Pr
   const forwardList = await adb(deviceId, ['forward', '--list']);
   const existingPort = parseForwardedPort(forwardList, deviceId, socketName);
   const port = existingPort ?? await pickFreePort();
-  if (existingPort === undefined) {
+  if (existingPort === null) {
     await adb(deviceId, ['forward', `tcp:${String(port)}`, `localabstract:${socketName}`]);
     log(`[webview-cdp] Forwarded tcp:${String(port)} -> localabstract:${socketName} (${appId} pid ${pid})`);
   } else {
@@ -331,9 +331,9 @@ export async function connectToWebViewCdp(params: ConnectToWebViewCdpParams): Pr
  * @param forwardList - The output of `adb forward --list`.
  * @param deviceId - The adb device id to match.
  * @param socketName - The abstract socket name to match.
- * @returns The already-forwarded local port, or `undefined` when there is none.
+ * @returns The already-forwarded local port, or `null` when there is none.
  */
-export function parseForwardedPort(forwardList: string, deviceId: string, socketName: string): number | undefined {
+export function parseForwardedPort(forwardList: string, deviceId: string, socketName: string): null | number {
   for (const line of forwardList.split('\n')) {
     // `adb forward --list` prints `<deviceId> tcp:<port> localabstract:<socketName>`.
     const [lineDeviceId, local, remote] = line.trim().split(/\s+/, FORWARD_LIST_COLUMN_COUNT);
@@ -347,7 +347,7 @@ export function parseForwardedPort(forwardList: string, deviceId: string, socket
     }
   }
 
-  return undefined;
+  return null;
 }
 
 /**

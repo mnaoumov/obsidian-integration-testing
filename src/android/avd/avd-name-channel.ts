@@ -190,12 +190,12 @@ export function parseAvdNameAnswer(stdout: string): string {
  * Picks the next channel to ask after one failed to identify the device.
  *
  * @param params - The channel just asked, and whether its command completed.
- * @returns The next channel, or `undefined` once every channel has been asked.
+ * @returns The next channel, or `null` once every channel has been asked.
  */
-export function resolveNextAvdNameChannel(params: ResolveNextAvdNameChannelParams): AvdNameChannel | undefined {
+export function resolveNextAvdNameChannel(params: ResolveNextAvdNameChannelParams): AvdNameChannel | null {
   switch (params.channel) {
     case 'console': {
-      return undefined;
+      return null;
     }
     case 'getprop-boot': {
       /*

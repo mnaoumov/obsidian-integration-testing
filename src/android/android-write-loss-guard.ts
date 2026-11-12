@@ -64,10 +64,10 @@ interface WriteLossGuardVault {
  *
  * @param rewrites - What {@link drainAndroidWriteLossRewrites} returned. Typed
  * `unknown` because it crossed the WebDriver boundary, where nothing checks it.
- * @returns The line to log, or `undefined` when nothing was re-written.
+ * @returns The line to log, or `null` when nothing was re-written.
  */
-export function buildAndroidWriteLossReport(rewrites: unknown): string | undefined {
-  return !Array.isArray(rewrites) || rewrites.length === 0 ? undefined : `[android-write-loss-guard] Re-wrote ${String(rewrites.length)} file(s) the emulator wrote empty: ${rewrites.join('; ')}`;
+export function buildAndroidWriteLossReport(rewrites: unknown): null | string {
+  return !Array.isArray(rewrites) || rewrites.length === 0 ? null : `[android-write-loss-guard] Re-wrote ${String(rewrites.length)} file(s) the emulator wrote empty: ${rewrites.join('; ')}`;
 }
 
 /**

@@ -154,12 +154,12 @@ export function buildInstallerAssetNameCandidates(params: BuildInstallerAssetNam
  * rejecting the 32-bit / arm64 / all-users sibling assets.
  *
  * @param params - The asset list, platform, and version.
- * @returns The matching asset name, or `undefined` if none matches (e.g. a
+ * @returns The matching asset name, or `null` if none matches (e.g. a
  *   catalyst release that ships no installer).
  */
-export function selectInstallerAssetName(params: SelectInstallerAssetNameParams): string | undefined {
+export function selectInstallerAssetName(params: SelectInstallerAssetNameParams): null | string {
   const pattern = buildAssetNamePattern(getPlatformAssetShape(params.platform), params.version);
-  return params.assetNames.find((name) => pattern.test(name));
+  return params.assetNames.find((name) => pattern.test(name)) ?? null;
 }
 
 /**
@@ -167,21 +167,17 @@ export function selectInstallerAssetName(params: SelectInstallerAssetNameParams)
  * baked catalog entry.
  *
  * @param params - The baked download URLs and the platform.
- * @returns The installer URL for the platform, or `undefined` when the version
+ * @returns The installer URL for the platform, or `null` when the version
  *   has no catalog entry or ships no desktop installer for it (e.g. a catalyst
  *   build, or a Linux `.tar.gz` that was never published).
  */
-export function selectInstallerDownloadUrl(params: SelectInstallerDownloadUrlParams): string | undefined {
+export function selectInstallerDownloadUrl(params: SelectInstallerDownloadUrlParams): null | string {
   const { downloads } = params;
   if (!downloads) {
-    return undefined;
+    return null;
   }
 
-  if (params.platform === 'win32') {
-    return downloads.exe;
-  }
-
-  return params.platform === 'darwin' ? downloads.dmg : downloads.tar;
+  return params.platform === 'win32' ? downloads.exe ?? null : (params.platform === 'darwin' ? downloads.dmg : downloads.tar) ?? null;
 }
 
 /**

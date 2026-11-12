@@ -678,54 +678,54 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * Returns the silent-asar-fallback verdict for this owned instance — whether the
    * app version it is actually running matches the swapped-in pin, or the installer
    * silently reverted to its own bundled asar (read live post-boot). Returns
-   * `undefined` when this is not an owned instance, the instance has not booted
+   * `null` when this is not an owned instance, the instance has not booted
    * yet, or the verdict could not be determined (no asar was swapped, or the live
    * version was unreadable). A `'fallback'` verdict reaches this surface only when
    * the throw is disabled ({@link DesktopCdpTransportConfig.shouldThrowOnSilentAsarFallback}
    * `false`); otherwise it throws `SilentAsarFallbackError`.
    *
-   * @returns The silent-asar-fallback verdict, or `undefined`.
+   * @returns The silent-asar-fallback verdict, or `null`.
    */
-  public getAsarFallback(): AsarFallback | undefined {
-    return this.asarFallback;
+  public getAsarFallback(): AsarFallback | null {
+    return this.asarFallback ?? null;
   }
 
   /**
    * Returns the resolved installer↔app compatibility verdict for this owned
-   * instance, so callers can assert on it. Returns `undefined` when this is not
+   * instance, so callers can assert on it. Returns `null` when this is not
    * an owned instance, or the verdict could not be determined (e.g. an
    * undetectable shell version, or the app version is absent from the table).
    *
-   * @returns The compatibility verdict, or `undefined`.
+   * @returns The compatibility verdict, or `null`.
    */
-  public getCompatibility(): InstallerCompatibility | undefined {
-    return this.ownedConfig?.compatibility;
+  public getCompatibility(): InstallerCompatibility | null {
+    return this.ownedConfig?.compatibility ?? null;
   }
 
   /**
    * Returns the runtime Electron compatibility verdict for this owned instance —
    * whether the Electron version it is actually running is new enough for the
    * running app version (read live post-boot; see {@link ObsidianVersionMetadata.minRecommendedElectronVersion}).
-   * Returns `undefined` when this is not an owned instance, the instance has not
+   * Returns `null` when this is not an owned instance, the instance has not
    * booted yet, or the verdict could not be determined (the live version was
    * unreadable, or the app version carries no recommended Electron version).
    *
-   * @returns The runtime Electron compatibility verdict, or `undefined`.
+   * @returns The runtime Electron compatibility verdict, or `null`.
    */
-  public getElectronCompatibility(): ElectronCompatibility | undefined {
-    return this.electronCompatibility;
+  public getElectronCompatibility(): ElectronCompatibility | null {
+    return this.electronCompatibility ?? null;
   }
 
   /**
    * Returns the CDP endpoint of the owned, launched instance so the global setup
    * can hand it to test workers (which then **attach** to it instead of
-   * launching their own). Returns `undefined` when this transport is not an
+   * launching their own). Returns `null` when this transport is not an
    * owned instance, or its instance has not been launched yet.
    *
-   * @returns The owned instance's CDP host and port, or `undefined`.
+   * @returns The owned instance's CDP host and port, or `null`.
    */
-  public getOwnedInstanceEndpoint(): OwnedInstanceEndpoint | undefined {
-    return !this.ownedConfig || !this.ownedInstance ? undefined : { host: this.cdpHost, port: this.cdpPort };
+  public getOwnedInstanceEndpoint(): null | OwnedInstanceEndpoint {
+    return !this.ownedConfig || !this.ownedInstance ? null : { host: this.cdpHost, port: this.cdpPort };
   }
 
   /**
@@ -917,7 +917,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const verdict = resolveElectronCompatibility({
       actualElectronVersion,
       appVersion,
-      metadata: getVersionMetadata(appVersion)
+      metadata: getVersionMetadata(appVersion) ?? undefined
     });
     this.electronCompatibility = verdict;
     if (verdict.tier === 'nagged' && this.shouldWarnOnCompatibilityIssues) {
@@ -1660,14 +1660,14 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * never bootstrapped (the renderer page target still exists), which is exactly
    * the state it must observe.
    *
-   * @returns The sampled observation, or `undefined` when no target is reachable
+   * @returns The sampled observation, or `null` when no target is reachable
    *   or the probe failed (so the caller keeps polling rather than fast-failing).
    */
-  private async probeRendererBootState(): Promise<RendererBootObservation | undefined> {
+  private async probeRendererBootState(): Promise<null | RendererBootObservation> {
     try {
       const [target] = await this.getPageTargets();
       if (!target) {
-        return undefined;
+        return null;
       }
 
       const ws = await this.connectToTarget(target);
@@ -1682,12 +1682,12 @@ export class DesktopCdpTransport implements ObsidianTransport {
           returnByValue: true
         });
         const value = response.result?.result?.value;
-        return typeof value === 'string' ? (JSON.parse(value) as RendererBootObservation) : undefined;
+        return typeof value === 'string' ? (JSON.parse(value) as RendererBootObservation) : null;
       } finally {
         ws.close();
       }
     } catch {
-      return undefined;
+      return null;
     }
   }
 

@@ -54,11 +54,11 @@ describe('selectPluginRepo', () => {
     expect(selectPluginRepo({ entries: ENTRIES, pluginId: 'fix-require-modules' })).toBe('mnaoumov/obsidian-codescript-toolkit');
   });
 
-  it('should return undefined for an id that is not in the registry', () => {
-    expect(selectPluginRepo({ entries: ENTRIES, pluginId: 'not-a-community-plugin' })).toBeUndefined();
+  it('should return null for an id that is not in the registry', () => {
+    expect(selectPluginRepo({ entries: ENTRIES, pluginId: 'not-a-community-plugin' })).toBeNull();
   });
 
-  it('should return undefined for an empty registry', () => {
-    expect(selectPluginRepo({ entries: [], pluginId: 'fix-require-modules' })).toBeUndefined();
+  it('should return null for an empty registry', () => {
+    expect(selectPluginRepo({ entries: [], pluginId: 'fix-require-modules' })).toBeNull();
   });
 });

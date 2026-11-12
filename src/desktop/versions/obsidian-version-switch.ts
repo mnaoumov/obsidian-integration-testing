@@ -138,14 +138,14 @@ export async function fetchDesktopReleasesManifest(): Promise<DesktopReleasesMan
  * Finds the newest `obsidian-<version>.asar` in a directory.
  *
  * @param directory - The directory to scan (e.g. the user's Obsidian config directory).
- * @returns The newest discovered asar, or `undefined` if none / the directory is unreadable.
+ * @returns The newest discovered asar, or `null` if none / the directory is unreadable.
  */
-export function findNewestAsar(directory: string): DiscoveredAsar | undefined {
+export function findNewestAsar(directory: string): DiscoveredAsar | null {
   let entries: string[];
   try {
     entries = readdirSync(directory);
   } catch {
-    return undefined;
+    return null;
   }
 
   let newest: DiscoveredAsar | undefined;
@@ -159,7 +159,7 @@ export function findNewestAsar(directory: string): DiscoveredAsar | undefined {
       newest = { path: join(directory, entry), version };
     }
   }
-  return newest;
+  return newest ?? null;
 }
 
 /**

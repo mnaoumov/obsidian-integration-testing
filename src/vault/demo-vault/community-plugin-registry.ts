@@ -129,9 +129,9 @@ export function isValidRepoReference(repo: string): boolean {
  * Looks a plugin id up in Obsidian's community plugin registry.
  *
  * @param params - The {@link SelectPluginRepoParams}.
- * @returns The publishing `owner/name` repo, or `undefined` when the id is not a
+ * @returns The publishing `owner/name` repo, or `null` when the id is not a
  *   registered community plugin (a private or unlisted plugin, or a typo).
  */
-export function selectPluginRepo(params: SelectPluginRepoParams): string | undefined {
-  return params.entries.find((entry) => entry.id === params.pluginId)?.repo;
+export function selectPluginRepo(params: SelectPluginRepoParams): null | string {
+  return params.entries.find((entry) => entry.id === params.pluginId)?.repo ?? null;
 }

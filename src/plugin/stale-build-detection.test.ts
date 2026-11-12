@@ -75,7 +75,7 @@ describe('checkIsBuildStale', () => {
   });
 
   it('should report fresh when there is no source, rather than failing every run of such a project', () => {
-    expect(checkIsBuildStale({ buildModifiedAtInMilliseconds: toMilliseconds(0), newestSource: undefined })).toBe(false);
+    expect(checkIsBuildStale({ buildModifiedAtInMilliseconds: toMilliseconds(0), newestSource: null })).toBe(false);
   });
 });
 
@@ -150,10 +150,10 @@ describe('findNewestSourceModification', () => {
     });
   });
 
-  it('should return undefined for a project whose sources are not under src/', async () => {
+  it('should return null for a project whose sources are not under src/', async () => {
     rmSync(join(projectRoot, 'src'), { recursive: true });
 
-    await expect(findNewestSourceModification(projectRoot)).resolves.toBeUndefined();
+    await expect(findNewestSourceModification(projectRoot)).resolves.toBeNull();
   });
 });
 

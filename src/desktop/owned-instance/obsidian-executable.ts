@@ -37,12 +37,12 @@ export async function resolveObsidianExecutable(): Promise<string> {
   return process.platform === 'darwin' ? resolveOnMacOs() : (await resolveOnLinux());
 }
 
-async function findInPath(lookupCommand: string, executableName: string): Promise<string | undefined> {
+async function findInPath(lookupCommand: string, executableName: string): Promise<null | string> {
   let output: string;
   try {
     output = await exec(`${lookupCommand} ${executableName}`, { isQuiet: true });
   } catch {
-    return undefined;
+    return null;
   }
 
   const candidates = output
@@ -58,7 +58,7 @@ async function findInPath(lookupCommand: string, executableName: string): Promis
    * before the actual `scoop\apps\<app>\current\<name>.exe`, so skip any shim.
    */
   const nonShim = candidates.find((candidate) => !isShim(candidate));
-  return nonShim ?? candidates[0];
+  return nonShim ?? candidates[0] ?? null;
 }
 
 /**

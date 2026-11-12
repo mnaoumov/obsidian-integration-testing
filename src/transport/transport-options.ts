@@ -762,9 +762,9 @@ export function checkIsMobileTransport(options: ObsidianTransportOptions): boole
  * needs — see `ensureHeadlessVaultConfig`.
  *
  * @param options - The resolved transport options.
- * @returns The overridden config folder name, or `undefined` for Obsidian's default.
+ * @returns The overridden config folder name, or `null` for Obsidian's default.
  */
 // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
-export function resolveOwnedConfigDirectory(options: ObsidianTransportOptions): string | undefined {
-  return options.type !== 'obsidian-cdp' || options.port !== undefined ? undefined : options.configDirectory;
+export function resolveOwnedConfigDirectory(options: ObsidianTransportOptions): null | string {
+  return options.type !== 'obsidian-cdp' || options.port !== undefined ? null : options.configDirectory ?? null;
 }

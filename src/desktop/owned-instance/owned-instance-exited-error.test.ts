@@ -131,7 +131,7 @@ describe('buildOwnedInstanceExitedErrorFromMarker', () => {
   });
 
   it('should build an error naming only the instance when there is no marker', () => {
-    const error = buildOwnedInstanceExitedErrorFromMarker(CDP_URL, undefined);
+    const error = buildOwnedInstanceExitedErrorFromMarker(CDP_URL, null);
 
     expect(error).toBeInstanceOf(OwnedInstanceExitedError);
     expect(error.message).toContain(CDP_URL);

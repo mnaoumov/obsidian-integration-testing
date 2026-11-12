@@ -57,9 +57,9 @@ export const FRAMEWORK_SERVICE_NAMES: readonly string[] = ['settings', 'package'
  */
 export interface BuildFrameworkNotReadyMessageParams {
   /**
-  Raw `logcat -d -b crash` output, or `undefined` when it could not be read.
+  Raw `logcat -d -b crash` output, or `null` when it could not be read.
    */
-  readonly crashLog: string | undefined;
+  readonly crashLog: null | string;
 
   /**
   The device the gate ran on.
@@ -77,9 +77,9 @@ export interface BuildFrameworkNotReadyMessageParams {
   readonly restarts: readonly SystemServerRestart[];
 
   /**
-  Raw `logcat -d -b system` output, or `undefined` when it could not be read.
+  Raw `logcat -d -b system` output, or `null` when it could not be read.
    */
-  readonly systemLog: string | undefined;
+  readonly systemLog: null | string;
 
   /**
   The budget the gate ran out of.
@@ -327,7 +327,7 @@ export function parseFrameworkProbeOutput(output: string): FrameworkProbe {
     }
   }
 
-  return { foundServices, identity: resolveIdentity(countText, uptimeText, pidText) };
+  return { foundServices, identity: resolveIdentity(countText, uptimeText, pidText) ?? undefined };
 }
 
 /**
@@ -367,8 +367,8 @@ export function resolveFrameworkReadyTimeoutInMilliseconds(
   return options.frameworkReadyTimeoutInMilliseconds ?? DEFAULT_FRAMEWORK_READY_TIMEOUT_IN_MILLISECONDS;
 }
 
-function formatLogSection(logText: string | undefined, isRelevant: (line: string) => boolean): string {
-  if (logText === undefined) {
+function formatLogSection(logText: null | string, isRelevant: (line: string) => boolean): string {
+  if (logText === null) {
     return '(could not be read)';
   }
 
@@ -376,22 +376,22 @@ function formatLogSection(logText: string | undefined, isRelevant: (line: string
   return lines.length === 0 ? '(empty)' : lines.slice(-LOG_LINE_LIMIT).join('\n');
 }
 
-function parsePositiveInteger(text: string): number | undefined {
+function parsePositiveInteger(text: string): null | number {
   if (!/^\d+$/.test(text)) {
-    return undefined;
+    return null;
   }
 
   const value = Number(text);
-  return value > 0 ? value : undefined;
+  return value > 0 ? value : null;
 }
 
-function resolveIdentity(countText: string, uptimeText: string, pidText: string): SystemServerIdentity | undefined {
+function resolveIdentity(countText: string, uptimeText: string, pidText: string): null | SystemServerIdentity {
   const count = parsePositiveInteger(countText);
-  if (count !== undefined) {
+  if (count !== null) {
     return { count, kind: 'start-count', uptime: uptimeText };
   }
 
   // `pidof` prints every match; system_server is one process, so several pids are not an identity.
   const pid = parsePositiveInteger(pidText);
-  return pid === undefined ? undefined : { kind: 'pid', pid };
+  return pid === null ? null : { kind: 'pid', pid };
 }

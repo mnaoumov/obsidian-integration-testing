@@ -207,7 +207,7 @@ export async function bootstrapDemoVaultPlugins(params: BootstrapDemoVaultPlugin
     // Sequential on purpose: the installs share one memoised registry fetch.
     // Parallelism would buy nothing but interleaved logs for the handful of plugins a demo vault injects.
     const info = await installPlugin({ demoVaultPath, plugin, shouldSkipUnlistedPlugins });
-    if (info === undefined) {
+    if (info === null) {
       unlistedPluginIds.push(plugin.pluginId);
     } else {
       installed.push(info);
@@ -262,14 +262,14 @@ function buildGitHubHeaders(): Headers {
  *
  * @param url - The asset's download URL.
  * @param isRequired - Whether a missing asset (HTTP 404) is an error rather than an absent optional file.
- * @returns The asset's bytes, or `undefined` when an optional asset is not published.
+ * @returns The asset's bytes, or `null` when an optional asset is not published.
  * @throws Error if the download fails and the asset is required.
  */
-async function downloadAsset(url: string, isRequired: boolean): Promise<Buffer | undefined> {
+async function downloadAsset(url: string, isRequired: boolean): Promise<Buffer | null> {
   const response = await fetch(url, { headers: buildGitHubHeaders() });
   if (!response.ok) {
     if (!isRequired && response.status === HTTP_NOT_FOUND) {
-      return undefined;
+      return null;
     }
     throw new Error(`Failed to download ${url}: HTTP ${String(response.status)} ${response.statusText}`);
   }
@@ -309,17 +309,17 @@ async function fetchCommunityPluginRegistry(): Promise<readonly CommunityPluginR
  * Downloads one plugin's release assets and writes them into the demo vault.
  *
  * @param params - The {@link InstallPluginParams}.
- * @returns What was installed, or `undefined` when the plugin is unlisted and `shouldSkipUnlistedPlugins` is set.
+ * @returns What was installed, or `null` when the plugin is unlisted and `shouldSkipUnlistedPlugins` is set.
  * @throws Error if the repository cannot be resolved or a required asset cannot be downloaded.
  */
-async function installPlugin(params: InstallPluginParams): Promise<InstalledPluginInfo | undefined> {
+async function installPlugin(params: InstallPluginParams): Promise<InstalledPluginInfo | null> {
   const { demoVaultPath, plugin, shouldSkipUnlistedPlugins } = params;
   const { pluginId, version } = plugin;
   const repo = await resolvePluginRepo(plugin);
-  if (repo === undefined) {
+  if (repo === null) {
     if (shouldSkipUnlistedPlugins) {
       log(`[demo-vault-bootstrap] Skipping "${pluginId}": it is not in Obsidian's community plugin registry and no \`repo\` was given.`);
-      return undefined;
+      return null;
     }
     throw new Error(
       `Community plugin "${pluginId}" is not listed in Obsidian's community plugin registry, so its GitHub `
@@ -345,7 +345,7 @@ async function installPlugin(params: InstallPluginParams): Promise<InstalledPlug
 
   const assetNames: string[] = [];
   for (const { assetName, content } of downloads) {
-    if (content === undefined) {
+    if (content === null) {
       continue;
     }
     writeFileSync(join(targetDirectory, assetName), content);
@@ -362,10 +362,10 @@ async function installPlugin(params: InstallPluginParams): Promise<InstalledPlug
  * Obsidian's community plugin registry.
  *
  * @param plugin - The plugin to resolve.
- * @returns The `owner/name` repository reference, or `undefined` when the id is not a registered community plugin.
+ * @returns The `owner/name` repository reference, or `null` when the id is not a registered community plugin.
  * @throws Error if an explicit override is malformed.
  */
-async function resolvePluginRepo(plugin: InjectPluginParams): Promise<string | undefined> {
+async function resolvePluginRepo(plugin: InjectPluginParams): Promise<null | string> {
   const { pluginId, repo } = plugin;
 
   if (repo !== undefined) {

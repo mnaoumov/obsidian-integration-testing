@@ -511,7 +511,7 @@ describe('tryAcquireSetupLock', () => {
     mockReadFileSync.mockReturnValue(lockInfoJson());
     mockKill.mockReturnValue(undefined);
 
-    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeUndefined();
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeNull();
     expect(mockRmSync).not.toHaveBeenCalled();
   });
 
@@ -523,7 +523,7 @@ describe('tryAcquireSetupLock', () => {
       throw makeErrnoError('ENOENT');
     });
 
-    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeUndefined();
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeNull();
     expect(mockRmSync).not.toHaveBeenCalled();
   });
 
@@ -554,7 +554,7 @@ describe('tryAcquireSetupLock', () => {
       throw makeErrnoError('ESRCH');
     });
 
-    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeUndefined();
+    expect(tryAcquireSetupLock({ label: 'emulator-reaper', scope: 'desktop' })).toBeNull();
     expect(mockRmSync).toHaveBeenCalledTimes(1);
   });
 
@@ -583,7 +583,7 @@ describe('tryAcquireSetupLock', () => {
       staleAfterSilenceInMilliseconds: THIRTY_MINUTES_IN_MILLISECONDS
     });
 
-    expect(lock).toBeUndefined();
+    expect(lock).toBeNull();
     expect(mockRmSync).not.toHaveBeenCalled();
   });
 });

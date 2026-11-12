@@ -391,13 +391,13 @@ export function checkIsSetupLockHeld(scope: string): boolean {
  * Takes the setup lock for a scope if it is free or abandoned, without waiting.
  *
  * One attempt: a live holder — or a lock file that cannot be read — means
- * `undefined`, and the caller decides whether to try again later.
+ * `null`, and the caller decides whether to try again later.
  *
  * @param params - The lock parameters.
- * @returns A handle whose {@link SetupLock.release} frees the lock, or `undefined` while another run holds it.
+ * @returns A handle whose {@link SetupLock.release} frees the lock, or `null` while another run holds it.
  * @throws If the file system fails for any reason other than the lock file already existing.
  */
-export function tryAcquireSetupLock(params: TryAcquireSetupLockParams): SetupLock | undefined {
+export function tryAcquireSetupLock(params: TryAcquireSetupLockParams): null | SetupLock {
   const { label, scope } = params;
   const lockFilePath = getLockFilePath(scope);
   mkdirSync(getLockDirectory(), { recursive: true });
@@ -406,14 +406,14 @@ export function tryAcquireSetupLock(params: TryAcquireSetupLockParams): SetupLoc
   if (!ownInfo) {
     const info = readLockFileInfo(lockFilePath);
     if (!info || !checkIsLockStale(info, params.staleAfterSilenceInMilliseconds ?? HEARTBEAT_STALE_IN_MILLISECONDS)) {
-      return undefined;
+      return null;
     }
 
     stealStaleLock({ info, label, lockFilePath, scope });
     ownInfo = tryCreateLockFile(lockFilePath, label);
     if (!ownInfo) {
       // Another run recreated it between the steal and this attempt; it is theirs now.
-      return undefined;
+      return null;
     }
   }
 
@@ -653,10 +653,10 @@ function formatWaitMessage(params: FormatWaitMessageParams): string {
  * Extracts the `code` from a Node.js system error, if present.
  *
  * @param error - The thrown value.
- * @returns The error code string, or `undefined` if not a coded error.
+ * @returns The error code string, or `null` if not a coded error.
  */
-function getErrorCode(error: unknown): string | undefined {
-  return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : undefined;
+function getErrorCode(error: unknown): null | string {
+  return error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : null;
 }
 
 /**

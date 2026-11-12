@@ -615,12 +615,12 @@ export class AppiumTransport implements ObsidianTransport {
    * uncaught errors, and caps the result length. Bounded, post-hoc,
    * failure-path-only — never a live monitor.
    *
-   * @param handle - The capture handle (or `undefined` when capture never started).
-   * @returns The captured console/error text, or `undefined` if nothing relevant was logged.
+   * @param handle - The capture handle (or `null` when capture never started).
+   * @returns The captured console/error text, or `null` if nothing relevant was logged.
    */
-  public async readConsoleCaptureSince(handle: ConsoleCaptureHandle | undefined): Promise<string | undefined> {
+  public async readConsoleCaptureSince(handle: ConsoleCaptureHandle | null): Promise<null | string> {
     if (!handle) {
-      return undefined;
+      return null;
     }
 
     const dump = await exec(
@@ -636,7 +636,7 @@ export class AppiumTransport implements ObsidianTransport {
       .join('\n')
       .trim();
 
-    return relevant ? relevant.slice(-CONSOLE_CAPTURE_TAIL_MAX_LENGTH) : undefined;
+    return relevant ? relevant.slice(-CONSOLE_CAPTURE_TAIL_MAX_LENGTH) : null;
   }
 
   /**
@@ -961,6 +961,7 @@ export class AppiumTransport implements ObsidianTransport {
    * @param script - The script to run, already wrapped in its `return (...)`.
    * @returns The script's result.
    */
+  // eslint-disable-next-line typescript-dev-toolkit/no-undefined-return-type -- Mirrors WebdriverIO's `browser.execute`, whose script can return `undefined`.
   private async evaluateWithinCap(script: string): Promise<null | string | undefined> {
     /*
      * The eval AFTER an overrun gets a grace period on top of the cap, and this is not generosity. Appium
@@ -1045,7 +1046,7 @@ export class AppiumTransport implements ObsidianTransport {
         return;
       }
 
-      await connection.sendAll(toCdpInputCommands(request, readEarlyEndedCompositionText(claim)));
+      await connection.sendAll(toCdpInputCommands(request, readEarlyEndedCompositionText(claim) ?? undefined));
       await connection.send('Runtime.evaluate', { expression: buildResolveInputExpression(id) });
     } catch (error: unknown) {
       const message = errorToString(error);

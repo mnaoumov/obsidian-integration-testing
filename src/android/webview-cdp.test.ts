@@ -22,19 +22,19 @@ describe('parseForwardedPort', () => {
   });
 
   it('should not match the same socket on a different device', () => {
-    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5555', 'webview_devtools_remote_18056')).toBeUndefined();
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5555', 'webview_devtools_remote_18056')).toBeNull();
   });
 
   it('should not match a different socket on the same device', () => {
-    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'webview_devtools_remote_999')).toBeUndefined();
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'webview_devtools_remote_999')).toBeNull();
   });
 
   it('should ignore non-localabstract forwards, such as Appium own tcp pairs', () => {
-    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'tcp:6790')).toBeUndefined();
+    expect(parseForwardedPort(FORWARD_LIST, 'emulator-5554', 'tcp:6790')).toBeNull();
   });
 
-  it('should return undefined when nothing is forwarded yet', () => {
-    expect(parseForwardedPort('', 'emulator-5554', 'webview_devtools_remote_18056')).toBeUndefined();
+  it('should return null when nothing is forwarded yet', () => {
+    expect(parseForwardedPort('', 'emulator-5554', 'webview_devtools_remote_18056')).toBeNull();
   });
 
   it('should tolerate the padded and CRLF-terminated output adb actually prints', () => {

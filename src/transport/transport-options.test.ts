@@ -35,17 +35,17 @@ describe('resolveOwnedConfigDirectory', () => {
     expect(resolveOwnedConfigDirectory({ configDirectory: '.obsidian-desktop', type: 'obsidian-cdp' })).toBe('.obsidian-desktop');
   });
 
-  it('returns undefined when no override is configured', () => {
-    expect(resolveOwnedConfigDirectory({ type: 'obsidian-cdp' })).toBeUndefined();
+  it('returns null when no override is configured', () => {
+    expect(resolveOwnedConfigDirectory({ type: 'obsidian-cdp' })).toBeNull();
   });
 
   it('ignores the override in attach mode, where the vault is opened under the user own config', () => {
     // `port` is the attach discriminator, and the option's own docs call it ignored there. Honouring it
     // anyway would write the harness defaults into a folder the attached Obsidian never reads.
-    expect(resolveOwnedConfigDirectory({ configDirectory: '.obsidian-desktop', port: 9222, type: 'obsidian-cdp' })).toBeUndefined();
+    expect(resolveOwnedConfigDirectory({ configDirectory: '.obsidian-desktop', port: 9222, type: 'obsidian-cdp' })).toBeNull();
   });
 
-  it('returns undefined for a mobile transport, which has no override at all', () => {
-    expect(resolveOwnedConfigDirectory(ANDROID_OPTIONS)).toBeUndefined();
+  it('returns null for a mobile transport, which has no override at all', () => {
+    expect(resolveOwnedConfigDirectory(ANDROID_OPTIONS)).toBeNull();
   });
 });

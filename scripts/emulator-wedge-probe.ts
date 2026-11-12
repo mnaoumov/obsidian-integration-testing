@@ -268,11 +268,11 @@ function delay(durationInMilliseconds: number): Promise<void> {
 /**
  * Finds the QEMU backend's PID once, for {@link sampleBackend} to reuse.
  *
- * @returns The PID, or `undefined` when no backend is listed.
+ * @returns The PID, or `null` when no backend is listed.
  */
-async function findBackendPid(): Promise<number | undefined> {
+async function findBackendPid(): Promise<null | number> {
   const emulatorProcesses = await listEmulatorProcesses();
-  return emulatorProcesses.find((entry) => toBaseName(entry.name).startsWith(QEMU_BACKEND_NAME_PREFIX))?.pid;
+  return emulatorProcesses.find((entry) => toBaseName(entry.name).startsWith(QEMU_BACKEND_NAME_PREFIX))?.pid ?? null;
 }
 
 /**
@@ -305,7 +305,7 @@ async function listEmulatorProcesses(): Promise<ProcessListEntry[]> {
         hasReportedNoMatch: (text) => checkIsNoMatchReported({ output: text, query }),
         query
       });
-      return output === undefined ? [] : parseEmulatorProcessQueryOutput({ output, query });
+      return output === null ? [] : parseEmulatorProcessQueryOutput({ output, query });
     })
   );
 
@@ -384,9 +384,9 @@ async function resolveVerdict(deviceId: string): Promise<EmulatorLivenessVerdict
  * (`host-process-query-verdict.ts`), so the two name a failure identically.
  *
  * @param params - The query, how to read its output, and what a failure costs.
- * @returns The stdout, or `undefined` when the query failed.
+ * @returns The stdout, or `null` when the query failed.
  */
-async function runHostQuery(params: RunHostQueryParams): Promise<string | undefined> {
+async function runHostQuery(params: RunHostQueryParams): Promise<null | string> {
   const startedAtInMilliseconds = Date.now();
   const result = await new Promise<HostProcessQueryResult>((resolve) => {
     execFile(
@@ -424,11 +424,11 @@ async function runHostQuery(params: RunHostQueryParams): Promise<string | undefi
     standardError: result.standardError,
     timeoutInMilliseconds: HOST_PROCESS_QUERY_TIMEOUT_IN_MILLISECONDS
   });
-  if (message !== undefined) {
+  if (message !== null) {
     console.warn(message);
   }
 
-  return outcome === 'listed' ? result.standardOutput : undefined;
+  return outcome === 'listed' ? result.standardOutput : null;
 }
 
 /**
@@ -525,11 +525,11 @@ async function runProbe(): Promise<void> {
  * the verdict stands on the adb probes alone.
  *
  * @param pid - The backend's PID, found once after boot.
- * @returns The sample, or `undefined` when the backend could not be sampled.
+ * @returns The sample, or `null` when the backend could not be sampled.
  */
-async function sampleBackend(pid: number | undefined): Promise<BackendSample | undefined> {
-  if (pid === undefined) {
-    return undefined;
+async function sampleBackend(pid: null | number): Promise<BackendSample | null> {
+  if (pid === null) {
+    return null;
   }
 
   const backend = { pid };
@@ -547,13 +547,13 @@ async function sampleBackend(pid: number | undefined): Promise<BackendSample | u
 
   const output = await runHostQuery({
     consequence: 'This tick prints `?` because the sample query failed, not because the backend could not be found.',
-    countRows: (text) => parseBackendSample(text) === undefined ? 0 : 1,
+    countRows: (text) => parseBackendSample(text) === null ? 0 : 1,
     // A backend that has exited prints nothing, and that silence is the answer rather than a failed query.
     hasReportedNoMatch: () => true,
     isSilentExitOneAnAnswer: true,
     query
   });
-  return output === undefined ? undefined : parseBackendSample(output);
+  return output === null ? null : parseBackendSample(output);
 }
 
 /**
@@ -627,10 +627,10 @@ async function waitForBootedDevice(): Promise<string> {
  * Polls the device until it stops answering or outlives the survival budget.
  *
  * @param deviceId - The booted device.
- * @param backendPid - The QEMU backend's PID, or `undefined` when it could not be found.
+ * @param backendPid - The QEMU backend's PID, or `null` when it could not be found.
  * @returns Every tick, in order. The last one carries the verdict.
  */
-async function watchDevice(deviceId: string, backendPid: number | undefined): Promise<ProbeTick[]> {
+async function watchDevice(deviceId: string, backendPid: null | number): Promise<ProbeTick[]> {
   const ticks: ProbeTick[] = [];
   /*
    * A baseline sample before the first poll, so the first tick already has
@@ -655,7 +655,7 @@ async function watchDevice(deviceId: string, backendPid: number | undefined): Pr
           intervalInMilliseconds: sampledAt - previousSampledAt,
           previous: previousSample
         })
-        : undefined,
+        : null,
       elapsedInMilliseconds: sampledAt - startedAt,
       freeMemoryInBytes: freemem(),
       verdict

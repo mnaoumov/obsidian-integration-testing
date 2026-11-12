@@ -221,7 +221,7 @@ describe('buildHostProcessQueryMessage', () => {
    * that found nothing.
    */
   it('should say nothing at all for a successful listing', () => {
-    expect(buildHostProcessQueryMessage(buildParams('listed', { partialRowCount: 528 }))).toBeUndefined();
+    expect(buildHostProcessQueryMessage(buildParams('listed', { partialRowCount: 528 }))).toBeNull();
   });
 
   it('should name the budget, the kill and the partial listing for a timeout', () => {

@@ -51,8 +51,8 @@ declare global {
 }
 /* eslint-enable vars-on-top -- End of `declare global` block. */
 
-setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions);
-setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVaultPath);
+setTransportOptionsResolver(() => globalThis.__obsidianIntegrationTesting?.transportOptions ?? null);
+setVaultPathResolver(() => globalThis.__obsidianIntegrationTesting?.temporaryVaultPath ?? null);
 
 /**
  * Options for {@link createSetup}.
@@ -162,10 +162,10 @@ export function getTemporaryVault(): TemporaryVault {
 /**
  * Returns the transport options provided by the global setup.
  *
- * @returns The transport options, or `undefined` if not configured.
+ * @returns The transport options, or `null` if not configured.
  */
-export function getTransportOptions(): ObsidianTransportOptions | undefined {
-  return globalThis.__obsidianIntegrationTesting?.transportOptions;
+export function getTransportOptions(): null | ObsidianTransportOptions {
+  return globalThis.__obsidianIntegrationTesting?.transportOptions ?? null;
 }
 
 const defaultGlobalSetup = createSetup();
