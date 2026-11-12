@@ -87,9 +87,13 @@ interface CdpMessage {
 
 /**
  * A command waiting for its reply: settles the {@link WebViewCdpConnection.send}
- * call's promise and cancels the timeout that would otherwise fail it.
+ * call's promise and cancels the timeout that would otherwise fail it, either with
+ * the reply or, when the socket closes first, with the reason no reply will come.
  */
-type PendingCommand = (message: CdpMessage) => void;
+interface PendingCommand {
+  readonly reject: (error: Error) => void;
+  readonly resolve: (message: CdpMessage) => void;
+}
 
 /* v8 ignore start -- Integration-time code (a live WebSocket to a WebView, adb port forwarding). Covered by the Android integration tests, not by unit tests. It ends before `parseForwardedPort`: `perfectionist/sort-modules` places the pure, unit-tested helpers AFTER this class and `connectToWebViewCdp`, so they must stay measured. */
 
@@ -165,7 +169,22 @@ export class WebViewCdpConnection {
       }
 
       this.pendingCommands.delete(message.id);
-      pendingCommand(message);
+      pendingCommand.resolve(message);
+    });
+
+    /*
+     * A closed socket answers nothing, so every command still waiting on it fails now rather than at its
+     * Timeout: the app restarting, or the WebView being torn down, used to leave a trusted-input request
+     * waiting the full `CDP_COMMAND_TIMEOUT_IN_MILLISECONDS`. The desktop transport's `getPendingCommands`
+     * does the same.
+     */
+    this.webSocket.addEventListener('close', ($event: CloseEvent) => {
+      const error = new Error(`WebView CDP socket closed (code ${String($event.code)}) before the command was answered`);
+      const waitingCommands = [...this.pendingCommands.values()];
+      this.pendingCommands.clear();
+      for (const waitingCommand of waitingCommands) {
+        waitingCommand.reject(error);
+      }
     });
   }
 
@@ -221,15 +240,29 @@ export class WebViewCdpConnection {
         reject(new Error(`WebView CDP command timed out after ${String(CDP_COMMAND_TIMEOUT_IN_MILLISECONDS)}ms: ${method}`));
       }, CDP_COMMAND_TIMEOUT_IN_MILLISECONDS);
 
-      this.pendingCommands.set(id, (message) => {
-        clearTimeout(timeout);
-        if (message.error) {
-          reject(new Error(`WebView CDP command ${method} failed: ${message.error.message ?? 'unknown error'}`));
-          return;
-        }
+      this.pendingCommands.set(id, {
+        reject(error: Error): void {
+          clearTimeout(timeout);
+          reject(error);
+        },
+        resolve(message: CdpMessage): void {
+          clearTimeout(timeout);
+          if (message.error) {
+            reject(new Error(`WebView CDP command ${method} failed: ${message.error.message ?? 'unknown error'}`));
+            return;
+          }
 
-        resolve(message.result ?? {});
+          resolve(message.result ?? {});
+        }
       });
+
+      if (this.webSocket.readyState !== WebSocket.OPEN) {
+        // A socket that is already closing or closed fires no further `close` for this command and silently drops the send.
+        clearTimeout(timeout);
+        this.pendingCommands.delete(id);
+        reject(new Error(`WebView CDP socket is not open (readyState ${String(this.webSocket.readyState)}); ${method} was not sent`));
+        return;
+      }
 
       try {
         this.webSocket.send(JSON.stringify({ id, method, params }));

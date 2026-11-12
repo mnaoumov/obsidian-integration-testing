@@ -4,11 +4,74 @@ import {
   it
 } from 'vitest';
 
+import { strictProxy } from '../strict-proxy.ts';
 import {
   parseForwardedPort,
   parseWebViewDevtoolsSocketName,
-  selectWebViewPageTarget
+  selectWebViewPageTarget,
+  WebViewCdpConnection
 } from './webview-cdp.ts';
+
+const ABNORMAL_CLOSE_CODE = 1006;
+
+/**
+ * A stand-in for the debugger socket: a settable `readyState`, a record of what was sent, and listeners it
+ * can fire by hand.
+ */
+class FakeWebSocket {
+  public readyState: number = WebSocket.OPEN;
+  public readonly sent: string[] = [];
+  private readonly listeners = new Map<string, (($event: Event) => void)[]>();
+
+  public addEventListener(type: string, listener: ($event: Event) => void): void {
+    this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+  }
+
+  public dispatchEvent($event: Event): void {
+    for (const listener of this.listeners.get($event.type) ?? []) {
+      listener($event);
+    }
+  }
+
+  public send(data: string): void {
+    this.sent.push(data);
+  }
+}
+
+function createConnection(fakeWebSocket: FakeWebSocket): WebViewCdpConnection {
+  return new WebViewCdpConnection(strictProxy<WebSocket>(fakeWebSocket), 'emulator-5554', 0);
+}
+
+describe('WebViewCdpConnection', () => {
+  it('should resolve a command with its reply', async () => {
+    const fakeWebSocket = new FakeWebSocket();
+    const connection = createConnection(fakeWebSocket);
+    const result = connection.send('Runtime.evaluate');
+    fakeWebSocket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ id: 1, result: { value: 2 } }) }));
+    await expect(result).resolves.toEqual({ value: 2 });
+  });
+
+  it('should reject every command in flight when the socket closes', async () => {
+    const fakeWebSocket = new FakeWebSocket();
+    const connection = createConnection(fakeWebSocket);
+    const first = connection.send('Input.dispatchTouchEvent');
+    const second = connection.send('Runtime.evaluate');
+    fakeWebSocket.readyState = WebSocket.CLOSED;
+    fakeWebSocket.dispatchEvent(new CloseEvent('close', { code: ABNORMAL_CLOSE_CODE }));
+    await expect(first).rejects.toThrow('WebView CDP socket closed (code 1006) before the command was answered');
+    await expect(second).rejects.toThrow('WebView CDP socket closed (code 1006) before the command was answered');
+  });
+
+  it('should refuse a send on a socket that is not open', async () => {
+    const fakeWebSocket = new FakeWebSocket();
+    fakeWebSocket.readyState = WebSocket.CLOSING;
+    const connection = createConnection(fakeWebSocket);
+    await expect(connection.send('Runtime.evaluate')).rejects.toThrow(
+      'WebView CDP socket is not open (readyState 2); Runtime.evaluate was not sent'
+    );
+    expect(fakeWebSocket.sent).toEqual([]);
+  });
+});
 
 describe('parseForwardedPort', () => {
   const FORWARD_LIST = [
