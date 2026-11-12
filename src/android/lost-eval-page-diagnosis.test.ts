@@ -66,6 +66,18 @@ describe('selectPageReplacementLogLines', () => {
     expect(selected.at(-1)).toContain('Kill 9');
     expect(selectPageReplacementLogLines(lines.slice(0, 3).join('\n'))).toEqual([lines[1], lines[2]]);
   });
+
+  it('should keep the theme-overlay relaunch of Obsidian\'s activity and a SystemUI death, but not another app\'s relaunch', () => {
+    // Captured from obsidian_test on 2026-11-12 (one guest core), shortened.
+    const lines = [
+      '11-12 05:47:09.289 I/ActivityManager(  633): Process com.android.systemui (pid 922) has died',
+      '11-12 05:48:10.865 I/ActivityTaskManager(  633): Config changes=80000000 {1.0 310mcc260mnc [en_US]}',
+      '11-12 05:48:10.968 V/AppCompatResourceOverlayPolicy(  633): doResourceOverlayChangesAffectActivity: result: true componentName: ComponentInfo{md.obsidian/md.obsidian.MainActivity} overlayPathsAdded: {}',
+      '11-12 05:46:16.472 V/AppCompatResourceOverlayPolicy(  633): doResourceOverlayChangesAffectActivity: result: true componentName: ComponentInfo{com.android.settings/com.android.settings.Settings}'
+    ];
+
+    expect(selectPageReplacementLogLines(lines.join('\n'))).toEqual([lines[0], lines[2]]);
+  });
 });
 
 describe('describeLostEvalPage', () => {
