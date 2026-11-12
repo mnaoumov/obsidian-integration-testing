@@ -36,6 +36,7 @@ import process from 'node:process';
 import type { AdbDeviceEntry } from '../android/adb/adb-device-list.ts';
 import type { AdbDevicesFailure } from '../android/adb/adb-devices-failure.ts';
 import type { AppiumServerMarker } from '../android/appium/appium-server-marker.ts';
+import type { AppiumTransportConfig } from '../android/appium/transport-appium.ts';
 import type { WedgedAppiumServerReportReason } from '../android/appium/wedged-appium-server.ts';
 import type {
   AvdNameChannel,
@@ -1128,10 +1129,7 @@ class AppiumTransportFactory {
       // script timeout is the one that session is actually enforcing.
       scriptTimeoutInMilliseconds: resolveScriptTimeoutInMilliseconds(options),
       shouldSweepLeftovers: willSweepLeftovers(options),
-      ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
-      ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
-      ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
-      ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
+      ...pickAppiumTransportBudgets(options)
     });
   }
 
@@ -1464,10 +1462,7 @@ class AppiumTransportFactory {
         // The same number the session was created with above, so a script timeout reports the cap that killed it.
         scriptTimeoutInMilliseconds: resolveScriptTimeoutInMilliseconds(options),
         shouldSweepLeftovers: willSweepLeftovers(options),
-        ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
-        ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
-        ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
-        ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
+        ...pickAppiumTransportBudgets(options)
       });
 
       const originalDispose = appiumTransport.dispose.bind(appiumTransport);
@@ -3877,6 +3872,22 @@ function getSettledFailure(outcomes: readonly PromiseSettledResult<unknown>[]): 
 async function importWebdriverio(): Promise<WebdriverioModule> {
   // eslint-disable-next-line no-restricted-syntax -- `webdriverio` is Appium-only, so it must be loaded lazily: a static import would drag the whole WebDriver stack into every consumer of this package's index, and `chalk` with it (see the doc comment).
   return await import('webdriverio');
+}
+
+/**
+ * The optional {@link AppiumTransportConfig} budgets and paths a caller set, for both places a transport is built.
+ *
+ * @param options - The resolved Android transport options.
+ * @returns Only the fields the caller set, so the transport's own defaults apply to the rest.
+ */
+function pickAppiumTransportBudgets(options: ObsidianAndroidAppiumTransportOptions): Pick<AppiumTransportConfig, 'appStartTimeoutInMilliseconds' | 'layoutReadyTimeoutInMilliseconds' | 'systemThemeReadyTimeoutInMilliseconds' | 'vaultBasePath' | 'webviewTimeoutInMilliseconds'> {
+  return {
+    ...(options.appStartTimeoutInMilliseconds !== undefined && { appStartTimeoutInMilliseconds: options.appStartTimeoutInMilliseconds }),
+    ...(options.layoutReadyTimeoutInMilliseconds !== undefined && { layoutReadyTimeoutInMilliseconds: options.layoutReadyTimeoutInMilliseconds }),
+    ...(options.systemThemeReadyTimeoutInMilliseconds !== undefined && { systemThemeReadyTimeoutInMilliseconds: options.systemThemeReadyTimeoutInMilliseconds }),
+    ...(options.vaultBasePath !== undefined && { vaultBasePath: options.vaultBasePath }),
+    ...(options.webviewTimeoutInMilliseconds !== undefined && { webviewTimeoutInMilliseconds: options.webviewTimeoutInMilliseconds })
+  };
 }
 
 /**

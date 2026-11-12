@@ -115,6 +115,7 @@ Besides the required `appiumUrl` and `avdName`, the transport accepts these opti
 | `shouldAutoStartAppium`                       | Auto-start the Appium server when it is not already reachable.                                                         | `true`                 |
 | `shouldReuseEmulatorSnapshot`                 | Let the emulator load **and** save the AVD's boot snapshot. Off by default: every run cold-boots a hermetic guest.     | `false`                |
 | `shouldSweepLeftovers`                        | Remove the temp vaults / instance profiles earlier runs leaked.                                                        | `true`                 |
+| `systemThemeReadyTimeoutInMilliseconds`       | Max wait, before a vault opens, for SystemUI to apply its theme, which would relaunch Obsidian mid-test. `0` skips.    | `240000`               |
 | `vaultBasePath`                               | Base device path where Obsidian stores vaults.                                                                         | `'/sdcard/Documents/'` |
 | `webviewTimeoutInMilliseconds`                | Max wait for the WebView context after the Appium session starts.                                                      | `60000`                |
 
@@ -240,6 +241,10 @@ Registering a vault reloads the page, triggering a full Obsidian re-init — reo
 There is a third reading, and it does not look like a timeout at all. A test whose network-dependent assertion comes back **empty rather than failing** — an empty list, a panel with no rows — was very likely run against a device with no route: a cold emulator's default network is not created and validated until some 80s into the guest's uptime, well after the idle gate clears. The harness waits that out by default (`networkReadyTimeoutInMilliseconds`) and logs a warning naming the missing network when it gives up, so check the harness log above the failure before reading the assertion at face value.
 
 Either way, run the health check in [AVD provisioning](#avd-provisioning) first — a full `/data` presents exactly like this — and bring the AVD up to the minimums there. A raised budget is headroom, not a substitute for adequate provisioning.
+
+### "the closure's result was lost" (`EvalResultLostError`)
+
+The page that ran the closure went away before it answered. The message says whether the WebView now shows a page loaded during the eval (`REPLACED`) and quotes any device log line naming why. On an emulator with one guest core, the usual cause is SystemUI applying its wallpaper theme a minute or two after boot: that relaunches Obsidian's activity, and the relaunch creates a new WebView. The harness waits for the theme before it opens a vault (`systemThemeReadyTimeoutInMilliseconds`). A SystemUI that crashes later in the run can still apply its theme mid-test.
 
 ## Related
 

@@ -83,9 +83,11 @@ export const LOST_EVAL_PAGE_STATE_PROBE_EXPRESSION = 'JSON.stringify({'
 const MAX_LOG_LINES = 8;
 
 /**
- * Device log lines that name a renderer, the WebView or the app's process going away.
+ * Device log lines that name a renderer, the WebView or the app's process going away, or Obsidian's activity
+ * being relaunched by a resource-overlay change (SystemUI applying its theme, AGENTS.md L91), and SystemUI dying,
+ * which is what starts that change on a starved guest.
  */
-const PAGE_REPLACEMENT_LOG_LINE_PATTERN = /RenderProcessGone|render(?:er)? process (?:crash|gone|exit|died)|crashed.*renderer|cr_.*(?:crash|killed)|chromium.*FATAL|lowmemorykiller|lmkd.*md\.obsidian|Process md\.obsidian.*(?:died|has died)|Kill(?:ing)? .*md\.obsidian|md\.obsidian.*(?:crash|ANR)/iu;
+const PAGE_REPLACEMENT_LOG_LINE_PATTERN = /RenderProcessGone|render(?:er)? process (?:crash|gone|exit|died)|crashed.*renderer|cr_.*(?:crash|killed)|chromium.*FATAL|lowmemorykiller|lmkd.*md\.obsidian|Process md\.obsidian.*(?:died|has died)|Kill(?:ing)? .*md\.obsidian|md\.obsidian.*(?:crash|ANR)|doResourceOverlayChangesAffectActivity: result: true.*md\.obsidian|Process com\.android\.systemui .*has died/iu;
 
 /**
  * Says what happened to the page, from what the probe and the device log found.

@@ -63,6 +63,7 @@ import type {
 import type { LostEvalPageState } from '../lost-eval-page-diagnosis.ts';
 import type { MobileInputEnvelope } from '../mobile-input.ts';
 import type { MobileVaultStartupProbeResult } from '../mobile-vault-startup.ts';
+import type { SystemThemeVerdict } from '../system-theme-readiness.ts';
 import type { WebViewCdpConnection } from '../webview-cdp.ts';
 import type { WebViewProbeFailure } from '../webview-probe-failure.ts';
 
@@ -111,6 +112,13 @@ import {
   toCdpInputCommands
 } from '../mobile-input.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
+import {
+  buildSystemThemeNotSettledWarning,
+  DEFAULT_SYSTEM_THEME_READY_TIMEOUT_IN_MILLISECONDS,
+  resolveSystemThemeVerdict,
+  SYSTEM_THEME_POLL_INTERVAL_IN_MILLISECONDS,
+  SYSTEM_THEME_PROBE_SCRIPT
+} from '../system-theme-readiness.ts';
 import { gzipTarForToybox } from '../tar-checksum.ts';
 import { connectToWebViewCdp } from '../webview-cdp.ts';
 import {
@@ -215,6 +223,14 @@ export interface AppiumTransportConfig {
   readonly shouldSweepLeftovers?: boolean;
 
   /**
+   * How long {@link AppiumTransport.registerVault} first waits for SystemUI's theme overlays, `0` to skip.
+   * See `system-theme-readiness.ts`.
+   *
+   * @default `240000`
+   */
+  readonly systemThemeReadyTimeoutInMilliseconds?: number;
+
+  /**
    * Base path on the device where Obsidian stores vaults.
    *
    * Defaults:
@@ -232,6 +248,7 @@ export interface AppiumTransportConfig {
 }
 
 const NO_OUTPUT = '(no output)';
+const SYSTEM_THEME_PROBE_TIMEOUT_IN_MILLISECONDS = 30_000;
 const APP_STATE_FOREGROUND = 4;
 const WEBVIEW_CONTEXT_PREFIX = 'WEBVIEW_md.obsidian';
 const WEBVIEW_POLL_INTERVAL_IN_MILLISECONDS = 500;
@@ -420,6 +437,7 @@ export class AppiumTransport implements ObsidianTransport {
   private readonly platform: 'android' | 'ios';
   private readonly scriptTimeoutInMilliseconds: number;
   private readonly shouldSweepLeftovers: boolean;
+  private readonly systemThemeReadyTimeoutInMilliseconds: number;
   private readonly vaultBasePath: string;
 
   private readonly webviewTimeoutInMilliseconds: number;
@@ -439,6 +457,7 @@ export class AppiumTransport implements ObsidianTransport {
     this.appStartTimeoutInMilliseconds = config.appStartTimeoutInMilliseconds ?? DEFAULT_APP_START_POLL_TIMEOUT_IN_MILLISECONDS;
     this.scriptTimeoutInMilliseconds = config.scriptTimeoutInMilliseconds ?? DEFAULT_EVAL_CAP_IN_MILLISECONDS;
     this.shouldSweepLeftovers = config.shouldSweepLeftovers ?? true;
+    this.systemThemeReadyTimeoutInMilliseconds = config.systemThemeReadyTimeoutInMilliseconds ?? DEFAULT_SYSTEM_THEME_READY_TIMEOUT_IN_MILLISECONDS;
     this.vaultBasePath = config.vaultBasePath ?? DEFAULT_VAULT_BASE_PATH[this.platform] ?? DEFAULT_ANDROID_VAULT_BASE_PATH;
     this.webviewTimeoutInMilliseconds = config.webviewTimeoutInMilliseconds ?? DEFAULT_WEBVIEW_POLL_TIMEOUT_IN_MILLISECONDS;
   }
@@ -723,6 +742,9 @@ export class AppiumTransport implements ObsidianTransport {
 
     // Push a minimal .obsidian directory so Obsidian recognizes it as a vault.
     await this.pushObsidianMarker(deviceVaultPath);
+
+    // A theme SystemUI applies later relaunches Obsidian's activity and replaces the WebView mid-test (L91).
+    await this.waitForSystemThemeSettled();
 
     // Switch to WebView and configure localStorage.
     await this.ensureWebViewContext();
@@ -1517,15 +1539,6 @@ export class AppiumTransport implements ObsidianTransport {
     });
   }
 
-  /**
-   * Polls until `app.workspace.layoutReady` is `true` in the WebView.
-   *
-   * The **second** budget, and the tight one: by the time it starts, the app is
-   * already up, so all it covers is Obsidian opening the vault and loading
-   * plugins — ~1s in practice, ≤8.4s under heavy host stress (**L19**).
-   *
-   * @param deviceVaultPath - The requested live adapter path.
-   */
   private async waitForLayoutReady(deviceVaultPath: string): Promise<void> {
     log(`[appium-transport] Waiting for layout ready (timeout=${String(this.layoutReadyTimeoutInMilliseconds)}ms)...`);
     await this.waitForStartupMilestone({
@@ -1628,6 +1641,75 @@ export class AppiumTransport implements ObsidianTransport {
       } Requested vault: ${deviceVaultPath}; live vault: ${lastProbe?.vaultPath ?? '(none)'}; picker action: ${lastProbe?.pickerAction ?? '(none)'}; `
         + `WebView window recoveries: ${String(windowRecoveryCount)}.`
     );
+  }
+
+  /**
+   * Polls until `app.workspace.layoutReady` is `true` in the WebView.
+   *
+   * The **second** budget, and the tight one: by the time it starts, the app is
+   * already up, so all it covers is Obsidian opening the vault and loading
+   * plugins — ~1s in practice, ≤8.4s under heavy host stress (**L19**).
+   *
+   * @param deviceVaultPath - The requested live adapter path.
+   */
+  /**
+   * Waits until SystemUI has applied its wallpaper theme overlays, so applying them cannot relaunch Obsidian's
+   * activity once a test is talking to its WebView. Best-effort: a budget that runs out is a logged warning.
+   * See `system-theme-readiness.ts` (AGENTS.md L91).
+   */
+  private async waitForSystemThemeSettled(): Promise<void> {
+    if (this.platform !== 'android') {
+      return;
+    }
+
+    const timeoutInMilliseconds = this.systemThemeReadyTimeoutInMilliseconds;
+    if (timeoutInMilliseconds <= 0) {
+      log(`[appium-transport] Skipping the system-theme wait on device ${this.deviceId} (timeout is 0).`);
+      return;
+    }
+
+    const start = Date.now();
+    const deadline = start + timeoutInMilliseconds;
+    let lastVerdict: null | SystemThemeVerdict = null;
+    let hasLoggedWait = false;
+
+    while (Date.now() < deadline) {
+      try {
+        const output = await exec(['adb', '-s', this.deviceId, 'shell', SYSTEM_THEME_PROBE_SCRIPT], {
+          isQuiet: true,
+          shouldIgnoreExitCode: true,
+          timeoutInMilliseconds: SYSTEM_THEME_PROBE_TIMEOUT_IN_MILLISECONDS
+        });
+        lastVerdict = resolveSystemThemeVerdict(output);
+      } catch (error: unknown) {
+        lastVerdict = { kind: 'unreadable', output: errorToString(error) };
+      }
+
+      const elapsed = String(Date.now() - start);
+      if (lastVerdict.kind === 'settled' || lastVerdict.kind === 'no-theme-overlays') {
+        if (hasLoggedWait) {
+          log(`[appium-transport] SystemUI's theme overlays on device ${this.deviceId} are applied after ${elapsed}ms.`);
+        }
+        return;
+      }
+
+      if (!hasLoggedWait) {
+        hasLoggedWait = true;
+        const state = lastVerdict.kind === 'pending'
+          ? `disabled: ${lastVerdict.disabledOverlayNames.join(', ')}`
+          : `the overlay list answered "${lastVerdict.output}"`;
+        log(
+          `[appium-transport] Waiting for SystemUI to apply its theme overlays on device ${this.deviceId} before opening the vault (${state}; `
+            + `timeout: ${String(timeoutInMilliseconds)}ms): applying them relaunches Obsidian's activity and replaces its WebView.`
+        );
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, SYSTEM_THEME_POLL_INTERVAL_IN_MILLISECONDS);
+      });
+    }
+
+    log(`[appium-transport] ${buildSystemThemeNotSettledWarning({ deviceId: this.deviceId, lastVerdict, timeoutInMilliseconds })}`);
   }
 }
 

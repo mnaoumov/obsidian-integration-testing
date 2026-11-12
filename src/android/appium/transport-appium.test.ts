@@ -46,6 +46,16 @@ vi.mock('../tar-checksum.ts', () => ({
   gzipTarForToybox: mockGzipTarForToybox
 }));
 
+// The exec mock answers every command with '', which the system-theme gate reads as an unreadable overlay list
+// and polls for its whole budget; every test but the gate's own sees a settled theme.
+const mockResolveSystemThemeVerdict = vi.hoisted(() => vi.fn());
+
+vi.mock('../system-theme-readiness.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../system-theme-readiness.ts')>();
+  mockResolveSystemThemeVerdict.mockImplementation(() => ({ kind: 'settled', overlayCount: 3 }));
+  return { ...original, resolveSystemThemeVerdict: mockResolveSystemThemeVerdict, SYSTEM_THEME_POLL_INTERVAL_IN_MILLISECONDS: 1 };
+});
+
 interface ExecOptions extends Record<string, unknown> {
   readonly cwd: string;
 }
@@ -293,6 +303,53 @@ describe('AppiumTransport.registerVault', () => {
       deviceId: 'emulator-5554',
       platform: 'android'
     });
+  });
+
+  it('should wait for SystemUI to apply its theme overlays before the reload that opens the vault', async () => {
+    mockResolveSystemThemeVerdict
+      .mockReturnValueOnce({ disabledOverlayNames: ['com.android.systemui:accent'], kind: 'pending' })
+      .mockReturnValueOnce({ kind: 'unreadable', output: 'cmd: Can\'t find service: overlay' });
+
+    await transport.registerVault('/tmp/my-vault');
+
+    const overlayProbes = mockExec.mock.calls.filter((call) => Array.isArray(call[0]) && call[0].includes('cmd overlay list android'));
+    expect(overlayProbes).toHaveLength(3);
+    expect(ensureNonNullable(overlayProbes[0])[0]).toEqual(['adb', '-s', 'emulator-5554', 'shell', 'cmd overlay list android']);
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('(disabled: com.android.systemui:accent; timeout: 240000ms)'));
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringMatching(/theme overlays on device emulator-5554 are applied after \d+ms/));
+  });
+
+  it('should warn and open the vault anyway when the theme is not applied within its budget', async () => {
+    mockResolveSystemThemeVerdict.mockReturnValue({ disabledOverlayNames: ['com.android.systemui:accent'], kind: 'pending' });
+    try {
+      const shortTransport = new AppiumTransport({
+        browser: strictProxy<Browser>(mockBrowser),
+        deviceId: 'emulator-5554',
+        platform: 'android',
+        systemThemeReadyTimeoutInMilliseconds: 20
+      });
+
+      await shortTransport.registerVault('/tmp/my-vault');
+
+      expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('were not applied within 20ms (still disabled: com.android.systemui:accent)'));
+      expect(mockBrowser.execute).toHaveBeenCalled();
+    } finally {
+      mockResolveSystemThemeVerdict.mockImplementation(() => ({ kind: 'settled', overlayCount: 3 }));
+    }
+  });
+
+  it('should skip the system-theme wait when its budget is 0', async () => {
+    const noThemeTransport = new AppiumTransport({
+      browser: strictProxy<Browser>(mockBrowser),
+      deviceId: 'emulator-5554',
+      platform: 'android',
+      systemThemeReadyTimeoutInMilliseconds: 0
+    });
+
+    await noThemeTransport.registerVault('/tmp/my-vault');
+
+    expect(mockExec.mock.calls.some((call) => Array.isArray(call[0]) && call[0].includes('cmd overlay list android'))).toBe(false);
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Skipping the system-theme wait on device emulator-5554'));
   });
 
   it('should push .obsidian/app.json marker to device vault path via adb', async () => {

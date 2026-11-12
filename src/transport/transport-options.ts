@@ -420,6 +420,18 @@ export interface ObsidianAndroidAppiumTransportOptions {
   readonly shouldSweepLeftovers?: boolean;
 
   /**
+   * How long opening a vault first waits for SystemUI to apply its wallpaper theme overlays.
+   *
+   * Applying them is a global configuration change that relaunches Obsidian's activity and replaces its
+   * WebView, so an eval in flight loses its result. On a one-core guest a restarted SystemUI re-applies them a
+   * minute or two after the session starts. The wait is best-effort: running out of it logs a warning and the
+   * vault opens anyway. `0` skips it.
+   *
+   * @default `240000`
+   */
+  readonly systemThemeReadyTimeoutInMilliseconds?: number;
+
+  /**
    * Discriminant for the transport type.
    */
   readonly type: 'obsidian-android-appium';
