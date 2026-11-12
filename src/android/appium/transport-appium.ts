@@ -60,6 +60,7 @@ import type {
   AppStartupMilestone,
   AppStartupPhase
 } from '../app-startup-progress.ts';
+import type { LostEvalPageState } from '../lost-eval-page-diagnosis.ts';
 import type { MobileInputEnvelope } from '../mobile-input.ts';
 import type { MobileVaultStartupProbeResult } from '../mobile-vault-startup.ts';
 import type { WebViewCdpConnection } from '../webview-cdp.ts';
@@ -95,6 +96,12 @@ import {
   classifyAppStartupProbe,
   compareAppStartupMilestones
 } from '../app-startup-progress.ts';
+import {
+  describeLostEvalPage,
+  LOST_EVAL_PAGE_STATE_PROBE_EXPRESSION,
+  parseLostEvalPageState,
+  selectPageReplacementLogLines
+} from '../lost-eval-page-diagnosis.ts';
 import {
   buildClaimInputExpression,
   buildResolveInputExpression,
@@ -271,6 +278,10 @@ const CONSOLE_CAPTURE_MARKER_TAG = 'OBSIDIAN_INTEGRATION_TESTING_CAPTURE';
 const CONSOLE_CAPTURE_TAIL_MAX_LENGTH = 8000;
 const ADB_LOG_MARKER_TIMEOUT_IN_MILLISECONDS = 5000;
 const LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS = 10_000;
+/**
+ * How many of the newest device log lines a lost-eval diagnosis searches for a renderer going away.
+ */
+const LOST_EVAL_LOGCAT_LINE_COUNT = 3000;
 /**
  * `adb logcat -v time` lines look like `MM-DD HH:MM:SS.mmm LEVEL/TAG( PID): message`.
  * Keep only the tags Chromium/WebView routes JS `console.*` output and uncaught
@@ -492,6 +503,47 @@ export class AppiumTransport implements ObsidianTransport {
     }
 
     await channel.send('HeapProfiler.collectGarbage');
+  }
+
+  /**
+   * Says what happened to the page after an evaluation came back with no result (AGENTS.md L90).
+   *
+   * Asks the page the WebView shows now how old it is and whether it carries the harness namespace, and reads
+   * the device log for a renderer or app process going away. Never throws: a probe that fails is reported in the
+   * paragraph it returns.
+   *
+   * @param evalStartedAtInMilliseconds - Host time when the lost evaluation started.
+   * @returns One paragraph for the error message.
+   */
+  public async describeLostEvalResult(evalStartedAtInMilliseconds: number): Promise<string> {
+    let pageState: LostEvalPageState | null = null;
+    let probeError: string | undefined;
+    try {
+      const raw = await this.evaluate(LOST_EVAL_PAGE_STATE_PROBE_EXPRESSION, { cwd: '' });
+      pageState = parseLostEvalPageState(raw);
+      if (pageState === null) {
+        probeError = `the probe answered ${raw}`;
+      }
+    } catch (error: unknown) {
+      probeError = errorToString(error);
+    }
+
+    const sinceEvalStartInMilliseconds = Date.now() - evalStartedAtInMilliseconds;
+
+    let logLines: string[] = [];
+    try {
+      const dump = await exec(
+        ['adb', '-s', this.deviceId, 'logcat', '-d', '-v', 'time', '-t', String(LOST_EVAL_LOGCAT_LINE_COUNT)],
+        { isQuiet: true, shouldIgnoreExitCode: true, timeoutInMilliseconds: LOGCAT_DUMP_TIMEOUT_IN_MILLISECONDS }
+      );
+      logLines = selectPageReplacementLogLines(dump);
+    } catch (error: unknown) {
+      log(`[appium-transport] Could not read the device log for a lost eval: ${errorToString(error)}`);
+    }
+
+    const diagnosis = describeLostEvalPage({ logLines, pageState, sinceEvalStartInMilliseconds, ...(probeError !== undefined && { probeError }) });
+    log(`[appium-transport] Eval result lost: ${diagnosis}`);
+    return diagnosis;
   }
 
   /**

@@ -11,6 +11,7 @@ import type { ObsidianTransport } from '../transport/transport.ts';
 
 import { ContextId } from '../transport/context-id.ts';
 import { evalInObsidian } from './eval-in-obsidian.ts';
+import { EvalResultLostError } from './eval-result-lost-error.ts';
 
 const mockTransportEvaluate = vi.hoisted(() => vi.fn<ObsidianTransport['evaluate']>());
 const mockTransportPreflightCheck = vi.hoisted(() => vi.fn<ObsidianTransport['preflightCheck']>().mockResolvedValue(undefined));
@@ -169,14 +170,33 @@ describe('evalInObsidian', () => {
     })).rejects.toThrow('evalInObsidian: Obsidian returned non-JSON output');
   });
 
-  it('should return undefined when transport returns empty string', async () => {
-    mockTransportEvaluate.mockResolvedValue('');
-    const result = await evalInObsidian({
+  it.each(['', '(no output)'])('should throw EvalResultLostError rather than return undefined when the transport answers %j', async (answer) => {
+    mockTransportEvaluate.mockResolvedValue(answer);
+    const error = await evalInObsidian({
       callback(): number {
         return 1;
       }
-    });
-    expect(result).toBeUndefined();
+    }).catch((error_: unknown) => error_);
+
+    expect(error).toBeInstanceOf(EvalResultLostError);
+    expect((error as EvalResultLostError).diagnosis).toBeNull();
+    expect((error as Error).message).toContain('cannot inspect the page');
+  });
+
+  it('should put the transport diagnosis of a lost result in the error', async () => {
+    mockTransportEvaluate.mockResolvedValue('(no output)');
+    const describeLostEvalResult = vi.fn<NonNullable<ObsidianTransport['describeLostEvalResult']>>().mockResolvedValue('The page was REPLACED.');
+    const error = await evalInObsidian({
+      callback(): number {
+        return 1;
+      },
+      transport: { ...mockTransport, describeLostEvalResult }
+    }).catch((error_: unknown) => error_);
+
+    expect(error).toBeInstanceOf(EvalResultLostError);
+    expect((error as EvalResultLostError).diagnosis).toBe('The page was REPLACED.');
+    expect((error as Error).message).toContain('The page was REPLACED.');
+    expect(describeLostEvalResult).toHaveBeenCalledWith(expect.any(Number));
   });
 
   it('should rethrow transport errors', async () => {
@@ -248,7 +268,7 @@ describe('ContextId', () => {
   });
 
   it('should dispose context without vaultPath', async () => {
-    mockTransportEvaluate.mockResolvedValue('(no output)');
+    mockTransportEvaluate.mockResolvedValue(JSON.stringify({ type: 'undefined' }));
     const context = new ContextId();
     await context.dispose();
     expect(mockTransportEvaluate).toHaveBeenCalled();
@@ -266,7 +286,7 @@ describe('ContextId', () => {
     const { join } = await import('node:path');
     const directory = mkdtempSync(join(tmpdir(), 'test-ctx-dispose-'));
     try {
-      mockTransportEvaluate.mockResolvedValue('(no output)');
+      mockTransportEvaluate.mockResolvedValue(JSON.stringify({ type: 'undefined' }));
       const context = new ContextId();
       await context.dispose(directory);
       expect(mockTransportEvaluate).toHaveBeenCalledWith(
@@ -279,7 +299,7 @@ describe('ContextId', () => {
   });
 
   it('should support await using', async () => {
-    mockTransportEvaluate.mockResolvedValue('(no output)');
+    mockTransportEvaluate.mockResolvedValue(JSON.stringify({ type: 'undefined' }));
     {
       await using _context = new ContextId();
     }
