@@ -62,7 +62,11 @@ import type {
 } from '../app-startup-progress.ts';
 import type { LostEvalPageState } from '../lost-eval-page-diagnosis.ts';
 import type { MobileInputEnvelope } from '../mobile-input.ts';
-import type { MobileVaultStartupProbeResult } from '../mobile-vault-startup.ts';
+import type { MobileVaultPickerSnapshot } from '../mobile-vault-picker-snapshot.ts';
+import type {
+  MobileVaultStartupProbeResult,
+  ProbeMobileVaultStartupParams
+} from '../mobile-vault-startup.ts';
 import type { SystemThemeVerdict } from '../system-theme-readiness.ts';
 import type { WebViewCdpConnection } from '../webview-cdp.ts';
 import type { WebViewProbeFailure } from '../webview-probe-failure.ts';
@@ -111,6 +115,10 @@ import {
   readEarlyEndedCompositionText,
   toCdpInputCommands
 } from '../mobile-input.ts';
+import {
+  formatMobileVaultPickerSnapshot,
+  snapshotMobileVaultPicker
+} from '../mobile-vault-picker-snapshot.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
 import {
   buildSystemThemeNotSettledWarning,
@@ -263,6 +271,62 @@ const APP_RESTART_DELAY_IN_MILLISECONDS = 2000;
  * it is not repeated on every 500ms poll; a page that is merely mid-reload gets a few probes first.
  */
 const WINDOW_RECOVERY_INTERVAL_IN_MILLISECONDS = 5000;
+
+/**
+ * How often, and how many times, the app-start poll may write a lost registration again from the picker
+ * and reload. A reload takes a few seconds to replace the page, and a probe made before it does still sees
+ * the old picker, so restores are spaced rather than made on every poll.
+ */
+const REGISTRATION_RESTORE_INTERVAL_IN_MILLISECONDS = 10_000;
+const MAX_REGISTRATION_RESTORES = 3;
+
+type AppiumTransportProbeStartupParams = ProbeMobileVaultStartupParams;
+
+interface BuildPickerProbeParamsParams {
+  readonly deviceVaultPath: string;
+  readonly phase: AppStartupPhase;
+  readonly state: PickerRecoveryState;
+}
+
+/**
+ * What the app-start poll has done on the picker so far.
+ */
+interface PickerRecoveryState {
+  readonly hasOpenedVault: boolean;
+  readonly lastRestoreAt: number;
+  readonly restoreCount: number;
+}
+
+/**
+ * Decides which picker actions the next startup probe may take.
+ *
+ * @param params - The requested vault, the phase, and what was done so far.
+ * @returns The probe's parameters.
+ */
+function buildPickerProbeParams(params: BuildPickerProbeParamsParams): ProbeMobileVaultStartupParams {
+  const { deviceVaultPath, phase, state } = params;
+  return {
+    deviceVaultPath,
+    shouldRecoverPicker: phase === 'app-start' && !state.hasOpenedVault,
+    shouldRestoreRegistration: state.restoreCount < MAX_REGISTRATION_RESTORES
+      && Date.now() - state.lastRestoreAt >= REGISTRATION_RESTORE_INTERVAL_IN_MILLISECONDS
+  };
+}
+
+/**
+ * Records a picker action a startup probe reported.
+ *
+ * @param state - What was done so far.
+ * @param action - The action the probe reported.
+ * @returns The state after the action.
+ */
+function notePickerAction(state: PickerRecoveryState, action: MobileVaultStartupProbeResult['pickerAction']): PickerRecoveryState {
+  if (action === 'opened-vault') {
+    return { ...state, hasOpenedVault: true };
+  }
+  return action === 'restored-registration' ? { ...state, lastRestoreAt: Date.now(), restoreCount: state.restoreCount + 1 } : state;
+}
+
 const DEFAULT_APP_ID = 'md.obsidian';
 const ADB_VAULT_REMOVE_TIMEOUT_IN_MILLISECONDS = 30_000;
 const ADB_MARKER_READ_TIMEOUT_IN_MILLISECONDS = 30_000;
@@ -758,7 +822,7 @@ export class AppiumTransport implements ObsidianTransport {
 
     const stalePrefix = this.shouldSweepLeftovers ? `${this.vaultBasePath}${TEMP_VAULT_DIR_PREFIX}` : '';
 
-    await this.browser.execute(
+    const registrationPage = await this.browser.execute(
       (path: string, prunePrefix: string) => {
         let existing = JSON.parse(localStorage.getItem('mobile-external-vaults') ?? '[]') as string[];
 
@@ -776,11 +840,15 @@ export class AppiumTransport implements ObsidianTransport {
         localStorage.setItem('mobile-external-vaults', JSON.stringify(existing));
         localStorage.setItem('mobile-selected-vault', path);
         localStorage.setItem(`enable-plugin-${path}`, 'true');
+        const page = `${location.href} (${document.readyState})`;
         location.reload();
+        return page;
       },
       deviceVaultPath,
       stalePrefix
     );
+    // The registration lives in this page's storage, so which page took it is worth a line.
+    log(`[appium-transport] Registration written in page ${registrationPage}; reloading.`);
 
     // Wait for reload + vault initialization, as two separately budgeted phases:
     // The app's cold start first, then Obsidian's own work. See `waitForAppStarted`.
@@ -1227,13 +1295,12 @@ export class AppiumTransport implements ObsidianTransport {
    * is classified, because two kinds of it never improve by waiting (see
    * `webview-probe-failure.ts`), and the poll acts on those.
    *
-   * @param deviceVaultPath - The requested live adapter path.
-   * @param shouldRecoverPicker - Whether a picker opening action may be initiated.
+   * @param params - The requested live adapter path, and which picker actions may be initiated.
    * @returns What the probe saw, or the classified failure when it could not run.
    */
-  private async probeStartup(deviceVaultPath: string, shouldRecoverPicker: boolean): Promise<StartupProbeOutcome> {
+  private async probeStartup(params: AppiumTransportProbeStartupParams): Promise<StartupProbeOutcome> {
     try {
-      return { probe: await this.browser.execute(probeMobileVaultStartup, { deviceVaultPath, shouldRecoverPicker }) };
+      return { probe: await this.browser.execute(probeMobileVaultStartup, params) };
     } catch (error: unknown) {
       return { error, failure: classifyWebViewProbeFailure(error) };
     }
@@ -1445,6 +1512,20 @@ export class AppiumTransport implements ObsidianTransport {
   }
 
   /**
+   * Reads what the page shows in place of the requested vault, for a startup timeout message.
+   *
+   * @returns The snapshot, or `null` when the WebView could not answer.
+   */
+  private async snapshotPicker(): Promise<MobileVaultPickerSnapshot | null> {
+    try {
+      return await this.browser.execute(snapshotMobileVaultPicker);
+    } catch (error: unknown) {
+      log(`[appium-transport] Could not snapshot the page after the startup timeout: ${errorToString(error)}`);
+      return null;
+    }
+  }
+
+  /**
    * Drops the `process.on('exit')` handler that would otherwise close an already-closed channel, and would
    * stack a listener per reconnect.
    */
@@ -1570,14 +1651,14 @@ export class AppiumTransport implements ObsidianTransport {
     let furthestMilestone: AppStartupMilestone = 'no-webview';
     let pollCount = 0;
     let slowestRoundTripInMilliseconds = 0;
-    let hasOpenedPickerVault = false;
+    let pickerRecovery: PickerRecoveryState = { hasOpenedVault: false, lastRestoreAt: -Infinity, restoreCount: 0 };
     let lastProbe: MobileVaultStartupProbeResult | undefined;
     let lastWindowRecoveryAt = -Infinity;
     let windowRecoveryCount = 0;
 
     while (Date.now() < deadline) {
       const roundTripStart = Date.now();
-      const outcome = await this.probeStartup(deviceVaultPath, phase === 'app-start' && !hasOpenedPickerVault);
+      const outcome = await this.probeStartup(buildPickerProbeParams({ deviceVaultPath, phase, state: pickerRecovery }));
       const probe = 'probe' in outcome ? outcome.probe : undefined;
 
       if ('failure' in outcome && outcome.failure === 'session-terminated') {
@@ -1599,9 +1680,7 @@ export class AppiumTransport implements ObsidianTransport {
 
       if (probe) {
         lastProbe = probe;
-        if (probe.pickerAction === 'opened-vault') {
-          hasOpenedPickerVault = true;
-        }
+        pickerRecovery = notePickerAction(pickerRecovery, probe.pickerAction);
         if (probe.pickerAction !== 'waiting') {
           log(`[appium-transport] Picker recovery: ${probe.pickerAction} (${deviceVaultPath}).`);
         }
@@ -1628,6 +1707,7 @@ export class AppiumTransport implements ObsidianTransport {
       await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
     }
 
+    const pageSnapshot = lastProbe?.hasApp === true ? '' : ` ${formatMobileVaultPickerSnapshot(await this.snapshotPicker())}`;
     throw new Error(
       `${
         buildStartupTimeoutMessage({
@@ -1639,7 +1719,7 @@ export class AppiumTransport implements ObsidianTransport {
           timeoutInMilliseconds
         })
       } Requested vault: ${deviceVaultPath}; live vault: ${lastProbe?.vaultPath ?? '(none)'}; picker action: ${lastProbe?.pickerAction ?? '(none)'}; `
-        + `WebView window recoveries: ${String(windowRecoveryCount)}.`
+        + `WebView window recoveries: ${String(windowRecoveryCount)}; registration restores: ${String(pickerRecovery.restoreCount)}.${pageSnapshot}`
     );
   }
 
