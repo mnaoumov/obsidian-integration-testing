@@ -209,6 +209,8 @@ export type { RunObsidianVersionMatrixParams } from './desktop/versions/run-vers
 export { runObsidianVersionMatrix } from './desktop/versions/run-version-matrix.ts';
 export type { ObsidianVersionMatrixEntry } from './desktop/versions/version-matrix.ts';
 export { DEFAULT_OBSIDIAN_VERSION_SPECS } from './desktop/versions/version-matrix.ts';
+export type { CollectedPromiseErrorConstructorParams } from './eval/collected-promise-error.ts';
+export { CollectedPromiseError } from './eval/collected-promise-error.ts';
 export type { EvalCapExceededErrorConstructorParams } from './eval/eval-cap-exceeded-error.ts';
 export {
   EvalCapExceededError,
