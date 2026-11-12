@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 18.0.0
+
+- fix(cdp): fail commands in flight when the CDP socket closes
+- refactor!: return null, not undefined, for "no value"
+- test(trusted-input): stop the canvas menu staying open after Escape under load
+- test(ime): stop the open-composition test losing focus under load
+- test(trusted-input): stop the dragMouse test reading coalesced moves as a released button
+- fix(android): stop IME compositions landing twice on Android
+
 ## 17.10.0
 
 - feat: re #2
