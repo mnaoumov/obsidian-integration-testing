@@ -73,6 +73,18 @@ export interface ObsidianTransport {
   readonly collectGarbage?: (cwd: string) => Promise<void>;
 
   /**
+   * Says what happened to the page after an evaluation came back with no result.
+   *
+   * The harness wrapper answers every closure with an envelope, so no result means the page that ran it went
+   * away. `evalInObsidian` calls this before it throws, and puts the answer in the error. Optional: implemented by
+   * {@link AppiumTransport}, which reads the page's age and namespace and the device log.
+   *
+   * @param evalStartedAtInMilliseconds - Host time (`Date.now()`) when the lost evaluation started.
+   * @returns One paragraph for the error message.
+   */
+  readonly describeLostEvalResult?: (evalStartedAtInMilliseconds: number) => Promise<string>;
+
+  /**
    * Disposes of transport resources (e.g. WebSocket connections, Appium sessions).
    */
   // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- The factory wraps disposal to also clean up the owned instance.

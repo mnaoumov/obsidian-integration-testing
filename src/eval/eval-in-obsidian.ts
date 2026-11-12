@@ -30,6 +30,7 @@ import {
   getVaultPath
 } from '../transport/context-provider.ts';
 import { getOrCreateTransport } from '../transport/transport-factory.ts';
+import { EvalResultLostError } from './eval-result-lost-error.ts';
 import { generateNamespaceCall } from './generate-function-call.ts';
 
 interface EvalErrorEnvelope {
@@ -1016,10 +1017,16 @@ export async function evalInObsidian<Input extends GenericObject, Result, TConte
 
   const expression = generateNamespaceCall(namespaceCallParams);
 
+  const evalStartedAtInMilliseconds = Date.now();
   const resultString = await transport.evaluate(expression, { cwd });
 
+  // The wrapper answers every closure with an envelope, an `undefined` result included, so no output means the
+  // Page that ran it went away before it answered (AGENTS.md L90). Returning `undefined` here handed the test a
+  // Value that failed later, naming nothing.
   if (resultString === '' || resultString === NO_OUTPUT) {
-    return undefined as Result;
+    const elapsedInMilliseconds = Date.now() - evalStartedAtInMilliseconds;
+    const diagnosis = transport.describeLostEvalResult ? await transport.describeLostEvalResult(evalStartedAtInMilliseconds) : null;
+    throw new EvalResultLostError({ diagnosis, elapsedInMilliseconds });
   }
 
   let envelope: EvalResultEnvelope;

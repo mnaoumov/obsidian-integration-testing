@@ -240,6 +240,8 @@ export type {
   WaitUntilParams
 } from './eval/eval-in-obsidian.ts';
 export { evalInObsidian } from './eval/eval-in-obsidian.ts';
+export type { EvalResultLostErrorConstructorParams } from './eval/eval-result-lost-error.ts';
+export { EvalResultLostError } from './eval/eval-result-lost-error.ts';
 export type { PollInObsidianParams } from './eval/poll-in-obsidian.ts';
 export { pollInObsidian } from './eval/poll-in-obsidian.ts';
 export type { LibResolver } from './namespace/lib-registry.ts';
