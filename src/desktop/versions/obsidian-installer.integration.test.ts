@@ -65,11 +65,11 @@ describe.runIf(SHOULD_RUN_INSTALLER_TEST)('installer shell download and extract'
 
       // Windows (PE FileVersion) and macOS (Info.plist) reliably report the
       // shell's version, so it must match the pinned build. Linux detection is a
-      // best-effort path parse that is usually `undefined`, so it is not asserted
+      // best-effort path parse that is usually `null`, so it is not asserted
       // there — the exe-path and cache-hit checks validate that branch instead.
       if (process.platform !== 'linux') {
         const detectedVersion = detectInstalledShellVersion(exePath);
-        expect(detectedVersion).toBeDefined();
+        expect(detectedVersion).not.toBeNull();
         expect(detectedVersion?.startsWith(version)).toBe(true);
       }
 
