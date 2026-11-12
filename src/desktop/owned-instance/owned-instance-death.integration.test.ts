@@ -25,7 +25,13 @@ import { evalInObsidian } from '../../eval/eval-in-obsidian.ts';
 import { readOwnedInstanceExitMarker } from './owned-instance-exit-marker.ts';
 import { OwnedInstanceExitedError } from './owned-instance-exited-error.ts';
 
-const DEATH_REPORT_TIMEOUT_IN_MILLISECONDS = 30_000;
+/*
+ * Above the 30 s per-eval cap with room for a second eval: a renderer torn down while its socket stays open
+ * answers nothing, so the eval in flight then can still spend the whole cap before the port closes. Under bulk
+ * load the instance has taken 20-25 s to exit after the destroy (measured 2026-11-11).
+ */
+const DEATH_REPORT_TIMEOUT_IN_MILLISECONDS = 90_000;
+const TEST_TIMEOUT_IN_MILLISECONDS = DEATH_REPORT_TIMEOUT_IN_MILLISECONDS + 30_000;
 const DEATH_REPORT_POLL_INTERVAL_IN_MILLISECONDS = 250;
 
 /**
@@ -112,5 +118,5 @@ describe('a harness-owned instance that dies mid-run', () => {
     expect(marker).not.toBeNull();
     expect(marker?.pid).toBeGreaterThan(0);
     expect(error.code).toBe(marker?.code);
-  });
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
 });

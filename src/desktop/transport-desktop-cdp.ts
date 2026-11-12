@@ -350,9 +350,13 @@ interface OpenVaultWindow {
 
 /**
  * A command waiting for its reply: settles the caller's promise and cancels the
- * timeout that would otherwise fail it.
+ * timeout that would otherwise fail it, either with the reply or, when the socket
+ * closes first, with the reason no reply will come.
  */
-type PendingCommand = (response: CdpResponse) => void;
+interface PendingCommand {
+  readonly reject: (error: Error) => void;
+  readonly resolve: (response: CdpResponse) => void;
+}
 
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10_000;
@@ -1349,7 +1353,21 @@ export class DesktopCdpTransport implements ObsidianTransport {
       }
 
       pendingCommands.delete(message.id);
-      pendingCommand(message);
+      pendingCommand.resolve(message);
+    });
+
+    /*
+     * A closed socket answers nothing, so every command still waiting on it fails now rather than at its
+     * Timeout. Without this an eval in flight when the instance died waited out the whole per-eval cap and
+     * Was then reported as a closure that outran it (measured 2026-11-11 in the instance-death suite).
+     */
+    ws.addEventListener('close', ($event: CloseEvent): void => {
+      const error = new Error(`CDP socket closed (code ${String($event.code)}) before the command was answered`);
+      const waitingCommands = [...pendingCommands.values()];
+      pendingCommands.clear();
+      for (const waitingCommand of waitingCommands) {
+        waitingCommand.reject(error);
+      }
     });
 
     return pendingCommands;
@@ -2025,10 +2043,24 @@ export class DesktopCdpTransport implements ObsidianTransport {
         reject(new CdpCommandTimeoutError({ method, timeoutInMilliseconds }));
       }, timeoutInMilliseconds);
 
-      pendingCommands.set(id, (response) => {
-        clearTimeout(timeout);
-        resolve(response);
+      pendingCommands.set(id, {
+        reject(error: Error): void {
+          clearTimeout(timeout);
+          reject(error);
+        },
+        resolve(response: CdpResponse): void {
+          clearTimeout(timeout);
+          resolve(response);
+        }
       });
+
+      if (ws.readyState !== WebSocket.OPEN) {
+        // A socket that is already closing or closed fires no further `close` for this command and silently drops the send.
+        clearTimeout(timeout);
+        pendingCommands.delete(id);
+        reject(new Error(`CDP socket is not open (readyState ${String(ws.readyState)}); ${method} was not sent`));
+        return;
+      }
 
       try {
         ws.send(JSON.stringify({ id, method, params }));
