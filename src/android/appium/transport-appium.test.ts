@@ -11,6 +11,7 @@ import {
 
 import type { AppReadyAfterWindowRecoveryProbe } from '../app-ready-after-window-recovery.ts';
 import type { StartupProbeResult } from '../app-startup-progress.ts';
+import type { ProbeMobileVaultStartupParams } from '../mobile-vault-startup.ts';
 import type { GzipTarForToyboxParams } from '../tar-checksum.ts';
 
 import { log } from '../../log.ts';
@@ -22,6 +23,7 @@ import {
   installAndroidWriteLossGuard
 } from '../android-write-loss-guard.ts';
 import { probeAppReadyAfterWindowRecovery } from '../app-ready-after-window-recovery.ts';
+import { snapshotMobileVaultPicker } from '../mobile-vault-picker-snapshot.ts';
 import { probeMobileVaultStartup } from '../mobile-vault-startup.ts';
 import { AppiumTransport } from './transport-appium.ts';
 
@@ -582,18 +584,81 @@ describe('AppiumTransport startup budgets', () => {
     await transport.registerVault('/tmp/my-vault');
     const probes = mockBrowser.execute.mock.calls.filter(([callback]) => callback === probeMobileVaultStartup);
     expect(probes.map(([, params]): unknown => params)).toEqual([
-      { deviceVaultPath, shouldRecoverPicker: true },
-      { deviceVaultPath, shouldRecoverPicker: true },
-      { deviceVaultPath, shouldRecoverPicker: false },
-      { deviceVaultPath, shouldRecoverPicker: false }
+      { deviceVaultPath, shouldRecoverPicker: true, shouldRestoreRegistration: true },
+      { deviceVaultPath, shouldRecoverPicker: true, shouldRestoreRegistration: true },
+      { deviceVaultPath, shouldRecoverPicker: false, shouldRestoreRegistration: true },
+      { deviceVaultPath, shouldRecoverPicker: false, shouldRestoreRegistration: true }
     ]);
     expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Picker recovery: opened-vault'));
+  });
+
+  it('spaces registration restores and counts them in the timeout message', async () => {
+    let now = 1_000_000;
+    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => {
+      now += 1000;
+      return now;
+    });
+    try {
+      mockBrowser.execute.mockImplementation((callback: unknown, params?: ProbeMobileVaultStartupParams): unknown =>
+        Promise.resolve(
+          callback === probeMobileVaultStartup
+            ? {
+              hasApp: false,
+              hasWorkspace: false,
+              isLayoutReady: false,
+              pickerAction: params?.shouldRestoreRegistration ? 'restored-registration' : 'waiting',
+              vaultPath: null
+            }
+            : null
+        )
+      );
+      const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 40_000, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+      await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('registration restores: 3.');
+      const restoreFlags = mockBrowser.execute.mock.calls
+        .filter(([callback]) => callback === probeMobileVaultStartup)
+        .map(([, params]) => (params as ProbeMobileVaultStartupParams).shouldRestoreRegistration);
+      expect(restoreFlags.filter(Boolean)).toHaveLength(3);
+      expect(restoreFlags[1]).toBe(false);
+    } finally {
+      dateNow.mockRestore();
+    }
   });
 
   it('names the requested and live vault when startup never reaches the requested vault', async () => {
     mockBrowser.execute.mockResolvedValue({ hasApp: false, hasWorkspace: false, isLayoutReady: false, pickerAction: 'waiting', vaultPath: '/sdcard/Documents/old' });
     const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 1, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
     await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('Requested vault: /sdcard/Documents/my-vault; live vault: /sdcard/Documents/old');
+  });
+
+  it('adds what the page showed to an app-start timeout', async () => {
+    const waiting = { hasApp: false, hasWorkspace: false, isLayoutReady: false, pickerAction: 'waiting', vaultPath: null };
+    mockBrowser.execute.mockImplementation((callback: unknown): unknown =>
+      Promise.resolve(
+        callback === snapshotMobileVaultPicker
+          ? {
+            actionNames: ['other'],
+            bodyClass: 'is-mobile',
+            bodyText: 'Vaults',
+            detailsPath: null,
+            modalTitles: [],
+            pickerLayout: 'onboarding',
+            registeredVaults: ['/sdcard/Documents/my-vault'],
+            screenClasses: ['mod-main'],
+            selectedVault: '/sdcard/Documents/my-vault'
+          }
+          : waiting
+      )
+    );
+    const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 1, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('Page snapshot: picker onboarding; screens ["mod-main"]; actions ["other"];');
+  });
+
+  it('says when the page could not be snapshot after an app-start timeout', async () => {
+    const waiting = { hasApp: false, hasWorkspace: false, isLayoutReady: false, pickerAction: 'waiting', vaultPath: null };
+    mockBrowser.execute.mockImplementation((callback: unknown): unknown => callback === snapshotMobileVaultPicker ? Promise.reject(new Error('no such window')) : Promise.resolve(waiting));
+    const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 1, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('Page snapshot: unavailable.');
+    expect(vi.mocked(log)).toHaveBeenCalledWith(expect.stringContaining('Could not snapshot the page'));
   });
 
   it('should default the app-start timeout to 180000ms', async () => {
@@ -752,7 +817,7 @@ describe('AppiumTransport startup budgets', () => {
 
     const transport = new AppiumTransport({ appStartTimeoutInMilliseconds: 600, browser: strictProxy<Browser>(mockBrowser), deviceId: 'emulator-5554', platform: 'android' });
 
-    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('WebView window recoveries: 1.');
+    await expect(transport.registerVault('/tmp/my-vault')).rejects.toThrow('WebView window recoveries: 1;');
   });
 });
 
