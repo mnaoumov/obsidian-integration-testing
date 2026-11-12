@@ -71,6 +71,7 @@ import {
 } from '../vault/vault-path-match.ts';
 import { shouldTearDownVaultWindow } from '../vault/vault-teardown-verdict.ts';
 import { CdpCommandTimeoutError } from './cdp-command-timeout-error.ts';
+import { resolveCdpEvaluateResult } from './cdp-evaluate-response.ts';
 import { resolveAsarFallback } from './compatibility/asar-fallback-detection.ts';
 import { resolveAsarFallbackAction } from './compatibility/compatibility-options.ts';
 import { resolveElectronCompatibility } from './compatibility/electron-compatibility.ts';
@@ -364,7 +365,6 @@ const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
 // A survivor of the owned kill is re-killed this many times before dispose stops trying and reports it.
 const OWNED_SURVIVOR_KILL_ROUND_COUNT = 3;
 const OWNED_SURVIVOR_SETTLE_IN_MILLISECONDS = 1000;
-const NO_OUTPUT = '(no output)';
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30_000;
 // Old (Electron 10-era) Obsidian occasionally boots without the workspace ever
@@ -668,14 +668,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
       throw error;
     }
 
-    if (response.result?.exceptionDetails) {
-      const desc = response.result.exceptionDetails.exception?.description
-        ?? response.result.exceptionDetails.text;
-      throw new Error(`CDP evaluation error: ${desc}`);
-    }
-
-    const resultObject = response.result?.result;
-    return !resultObject || resultObject.type === 'undefined' ? NO_OUTPUT : String(resultObject.value);
+    // A protocol `error` (e.g. `Promise was collected`) is a failed command, never an empty result.
+    return resolveCdpEvaluateResult(response);
   }
 
   /**
