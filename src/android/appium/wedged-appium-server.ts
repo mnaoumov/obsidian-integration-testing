@@ -284,16 +284,16 @@ function formatAge(ageInMilliseconds: number): string {
   return ageInMilliseconds < MILLISECONDS_PER_MINUTE ? `${String(Math.round(ageInMilliseconds / MILLISECONDS_PER_SECOND))}s` : `${String(Math.round(ageInMilliseconds / MILLISECONDS_PER_MINUTE))}min`;
 }
 
-function readReadyFlag(parsed: unknown): boolean | undefined {
+function readReadyFlag(parsed: unknown): boolean | null {
   if (typeof parsed !== 'object' || parsed === null) {
-    return undefined;
+    return null;
   }
 
   const record = parsed as Record<string, unknown>;
   const value = record['value'];
   const nested = typeof value === 'object' && value !== null ? (value as Record<string, unknown>)['ready'] : undefined;
   const ready = nested ?? record['ready'];
-  return typeof ready === 'boolean' ? ready : undefined;
+  return typeof ready === 'boolean' ? ready : null;
 }
 
 function resolveRemedyAdvice(params: BuildWedgedAppiumServerMessageParams): string {

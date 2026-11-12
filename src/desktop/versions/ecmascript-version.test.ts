@@ -30,12 +30,12 @@ describe('deriveEcmaScriptVersion', () => {
     expect(deriveEcmaScriptVersion('94')).toBe('ES2022');
   });
 
-  it('returns `undefined` for a Chromium major below the earliest tracked edition', () => {
-    expect(deriveEcmaScriptVersion('50.0.2661.102')).toBeUndefined();
+  it('returns `null` for a Chromium major below the earliest tracked edition', () => {
+    expect(deriveEcmaScriptVersion('50.0.2661.102')).toBeNull();
   });
 
-  it('returns `undefined` for a malformed version', () => {
-    expect(deriveEcmaScriptVersion('not-a-version')).toBeUndefined();
-    expect(deriveEcmaScriptVersion('')).toBeUndefined();
+  it('returns `null` for a malformed version', () => {
+    expect(deriveEcmaScriptVersion('not-a-version')).toBeNull();
+    expect(deriveEcmaScriptVersion('')).toBeNull();
   });
 });

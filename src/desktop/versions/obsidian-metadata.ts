@@ -247,10 +247,10 @@ const METADATA_TABLE: ObsidianMetadataTable = OBSIDIAN_METADATA;
  * Looks up the metadata entry for a concrete Obsidian app version.
  *
  * @param version - A concrete `x.y.z` app version.
- * @returns The entry, or `undefined` when the version is absent from the table.
+ * @returns The entry, or `null` when the version is absent from the table.
  */
-export function getVersionMetadata(version: string): ObsidianVersionMetadata | undefined {
-  return METADATA_TABLE[version];
+export function getVersionMetadata(version: string): null | ObsidianVersionMetadata {
+  return METADATA_TABLE[version] ?? null;
 }
 
 declare const OBSIDIAN_METADATA: ObsidianMetadataTable;

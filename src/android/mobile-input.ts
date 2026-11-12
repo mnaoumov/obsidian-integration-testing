@@ -366,15 +366,15 @@ export function codePointOf(text: string): number {
  * the harness's composition before the request reached it (**L88**).
  *
  * @param result - The raw `Runtime.evaluate` result object.
- * @returns The text the early-ended composition committed, or `undefined` when there was none.
+ * @returns The text the early-ended composition committed, or `null` when there was none.
  */
-export function readEarlyEndedCompositionText(result: unknown): string | undefined {
+export function readEarlyEndedCompositionText(result: unknown): null | string {
   if (typeof result !== 'object' || result === null) {
-    return undefined;
+    return null;
   }
 
   const value = (result as EvaluateResult).result?.value;
-  return typeof value === 'string' ? value : undefined;
+  return typeof value === 'string' ? value : null;
 }
 
 /**

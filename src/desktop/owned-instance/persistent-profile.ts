@@ -219,16 +219,16 @@ export function mergePersistentObsidianJson(params: MergePersistentObsidianJsonP
  * Reads a persistent profile's lock file.
  *
  * @param lockPath - The lock file's path.
- * @returns The lock, or `undefined` when the file is missing or unreadable.
+ * @returns The lock, or `null` when the file is missing or unreadable.
  */
-export function readPersistentProfileLock(lockPath: string): PersistentProfileLock | undefined {
+export function readPersistentProfileLock(lockPath: string): null | PersistentProfileLock {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(lockPath, 'utf-8'));
   } catch {
-    return undefined;
+    return null;
   }
-  return !isRecord(parsed) || typeof parsed['pid'] !== 'number' || typeof parsed['startedAtInMilliseconds'] !== 'number' ? undefined : { pid: parsed['pid'], startedAtInMilliseconds: parsed['startedAtInMilliseconds'] };
+  return !isRecord(parsed) || typeof parsed['pid'] !== 'number' || typeof parsed['startedAtInMilliseconds'] !== 'number' ? null : { pid: parsed['pid'], startedAtInMilliseconds: parsed['startedAtInMilliseconds'] };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

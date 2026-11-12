@@ -148,19 +148,19 @@ describe('readPersistentProfileLock', () => {
   it('should read a malformed lock as absent', () => {
     files.set(LOCK_PATH, JSON.stringify({ pid: 'x' }));
 
-    expect(readPersistentProfileLock(LOCK_PATH)).toBeUndefined();
+    expect(readPersistentProfileLock(LOCK_PATH)).toBeNull();
   });
 
   it('should read a non-JSON lock as absent', () => {
     files.set(LOCK_PATH, 'nope');
 
-    expect(readPersistentProfileLock(LOCK_PATH)).toBeUndefined();
+    expect(readPersistentProfileLock(LOCK_PATH)).toBeNull();
   });
 
   it('should read a JSON null lock as absent', () => {
     files.set(LOCK_PATH, 'null');
 
-    expect(readPersistentProfileLock(LOCK_PATH)).toBeUndefined();
+    expect(readPersistentProfileLock(LOCK_PATH)).toBeNull();
   });
 });
 

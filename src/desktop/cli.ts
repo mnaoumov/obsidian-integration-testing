@@ -161,14 +161,14 @@ function parseNumber(flag: string, raw: string): number {
  * published release.
  *
  * @param demoVaultPath - The demo vault root.
- * @returns The plugin id, or `undefined` when the parent folder holds no readable manifest.
+ * @returns The plugin id, or `null` when the parent folder holds no readable manifest.
  */
-function readOwnPluginId(demoVaultPath: string): string | undefined {
+function readOwnPluginId(demoVaultPath: string): null | string {
   try {
     const manifest = JSON.parse(readFileSync(join(dirname(demoVaultPath), 'manifest.json'), 'utf-8')) as PluginManifestIdShape;
-    return typeof manifest.id === 'string' ? manifest.id : undefined;
+    return typeof manifest.id === 'string' ? manifest.id : null;
   } catch {
-    return undefined;
+    return null;
   }
 }
 
@@ -198,10 +198,10 @@ async function runBootstrapDemoVaultCommand(commandArguments: string[]): Promise
   // something to download, so a sweep skips them; a plugin named with --plugin is installed or fails.
   const isFolderSweep = values.plugin === undefined;
   const discoveredPluginIds = isFolderSweep ? discoverDemoVaultPluginIds(demoVaultPath) : [];
-  const ownPluginId = isFolderSweep ? readOwnPluginId(demoVaultPath) : undefined;
+  const ownPluginId = isFolderSweep ? readOwnPluginId(demoVaultPath) : null;
   const pluginIds = values.plugin ?? discoveredPluginIds.filter((pluginId) => pluginId !== ownPluginId);
 
-  if (ownPluginId !== undefined && discoveredPluginIds.includes(ownPluginId)) {
+  if (ownPluginId !== null && discoveredPluginIds.includes(ownPluginId)) {
     process.stdout.write(`Skipped ${ownPluginId}: it is the plugin this repo builds, installed from its own build output.\n`);
   }
 

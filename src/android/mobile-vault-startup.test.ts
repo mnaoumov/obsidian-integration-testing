@@ -50,13 +50,13 @@ function mockPicker(params: MockPickerParams): ReturnType<typeof vi.fn>[] {
 describe('probeMobileVaultStartup', () => {
   it('waits through a reload with no picker yet', () => {
     vi.stubGlobal('app', undefined);
-    vi.stubGlobal('document', strictProxy<Document>({ querySelector: () => null }));
+    vi.stubGlobal('document', strictProxy<Document>({ querySelector: vi.fn().mockReturnValue(null) }));
     expect(probeMobileVaultStartup({ deviceVaultPath: VAULT_PATH, shouldRecoverPicker: true })).toMatchObject({ hasApp: false, pickerAction: 'waiting', vaultPath: null });
   });
 
   it('waits if the picker container has no screen yet', () => {
     vi.stubGlobal('app', undefined);
-    vi.stubGlobal('document', strictProxy<Document>({ querySelector: () => null }));
+    vi.stubGlobal('document', strictProxy<Document>({ querySelector: vi.fn().mockReturnValue(null) }));
     expect(probeMobileVaultStartup({ deviceVaultPath: VAULT_PATH, shouldRecoverPicker: true }).pickerAction).toBe('waiting');
   });
 

@@ -193,7 +193,7 @@ export function readTarEntrySize(header: Buffer): number {
   return size;
 }
 
-function parseOctalField(field: Uint8Array): number | undefined {
+function parseOctalField(field: Uint8Array): null | number {
   let value: number | undefined;
   for (const byte of field) {
     if (byte >= DIGIT_ZERO && byte <= DIGIT_SEVEN) {
@@ -202,5 +202,5 @@ function parseOctalField(field: Uint8Array): number | undefined {
       break;
     }
   }
-  return value;
+  return value ?? null;
 }

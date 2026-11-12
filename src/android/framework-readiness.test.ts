@@ -135,7 +135,7 @@ describe('buildFrameworkNotReadyMessage', () => {
 
   it('should say when nothing answered and the logs could not be read', () => {
     const message = buildFrameworkNotReadyMessage({
-      crashLog: undefined,
+      crashLog: null,
       deviceId: 'emulator-5554',
       lastVerdict: undefined,
       restarts: [],

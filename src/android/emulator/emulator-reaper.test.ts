@@ -86,7 +86,7 @@ describe('buildEmulatorReaperArguments / parseEmulatorReaperArguments', () => {
     ['a launch time of zero', ['obsidian_test', '0']],
     ['a negative launch time', ['obsidian_test', '-1']]
   ])('rejects %s', (_description, argv) => {
-    expect(parseEmulatorReaperArguments(argv)).toBeUndefined();
+    expect(parseEmulatorReaperArguments(argv)).toBeNull();
   });
 });
 
@@ -103,7 +103,7 @@ describe('resolveEmulatorReaperWatch', () => {
     expect(resolveEmulatorReaperWatch({
       armedStartedAtInMilliseconds: STARTED_AT_IN_MILLISECONDS,
       checkIsPidAlive,
-      marker: undefined
+      marker: null
     })).toBe('emulator-stopped');
   });
 
@@ -156,7 +156,7 @@ describe('resolveEmulatorReaperWatch', () => {
 
 describe('resolveEmulatorReaperLogOpenFlag', () => {
   it('appends to a log that does not exist yet', () => {
-    expect(resolveEmulatorReaperLogOpenFlag(undefined)).toBe('a');
+    expect(resolveEmulatorReaperLogOpenFlag(null)).toBe('a');
   });
 
   it('appends to a log at the cap', () => {

@@ -107,7 +107,7 @@ describe('resolveReleaseChannel', () => {
 
   it('reports nothing when there is no evidence either way', () => {
     expect(resolveReleaseChannel({ hasCatalystPage: false, hasPublicPage: true, hasPublicRelease: false }))
-      .toBeUndefined();
+      .toBeNull();
   });
 });
 
@@ -140,7 +140,7 @@ describe('selectReleaseDownloads', () => {
   });
 
   it('selects nothing when the assets carry a different version than the tag', () => {
-    expect(selectReleaseDownloads({ assets: ASSETS_1_6_3_E30, version: '1.6.3-e30' })).toBeUndefined();
+    expect(selectReleaseDownloads({ assets: ASSETS_1_6_3_E30, version: '1.6.3-e30' })).toBeNull();
   });
 
   it('selects the apk alone from a mobile-only release', () => {
@@ -150,6 +150,6 @@ describe('selectReleaseDownloads', () => {
   });
 
   it('selects nothing from a release with no assets', () => {
-    expect(selectReleaseDownloads({ assets: [], version: '1.13.7' })).toBeUndefined();
+    expect(selectReleaseDownloads({ assets: [], version: '1.13.7' })).toBeNull();
   });
 });

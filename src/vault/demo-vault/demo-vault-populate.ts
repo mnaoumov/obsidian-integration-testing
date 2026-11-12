@@ -162,9 +162,9 @@ export interface ResolveInjectedPluginSourceDirectoryParams {
  */
 export interface ResolveInjectedPluginStaleReasonParams {
   /**
-  The version the installed copy's `manifest.json` reports, or `undefined` when it reports none.
+  The version the installed copy's `manifest.json` reports, or `null` when it reports none.
    */
-  readonly installedVersion: string | undefined;
+  readonly installedVersion: null | string;
 
   /**
   The injected plugin whose installed copy is being judged.
@@ -230,13 +230,13 @@ export function resolveInjectedPluginSourceDirectory(params: ResolveInjectedPlug
  * {@link InjectPluginParams.version} and its {@link InjectPluginParams.minVersion}.
  *
  * @param params - The {@link ResolveInjectedPluginStaleReasonParams}.
- * @returns Why the copy is stale, or `undefined` when it is acceptable (including when the plugin declares
+ * @returns Why the copy is stale, or `null` when it is acceptable (including when the plugin declares
  *   neither a pin nor a minimum, or opted out with an explicit `sourceDirectory`).
  */
-export function resolveInjectedPluginStaleReason(params: ResolveInjectedPluginStaleReasonParams): string | undefined {
+export function resolveInjectedPluginStaleReason(params: ResolveInjectedPluginStaleReasonParams): null | string {
   const { installedVersion, plugin } = params;
   if (plugin.sourceDirectory !== undefined) {
-    return undefined;
+    return null;
   }
 
   const installedLabel = installedVersion ?? 'no version';
@@ -248,7 +248,7 @@ export function resolveInjectedPluginStaleReason(params: ResolveInjectedPluginSt
     }
   }
 
-  return plugin.minVersion !== undefined && (installedVersion === undefined || compareVersions(installedVersion, plugin.minVersion) < 0) ? `the installed copy reports ${installedLabel}, older than \`minVersion\` ${plugin.minVersion}` : undefined;
+  return plugin.minVersion !== undefined && (installedVersion === null || compareVersions(installedVersion, plugin.minVersion) < 0) ? `the installed copy reports ${installedLabel}, older than \`minVersion\` ${plugin.minVersion}` : null;
 }
 
 /**
@@ -273,7 +273,7 @@ export function resolveMissingInjectedPlugins(params: ResolveMissingInjectedPlug
     }
     const sourceDirectory = resolveInjectedPluginSourceDirectory({ demoVaultPath, plugin });
     const fileNames = readPluginFileNames(sourceDirectory);
-    return REQUIRED_PLUGIN_ASSET_NAMES.some((assetName) => !fileNames.includes(assetName)) || resolveInjectedPluginStaleReason({ installedVersion: readInstalledPluginVersion(sourceDirectory), plugin }) !== undefined;
+    return REQUIRED_PLUGIN_ASSET_NAMES.some((assetName) => !fileNames.includes(assetName)) || resolveInjectedPluginStaleReason({ installedVersion: readInstalledPluginVersion(sourceDirectory), plugin }) !== null;
   });
 }
 
@@ -323,22 +323,22 @@ function buildMissingPluginRemedy(demoVaultPath: string, plugin: InjectPluginPar
  * Reads the `version` an installed plugin's `manifest.json` reports.
  *
  * @param sourceDirectory - The plugin's directory.
- * @returns The version, or `undefined` when the manifest is absent, unreadable, or carries no string
+ * @returns The version, or `null` when the manifest is absent, unreadable, or carries no string
  *   `version`.
  */
-function readInstalledPluginVersion(sourceDirectory: string): string | undefined {
+function readInstalledPluginVersion(sourceDirectory: string): null | string {
   let manifest: unknown;
   try {
     manifest = JSON.parse(readFileSync(join(sourceDirectory, MANIFEST_JSON), 'utf-8'));
   } catch {
-    return undefined;
+    return null;
   }
 
   if (typeof manifest !== 'object' || manifest === null || !('version' in manifest)) {
-    return undefined;
+    return null;
   }
 
-  return typeof manifest.version === 'string' ? manifest.version : undefined;
+  return typeof manifest.version === 'string' ? manifest.version : null;
 }
 
 /**
@@ -379,7 +379,7 @@ function seedPlugin(demoVaultPath: string, plugin: InjectPluginParams, map: Popu
 
   const installedVersion = readInstalledPluginVersion(sourceDirectory);
   const staleReason = resolveInjectedPluginStaleReason({ installedVersion, plugin });
-  if (staleReason !== undefined) {
+  if (staleReason !== null) {
     throw new Error(
       `Community plugin "${pluginId}" in the demo vault (${sourceDirectory}) is stale: ${staleReason}. `
         + `Re-install it headlessly with \`${buildBootstrapCommand(demoVaultPath, plugin)}\`, `

@@ -668,9 +668,9 @@ interface ProcessLaunch {
   readonly process: ChildProcess;
 
   /**
-  Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`.
+  Returns the exit / spawn-failure details once the process is no longer running, otherwise `null`.
    */
-  readonly readExitInfo: () => ProcessExitInfo | undefined;
+  readonly readExitInfo: () => null | ProcessExitInfo;
 
   /**
   Returns the captured stdout+stderr (bounded to the most recent output).
@@ -1388,7 +1388,7 @@ class AppiumTransportFactory {
             frameworkReadyTimeoutInMilliseconds: resolveFrameworkReadyTimeoutInMilliseconds(options),
             networkReadyTimeoutInMilliseconds: resolveNetworkReadyTimeoutInMilliseconds(options)
           });
-        if (diagnosis === undefined) {
+        if (diagnosis === null) {
           break;
         }
 
@@ -1549,12 +1549,12 @@ class AppiumTransportFactory {
    *
    * @param deviceId - The device to probe.
    * @param emulatorCapture - The emulator's output, when this run started it.
-   * @returns The diagnosis, or `undefined` when the device still answers.
+   * @returns The diagnosis, or `null` when the device still answers.
    */
-  private async diagnoseDevice(deviceId: string, emulatorCapture?: EmulatorCapture): Promise<string | undefined> {
+  private async diagnoseDevice(deviceId: string, emulatorCapture?: EmulatorCapture): Promise<null | string> {
     const shellProbe = await this.probeDeviceShell(deviceId);
     if (shellProbe === 'answered') {
-      return undefined;
+      return null;
     }
 
     this.log(`Device ${deviceId} did not answer \`adb -s ${deviceId} shell\`; checking whether the emulator itself is still alive...`);
@@ -1573,7 +1573,7 @@ class AppiumTransportFactory {
 
     // Unreachable in practice — the verdict is only `'alive'` when the shell answered, which returned above — but it is what narrows the type for the builder.
     return verdict === 'alive'
-      ? undefined
+      ? null
       : buildEmulatorLivenessMessage({
         deviceId,
         emulatorOutput: emulatorCapture?.read() ?? '',
@@ -1935,7 +1935,7 @@ class AppiumTransportFactory {
       return await this.establishSession(params);
     } catch (error: unknown) {
       const diagnosis = await this.diagnoseDevice(params.deviceId, emulatorCapture);
-      if (diagnosis === undefined) {
+      if (diagnosis === null) {
         throw error;
       }
 
@@ -2010,7 +2010,7 @@ class AppiumTransportFactory {
    */
   private async listEmulatorBackendPids(knownPids: readonly number[]): Promise<number[]> {
     const processes = await this.emulators.queryEmulatorProcesses();
-    if (processes === undefined) {
+    if (processes === null) {
       this.log(
         'Warning: the host process listing failed, so this run cannot identify the emulator backend it owns. Teardown will fall back to `adb devices` alone and will have no PID to escalate to.'
       );
@@ -2122,7 +2122,7 @@ class AppiumTransportFactory {
    */
   private logPortOwnerQueryFailure(params: BuildPortOwnerQueryMessageParams): void {
     const message = buildPortOwnerQueryMessage(params);
-    if (message !== undefined) {
+    if (message !== null) {
       this.log(message);
     }
   }
@@ -2167,16 +2167,16 @@ class AppiumTransportFactory {
    * anyway; see `avd-name-channel.ts`.
    *
    * @param deviceId - The emulator to ask.
-   * @returns The AVD name it answered, or `undefined` when no channel answered.
+   * @returns The AVD name it answered, or `null` when no channel answered.
    */
-  private async probeAvdName(deviceId: string): Promise<string | undefined> {
+  private async probeAvdName(deviceId: string): Promise<null | string> {
     const propertyCommand = describeAdbCommand(buildAvdNameChannelArguments({ channel: FIRST_AVD_NAME_CHANNEL, deviceId }));
     const consoleCommand = describeAdbCommand(buildAvdNameChannelArguments({ channel: 'console', deviceId }));
 
     for (let attempt = 1; attempt <= AVD_PROBE_ATTEMPT_COUNT; attempt++) {
-      let channel: AvdNameChannel | undefined = FIRST_AVD_NAME_CHANNEL;
+      let channel: AvdNameChannel | null = FIRST_AVD_NAME_CHANNEL;
 
-      while (channel !== undefined) {
+      while (channel !== null) {
         const answer = await this.askDeviceForAvdName(deviceId, channel);
 
         if (answer.reportedAvdName.length > 0) {
@@ -2198,7 +2198,7 @@ class AppiumTransportFactory {
       }
     }
 
-    return undefined;
+    return null;
   }
 
   /**
@@ -2217,7 +2217,7 @@ class AppiumTransportFactory {
     const results: AvdProbeResult[] = [];
 
     for (const deviceId of deviceIds) {
-      const probedAvdName = checkIsEmulatorDeviceId(deviceId) ? await this.probeAvdName(deviceId) : undefined;
+      const probedAvdName = checkIsEmulatorDeviceId(deviceId) ? await this.probeAvdName(deviceId) ?? undefined : undefined;
       results.push({ deviceId, outcome: classifyAvdProbe({ avdName, deviceId, probedAvdName }) });
     }
 
@@ -2274,9 +2274,9 @@ class AppiumTransportFactory {
    * `adb shell` round-trip.
    *
    * @param deviceId - The device UDID.
-   * @returns The parsed probe, or `undefined` when adb did not answer.
+   * @returns The parsed probe, or `null` when adb did not answer.
    */
-  private probeFramework(deviceId: string): Promise<FrameworkProbe | undefined> {
+  private probeFramework(deviceId: string): Promise<FrameworkProbe | null> {
     return new Promise((resolve) => {
       execFile(
         'adb',
@@ -2284,7 +2284,7 @@ class AppiumTransportFactory {
         { timeout: ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS },
         (error, stdout) => {
           // `service check` exits 0 either way, so an error here is adb itself failing or the guest not answering.
-          resolve(error ? undefined : parseFrameworkProbeOutput(stdout));
+          resolve(error ? null : parseFrameworkProbeOutput(stdout));
         }
       );
     });
@@ -2295,16 +2295,16 @@ class AppiumTransportFactory {
    *
    * @param deviceId - The device UDID.
    * @param buffer - The buffer name, e.g. `crash` or `system`.
-   * @returns The buffer's text, or `undefined` when it could not be read.
+   * @returns The buffer's text, or `null` when it could not be read.
    */
-  private readLogcatBuffer(deviceId: string, buffer: string): Promise<string | undefined> {
+  private readLogcatBuffer(deviceId: string, buffer: string): Promise<null | string> {
     return new Promise((resolve) => {
       execFile(
         'adb',
         ['-s', deviceId, 'logcat', '-d', '-b', buffer],
         { maxBuffer: ADB_DUMPSYS_MAX_BUFFER_IN_BYTES, timeout: ADB_DUMPSYS_TIMEOUT_IN_MILLISECONDS },
         (error, stdout) => {
-          resolve(error ? undefined : stdout);
+          resolve(error ? null : stdout);
         }
       );
     });
@@ -2607,7 +2607,7 @@ class AppiumTransportFactory {
     this.log(`Checking Appium server at ${appiumUrl.href}...`);
     try {
       await this.checkAppiumReachable(appiumUrl);
-      appiumServerMarker = readAppiumServerMarker(port);
+      appiumServerMarker = readAppiumServerMarker(port) ?? undefined;
       this.log(`Appium server is reachable (${this.describeAdoptedServer(appiumServerMarker)}).`);
 
       if (appiumServerMarker?.stopAttemptedAtInMilliseconds !== undefined) {
@@ -2732,7 +2732,7 @@ class AppiumTransportFactory {
 
     return {
       process: child,
-      readExitInfo: () => exitInfo,
+      readExitInfo: () => exitInfo ?? null,
       readOutput: () => capturedOutput,
       stopCapture: (): void => {
         isCapturing = false;
@@ -2794,7 +2794,7 @@ class AppiumTransportFactory {
 
     return {
       process: child,
-      readExitInfo: () => exitInfo,
+      readExitInfo: () => exitInfo ?? null,
       readOutput: () => capturedOutput,
       stopCapture: (): void => {
         /*
@@ -3089,7 +3089,7 @@ class AppiumTransportFactory {
     }
 
     const processes = await this.emulators.queryEmulatorProcesses();
-    if (processes === undefined) {
+    if (processes === null) {
       this.log(`Cannot tell whether AVD "${avdName}" is a leftover this harness started without a host process listing; reusing it without taking it over.`);
       return [];
     }
@@ -3359,13 +3359,13 @@ class AppiumTransportFactory {
    *
    * @param deviceId - The device UDID.
    * @param timeouts - The readiness budgets; the framework one bounds the whole wait.
-   * @returns `undefined` when the framework is ready (or the gate is off), otherwise the failure message.
+   * @returns `null` when the framework is ready (or the gate is off), otherwise the failure message.
    */
-  private async waitForFrameworkReady(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<string | undefined> {
+  private async waitForFrameworkReady(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<null | string> {
     const timeoutInMilliseconds = timeouts.frameworkReadyTimeoutInMilliseconds;
     if (timeoutInMilliseconds <= 0) {
       this.log(`Skipping the framework-ready gate for device ${deviceId} (timeout is 0).`);
-      return undefined;
+      return null;
     }
 
     const start = Date.now();
@@ -3376,7 +3376,7 @@ class AppiumTransportFactory {
     while (Date.now() < deadline) {
       const probe = await this.probeFramework(deviceId);
       const elapsed = String(Date.now() - start);
-      if (probe === undefined) {
+      if (probe === null) {
         this.log(`Device ${deviceId} did not answer the framework probe (elapsed: ${elapsed}ms). Retrying...`);
       } else {
         if (this.systemServerBaselines.get(deviceId) === undefined && probe.identity !== undefined) {
@@ -3388,7 +3388,7 @@ class AppiumTransportFactory {
 
         if (verdict.kind === 'ready') {
           this.log(`Device ${deviceId} framework is ready after ${elapsed}ms.`);
-          return undefined;
+          return null;
         }
 
         if (verdict.kind === 'restarted') {
@@ -3430,7 +3430,7 @@ class AppiumTransportFactory {
    */
   private async waitForFrameworkReadyBeforeSettings(deviceId: string, timeouts: DeviceReadinessTimeouts): Promise<void> {
     const failure = await this.waitForFrameworkReady(deviceId, timeouts);
-    if (failure !== undefined) {
+    if (failure !== null) {
       this.log(`Warning: proceeding past the first framework gate on device ${deviceId}; the gate before the session decides.`);
     }
   }
@@ -3597,7 +3597,7 @@ class AppiumTransportFactory {
       const candidates: LaunchedDeviceCandidate[] = [];
       for (const deviceId of emulatorDeviceIds) {
         if (!ignoredDeviceIds.has(deviceId)) {
-          candidates.push({ deviceId, probedAvdName: await this.probeAvdName(deviceId) });
+          candidates.push({ deviceId, probedAvdName: await this.probeAvdName(deviceId) ?? undefined });
         }
       }
 
@@ -3690,10 +3690,10 @@ export async function createTransportFromOptions(options?: ObsidianTransportOpti
  * unregistering never needs a new one. Creating one there is what turned a
  * failed Android registration into a second full provisioning inside `afterAll`.
  *
- * @returns The cached transport, or `undefined` when this worker has none.
+ * @returns The cached transport, or `null` when this worker has none.
  */
-export function getCachedTransport(): ObsidianTransport | undefined {
-  return cachedTransport;
+export function getCachedTransport(): null | ObsidianTransport {
+  return cachedTransport ?? null;
 }
 
 /**
@@ -3711,12 +3711,11 @@ export function getCachedTransport(): ObsidianTransport | undefined {
  * The setup path itself is unaffected: `coreSetup` builds its transport through
  * {@link createTransportFromOptions} with explicit options.
  *
- * @param options - Transport configuration. Defaults to an owned desktop CDP transport.
+ * @param options - Transport configuration, or `null` / omitted for an owned desktop CDP transport.
  * @returns The cached or newly created transport.
  * @throws {IntegrationSetupFailedError} When this project's global setup failed.
  */
-// eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `ObsidianTransportOptions` is one transport options bag read by five helpers, so no per-owner name can satisfy them all.
-export async function getOrCreateTransport(options?: ObsidianTransportOptions): Promise<ObsidianTransport> {
+export async function getOrCreateTransport(options?: null | ObsidianTransportOptions): Promise<ObsidianTransport> {
   const setupError = getSetupError();
   if (setupError) {
     throw new IntegrationSetupFailedError(setupError);
@@ -3726,7 +3725,7 @@ export async function getOrCreateTransport(options?: ObsidianTransportOptions): 
     return cachedTransport;
   }
 
-  const result = await createTransportFromOptions(options);
+  const result = await createTransportFromOptions(options ?? undefined);
   // eslint-disable-next-line require-atomic-updates -- Single-threaded worker; no concurrent writes.
   cachedTransport = result;
   return result;
@@ -3891,18 +3890,18 @@ async function importWebdriverio(): Promise<WebdriverioModule> {
  * `false`.
  *
  * @param params - The resolved versions and the warn/throw knobs.
- * @returns The verdict, or `undefined` when there is no asar-swap to check.
+ * @returns The verdict, or `null` when there is no asar-swap to check.
  */
-function resolveAndReportCompatibility(params: ResolveAndReportCompatibilityParams): InstallerCompatibility | undefined {
+function resolveAndReportCompatibility(params: ResolveAndReportCompatibilityParams): InstallerCompatibility | null {
   const { appVersion, installerVersion, shouldThrowOnIncompatibleInstaller, shouldWarnOnCompatibilityIssues } = params;
   if (appVersion === undefined) {
-    return undefined;
+    return null;
   }
 
   const compatibility = resolveInstallerCompatibility({
     appVersion,
     installerVersion,
-    metadata: getVersionMetadata(appVersion)
+    metadata: getVersionMetadata(appVersion) ?? undefined
   });
 
   const action = resolveInstallerCompatibilityAction({
@@ -3975,19 +3974,19 @@ async function resolveAsarPlan(
  * Resolves the locally-installed Obsidian shell, tolerating its absence.
  *
  * Unlike {@link resolveObsidianExecutable} (which throws when Obsidian is not
- * installed), this returns `undefined` in that case, so a caller pinning an
+ * installed), this returns `null` in that case, so a caller pinning an
  * installer version can fall back to downloading the pinned shell instead of
  * failing on a host with no Obsidian installed (e.g. CI).
  *
- * @returns The installed shell's path and detected version, or `undefined` when
+ * @returns The installed shell's path and detected version, or `null` when
  *   no Obsidian is installed.
  */
-async function resolveInstalledShellOrNull(): Promise<InstalledShell | undefined> {
+async function resolveInstalledShellOrNull(): Promise<InstalledShell | null> {
   try {
     const exePath = await resolveObsidianExecutable();
-    return { exePath, shellVersion: detectInstalledShellVersion(exePath) };
+    return { exePath, shellVersion: detectInstalledShellVersion(exePath) ?? undefined };
   } catch {
-    return undefined;
+    return null;
   }
 }
 
@@ -4025,7 +4024,7 @@ async function resolveOwnedInstanceConfig(options?: ObsidianCdpTransportOptions)
 
   if (options?.obsidianInstallerVersion === undefined) {
     exePath = await resolveObsidianExecutable();
-    shellVersion = detectInstalledShellVersion(exePath);
+    shellVersion = detectInstalledShellVersion(exePath) ?? undefined;
   } else {
     // A pinned installer version fully determines the shell version up front,
     // without requiring a locally-installed Obsidian (a CI runner has none).

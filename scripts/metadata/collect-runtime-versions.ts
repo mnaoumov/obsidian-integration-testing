@@ -162,20 +162,20 @@ async function main(): Promise<void> {
       const ecmaScriptVersion = deriveEcmaScriptVersion(runtimeVersions.chrome);
       collected[version] = {
         runtimeVersions,
-        ...(ecmaScriptVersion !== undefined && { ecmaScriptVersion })
+        ...(ecmaScriptVersion !== null && { ecmaScriptVersion })
       };
 
       if (outPath === undefined) {
         table[version] = {
           ...table[version],
           runtimeVersions,
-          ...(ecmaScriptVersion !== undefined && { ecmaScriptVersion })
+          ...(ecmaScriptVersion !== null && { ecmaScriptVersion })
         };
         // Write after each version so a long run is resumable if it is interrupted.
         await writeMetadataTable(table);
       }
 
-      console.log(`Collected ${version}: ${JSON.stringify(runtimeVersions)}${ecmaScriptVersion === undefined ? '' : ` -> ${ecmaScriptVersion}`}`);
+      console.log(`Collected ${version}: ${JSON.stringify(runtimeVersions)}${ecmaScriptVersion === null ? '' : ` -> ${ecmaScriptVersion}`}`);
     } catch (error) {
       skipped++;
       console.warn(`Skipped ${version}: ${errorToString(error)}`);

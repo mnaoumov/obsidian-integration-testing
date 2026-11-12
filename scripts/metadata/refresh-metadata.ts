@@ -358,7 +358,7 @@ function mergeChangelogAndChannel(
     table[version] = {
       ...existing,
       changelogUrl,
-      ...(channel !== undefined && { channel })
+      ...(channel !== null && { channel })
     };
     updated++;
   }
@@ -386,8 +386,8 @@ async function mergeElectronVersions(table: MetadataTable): Promise<number> {
     }
 
     const appJs = await readAsarAppJs(asarUrl);
-    const electronVersion = appJs === undefined ? undefined : extractMinRecommendedElectronVersion({ appJs, version });
-    if (electronVersion === undefined) {
+    const electronVersion = appJs === null ? null : extractMinRecommendedElectronVersion({ appJs, version });
+    if (electronVersion === null) {
       console.warn(`Could not read minRecommendedElectronVersion for ${version} from ${asarUrl}; leaving it for a later run.`);
       continue;
     }
@@ -506,11 +506,11 @@ function mergeReleaseDownloads(
  *
  * @param version - The feed version.
  * @param changelogUrl - Its changelog pages.
- * @returns An empty entry to fill, or `undefined` when the version mints none.
+ * @returns An empty entry to fill, or `null` when the version mints none.
  */
-function mintFeedVersion(version: string, changelogUrl: ObsidianVersionChangelogUrls): ObsidianVersionMetadata | undefined {
+function mintFeedVersion(version: string, changelogUrl: ObsidianVersionChangelogUrls): null | ObsidianVersionMetadata {
   const hasDesktopPage = changelogUrl.desktop !== undefined || changelogUrl.desktopCatalyst !== undefined;
-  return hasDesktopPage && checkIsFullFeedVersion(version) ? {} : undefined;
+  return hasDesktopPage && checkIsFullFeedVersion(version) ? {} : null;
 }
 
 /**
@@ -563,15 +563,15 @@ function parseChangelogFeed(feedXml: string): Record<string, ObsidianVersionChan
  * through a temporary directory that is removed afterwards.
  *
  * @param asarUrl - The `*.asar.gz` URL.
- * @returns The `app.js` source, or `undefined` when the download or the read fails.
+ * @returns The `app.js` source, or `null` when the download or the read fails.
  */
-async function readAsarAppJs(asarUrl: string): Promise<string | undefined> {
+async function readAsarAppJs(asarUrl: string): Promise<null | string> {
   const directory = await mkdtemp(join(tmpdir(), 'refresh-metadata-'));
   try {
     const response = await fetch(asarUrl, { headers: { 'user-agent': CATALYST_PROBE_USER_AGENT } });
     if (!response.ok) {
       console.warn(`Failed to download ${asarUrl}: HTTP ${String(response.status)}`);
-      return undefined;
+      return null;
     }
 
     const asarPath = join(directory, 'obsidian.asar');
@@ -579,7 +579,7 @@ async function readAsarAppJs(asarUrl: string): Promise<string | undefined> {
     return extractFile(asarPath, 'app.js').toString('utf-8');
   } catch (error) {
     console.warn(`Failed to read app.js from ${asarUrl}:`, error);
-    return undefined;
+    return null;
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

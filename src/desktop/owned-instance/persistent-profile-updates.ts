@@ -85,11 +85,11 @@ export interface PersistentProfileUpdateDisabledState {
  *
  * @param existing - The profile's current `obsidian.json`, parsed.
  * @param state - What the profile had.
- * @returns The registry to write back, or `undefined` when `existing` is not an object (nothing to restore into).
+ * @returns The registry to write back, or `null` when `existing` is not an object (nothing to restore into).
  */
-export function applyUpdateDisabledRestore(existing: unknown, state: PersistentProfileHoldState): Record<string, unknown> | undefined {
+export function applyUpdateDisabledRestore(existing: unknown, state: PersistentProfileHoldState): null | Record<string, unknown> {
   if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
-    return undefined;
+    return null;
   }
   const { updateDisabled: _updateDisabled, ...rest } = existing as Record<string, unknown>;
   return state.hadUpdateDisabled ? { ...rest, updateDisabled: state.updateDisabled } : rest;

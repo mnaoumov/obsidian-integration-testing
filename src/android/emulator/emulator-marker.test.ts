@@ -205,30 +205,30 @@ describe('readEmulatorMarker', () => {
     expect(readEmulatorMarker(AVD_NAME)).toStrictEqual(LAUNCH_MARKER);
   });
 
-  it('should return undefined when there is no marker', () => {
+  it('should return null when there is no marker', () => {
     mockReadFileSync.mockImplementation(() => {
       throw new Error('ENOENT');
     });
 
-    expect(readEmulatorMarker(AVD_NAME)).toBeUndefined();
+    expect(readEmulatorMarker(AVD_NAME)).toBeNull();
   });
 
-  it('should return undefined for a malformed marker', () => {
+  it('should return null for a malformed marker', () => {
     mockReadFileSync.mockReturnValue('{not json');
 
-    expect(readEmulatorMarker(AVD_NAME)).toBeUndefined();
+    expect(readEmulatorMarker(AVD_NAME)).toBeNull();
   });
 
-  it('should return undefined for a non-object marker', () => {
+  it('should return null for a non-object marker', () => {
     mockReadFileSync.mockReturnValue('null');
 
-    expect(readEmulatorMarker(AVD_NAME)).toBeUndefined();
+    expect(readEmulatorMarker(AVD_NAME)).toBeNull();
   });
 
-  it('should return undefined when the marker describes another AVD', () => {
+  it('should return null when the marker describes another AVD', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ ...MARKER, avdName: 'obsidian_screenshots' }));
 
-    expect(readEmulatorMarker(AVD_NAME)).toBeUndefined();
+    expect(readEmulatorMarker(AVD_NAME)).toBeNull();
   });
 
   it.each([
@@ -241,7 +241,7 @@ describe('readEmulatorMarker', () => {
   ])('should return undefined when %s has the wrong type', (_field, override) => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ ...MARKER, ...override }));
 
-    expect(readEmulatorMarker(AVD_NAME)).toBeUndefined();
+    expect(readEmulatorMarker(AVD_NAME)).toBeNull();
   });
 });
 
@@ -346,7 +346,7 @@ describe('checkIsMarkedEmulatorRunning', () => {
    * over an AVD whose last emulator is gone.
    */
   it('should be false when there is no marker', () => {
-    expect(checkIsMarkedEmulatorRunning(undefined)).toBe(false);
+    expect(checkIsMarkedEmulatorRunning(null)).toBe(false);
   });
 });
 

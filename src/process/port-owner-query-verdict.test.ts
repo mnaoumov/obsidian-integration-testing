@@ -107,7 +107,7 @@ describe('resolvePortOwnerQueryOutcome', () => {
 
 describe('buildPortOwnerQueryMessage', () => {
   it('should say nothing for an answered query', () => {
-    expect(buildPortOwnerQueryMessage(buildMessageParams('answered'))).toBeUndefined();
+    expect(buildPortOwnerQueryMessage(buildMessageParams('answered'))).toBeNull();
   });
 
   it('should name the budget and the signal for a timeout, and say what it costs', () => {

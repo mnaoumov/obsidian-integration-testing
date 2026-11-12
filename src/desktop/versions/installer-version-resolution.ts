@@ -85,7 +85,7 @@ export interface ResolveInstallerVersionActionParams {
  * @returns The action to take.
  */
 export function resolveInstallerVersionAction(params: ResolveInstallerVersionActionParams): InstallerVersionAction {
-  if (params.downloads === undefined || selectInstallerDownloadUrl({ downloads: params.downloads, platform: params.platform }) !== undefined) {
+  if (params.downloads === undefined || selectInstallerDownloadUrl({ downloads: params.downloads, platform: params.platform }) !== null) {
     return { action: 'use' };
   }
 

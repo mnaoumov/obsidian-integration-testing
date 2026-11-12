@@ -108,14 +108,14 @@ export interface ComputeCpuPercentParams {
  */
 export interface ProbeTick {
   /**
-  The backend process sample, or `undefined` when the backend could not be found or sampled.
+  The backend process sample, or `null` when the backend could not be found or sampled.
    */
-  readonly backend: BackendSample | undefined;
+  readonly backend: BackendSample | null;
 
   /**
-  The backend's CPU share since the previous tick, or `undefined` on the first tick and when unsampled.
+  The backend's CPU share since the previous tick, or `null` on the first tick and when unsampled.
    */
-  readonly cpuPercent: number | undefined;
+  readonly cpuPercent: null | number;
 
   /**
   Milliseconds since the device finished booting.
@@ -188,15 +188,15 @@ export function buildProbeReport(params: BuildProbeReportParams): string {
  * thrashing backend indistinguishable from a blocked one.
  *
  * @param params - The two samples and the wall-clock gap between them.
- * @returns The percentage, or `undefined` when the samples cannot be compared.
+ * @returns The percentage, or `null` when the samples cannot be compared.
  */
-export function computeCpuPercent(params: ComputeCpuPercentParams): number | undefined {
+export function computeCpuPercent(params: ComputeCpuPercentParams): null | number {
   if (params.current.pid !== params.previous.pid || params.intervalInMilliseconds <= 0) {
-    return undefined;
+    return null;
   }
 
   const cpuTimeDeltaInSeconds = params.current.cpuTimeInSeconds - params.previous.cpuTimeInSeconds;
-  return cpuTimeDeltaInSeconds < 0 ? undefined : (cpuTimeDeltaInSeconds * MILLISECONDS_PER_SECOND * PERCENT_SCALE) / params.intervalInMilliseconds;
+  return cpuTimeDeltaInSeconds < 0 ? null : (cpuTimeDeltaInSeconds * MILLISECONDS_PER_SECOND * PERCENT_SCALE) / params.intervalInMilliseconds;
 }
 
 /**
@@ -212,7 +212,7 @@ export function formatProbeTick(tick: ProbeTick): string {
     `${String(seconds).padStart(ELAPSED_COLUMN_WIDTH)}s`,
     tick.verdict.padEnd(VERDICT_COLUMN_WIDTH),
     `cpu=${formatPercent(tick.cpuPercent)}`,
-    `rss=${formatGibibytes(tick.backend?.residentSetSizeInBytes)}`,
+    `rss=${formatGibibytes(tick.backend?.residentSetSizeInBytes ?? null)}`,
     `free=${formatGibibytes(tick.freeMemoryInBytes)}`
   ].join('  ');
 }
@@ -225,17 +225,17 @@ export function formatProbeTick(tick: ProbeTick): string {
  * not sample", which is a normal outcome once the process has exited.
  *
  * @param sampleOutput - Raw stdout of the platform's sampling command.
- * @returns The sample, or `undefined` when the output is not one.
+ * @returns The sample, or `null` when the output is not one.
  */
-export function parseBackendSample(sampleOutput: string): BackendSample | undefined {
+export function parseBackendSample(sampleOutput: string): BackendSample | null {
   const fields = sampleOutput.trim().split(WHITESPACE_RUN_REG_EXP);
   if (fields.length !== BACKEND_SAMPLE_FIELD_COUNT) {
-    return undefined;
+    return null;
   }
 
   const [pid = NaN, cpuTimeInSeconds = NaN, residentSetSizeInKibibytes = NaN] = fields.map((field) => Number.parseInt(field, RADIX_DECIMAL));
 
-  return Number.isNaN(pid) || Number.isNaN(cpuTimeInSeconds) || Number.isNaN(residentSetSizeInKibibytes) ? undefined : { cpuTimeInSeconds, pid, residentSetSizeInBytes: residentSetSizeInKibibytes * BYTES_PER_KIBIBYTE };
+  return Number.isNaN(pid) || Number.isNaN(cpuTimeInSeconds) || Number.isNaN(residentSetSizeInKibibytes) ? null : { cpuTimeInSeconds, pid, residentSetSizeInBytes: residentSetSizeInKibibytes * BYTES_PER_KIBIBYTE };
 }
 
 function buildFailureVerdict(params: BuildProbeReportParams, lastTick: ProbeTick): string[] {
@@ -243,7 +243,7 @@ function buildFailureVerdict(params: BuildProbeReportParams, lastTick: ProbeTick
   return [
     `WEDGED: ${lastTick.verdict} after ${String(seconds)}s of uptime.`,
     ...(params.diagnosis === undefined ? [] : ['', params.diagnosis, '']),
-    ...(lastTick.cpuPercent === undefined
+    ...(lastTick.cpuPercent === null
       ? []
       : [
         `The backend was at ${formatPercent(lastTick.cpuPercent)} CPU with ${formatGibibytes(lastTick.freeMemoryInBytes)} free on the host.`,
@@ -265,10 +265,10 @@ function buildSurvivalVerdict(params: BuildProbeReportParams, lastTick: ProbeTic
   ];
 }
 
-function formatGibibytes(bytes: number | undefined): string {
-  return bytes === undefined ? '?' : `${(bytes / BYTES_PER_GIBIBYTE).toFixed(GIBIBYTE_FRACTION_DIGITS)}GB`;
+function formatGibibytes(bytes: null | number): string {
+  return bytes === null ? '?' : `${(bytes / BYTES_PER_GIBIBYTE).toFixed(GIBIBYTE_FRACTION_DIGITS)}GB`;
 }
 
-function formatPercent(percent: number | undefined): string {
-  return percent === undefined ? '?' : `${String(Math.round(percent))}%`;
+function formatPercent(percent: null | number): string {
+  return percent === null ? '?' : `${String(Math.round(percent))}%`;
 }

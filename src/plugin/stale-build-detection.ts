@@ -78,9 +78,9 @@ export interface CheckIsBuildStaleParams {
   readonly buildModifiedAtInMilliseconds: number;
 
   /**
-  The newest source found, or `undefined` when the project has none to compare against.
+  The newest source found, or `null` when the project has none to compare against.
    */
-  readonly newestSource: SourceModification | undefined;
+  readonly newestSource: null | SourceModification;
 }
 
 /**
@@ -113,7 +113,7 @@ export interface SourceModification {
  */
 export function checkIsBuildStale(params: CheckIsBuildStaleParams): boolean {
   const { buildModifiedAtInMilliseconds, newestSource } = params;
-  return newestSource ? newestSource.modifiedAtInMilliseconds > buildModifiedAtInMilliseconds : false;
+  return newestSource !== null && newestSource.modifiedAtInMilliseconds > buildModifiedAtInMilliseconds;
 }
 
 /**
@@ -135,18 +135,18 @@ export function checkIsSourceFileName(fileName: string): boolean {
  * run fails.
  *
  * @param projectRoot - The absolute path to the project root.
- * @returns The newest source, or `undefined` when the project has none.
+ * @returns The newest source, or `null` when the project has none.
  */
-export async function findNewestSourceModification(projectRoot: string): Promise<SourceModification | undefined> {
+export async function findNewestSourceModification(projectRoot: string): Promise<null | SourceModification> {
   const paths = [
     ...await listSourcePaths(join(projectRoot, SOURCE_DIRECTORY_NAME)),
     ...ROOT_SOURCE_FILE_NAMES.map((fileName) => join(projectRoot, fileName))
   ];
 
-  let newestSource: SourceModification | undefined;
+  let newestSource: null | SourceModification = null;
   for (const path of paths) {
     const modifiedAtInMilliseconds = await readModifiedAtInMilliseconds(path);
-    if ((modifiedAtInMilliseconds === undefined) || (newestSource && newestSource.modifiedAtInMilliseconds >= modifiedAtInMilliseconds)) {
+    if ((modifiedAtInMilliseconds === null) || (newestSource && newestSource.modifiedAtInMilliseconds >= modifiedAtInMilliseconds)) {
       continue;
     }
 
@@ -229,13 +229,13 @@ async function listSourcePaths(directory: string): Promise<string[]> {
  * Reads one file's modification time.
  *
  * @param path - The absolute path to stat.
- * @returns The epoch milliseconds, or `undefined` when the file is missing or unreadable.
+ * @returns The epoch milliseconds, or `null` when the file is missing or unreadable.
  */
-async function readModifiedAtInMilliseconds(path: string): Promise<number | undefined> {
+async function readModifiedAtInMilliseconds(path: string): Promise<null | number> {
   try {
     const stats = await stat(path);
     return stats.mtimeMs;
   } catch {
-    return undefined;
+    return null;
   }
 }

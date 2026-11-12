@@ -53,10 +53,10 @@ function pluginFiles(id: string, body: string): Record<string, string> {
 const temporaryVault = new TemporaryVault();
 let vaultPath: string;
 
-async function readProbe(): Promise<ProbeRecord | undefined> {
-  return await evalInObsidian<Record<string, never>, ProbeRecord | undefined>({
-    callback(): ProbeRecord | undefined {
-      return Reflect.get(globalThis, '__oitLifecycleProbe') as ProbeRecord | undefined;
+async function readProbe(): Promise<null | ProbeRecord> {
+  return await evalInObsidian<Record<string, never>, null | ProbeRecord>({
+    callback(): null | ProbeRecord {
+      return (Reflect.get(globalThis, '__oitLifecycleProbe') as ProbeRecord | undefined) ?? null;
     },
     vaultPath
   });

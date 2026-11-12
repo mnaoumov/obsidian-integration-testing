@@ -357,7 +357,7 @@ export async function connectToCdp(options?: ConnectToCdpOptions): Promise<CdpCo
   try {
     if (options?.vault === undefined) {
       await ensureHeadlessVaultConfig({
-        configDirectory: resolveOwnedConfigDirectory(transportOptions),
+        configDirectory: resolveOwnedConfigDirectory(transportOptions) ?? undefined,
         label: transportOptions.type,
         vaultPath: vault.path
       });

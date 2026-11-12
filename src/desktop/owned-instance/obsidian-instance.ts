@@ -114,11 +114,11 @@ export interface OwnedObsidianInstance {
 
   /**
    * Returns how the instance died once it is no longer running, otherwise
-   * `undefined`. This is the in-process half of the answer; a test worker in
+   * `null`. This is the in-process half of the answer; a test worker in
    * another process reads the same facts from the exit marker
    * (`owned-instance-exit-marker.ts`).
    */
-  readonly readExitInfo: () => ProcessExitInfo | undefined;
+  readonly readExitInfo: () => null | ProcessExitInfo;
 
   /**
   Returns the tail of everything the instance wrote to stdout/stderr.

@@ -109,14 +109,14 @@ export function clearAppiumServerMarker(port: number): void {
  * Reads the marker for a port.
  *
  * @param port - The Appium server port.
- * @returns The marker, or `undefined` when there is none, it is unreadable, or it does not describe this port.
+ * @returns The marker, or `null` when there is none, it is unreadable, or it does not describe this port.
  */
-export function readAppiumServerMarker(port: number): AppiumServerMarker | undefined {
+export function readAppiumServerMarker(port: number): AppiumServerMarker | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(getMarkerFilePath(port), 'utf-8'));
   } catch {
-    return undefined;
+    return null;
   }
 
   return parseMarker(parsed, port);
@@ -170,16 +170,16 @@ function getMarkerFilePath(port: number): string {
   return join(getMarkerDirectory(), `${String(port)}${MARKER_FILE_SUFFIX}`);
 }
 
-function parseMarker(parsed: unknown, port: number): AppiumServerMarker | undefined {
+function parseMarker(parsed: unknown, port: number): AppiumServerMarker | null {
   if (typeof parsed !== 'object' || parsed === null) {
-    return undefined;
+    return null;
   }
 
   const record = parsed as Record<string, unknown>;
   const { pid, port: markedPort, startedAtInMilliseconds, stopAttemptedAtInMilliseconds } = record;
 
   return typeof pid !== 'number' || typeof startedAtInMilliseconds !== 'number' || markedPort !== port
-    ? undefined
+    ? null
     : {
       pid,
       port,

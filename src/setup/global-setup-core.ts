@@ -184,6 +184,36 @@ export interface CoreSetupResult {
 }
 
 /**
+ * Parameters for {@link activateSetupResult}.
+ */
+interface ActivateSetupResultParams {
+  /**
+  Short label for log messages.
+   */
+  readonly label: string;
+
+  /**
+  The setup lock held for this setup, if one was taken.
+   */
+  readonly lock: SetupLock | undefined;
+
+  /**
+  The temporary vault created during setup.
+   */
+  readonly temporaryVault: TemporaryVault;
+
+  /**
+  The transport instance used during setup.
+   */
+  readonly transport: ObsidianTransport;
+
+  /**
+  The resolved transport options.
+   */
+  readonly transportOptions: ObsidianTransportOptions | undefined;
+}
+
+/**
  * Parameters for {@link assertBuildIsFresh}.
  */
 interface AssertBuildIsFreshParams {
@@ -430,7 +460,7 @@ export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupRes
   const lockScope = getLockScope(transportOptions);
 
   let lock: SetupLock | undefined;
-  if (lockScope !== undefined) {
+  if (lockScope !== null) {
     log(`[integration-setup:${label}] Acquiring '${lockScope}' setup lock (serializes against any concurrent integration-test run)...`);
     lock = await acquireSetupLock({ label, scope: lockScope });
     log(`[integration-setup:${label}] Setup lock acquired.`);
@@ -456,7 +486,7 @@ export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupRes
      * Every pre-open write has to agree on it: one that hardcodes `.obsidian` under an override writes
      * somewhere nothing looks, and nothing throws to say so.
      */
-    const configDirectory = resolveOwnedConfigDirectory(transportOptions);
+    const configDirectory = resolveOwnedConfigDirectory(transportOptions) ?? undefined;
 
     let pluginId: string | undefined;
 
@@ -505,14 +535,7 @@ export async function coreSetup(params?: CoreSetupOptions): Promise<CoreSetupRes
       transportOptions
     });
 
-    const augmentedOptions = augmentTransportOptions(transportOptions, transport);
-    const result: CoreSetupResult = { temporaryVault, transport, transportLabel: label, transportOptions: augmentedOptions };
-    activeSetups.add(result);
-    if (lock) {
-      setupLocks.set(result, lock);
-    }
-    registerProcessCleanupHandler();
-    return result;
+    return activateSetupResult({ label, lock, temporaryVault, transport, transportOptions });
   } catch (error: unknown) {
     log(`[integration-setup:${label}] Setup failed, cleaning up...`);
     try {
@@ -623,6 +646,24 @@ export function resolveIntegrationTransportOptions(options?: ObsidianTransportOp
 }
 
 /**
+ * Builds the setup result, records it as active with its lock, and arms the process cleanup handler.
+ *
+ * @param params - What setup produced.
+ * @returns The setup result.
+ */
+function activateSetupResult(params: ActivateSetupResultParams): CoreSetupResult {
+  const { label, lock, temporaryVault, transport, transportOptions } = params;
+  const augmentedOptions = augmentTransportOptions(transportOptions, transport);
+  const result: CoreSetupResult = { temporaryVault, transport, transportLabel: label, transportOptions: augmentedOptions ?? undefined };
+  activeSetups.add(result);
+  if (lock) {
+    setupLocks.set(result, lock);
+  }
+  registerProcessCleanupHandler();
+  return result;
+}
+
+/**
  * Augments transport options with reuse info so test workers can reattach to the
  * instance the global setup already launched instead of creating their own:
  *
@@ -709,7 +750,7 @@ async function assertBuildIsFresh(params: AssertBuildIsFreshParams): Promise<voi
 function augmentTransportOptions(
   options: ObsidianTransportOptions | undefined,
   transport: ObsidianTransport
-): ObsidianTransportOptions | undefined {
+): null | ObsidianTransportOptions {
   if (options?.type === 'obsidian-android-appium' && transport instanceof AppiumTransport) {
     const sessionInfo = transport.getSessionInfo();
     log(`[integration-setup:${options.type}] Session reuse info: sessionId=${sessionInfo.sessionId}, deviceId=${sessionInfo.deviceId}`);
@@ -734,7 +775,7 @@ function augmentTransportOptions(
     }
   }
 
-  return options;
+  return options ?? null;
 }
 
 /**
@@ -827,7 +868,7 @@ async function enablePluginInVault(params: EnablePluginInVaultParams): Promise<v
    * real cause from `adb logcat`. No-op (undefined) on transports that don't
    * implement it (e.g. desktop).
    */
-  const captureHandle = await transport.beginConsoleCapture?.();
+  const captureHandle = await transport.beginConsoleCapture?.() ?? null;
 
   /*
    * On a freshly cold-booted emulator the plugin subsystem can still be settling
@@ -945,10 +986,10 @@ function findProjectRoot(): string {
  * nothing the harness uses is behind it. See AGENTS.md L59.
  *
  * @param transportOptions - The resolved transport options.
- * @returns The lock scope string, or `undefined` if no lock is needed.
+ * @returns The lock scope string, or `null` if no lock is needed.
  */
-function getLockScope(transportOptions: ObsidianTransportOptions | undefined): string | undefined {
-  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_SETUP_LOCK_SCOPE : undefined;
+function getLockScope(transportOptions: ObsidianTransportOptions | undefined): null | string {
+  return transportOptions?.type === 'obsidian-android-appium' ? ANDROID_SETUP_LOCK_SCOPE : null;
 }
 
 /**

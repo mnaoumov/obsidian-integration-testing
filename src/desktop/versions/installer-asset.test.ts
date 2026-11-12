@@ -130,13 +130,13 @@ describe('selectInstallerAssetName', () => {
     });
   });
 
-  it('should return undefined when no asset matches (e.g. a catalyst release with no installer)', () => {
+  it('should return null when no asset matches (e.g. a catalyst release with no installer)', () => {
     expect(
       selectInstallerAssetName({ assetNames: ['obsidian-1.13.1.asar.gz'], platform: 'win32', version: '1.13.1' })
-    ).toBeUndefined();
+    ).toBeNull();
     expect(
       selectInstallerAssetName({ assetNames: [], platform: 'win32', version: '1.6.7' })
-    ).toBeUndefined();
+    ).toBeNull();
   });
 });
 
@@ -151,14 +151,14 @@ describe('selectInstallerDownloadUrl', () => {
     expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_PUBLIC, platform: 'freebsd' })).toBe(DOWNLOADS_PUBLIC.tar);
   });
 
-  it('should return undefined when the version has no catalog entry', () => {
-    expect(selectInstallerDownloadUrl({ downloads: undefined, platform: 'win32' })).toBeUndefined();
+  it('should return null when the version has no catalog entry', () => {
+    expect(selectInstallerDownloadUrl({ downloads: undefined, platform: 'win32' })).toBeNull();
   });
 
-  it('should return undefined when the entry ships no installer for the platform (catalyst asar-only)', () => {
-    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'win32' })).toBeUndefined();
-    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'darwin' })).toBeUndefined();
-    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'linux' })).toBeUndefined();
+  it('should return null when the entry ships no installer for the platform (catalyst asar-only)', () => {
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'win32' })).toBeNull();
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'darwin' })).toBeNull();
+    expect(selectInstallerDownloadUrl({ downloads: DOWNLOADS_CATALYST_ONLY_ASAR, platform: 'linux' })).toBeNull();
   });
 });
 

@@ -119,8 +119,8 @@ describe('applyUpdateDisabledRestore', () => {
   });
 
   it('should leave a registry that is not an object alone', () => {
-    expect(applyUpdateDisabledRestore(undefined, { hadUpdateDisabled: false, heldAsarFileNames: [] })).toBeUndefined();
-    expect(applyUpdateDisabledRestore([], { hadUpdateDisabled: false, heldAsarFileNames: [] })).toBeUndefined();
+    expect(applyUpdateDisabledRestore(undefined, { hadUpdateDisabled: false, heldAsarFileNames: [] })).toBeNull();
+    expect(applyUpdateDisabledRestore([], { hadUpdateDisabled: false, heldAsarFileNames: [] })).toBeNull();
   });
 });
 

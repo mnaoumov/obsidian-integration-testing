@@ -29,6 +29,6 @@ export function checkIsProcessAlive(pid: number): boolean {
   }
 }
 
-function getErrorCode(error: unknown): string | undefined {
-  return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : undefined;
+function getErrorCode(error: unknown): null | string {
+  return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : null;
 }

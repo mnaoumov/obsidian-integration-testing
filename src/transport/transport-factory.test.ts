@@ -11,7 +11,7 @@ import { getOrCreateTransport } from './transport-factory.ts';
 
 describe('getOrCreateTransport', () => {
   afterEach(() => {
-    setSetupErrorResolver(() => undefined);
+    setSetupErrorResolver(() => null);
   });
 
   it('should throw the original setup failure instead of building a fallback transport', async () => {

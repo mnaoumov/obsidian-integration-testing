@@ -133,7 +133,7 @@ export function listPortOwnerPids(params: ListPortOwnerPidsParams): Promise<numb
         standardError: stderr,
         timeoutInMilliseconds: params.timeoutInMilliseconds
       });
-      if (message !== undefined) {
+      if (message !== null) {
         params.log(message);
       }
       resolve(outcome === 'answered' ? parsePortOwnerPids({ output: stdout, port: params.port }) : []);
@@ -175,7 +175,7 @@ export function listPortOwnerPidsSync(params: ListPortOwnerPidsParams): number[]
       standardError: failure.standardError,
       timeoutInMilliseconds: params.timeoutInMilliseconds
     });
-    if (message !== undefined) {
+    if (message !== null) {
       params.log(message);
     }
     return [];

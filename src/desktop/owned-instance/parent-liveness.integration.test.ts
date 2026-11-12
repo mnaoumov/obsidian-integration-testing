@@ -171,14 +171,14 @@ describe('parent-liveness watchdog', () => {
 /**
  * Reads the watchdog socket's remote port from the renderer.
  *
- * @returns The remote port, or `undefined` when no socket is armed.
+ * @returns The remote port, or `null` when no socket is armed.
  */
-async function readRemotePort(): Promise<number | undefined> {
+async function readRemotePort(): Promise<null | number> {
   return evalInObsidian({
-    callback(): number | undefined {
+    callback(): null | number {
       // eslint-disable-next-line no-restricted-syntax -- Approved double cast, same rationale as above.
       const holder = globalThis as unknown as ParentLivenessHolder;
-      return holder.__obsidianIntegrationTestingParentLiveness?.remotePort;
+      return holder.__obsidianIntegrationTestingParentLiveness?.remotePort ?? null;
     },
     vaultPath
   });

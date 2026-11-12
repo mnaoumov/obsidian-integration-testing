@@ -567,6 +567,7 @@ function getObsidianDevUtilsPluginConfigs(): Linter.Config[] {
       },
       rules: {
         'typescript-dev-toolkit/no-keyword-identifiers': 'error',
+        'typescript-dev-toolkit/no-undefined-return-type': 'error',
         'typescript-dev-toolkit/no-unresolved-jsdoc-link': 'error',
         'typescript-dev-toolkit/no-unused-params-members': 'error',
         'typescript-dev-toolkit/no-used-underscore-variables': 'error',

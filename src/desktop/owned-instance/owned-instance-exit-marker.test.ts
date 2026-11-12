@@ -146,33 +146,33 @@ describe('readOwnedInstanceExitMarker', () => {
     expect(readOwnedInstanceExitMarker(PORT)?.signal).toBe('SIGKILL');
   });
 
-  it('should return undefined when there is no marker', () => {
+  it('should return null when there is no marker', () => {
     mockReadFileSync.mockImplementation(() => {
       throw makeErrnoError('ENOENT');
     });
 
-    expect(readOwnedInstanceExitMarker(PORT)).toBeUndefined();
+    expect(readOwnedInstanceExitMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined for a malformed marker', () => {
+  it('should return null for a malformed marker', () => {
     mockReadFileSync.mockReturnValue('{ not json');
 
-    expect(readOwnedInstanceExitMarker(PORT)).toBeUndefined();
+    expect(readOwnedInstanceExitMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined for a non-object marker', () => {
+  it('should return null for a non-object marker', () => {
     mockReadFileSync.mockReturnValue('null');
 
-    expect(readOwnedInstanceExitMarker(PORT)).toBeUndefined();
+    expect(readOwnedInstanceExitMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined for a marker without an exit time', () => {
+  it('should return null for a marker without an exit time', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ code: 0, port: PORT, signal: null }));
 
-    expect(readOwnedInstanceExitMarker(PORT)).toBeUndefined();
+    expect(readOwnedInstanceExitMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined for a marker describing another port', () => {
+  it('should return null for a marker describing another port', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({
       code: 0,
       exitedAtInMilliseconds: NOW_IN_MILLISECONDS,
@@ -182,7 +182,7 @@ describe('readOwnedInstanceExitMarker', () => {
       signal: null
     }));
 
-    expect(readOwnedInstanceExitMarker(PORT)).toBeUndefined();
+    expect(readOwnedInstanceExitMarker(PORT)).toBeNull();
   });
 
   it('should fall back to empty details for a marker with the wrong field types', () => {

@@ -103,12 +103,12 @@ export function getObsidianConfigDirectory(): string {
  * Returns the hex vault ID for a given vault path from Obsidian's registry.
  *
  * @param vaultPath - The absolute path to the vault folder.
- * @returns The vault ID, or `undefined` if the vault is not registered.
+ * @returns The vault ID, or `null` if the vault is not registered.
  */
-export function getVaultId(vaultPath: string): string | undefined {
+export function getVaultId(vaultPath: string): null | string {
   const config = readObsidianJson();
   if (!config) {
-    return undefined;
+    return null;
   }
 
   const normalizedTarget = normalizePath(vaultPath);
@@ -119,7 +119,7 @@ export function getVaultId(vaultPath: string): string | undefined {
     }
   }
 
-  return undefined;
+  return null;
 }
 
 /**
@@ -129,7 +129,7 @@ export function getVaultId(vaultPath: string): string | undefined {
  * @returns `true` if the vault is registered, `false` otherwise.
  */
 export function isVaultRegistered(vaultPath: string): boolean {
-  return getVaultId(vaultPath) !== undefined;
+  return getVaultId(vaultPath) !== null;
 }
 
 /**
@@ -147,15 +147,15 @@ function normalizePath(vaultPath: string): string {
 /**
  * Reads and parses Obsidian's `obsidian.json` config file.
  *
- * @returns The parsed config, or `undefined` if the file doesn't exist or can't be parsed.
+ * @returns The parsed config, or `null` if the file doesn't exist or can't be parsed.
  */
-function readObsidianJson(): ObsidianJson | undefined {
+function readObsidianJson(): null | ObsidianJson {
   const configPath = join(getObsidianConfigDirectory(), 'obsidian.json');
   try {
     const content = readFileSync(configPath, 'utf-8');
     return JSON.parse(content) as ObsidianJson;
   } catch {
-    return undefined;
+    return null;
   }
 }
 

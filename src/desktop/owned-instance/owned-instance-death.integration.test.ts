@@ -109,7 +109,7 @@ describe('a harness-owned instance that dies mid-run', () => {
     const port = transportOptions?.type === 'obsidian-cdp' ? transportOptions.port : undefined;
     expect(port).toBeDefined();
     const marker = readOwnedInstanceExitMarker(port ?? 0);
-    expect(marker).toBeDefined();
+    expect(marker).not.toBeNull();
     expect(marker?.pid).toBeGreaterThan(0);
     expect(error.code).toBe(marker?.code);
   });

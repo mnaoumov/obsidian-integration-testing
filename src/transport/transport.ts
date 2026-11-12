@@ -41,9 +41,9 @@ export interface ObsidianTransport {
    * {@link DesktopCdpTransport} (desktop errors are surfaced in-renderer, and a
    * developer can open DevTools directly).
    *
-   * @returns An opaque handle to pass to {@link ObsidianTransport.readConsoleCaptureSince}, or `undefined` when unsupported.
+   * @returns An opaque handle to pass to {@link ObsidianTransport.readConsoleCaptureSince}, or `null` when unsupported.
    */
-  readonly beginConsoleCapture?: () => Promise<ConsoleCaptureHandle | undefined>;
+  readonly beginConsoleCapture?: () => Promise<ConsoleCaptureHandle | null>;
 
   /**
    * Captures a PNG screenshot of the running Obsidian instance.
@@ -137,10 +137,10 @@ export interface ObsidianTransport {
    *
    * A bounded, post-hoc, failure-path-only dump — not a live monitor.
    *
-   * @param handle - The handle returned by {@link ObsidianTransport.beginConsoleCapture} (or `undefined` when capture was unsupported).
-   * @returns The captured console/error text, or `undefined` when unsupported or nothing relevant was logged.
+   * @param handle - The handle returned by {@link ObsidianTransport.beginConsoleCapture} (or `null` when capture was unsupported).
+   * @returns The captured console/error text, or `null` when nothing relevant was logged.
    */
-  readonly readConsoleCaptureSince?: (handle: ConsoleCaptureHandle | undefined) => Promise<string | undefined>;
+  readonly readConsoleCaptureSince?: (handle: ConsoleCaptureHandle | null) => Promise<null | string>;
 
   /**
    * Registers a vault path so Obsidian can target it.

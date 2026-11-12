@@ -106,9 +106,9 @@ export interface ResolvedShell {
  * - Linux: best-effort parse from the executable path (often `undefined`).
  *
  * @param exePath - Absolute path to the Obsidian executable.
- * @returns The `x.y.z` version, or `undefined` if it cannot be determined.
+ * @returns The `x.y.z` version, or `null` if it cannot be determined.
  */
-export function detectInstalledShellVersion(exePath: string): string | undefined {
+export function detectInstalledShellVersion(exePath: string): null | string {
   if (process.platform === 'win32') {
     return detectWindowsFileVersion(exePath);
   }
@@ -174,16 +174,16 @@ function assertCommandAvailable(command: string, hint: string): void {
  * Reads `CFBundleShortVersionString` from a macOS app bundle's `Info.plist`.
  *
  * @param exePath - Path to `.../Obsidian.app/Contents/MacOS/Obsidian`.
- * @returns The `x.y.z` version, or `undefined`.
+ * @returns The `x.y.z` version, or `null`.
  */
-function detectMacBundleVersion(exePath: string): string | undefined {
+function detectMacBundleVersion(exePath: string): null | string {
   try {
     const contentsDirectory = dirname(dirname(exePath));
     const plist = readFileSync(join(contentsDirectory, 'Info.plist'), 'utf-8');
     const match = MAC_PLIST_VERSION_PATTERN.exec(plist);
-    return match?.groups?.['version'];
+    return match?.groups?.['version'] ?? null;
   } catch {
-    return undefined;
+    return null;
   }
 }
 
@@ -191,20 +191,20 @@ function detectMacBundleVersion(exePath: string): string | undefined {
  * Best-effort parse of an `x.y.z` version embedded in a path.
  *
  * @param value - The path or string to scan.
- * @returns The first `x.y.z` match, or `undefined`.
+ * @returns The first `x.y.z` match, or `null`.
  */
-function detectVersionFromPath(value: string): string | undefined {
+function detectVersionFromPath(value: string): null | string {
   const match = /(?<version>\d+\.\d+\.\d+)/.exec(value);
-  return match?.groups?.['version'];
+  return match?.groups?.['version'] ?? null;
 }
 
 /**
  * Reads the PE `FileVersion` of a Windows executable via PowerShell.
  *
  * @param exePath - Absolute path to the executable.
- * @returns The `x.y.z` version, or `undefined`.
+ * @returns The `x.y.z` version, or `null`.
  */
-function detectWindowsFileVersion(exePath: string): string | undefined {
+function detectWindowsFileVersion(exePath: string): null | string {
   try {
     const output = execFileSync(
       'powershell',
@@ -212,9 +212,9 @@ function detectWindowsFileVersion(exePath: string): string | undefined {
       { encoding: 'utf-8' }
     );
     const version = output.trim();
-    return version.length > 0 ? version : undefined;
+    return version.length > 0 ? version : null;
   } catch {
-    return undefined;
+    return null;
   }
 }
 
@@ -336,9 +336,9 @@ function extractWindowsShell(assetPath: string, shellDirectory: string): void {
  * returns HTTP 403 on shared CI runner IPs.
  *
  * @param version - The release version (tag `v<version>`).
- * @returns The asset names, or `undefined` if the API is unavailable.
+ * @returns The asset names, or `null` if the API is unavailable.
  */
-async function fetchReleaseAssetNames(version: string): Promise<string[] | undefined> {
+async function fetchReleaseAssetNames(version: string): Promise<null | string[]> {
   try {
     const headers = new Headers({ 'Accept': 'application/vnd.github+json', 'User-Agent': DOWNLOAD_USER_AGENT });
     // Send a bearer token when one is available (e.g. GITHUB_TOKEN on CI).
@@ -351,13 +351,13 @@ async function fetchReleaseAssetNames(version: string): Promise<string[] | undef
     const response = await fetch(`${RELEASE_API_TAG_URL}/v${version}`, { headers });
     if (!response.ok) {
       log(`[installer] Release API for ${version} returned HTTP ${String(response.status)}; falling back to templated asset names.`);
-      return undefined;
+      return null;
     }
     const release = await response.json() as GitHubRelease;
     return release.assets.map((asset) => asset.name);
   } catch (error) {
     log(`[installer] Release API for ${version} unavailable (${error instanceof Error ? error.message : String(error)}); falling back to templated asset names.`);
-    return undefined;
+    return null;
   }
 }
 
@@ -390,14 +390,14 @@ function getCachedShellExePath(shellDirectory: string): string {
  */
 async function resolveInstallerAssetUrls(version: string): Promise<string[]> {
   const bakedUrl = selectInstallerDownloadUrl({ downloads: getVersionMetadata(version)?.downloads, platform: process.platform });
-  if (bakedUrl !== undefined) {
+  if (bakedUrl !== null) {
     return [bakedUrl];
   }
 
   const assetNames = await fetchReleaseAssetNames(version);
   if (assetNames) {
     const selected = selectInstallerAssetName({ assetNames, platform: process.platform, version });
-    if (selected !== undefined) {
+    if (selected !== null) {
       return [`${RELEASE_DOWNLOAD_BASE_URL}/v${version}/${selected}`];
     }
     log(`[installer] No installer asset matched for ${version}; falling back to templated asset names.`);

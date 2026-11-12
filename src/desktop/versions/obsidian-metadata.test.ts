@@ -95,7 +95,7 @@ describe('getVersionMetadata', () => {
     expect(Object.keys(runtimeVersions ?? {}).length).toBeGreaterThan(4);
   });
 
-  it('returns `undefined` for a version absent from the table', () => {
-    expect(getVersionMetadata('999.999.999')).toBeUndefined();
+  it('returns `null` for a version absent from the table', () => {
+    expect(getVersionMetadata('999.999.999')).toBeNull();
   });
 });

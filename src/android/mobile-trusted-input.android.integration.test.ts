@@ -467,7 +467,7 @@ describe('mobile trusted input', () => {
         // point is then off the viewport, which `Input.synthesizeTapGesture` rejects with "Position out of
         // bounds" rather than pressing anything. Waiting on the centre point rather than on the width is
         // what makes this wait for the drawer to arrive instead of merely to exist.
-        function findVisibleNavFile(): HTMLElement | undefined {
+        function findVisibleNavFile(): HTMLElement | null {
           return [...document.querySelectorAll<HTMLElement>('.nav-file-title')].find((item) => {
             const rect = item.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
@@ -475,7 +475,7 @@ describe('mobile trusted input', () => {
             return rect.width > 0
               && centerX >= 0 && centerX <= globalThis.innerWidth
               && centerY >= 0 && centerY <= globalThis.innerHeight;
-          });
+          }) ?? null;
         }
 
         // What the explorer actually rendered is the half of the answer a bare timeout throws away, and
@@ -517,7 +517,7 @@ describe('mobile trusted input', () => {
           try {
             await lib.waitUntil({
               message: 'the file explorer to render a `.nav-file-title` whose centre is on screen',
-              predicate: () => findVisibleNavFile() !== undefined,
+              predicate: () => findVisibleNavFile() !== null,
               timeoutInMilliseconds: DRAWER_OPEN_TIMEOUT_IN_MILLISECONDS
             });
             break;
@@ -617,7 +617,7 @@ describe('mobile trusted input', () => {
         const leaf = app.workspace.getLeaf(false);
         await leaf.setViewState({ active: true, state: { file: source.path, mode: 'preview' }, type: 'markdown' });
 
-        function findVisibleLink(): HTMLElement | undefined {
+        function findVisibleLink(): HTMLElement | null {
           const containerEl = leaf.view instanceof obsidianModule.MarkdownView ? leaf.view.containerEl : undefined;
           const links = containerEl ? [...containerEl.querySelectorAll<HTMLElement>(':scope .markdown-preview-view a.internal-link')] : [];
           return links.find((link) => {
@@ -627,12 +627,12 @@ describe('mobile trusted input', () => {
             return rect.width > 0
               && centerX >= 0 && centerX <= globalThis.innerWidth
               && centerY >= 0 && centerY <= globalThis.innerHeight;
-          });
+          }) ?? null;
         }
 
         await lib.waitUntil({
           message: 'Reading view to render the internal link on screen',
-          predicate: () => findVisibleLink() !== undefined
+          predicate: () => findVisibleLink() !== null
         });
         const link = findVisibleLink();
         if (!link) {

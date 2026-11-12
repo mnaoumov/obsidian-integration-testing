@@ -68,15 +68,15 @@ describe('parseBackendSample', () => {
   });
 
   it('reports no sample when the process is gone and the command printed nothing', () => {
-    expect(parseBackendSample('')).toBeUndefined();
+    expect(parseBackendSample('')).toBeNull();
   });
 
   it('reports no sample when a column is missing rather than guessing which one', () => {
-    expect(parseBackendSample('10004 37')).toBeUndefined();
+    expect(parseBackendSample('10004 37')).toBeNull();
   });
 
   it('reports no sample when a column is not a number', () => {
-    expect(parseBackendSample('10004 - 6103516')).toBeUndefined();
+    expect(parseBackendSample('10004 - 6103516')).toBeNull();
   });
 });
 
@@ -107,12 +107,12 @@ describe('computeCpuPercent', () => {
       current: buildSample({ pid: 20_008 }),
       intervalInMilliseconds: 5000,
       previous: buildSample({ pid: 10_004 })
-    })).toBeUndefined();
+    })).toBeNull();
   });
 
   it('refuses a non-positive interval rather than dividing by it', () => {
     const sample = buildSample();
-    expect(computeCpuPercent({ current: sample, intervalInMilliseconds: 0, previous: sample })).toBeUndefined();
+    expect(computeCpuPercent({ current: sample, intervalInMilliseconds: 0, previous: sample })).toBeNull();
   });
 
   it('refuses a backwards CPU total, which means the PID was reused', () => {
@@ -120,7 +120,7 @@ describe('computeCpuPercent', () => {
       current: buildSample({ cpuTimeInSeconds: 1 }),
       intervalInMilliseconds: 5000,
       previous: buildSample({ cpuTimeInSeconds: 37 })
-    })).toBeUndefined();
+    })).toBeNull();
   });
 });
 
@@ -130,7 +130,7 @@ describe('formatProbeTick', () => {
   });
 
   it('prints `?` for an unsampled backend instead of a made-up zero', () => {
-    expect(formatProbeTick(buildTick({ backend: undefined, cpuPercent: undefined }))).toContain('cpu=?  rss=?');
+    expect(formatProbeTick(buildTick({ backend: null, cpuPercent: null }))).toContain('cpu=?  rss=?');
   });
 });
 

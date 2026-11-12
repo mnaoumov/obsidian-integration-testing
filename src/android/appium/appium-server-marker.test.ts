@@ -120,38 +120,38 @@ describe('readAppiumServerMarker', () => {
     expect(mockReadFileSync).toHaveBeenCalledWith(MARKER_PATH, 'utf-8');
   });
 
-  it('should return undefined when there is no marker', () => {
+  it('should return null when there is no marker', () => {
     mockReadFileSync.mockImplementation(() => {
       throw makeErrnoError('ENOENT');
     });
 
-    expect(readAppiumServerMarker(PORT)).toBeUndefined();
+    expect(readAppiumServerMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined for a malformed marker', () => {
+  it('should return null for a malformed marker', () => {
     mockReadFileSync.mockReturnValue('{ not json');
 
-    expect(readAppiumServerMarker(PORT)).toBeUndefined();
+    expect(readAppiumServerMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined for a non-object marker', () => {
+  it('should return null for a non-object marker', () => {
     mockReadFileSync.mockReturnValue('null');
 
-    expect(readAppiumServerMarker(PORT)).toBeUndefined();
+    expect(readAppiumServerMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined when the marker describes another port', () => {
+  it('should return null when the marker describes another port', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ pid: 12_345, port: 4724, startedAtInMilliseconds: NOW_IN_MILLISECONDS }));
 
-    expect(readAppiumServerMarker(PORT)).toBeUndefined();
+    expect(readAppiumServerMarker(PORT)).toBeNull();
   });
 
-  it('should return undefined when a field has the wrong type', () => {
+  it('should return null when a field has the wrong type', () => {
     mockReadFileSync.mockReturnValue(JSON.stringify({ pid: 'nope', port: PORT, startedAtInMilliseconds: NOW_IN_MILLISECONDS }));
-    expect(readAppiumServerMarker(PORT)).toBeUndefined();
+    expect(readAppiumServerMarker(PORT)).toBeNull();
 
     mockReadFileSync.mockReturnValue(JSON.stringify({ pid: 12_345, port: PORT, startedAtInMilliseconds: 'nope' }));
-    expect(readAppiumServerMarker(PORT)).toBeUndefined();
+    expect(readAppiumServerMarker(PORT)).toBeNull();
   });
 
   it('should carry a recorded stop attempt through', () => {

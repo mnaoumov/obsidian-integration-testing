@@ -37,10 +37,10 @@ const ESCAPED_REGEX_CHARACTERS_PATTERN = /[.*+?^${}()|[\]\\]/g;
  * Extracts the Electron version a build recommends from its `app.js`.
  *
  * @param params - The source and the version it belongs to.
- * @returns The `a.b.c` Electron version, or `undefined` when the source carries
+ * @returns The `a.b.c` Electron version, or `null` when the source carries
  *   no match or more than one (an ambiguous answer is not recorded).
  */
-export function extractMinRecommendedElectronVersion(params: ExtractMinRecommendedElectronVersionParams): string | undefined {
+export function extractMinRecommendedElectronVersion(params: ExtractMinRecommendedElectronVersionParams): null | string {
   const escapedVersion = params.version.replaceAll(ESCAPED_REGEX_CHARACTERS_PATTERN, String.raw`\$&`);
   const pattern = new RegExp(
     String.raw`[\w$]+\s*=\s*(['"])${escapedVersion}\1,\s*[\w$]+\s*=\s*(['"])(?<electronVersion>\d+\.\d+\.\d+)\2;`,
@@ -48,11 +48,11 @@ export function extractMinRecommendedElectronVersion(params: ExtractMinRecommend
   );
   const electronVersions = new Set([...params.appJs.matchAll(pattern)].map((match) => match.groups?.['electronVersion'] ?? ''));
   if (electronVersions.size !== 1) {
-    return undefined;
+    return null;
   }
 
   const [electronVersion] = electronVersions;
-  return electronVersion;
+  return electronVersion ?? null;
 }
 
 /**

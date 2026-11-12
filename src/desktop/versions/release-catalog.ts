@@ -130,15 +130,15 @@ export function buildCatalystAsarUrl(version: string): string {
  * the shape every version already labelled `'public+catalyst'` has.
  *
  * @param params - The publication evidence and the desktop pages the feed published.
- * @returns The channel, or `undefined` when there is no evidence either way (the
+ * @returns The channel, or `null` when there is no evidence either way (the
  *   caller then keeps whatever the version already carries).
  */
-export function resolveReleaseChannel(params: ResolveReleaseChannelParams): string | undefined {
+export function resolveReleaseChannel(params: ResolveReleaseChannelParams): null | string {
   if (params.hasPublicRelease) {
     return params.hasPublicPage && params.hasCatalystPage ? 'public+catalyst' : 'public';
   }
 
-  return params.hasCatalystPage ? 'catalyst' : undefined;
+  return params.hasCatalystPage ? 'catalyst' : null;
 }
 
 /**
@@ -152,10 +152,10 @@ export function resolveReleaseChannel(params: ResolveReleaseChannelParams): stri
  * version's, not the tag's.
  *
  * @param params - The release's assets and its version.
- * @returns The distilled download URLs, or `undefined` when the release
+ * @returns The distilled download URLs, or `null` when the release
  *   publishes none of them.
  */
-export function selectReleaseDownloads(params: SelectReleaseDownloadsParams): ObsidianVersionDownloads | undefined {
+export function selectReleaseDownloads(params: SelectReleaseDownloadsParams): null | ObsidianVersionDownloads {
   const { assets, version } = params;
   const assetNames = assets.map((asset) => asset.name);
   const urlByName = new Map(assets.map((asset) => [asset.name, asset.url]));
@@ -173,11 +173,11 @@ export function selectReleaseDownloads(params: SelectReleaseDownloadsParams): Ob
 
   for (const [key, platform] of INSTALLER_KEYS_BY_PLATFORM) {
     const assetName = selectInstallerAssetName({ assetNames, platform, version });
-    const url = assetName === undefined ? undefined : urlByName.get(assetName);
+    const url = assetName === null ? undefined : urlByName.get(assetName);
     if (url !== undefined) {
       downloads[key] = url;
     }
   }
 
-  return Object.keys(downloads).length > 0 ? downloads : undefined;
+  return Object.keys(downloads).length > 0 ? downloads : null;
 }

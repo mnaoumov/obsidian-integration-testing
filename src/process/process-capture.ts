@@ -46,9 +46,9 @@ export interface AttachProcessCaptureOptions {
  */
 export interface ProcessCapture {
   /**
-  Returns the exit / spawn-failure details once the process is no longer running, otherwise `undefined`.
+  Returns the exit / spawn-failure details once the process is no longer running, otherwise `null`.
    */
-  readonly readExitInfo: () => ProcessExitInfo | undefined;
+  readonly readExitInfo: () => null | ProcessExitInfo;
 
   /**
   Returns the captured stdout+stderr, bounded to the most recent output.
@@ -124,7 +124,7 @@ export function attachProcessCapture(child: ChildProcess, params: AttachProcessC
   });
 
   return {
-    readExitInfo: () => exitInfo,
+    readExitInfo: () => exitInfo ?? null,
     readOutput: () => capturedOutput,
     stopCapture: (): void => {
       isCapturing = false;

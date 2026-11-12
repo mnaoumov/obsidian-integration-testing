@@ -85,7 +85,7 @@ export function buildAvdSnapshotDirectoryCandidates(params: BuildAvdSnapshotDire
   ];
 
   return avdHomes
-    .filter((avdHome): avdHome is string => avdHome !== undefined && avdHome.length > 0)
+    .filter((avdHome): avdHome is string => typeof avdHome === 'string' && avdHome.length > 0)
     .map((avdHome) => joinPath(avdHome, `${avdName}.avd`, 'snapshots', DEFAULT_SNAPSHOT_NAME));
 }
 
@@ -114,8 +114,8 @@ function joinPath(base: string, ...segments: string[]): string {
  * Resolves the AVD home under a base directory, when there is one.
  *
  * @param base - `ANDROID_SDK_HOME` or the user's home directory.
- * @returns The AVD home, or `undefined` when `base` is unset.
+ * @returns The AVD home, or `null` when `base` is unset.
  */
-function resolveAvdHomeUnder(base: string | undefined): string | undefined {
-  return base === undefined || base.length === 0 ? undefined : joinPath(base, ...AVD_HOME_SEGMENTS);
+function resolveAvdHomeUnder(base: string | undefined): null | string {
+  return base === undefined || base.length === 0 ? null : joinPath(base, ...AVD_HOME_SEGMENTS);
 }

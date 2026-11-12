@@ -184,10 +184,10 @@ export interface WriteEmulatorMarkerParams {
  * overwritten or removed needs. Convicting one as another run's leftover is the
  * stronger question, and costs a host process listing.
  *
- * @param marker - The marker, or `undefined` when there is none.
+ * @param marker - The marker, or `null` when there is none.
  * @returns `true` when the marker records a PID that is still alive.
  */
-export function checkIsMarkedEmulatorRunning(marker: EmulatorMarker | undefined): boolean {
+export function checkIsMarkedEmulatorRunning(marker: EmulatorMarker | null): boolean {
   return marker?.ownedEmulatorPids.some((pid) => checkIsProcessAlive(pid)) ?? false;
 }
 
@@ -256,14 +256,14 @@ export function listEmulatorMarkers(): EmulatorMarker[] {
  * Reads the marker for an AVD.
  *
  * @param avdName - The AVD name.
- * @returns The marker, or `undefined` when there is none, it is unreadable, or it describes another AVD.
+ * @returns The marker, or `null` when there is none, it is unreadable, or it describes another AVD.
  */
-export function readEmulatorMarker(avdName: string): EmulatorMarker | undefined {
+export function readEmulatorMarker(avdName: string): EmulatorMarker | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(getMarkerFilePath(avdName), 'utf-8'));
   } catch {
-    return undefined;
+    return null;
   }
 
   return parseMarker(parsed, avdName);
@@ -352,9 +352,9 @@ function getMarkerFilePath(avdName: string): string {
   return join(getMarkerDirectory(), `${avdName}${MARKER_FILE_SUFFIX}`);
 }
 
-function parseMarker(parsed: unknown, avdName: string): EmulatorMarker | undefined {
+function parseMarker(parsed: unknown, avdName: string): EmulatorMarker | null {
   if (typeof parsed !== 'object' || parsed === null) {
-    return undefined;
+    return null;
   }
 
   const record = parsed as Record<string, unknown>;
@@ -366,7 +366,7 @@ function parseMarker(parsed: unknown, avdName: string): EmulatorMarker | undefin
       || typeof startedAtInMilliseconds !== 'number'
       || !checkIsNumberArray(ownedEmulatorPids)
       || (preLaunchEmulatorPids !== undefined && !checkIsNumberArray(preLaunchEmulatorPids))
-    ? undefined
+    ? null
     : {
       avdName,
       ...(deviceId !== undefined && { deviceId }),
