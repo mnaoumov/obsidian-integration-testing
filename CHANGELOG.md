@@ -2,22 +2,34 @@
 
 ## 18.0.0
 
-- fix(cdp): fail commands in flight when the CDP socket closes
-- refactor!: return null, not undefined, for "no value"
-- test(trusted-input): stop the canvas menu staying open after Escape under load
-- test(ime): stop the open-composition test losing focus under load
-- test(trusted-input): stop the dragMouse test reading coalesced moves as a released button
-- fix(android): stop IME compositions landing twice on Android
+This release has 1 breaking change and 2 fixes. 3 maintenance commits (tests, build, CI, refactoring, dependencies) are not listed.
+
+### Breaking changes
+
+- return null, not undefined, for "no value"
+
+### Fixed
+
+- **cdp:** fail commands in flight when the CDP socket closes
+- **android:** stop IME compositions landing twice on Android (#2)
 
 ## 17.10.0
 
-- feat: re #2
-- chore: collect runtime versions
-- docs(changelog): regroup the published release notes for readers
-- fix(desktop): load enabled plugins during startup on a fresh owned profile
-- fix(android): wait for Obsidian's app after a WebView window recovery
-- fix(android): retry an eval once when ChromeDriver's window was closed
-- chore: refresh metadata.json
+This release has 1 new feature, 3 fixes and 1 documentation change. 2 maintenance commits (tests, build, CI, refactoring, dependencies) are not listed.
+
+### New
+
+- composeIntoEditor: type through IME composition (#2)
+
+### Fixed
+
+- **desktop:** load enabled plugins during startup on a fresh owned profile
+- **android:** wait for Obsidian's app after a WebView window recovery
+- **android:** retry an eval once when ChromeDriver's window was closed
+
+### Documentation
+
+- **changelog:** regroup the published release notes for readers
 
 ## 17.9.1
 
