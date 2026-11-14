@@ -5,6 +5,7 @@ import type {
   UndefinedOnPartialDeep
 } from 'type-fest';
 
+import { renderGroupedChangelogSection } from '@mnaoumov/typescript-dev-toolkit/changelog-grouping';
 import { exitIfScriptDisabled } from '@mnaoumov/typescript-dev-toolkit/env-toggle';
 import { spellcheckContent } from '@mnaoumov/typescript-dev-toolkit/linters/cspell-content';
 import { lintMarkdownContent } from '@mnaoumov/typescript-dev-toolkit/linters/markdownlint-content';
@@ -13,6 +14,7 @@ import {
   execFromRoot,
   getRootFolder
 } from '@mnaoumov/typescript-dev-toolkit/root';
+import { toChangelogCommitEntry } from '@mnaoumov/typescript-dev-toolkit/version';
 import { toPosixPath } from '@mnaoumov/typescript-lib/path';
 import {
   assertNonNullable,
@@ -44,7 +46,10 @@ import {
   findBreakingCommitSubjects,
   isMajorRaise
 } from './helpers/breaking-change.ts';
-import { toChangelogSectionDocument } from './helpers/changelog-section.ts';
+import {
+  extractChangelogSection,
+  toChangelogSectionDocument
+} from './helpers/changelog-section.ts';
 import { parseNpmPackFilename } from './helpers/npm-pack.ts';
 
 exitIfScriptDisabled();
@@ -180,8 +185,10 @@ async function assertGitRepoClean(): Promise<void> {
 /**
  * Composes the `CHANGELOG.md` the release would publish, in memory and without writing anything.
  *
- * The new section is built from the first-parent commit subjects since the version the file's own first
- * heading names, and the previous sections are carried underneath it unchanged.
+ * The new section is built from the first-parent commits since the version the file's own first heading
+ * names, grouped by the toolkit's `renderGroupedChangelogSection` (`### New`, `### Fixed`, ..., with
+ * maintenance commits counted rather than listed), and the previous sections are carried underneath it
+ * unchanged.
  *
  * @param newVersion - The version whose section is being composed.
  * @param changelogPath - The absolute path of `CHANGELOG.md`.
@@ -203,13 +210,12 @@ async function composeChangelog(newVersion: string, changelogPath: string): Prom
   const lastTag = (previousChangelogLines[0] ?? '').replaceAll('## ', '');
   const commitRange = lastTag ? `${lastTag}..HEAD` : 'HEAD';
   const commitMessagesString = await execFromRoot(`git log ${commitRange} --format=%B --first-parent -z`, { isQuiet: true });
-  const commitMessages = commitMessagesString.split('\0').filter(Boolean).map((message) => toFirstLine(message));
+  const commitMessages = commitMessagesString.split('\0').filter(Boolean);
 
+  // The toolkit's grouped layout, the same one `@mnaoumov/typescript-dev-toolkit/version` writes for every other
+  // repo: a summary line, the entries sorted under `### New` / `### Fixed` / ..., maintenance commits counted.
   let newChangeLog = `# CHANGELOG\n\n## ${newVersion}\n\n`;
-
-  for (const message of commitMessages) {
-    newChangeLog += `- ${message}\n`;
-  }
+  newChangeLog += `${renderGroupedChangelogSection(commitMessages.map((message) => toChangelogCommitEntry(message)))}\n`;
 
   if (previousChangelogLines.length > 0) {
     newChangeLog += '\n';
@@ -317,9 +323,10 @@ async function getNewVersion(versionUpdateType: string): Promise<string> {
 async function getReleaseNotes(newVersion: string): Promise<string> {
   const changelogPath = resolvePathFromRootSafe(CHANGELOG_FILE_NAME);
   const content = await readFile(changelogPath, 'utf-8');
-  const newVersionEscaped = newVersion.replace('.', String.raw`\.`);
-  const match = new RegExp(`\n## ${newVersionEscaped}\n\n((.|\n)+?)\n\n##`).exec(content);
-  let releaseNotes = match?.[1] ? `${match[1]}\n\n` : '';
+  // Read up to the next `## ` heading by line: a grouped section carries `### ` subheadings, which a
+  // `\n\n##` pattern would stop at.
+  const section = extractChangelogSection(content, newVersion);
+  let releaseNotes = section ? `${section}\n\n` : '';
 
   const tagsOutput = await execFromRoot('git tag --sort=-creatordate', { isQuiet: true });
   const tags = tagsOutput.split(/\r?\n/);
@@ -549,10 +556,6 @@ function toFailedScriptNames(findings: ChangelogFinding[]): string {
  */
 function toFindingLines(findings: ChangelogFinding[]): string {
   return findings.map((finding) => `[${finding.scriptName}] ${finding.text}`).join('\n');
-}
-
-function toFirstLine(string_: string): string {
-  return string_.split(/\r?\n/).filter(Boolean).slice(0, 1).join('');
 }
 
 /**
