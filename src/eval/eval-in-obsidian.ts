@@ -171,7 +171,8 @@ export interface CommonArguments {
    * helpers (trusted input — `typeIntoEditor` / `pressKey` / `moveMouse` /
    * `clickMouse` / `dragMouse` / `hoverElement` / `unhoverElement` /
    * `clickElement` — plus
-   * `waitUntil`, `createNote` and `openSettingsTab`), and provider packages
+   * `waitUntil`, `createNote`, `openSettingsTab` and the in-memory clipboard
+   * pair `useInMemoryClipboard` / `getInMemoryClipboard`), and provider packages
    * (chiefly `@mnaoumov/obsidian-lib`) `Object.assign` their whole renderer-safe
    * library on top via {@link registerLibResolver}. A serialized closure reaches
    * every shared helper through `lib` — `lib.typeIntoEditor({ editor, text })`,
@@ -328,6 +329,19 @@ export interface EvalInObsidianParams<Input extends GenericObject, Result, TCont
 export type GenericObject = Record<string, unknown>;
 
 /**
+ * Options for {@link Lib.getInMemoryClipboard}.
+ */
+export interface GetInMemoryClipboardOptions {
+  /**
+   * The Obsidian window whose clipboard to look up: the main window or a
+   * popout.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
+}
+
+/**
  * Parameters for {@link Lib.hoverElement}.
  */
 export interface HoverElementParams {
@@ -341,6 +355,47 @@ export interface HoverElementParams {
    * popout with no extra parameter.
    */
   readonly element: HTMLElement;
+}
+
+/**
+ * An in-memory clipboard installed by {@link Lib.useInMemoryClipboard}.
+ *
+ * It replaces the clipboard of one window until {@link InMemoryClipboard.restore}
+ * runs. `[Symbol.dispose]` does the same. It is set only where the renderer
+ * has `Symbol.dispose` (Chromium 134 and later, so Electron 35 and later), and
+ * a bundler that lowers `using` puts its helper outside the serialized
+ * callback, so prefer `try`/`finally` inside an `evalInObsidian` callback.
+ */
+export interface InMemoryClipboard extends Disposable {
+  /**
+   * The HTML the clipboard holds now: the seed, or the last HTML written.
+   * Writing plain text alone clears it, as a real clipboard does.
+   */
+  readonly html: string;
+
+  /**
+   * Whether Electron's `clipboard` module was replaced too. It is `false` where
+   * the window has no `require` (mobile), or where the module's methods could
+   * not be overwritten.
+   */
+  readonly isElectronClipboardReplaced: boolean;
+
+  /**
+   * Puts the window's own clipboard back. Calling it again does nothing.
+   */
+  readonly restore: (this: void) => void;
+
+  /**
+   * The text the clipboard holds now: the seed, or the last text written.
+   */
+  readonly text: string;
+
+  /**
+   * Every text written while the clipboard was installed, oldest first. A write
+   * through `navigator.clipboard.write` counts when its item carries
+   * `text/plain`.
+   */
+  readonly writtenTexts: readonly string[];
 }
 
 /**
@@ -547,6 +602,15 @@ export interface Lib {
   readonly dragMouse: (this: void, params: DragMouseParams) => Promise<void>;
 
   /**
+   * Returns the in-memory clipboard {@link Lib.useInMemoryClipboard} installed
+   * in a window, so a later evaluation can read what was written to it.
+   *
+   * @param options - The window to look in.
+   * @returns The installed clipboard, or `null` when none is installed there.
+   */
+  readonly getInMemoryClipboard: (this: void, options?: GetInMemoryClipboardOptions) => InMemoryClipboard | null;
+
+  /**
    * Moves the mouse pointer to the center of an element using **trusted**
    * Electron pointer input, then polls until the element actually matches
    * `:hover`.
@@ -732,6 +796,32 @@ export interface Lib {
    *   full-viewport element does.
    */
   readonly unhoverElement: (this: void, params: UnhoverElementParams) => Promise<void>;
+
+  /**
+   * Replaces a window's clipboard with an in-memory one until the returned
+   * clipboard's `restore()` (or `[Symbol.dispose]`) runs.
+   *
+   * A test that uses the system clipboard has two problems. The harness keeps
+   * its window hidden and unfocused, and Chromium refuses `navigator.clipboard`
+   * to a document that is not focused. And the system clipboard is the
+   * owner's: a test overwrites it, and anything else on the machine can
+   * overwrite it between the test's write and its read.
+   *
+   * It replaces `navigator.clipboard`'s `writeText`, `readText`, `write` and
+   * `read` in the window, and the `readText`, `writeText`, `readHTML`,
+   * `writeHTML`, `write` and `clear` methods of Electron's `clipboard` module
+   * where the window has `require`. The Electron module is shared by every
+   * window of the renderer, so it is replaced for all of them.
+   *
+   * The clipboard stays installed across evaluations. Read it back from a
+   * later one with {@link Lib.getInMemoryClipboard}, and restore it in a
+   * `finally` or an `afterEach`: a clipboard left installed answers every
+   * later test. Installing a second one in the same window restores the first.
+   *
+   * @param options - The seed text and HTML, and the window.
+   * @returns The installed clipboard.
+   */
+  readonly useInMemoryClipboard: (this: void, options?: UseInMemoryClipboardOptions) => InMemoryClipboard;
 
   /**
    * Polls a predicate until it becomes truthy, or rejects once a bounded
@@ -939,6 +1029,33 @@ export interface UnhoverElementParams {
    * popout is driven in that popout with no extra parameter.
    */
   readonly element: HTMLElement;
+}
+
+/**
+ * Options for {@link Lib.useInMemoryClipboard}.
+ */
+export interface UseInMemoryClipboardOptions {
+  /**
+   * The HTML the clipboard holds when it is installed.
+   *
+   * @default `''`
+   */
+  readonly html?: string;
+
+  /**
+   * The text the clipboard holds when it is installed.
+   *
+   * @default `''`
+   */
+  readonly text?: string;
+
+  /**
+   * The Obsidian window whose clipboard to replace: the main window or a
+   * popout. Each window has its own `navigator.clipboard`.
+   *
+   * @default the main window (`globalThis`)
+   */
+  readonly window?: Window;
 }
 
 /**

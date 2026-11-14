@@ -227,7 +227,9 @@ export type {
   DragMouseParams,
   EvalInObsidianParams,
   GenericObject,
+  GetInMemoryClipboardOptions,
   HoverElementParams,
+  InMemoryClipboard,
   Lib,
   MouseButton,
   MousePoint,
@@ -237,6 +239,7 @@ export type {
   SetCompositionParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
+  UseInMemoryClipboardOptions,
   WaitUntilParams
 } from './eval/eval-in-obsidian.ts';
 export { evalInObsidian } from './eval/eval-in-obsidian.ts';
