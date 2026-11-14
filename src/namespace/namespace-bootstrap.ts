@@ -19,13 +19,16 @@ import type {
   ComposeIntoEditorParams,
   CreateNoteParams,
   DragMouseParams,
+  GetInMemoryClipboardOptions,
   HoverElementParams,
+  InMemoryClipboard,
   MoveMouseParams,
   OpenSettingsTabParams,
   PressKeyParams,
   SetCompositionParams,
   TypeIntoEditorParams,
   UnhoverElementParams,
+  UseInMemoryClipboardOptions,
   WaitUntilParams
 } from '../eval/eval-in-obsidian.ts';
 import type { GenerateFunctionCallParams } from '../eval/generate-function-call.ts';
@@ -388,6 +391,42 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     readonly kind: 'commitComposition' | 'setComposition';
   }
 
+  // The argument of Electron's `clipboard.write`, as far as the in-memory clipboard keeps it.
+  interface ElectronClipboardData {
+    readonly html?: string;
+    readonly text?: string;
+  }
+
+  // The part of `require('electron')` the in-memory clipboard reaches.
+  interface ElectronModuleLike {
+    readonly clipboard?: object;
+  }
+
+  // A window, with the property its installed in-memory clipboard is kept on, and the `require` Obsidian
+  // Desktop gives it.
+  interface InMemoryClipboardHolderWindow extends Window {
+    // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Mutable: the installed clipboard is set and deleted here.
+    __obsidianIntegrationTestingInMemoryClipboard?: InMemoryClipboard;
+    readonly ClipboardItem: typeof ClipboardItem;
+    readonly require?: (id: string) => unknown;
+  }
+
+  // What an in-memory clipboard holds.
+  interface InMemoryClipboardState {
+    // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Mutable: each write replaces it.
+    html: string;
+    // eslint-disable-next-line typescript-dev-toolkit/readonly-interface-members -- Mutable: each write replaces it.
+    text: string;
+    readonly writtenTexts: string[];
+  }
+
+  // A method the in-memory clipboard shadowed, and the own property that was there before, if any.
+  interface SavedClipboardMethod {
+    readonly descriptor: PropertyDescriptor | undefined;
+    readonly name: string;
+    readonly target: object;
+  }
+
   /**
    * Delay (in ms) before invoking `electronWindow.destroy()` so the eval that
    * triggered the call has time to return its result to the caller. Without
@@ -574,6 +613,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         composeIntoEditor,
         createNote,
         dragMouse,
+        getInMemoryClipboard,
         hoverElement,
         moveMouse,
         openSettingsTab,
@@ -581,6 +621,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
         setComposition,
         typeIntoEditor,
         unhoverElement,
+        useInMemoryClipboard,
         waitUntil
       };
       for (const resolveLib of this.libResolvers) {
@@ -1685,6 +1726,181 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     // Not every tab renders `.setting-item-name` rows (Hotkeys does not), so an empty array is a valid
     // answer here — the render itself was already proven by the poll above.
     return [...activeTab.containerEl.querySelectorAll('.setting-item-name')].map((nameEl) => nameEl.textContent);
+  }
+
+  function getInMemoryClipboard(clipboardOptions?: GetInMemoryClipboardOptions): InMemoryClipboard | null {
+    const targetWindow = (clipboardOptions?.window ?? globalThis) as InMemoryClipboardHolderWindow;
+    return targetWindow.__obsidianIntegrationTestingInMemoryClipboard ?? null;
+  }
+
+  function useInMemoryClipboard(clipboardOptions?: UseInMemoryClipboardOptions): InMemoryClipboard {
+    const targetWindow = (clipboardOptions?.window ?? globalThis) as InMemoryClipboardHolderWindow;
+
+    // A clipboard a failed test left installed must not answer the next one, and two installs must not
+    // Stack, where the second would save the first's fakes as the "originals" it restores.
+    targetWindow.__obsidianIntegrationTestingInMemoryClipboard?.restore();
+
+    const state: InMemoryClipboardState = {
+      html: clipboardOptions?.html ?? '',
+      text: clipboardOptions?.text ?? '',
+      writtenTexts: []
+    };
+
+    // A real clipboard holds one entry, so writing text drops the HTML that was there.
+    function writeText(text: string): void {
+      state.text = text;
+      state.html = '';
+      state.writtenTexts.push(text);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `navigator.clipboard` is missing in an insecure context, though the DOM lib declares it.
+    const navigatorSavedMethods = targetWindow.navigator.clipboard
+      ? replaceMethods(targetWindow.navigator.clipboard, {
+        read(): Promise<ClipboardItem[]> {
+          const entries = [['text/plain', state.text], ['text/html', state.html]]
+            .filter(([, value]) => value !== '')
+            .map(([type = '', value = '']) => [type, new Blob([value], { type })] as const);
+          return Promise.resolve(entries.length === 0 ? [] : [new targetWindow.ClipboardItem(Object.fromEntries(entries))]);
+        },
+        readText(): Promise<string> {
+          return Promise.resolve(state.text);
+        },
+        async write(items: ClipboardItem[]): Promise<void> {
+          let text: null | string = null;
+          let html: null | string = null;
+          for (const item of items) {
+            text = await readClipboardItemType(item, 'text/plain') ?? text;
+            html = await readClipboardItemType(item, 'text/html') ?? html;
+          }
+          if (text === null) {
+            state.text = '';
+          } else {
+            writeText(text);
+          }
+          state.html = html ?? '';
+        },
+        writeText(text: string): Promise<void> {
+          writeText(text);
+          return Promise.resolve(undefined);
+        }
+      })
+      : null;
+
+    const electronClipboard = getElectronClipboard(targetWindow);
+    const electronSavedMethods = electronClipboard
+      ? replaceMethods(electronClipboard, {
+        clear(): void {
+          state.text = '';
+          state.html = '';
+        },
+        readHTML(): string {
+          return state.html;
+        },
+        readText(): string {
+          return state.text;
+        },
+        write(data: ElectronClipboardData): void {
+          if (data.text === undefined) {
+            state.text = '';
+          } else {
+            writeText(data.text);
+          }
+          state.html = data.html ?? '';
+        },
+        writeHTML(markup: string): void {
+          state.text = '';
+          state.html = markup;
+        },
+        writeText(text: string): void {
+          writeText(text);
+        }
+      })
+      : null;
+
+    if (navigatorSavedMethods === null && electronSavedMethods === null) {
+      throw new Error('useInMemoryClipboard: the window has neither `navigator.clipboard` nor Electron\'s `clipboard` module to replace.');
+    }
+
+    let isRestored = false;
+    function restore(): void {
+      if (isRestored) {
+        return;
+      }
+      isRestored = true;
+      restoreMethods(electronSavedMethods ?? []);
+      restoreMethods(navigatorSavedMethods ?? []);
+      if (targetWindow.__obsidianIntegrationTestingInMemoryClipboard === clipboard) {
+        delete targetWindow.__obsidianIntegrationTestingInMemoryClipboard;
+      }
+    }
+
+    const clipboardBase = {
+      get html(): string {
+        return state.html;
+      },
+      isElectronClipboardReplaced: electronSavedMethods !== null,
+      restore,
+      get text(): string {
+        return state.text;
+      },
+      get writtenTexts(): readonly string[] {
+        return [...state.writtenTexts];
+      }
+    };
+    // `Symbol.dispose` is missing on the Chromium of Obsidian before Electron 35, so it is set only where it exists.
+    if (typeof Symbol.dispose === 'symbol') {
+      Object.defineProperty(clipboardBase, Symbol.dispose, { configurable: true, value: restore });
+    }
+    const clipboard = clipboardBase as InMemoryClipboard;
+    targetWindow.__obsidianIntegrationTestingInMemoryClipboard = clipboard;
+    return clipboard;
+  }
+
+  async function readClipboardItemType(item: ClipboardItem, type: string): Promise<null | string> {
+    if (!item.types.includes(type)) {
+      return null;
+    }
+    const blob = await item.getType(type);
+    return await blob.text();
+  }
+
+  function getElectronClipboard(targetWindow: InMemoryClipboardHolderWindow): null | object {
+    if (typeof targetWindow.require !== 'function') {
+      return null;
+    }
+    try {
+      const electronModule = targetWindow.require('electron') as ElectronModuleLike | undefined;
+      return electronModule?.clipboard ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Shadows each named method with an own property, recording what was there. Returns `null`, having
+  // Undone its partial work, when the target refuses a property.
+  function replaceMethods(target: object, replacements: Record<string, unknown>): null | SavedClipboardMethod[] {
+    const savedMethods: SavedClipboardMethod[] = [];
+    try {
+      for (const [name, value] of Object.entries(replacements)) {
+        savedMethods.push({ descriptor: Object.getOwnPropertyDescriptor(target, name), name, target });
+        Object.defineProperty(target, name, { configurable: true, value, writable: true });
+      }
+      return savedMethods;
+    } catch {
+      restoreMethods(savedMethods);
+      return null;
+    }
+  }
+
+  function restoreMethods(savedMethods: readonly SavedClipboardMethod[]): void {
+    for (const savedMethod of [...savedMethods].reverse()) {
+      if (savedMethod.descriptor) {
+        Object.defineProperty(savedMethod.target, savedMethod.name, savedMethod.descriptor);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- Removing the shadowing own property puts the prototype's method back.
+        delete (savedMethod.target as Record<string, unknown>)[savedMethod.name];
+      }
+    }
   }
 
   async function loadObsidianModule(namespace: IntegrationTestingNamespace): Promise<unknown> {

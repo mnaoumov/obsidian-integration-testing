@@ -100,6 +100,36 @@ const hasToggle = await evalInObsidian({
 
 A tab that legitimately draws no `.setting-item-name` rows (Hotkeys, for instance) resolves to an empty array; the render itself has still been waited for. Close the modal again with `app.setting.close()` — the attach is idempotent, so the tab can simply be re-opened afterwards.
 
+## `useInMemoryClipboard` — a clipboard the test owns
+
+**Use `lib.useInMemoryClipboard()` in any test that copies or pastes.** The system clipboard fails a test in two ways. The harness keeps its window hidden and unfocused, and Chromium refuses `navigator.clipboard` to a document that does not have focus. And the system clipboard belongs to whoever uses the machine: a test overwrites it, and anything else running there can change it between the test's write and its read.
+
+`useInMemoryClipboard` replaces the window's clipboard with one held in memory until you restore it:
+
+- `navigator.clipboard`'s `writeText`, `readText`, `write` and `read` (text and HTML items).
+- Electron's `clipboard` module (`readText`, `writeText`, `readHTML`, `writeHTML`, `write`, `clear`), when the window has `require`. That module is shared by every window, so it is replaced for all of them.
+
+It returns the clipboard: `text` and `html` are what it holds now, `writtenTexts` lists every text written, oldest first, and `restore()` puts the original methods back. Seed it with `text` or `html`, and pass `window` for a popout.
+
+```ts
+const copied = await evalInObsidian({
+  callback: async ({ app, lib: { useInMemoryClipboard } }) => {
+    const clipboard = useInMemoryClipboard({ text: 'seeded' });
+    try {
+      await app.commands.executeCommandById('my-plugin:copy-link');
+      return clipboard.text;
+    } finally {
+      clipboard.restore();
+    }
+  }
+});
+expect(copied).toBe('[[Note]]');
+```
+
+The clipboard stays installed across evaluations, so a test can install it in one callback, trigger the copy in another, and read it in a third with `lib.getInMemoryClipboard()`, which returns `null` once nothing is installed. Restore it in a `finally` or an `afterEach`: an installed clipboard answers every later test in that window. Installing a second one restores the first.
+
+The clipboard is also `Disposable` where the renderer has `Symbol.dispose` (Electron 35, Chromium 134, and later). Prefer `try`/`finally` inside a callback all the same: a bundler that lowers `using` puts its helper at the top of the test module, outside the callback, and a serialized callback cannot reach it.
+
 ## Related
 
 - [`registerLibResolver` API reference](/obsidian-integration-testing/api/namespace/lib-registry/registerLibResolver/)
