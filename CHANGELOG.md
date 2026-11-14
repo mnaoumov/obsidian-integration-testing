@@ -1,5 +1,26 @@
 # CHANGELOG
 
+## 18.1.0
+
+This release has 1 new feature, 6 fixes and 1 documentation change. 3 maintenance commits (tests, build, CI, refactoring, dependencies) are not listed.
+
+### New
+
+- **lib:** add an in-memory clipboard for tests
+
+### Fixed
+
+- **android:** stop a mobile Enter into CodeMirror inserting two line breaks
+- **android:** recover the vault picker Obsidian Mobile 1.15 draws
+- **android:** open a vault only once SystemUI has applied its theme
+- **android:** fail an eval whose result was lost, naming what replaced the page
+- **cdp:** report an awaited promise that was garbage-collected as an error
+- **android:** fail WebView CDP commands in flight when the socket closes
+
+### Documentation
+
+- **changelog:** regroup the raw release notes for readers
+
 ## 18.0.0
 
 This release has 1 breaking change and 2 fixes. 3 maintenance commits (tests, build, CI, refactoring, dependencies) are not listed.

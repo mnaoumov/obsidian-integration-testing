@@ -1,6 +1,6 @@
 {
   "name": "obsidian-integration-testing",
-  "version": "18.0.0",
+  "version": "18.1.0",
   "description": "Integration testing of Obsidian plugins inside a real Obsidian: any version, desktop or Android, driven by tests or by a coding agent.",
   "keywords": [
     "ai-agent",
