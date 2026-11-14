@@ -770,6 +770,12 @@ Two consequences worth knowing:
 
 Both decisions are pure and live in `scripts/helpers/breaking-change.ts`, tested by `breaking-change.test.ts` against the real four-commit `-z` payload that was unreleased on `main` -- `version.ts` runs `await main()` at top level, so nothing can import it to test it, and the git reads are the only thing that stayed there.
 
+### The new section is GROUPED, by the toolkit's renderer
+
+`composeChangelog` builds the new section with `@mnaoumov/typescript-dev-toolkit`'s `renderGroupedChangelogSection` over `toChangelogCommitEntry` of each first-parent commit, the same layout the toolkit's own `updateVersion` writes for every other repo: a summary line, then `### Breaking changes` / `### New` / `### Fixed` / `### Improved` / `### For developers` / `### Documentation` / `### Other changes`, with maintenance commits counted rather than listed. Until 2026-11-13 this script wrote one raw bullet per commit subject, so 17.10.0 and 18.0.0 shipped raw and were regrouped by hand with `rewrite-changelog`. Only the renderer is borrowed: the rest of the toolkit's release path does not watch `publish-npm.yml`, which is why this script stays.
+
+`getReleaseNotes` reads the section by line, through `extractChangelogSection`, up to the next level-2 heading. Its old `\n\n##` regex stopped at the first level-3 subheading of a grouped section, so the GitHub release body would have carried only the summary line.
+
 ### The changelog is settled, linted and spellchecked BEFORE it is written
 
 `updateChangelog` used to write `CHANGELOG.md` first and offer the review on the file itself, which left the new section outside every gate: the six gates run *above* it, so `spellcheck` and `lint:md` see the file as it was and never as it is about to be — **the new section was checked by nothing, ever**. Each bullet is a commit subject verbatim (`git log --format=%B --first-parent`, first line each), and nothing checks a commit subject when it is written, so a coined word — or a bare URL, or a badly-nested list — lands on `main` inside the `chore: release` commit and the NEXT release aborts on it, in a repo nobody was working on. That is exactly how `repoint` got here (`d8b568e`, settled by teaching `cspell.json` the word). Five sibling repos are still stuck on their own version of it, each with the word already published in an old section.
