@@ -1442,6 +1442,53 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
     }
   }
 
+  /**
+   * Presses Enter into a CodeMirror editor on mobile, so it inserts exactly one line break (L14).
+   *
+   * CDP delivers the press as `RawKeyDown` then `Char`. CodeMirror's Android path lets the `keydown` through
+   * and acts on the next frame: when the DOM changed it reads the change, and when it did not it dispatches
+   * an Enter of its own, an untrusted `keydown`. On a starved guest that frame can run between the two
+   * halves, so CodeMirror's Enter lands first and the `Char`'s native line break is then read as a second
+   * Enter. That doubled one press in five on a one-core guest. So while the press is in flight, a trusted
+   * `keypress` that arrives after CodeMirror's own Enter has its default prevented, which cancels the
+   * native line break; in the usual order the `keypress` comes first and nothing is touched.
+   *
+   * @param electronModifiers - The modifiers, already resolved.
+   */
+  async function pressCodeMirrorEnterOnMobile(electronModifiers: readonly string[]): Promise<void> {
+    const KEY_LISTENER_OPTIONS = { capture: true } as const;
+    let hasDispatchedOwnEnter = false;
+    function keydownListener($event: KeyboardEvent): void {
+      if (!$event.isTrusted && $event.key === 'Enter') {
+        hasDispatchedOwnEnter = true;
+      }
+    }
+    function keypressListener($event: KeyboardEvent): void {
+      if ($event.isTrusted && $event.key === 'Enter' && hasDispatchedOwnEnter) {
+        $event.preventDefault();
+      }
+    }
+    globalThis.addEventListener('keydown', keydownListener, KEY_LISTENER_OPTIONS);
+    globalThis.addEventListener('keypress', keypressListener, KEY_LISTENER_OPTIONS);
+    try {
+      await requestHostInput({ key: 'Enter', kind: 'key', modifiers: electronModifiers });
+      // The `Char` half can still be queued when the host's command returns; two frames let it arrive.
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+    } finally {
+      globalThis.removeEventListener('keydown', keydownListener, KEY_LISTENER_OPTIONS);
+      globalThis.removeEventListener('keypress', keypressListener, KEY_LISTENER_OPTIONS);
+    }
+  }
+
+  async function nextAnimationFrame(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      globalThis.requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  }
+
   async function pressKey(pressParams: PressKeyParams): Promise<void> {
     const { key, modifiers = [] } = pressParams;
     const targetWindow = pressParams.window;
@@ -1450,6 +1497,11 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
     if (checkIsMobile()) {
       assertMainWindowOnMobile('pressKey', targetWindow);
+      const focusedElement = document.activeElement;
+      if (key === 'Enter' && focusedElement instanceof Element && focusedElement.closest('.cm-content') !== null) {
+        await pressCodeMirrorEnterOnMobile(electronModifiers);
+        return;
+      }
       await requestHostInput({ key, kind: 'key', modifiers: electronModifiers });
       return;
     }
