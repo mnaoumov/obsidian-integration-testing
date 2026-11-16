@@ -1218,7 +1218,7 @@ This release has 1 fix.
 
 ## 2.5.8
 
-- No changes since 2.5.6.
+This release has no changes for users since 2.5.6. It republishes the same code.
 
 ## 2.5.6
 
@@ -1572,4 +1572,9 @@ This release has maintenance changes only. 1 maintenance commit (tests, build, C
 
 ## 1.0.0
 
-- initial
+This is the first release: helpers for integration-testing Obsidian plugins against a running Obsidian instance through the Obsidian CLI.
+
+### New
+
+- `evalInObsidian()` runs a function inside the Obsidian process and returns its result to the test.
+- A Vitest global setup for plugin repos creates a temporary vault, copies the built plugin from `dist/dev` or `dist/build` into it, and enables the plugin.
