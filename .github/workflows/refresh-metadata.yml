@@ -38,6 +38,9 @@ jobs:
 
       - name: Refresh metadata.json
         run: npm run refresh:metadata
+        env:
+          # The anonymous releases API quota (60/hour) is shared by every job on the runner's IP.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit if changed
         run: |
