@@ -174,6 +174,16 @@ const RELEASES_API_URL = 'https://api.github.com/repos/obsidianmd/obsidian-relea
 const RELEASES_PER_PAGE = 100;
 
 /**
+How much of a failed response body the error quotes.
+*/
+const ERROR_BODY_MAX_LENGTH = 500;
+
+/**
+`x-ratelimit-reset` is in epoch seconds.
+*/
+const MILLISECONDS_IN_SECOND = 1000;
+
+/**
  * Fetches the raw Atom changelog feed.
  *
  * @returns The feed XML.
@@ -224,7 +234,15 @@ async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
   do {
     const response = await fetch(`${RELEASES_API_URL}?per_page=${String(RELEASES_PER_PAGE)}&page=${String(page)}`, { headers });
     if (!response.ok) {
-      throw new Error(`Failed to fetch releases page ${String(page)}: HTTP ${String(response.status)}`);
+      const remaining = response.headers.get('x-ratelimit-remaining') ?? 'unknown';
+      const reset = response.headers.get('x-ratelimit-reset');
+      const resetText = reset === null ? 'unknown' : new Date(Number(reset) * MILLISECONDS_IN_SECOND).toISOString();
+      const responseText = await response.text();
+      const body = responseText.slice(0, ERROR_BODY_MAX_LENGTH);
+      throw new Error(
+        `Failed to fetch releases page ${String(page)}: HTTP ${String(response.status)} (${token ? 'authenticated' : 'anonymous'}, `
+          + `x-ratelimit-remaining: ${remaining}, x-ratelimit-reset: ${resetText}): ${body}`
+      );
     }
 
     pageReleases = await response.json() as GitHubRelease[];
