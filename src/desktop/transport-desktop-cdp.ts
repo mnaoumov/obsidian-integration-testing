@@ -222,7 +222,19 @@ export interface DesktopCdpTransportConfig {
    * @default `true`
    */
   readonly shouldWarnOnCompatibilityIssues?: boolean;
+
+  /**
+   * How long opening a vault may take before it fails: the owned instance's readiness
+   * poll, and the wait for a vault window the attached instance was asked to open.
+   * The layout-ready wait inside it polls from Node, so a large vault whose layout
+   * takes minutes needs only this budget raised, never the per-eval cap.
+   *
+   * @default `30000`
+   */
+  readonly vaultReadyTimeoutInMilliseconds?: number;
 }
+
+const DEFAULT_VAULT_READY_TIMEOUT_IN_MILLISECONDS = 30_000;
 
 /**
  * An asar to provision into a harness-owned instance's user-data directory before launch.
@@ -394,6 +406,9 @@ const OWNED_SURVIVOR_KILL_ROUND_COUNT = 3;
 const OWNED_SURVIVOR_SETTLE_IN_MILLISECONDS = 1000;
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30_000;
+// One short eval per poll: the layout-ready wait must never be a single eval that waits on Obsidian's layout.
+const LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS = 250;
+const LAYOUT_READY_PROBE_EXPRESSION = '(function(){var a=window.app;return JSON.stringify(!!(a&&a.workspace&&a.workspace.layoutReady));})()';
 /**
 How long readiness waits for an enabled plugin's startup onload to settle.
  */
@@ -485,6 +500,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly shouldDisableSandbox: boolean;
   private readonly shouldThrowOnSilentAsarFallback: boolean;
   private readonly shouldWarnOnCompatibilityIssues: boolean;
+  private readonly vaultReadyTimeoutInMilliseconds: number;
   /**
    * The viewport each vault's window is pinned to through {@link setViewportOverride}. A CDP override dies with
    * the socket that set it, so a new socket re-applies it, and a sized capture puts it back after its own.
@@ -515,8 +531,13 @@ export class DesktopCdpTransport implements ObsidianTransport {
       ownedInstance,
       shouldDisableSandbox = false,
       shouldThrowOnSilentAsarFallback = true,
-      shouldWarnOnCompatibilityIssues = true
+      shouldWarnOnCompatibilityIssues = true,
+      vaultReadyTimeoutInMilliseconds = DEFAULT_VAULT_READY_TIMEOUT_IN_MILLISECONDS
     } = config ?? {};
+    if (!Number.isFinite(vaultReadyTimeoutInMilliseconds) || vaultReadyTimeoutInMilliseconds <= 0) {
+      throw new Error(`vaultReadyTimeoutInMilliseconds must be a positive number, got ${String(vaultReadyTimeoutInMilliseconds)}.`);
+    }
+    this.vaultReadyTimeoutInMilliseconds = vaultReadyTimeoutInMilliseconds;
     this.cdpHost = cdpHost;
     this.commandTimeoutInMilliseconds = commandTimeoutInMilliseconds;
     this.configDirectory = configDirectory;
@@ -1029,7 +1050,7 @@ ull.
     }
 
     log(`[cdp-transport] Vault is already open in the running instance; adopting its window (${target.id}) without vault-open: ${vaultPath}`);
-    await this.waitForLayoutReady(vaultPath);
+    await this.waitForLayoutReady(vaultPath, Date.now() + this.vaultReadyTimeoutInMilliseconds);
     return true;
   }
 
@@ -1730,13 +1751,13 @@ ull.
       ipcWs.close();
     }
 
-    log(`[cdp-transport] Polling for vault target (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    log(`[cdp-transport] Polling for vault target (timeout=${String(this.vaultReadyTimeoutInMilliseconds)}ms)...`);
+    const deadline = Date.now() + this.vaultReadyTimeoutInMilliseconds;
     while (Date.now() < deadline) {
       try {
         await this.findTargetForVault(vaultPath);
         log('[cdp-transport] Vault target found.');
-        await this.waitForLayoutReady(vaultPath);
+        await this.waitForLayoutReady(vaultPath, deadline);
         await this.dismissTrustDialog(vaultPath);
         return true;
       } catch {
@@ -1744,7 +1765,9 @@ ull.
       }
       await delay(VAULT_POLL_INTERVAL_IN_MILLISECONDS);
     }
-    throw new Error(`Vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms`);
+    throw new Error(
+      `Vault at ${vaultPath} did not become ready within ${String(this.vaultReadyTimeoutInMilliseconds)}ms. A large vault may need a larger vaultReadyTimeoutInMilliseconds.`
+    );
   }
 
   /**
@@ -1753,8 +1776,8 @@ ull.
    * @param vaultPath - The absolute path to the vault folder.
    */
   private async pollOwnedVaultReady(vaultPath: string): Promise<void> {
-    log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms)...`);
-    const deadline = Date.now() + VAULT_POLL_TIMEOUT_IN_MILLISECONDS;
+    log(`[cdp-transport] Waiting for owned vault to become ready (timeout=${String(this.vaultReadyTimeoutInMilliseconds)}ms)...`);
+    const deadline = Date.now() + this.vaultReadyTimeoutInMilliseconds;
     this.ownedReadinessDeadline = deadline;
     try {
       let documentCompleteSince: null | number = null;
@@ -1763,7 +1786,7 @@ ull.
       while (Date.now() < deadline) {
         try {
           await this.findTargetForVault(vaultPath);
-          await this.waitForLayoutReady(vaultPath);
+          await this.waitForLayoutReady(vaultPath, deadline);
           await this.dismissTrustDialog(vaultPath);
           isReady = true;
           break;
@@ -1795,7 +1818,7 @@ ull.
       }
 
       if (!isReady) {
-        throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(VAULT_POLL_TIMEOUT_IN_MILLISECONDS)}ms: ${errorToString(lastReadinessError)}`, {
+        throw new Error(`Owned vault at ${vaultPath} did not become ready within ${String(this.vaultReadyTimeoutInMilliseconds)}ms (a large vault may need a larger vaultReadyTimeoutInMilliseconds): ${errorToString(lastReadinessError)}`, {
           cause: lastReadinessError
         });
       }
@@ -2265,10 +2288,39 @@ ull.
    * by the time this returns the dialog has either rendered or is not going
    * to render.
    *
+   * The wait for `layoutReady` is polled from Node, one short eval per poll, and
+   * `pollVaultBasePath()` runs only once the layout is ready. A single eval that
+   * awaited the layout was capped by the per-eval budget, which a large vault's
+   * layout outlasts, so opening it failed with `EvalCapExceededError` however long
+   * the readiness timeout was.
+   *
    * @param vaultPath - The vault path to evaluate in.
+   * @param deadline - When to give up, as a `Date.now()` time.
+   * @throws {Error} When the layout is not ready by the deadline.
    */
-  private async waitForLayoutReady(vaultPath: string): Promise<void> {
+  private async waitForLayoutReady(vaultPath: string, deadline: number): Promise<void> {
     await ensureNamespaceBootstrapped(this, vaultPath);
+    const notReadyMessage = `The layout of the vault at ${vaultPath} was not ready when the readiness budget `
+      + '(vaultReadyTimeoutInMilliseconds) ran out.';
+    for (;;) {
+      let isLayoutReady: boolean;
+      try {
+        isLayoutReady = await this.evaluate(LAYOUT_READY_PROBE_EXPRESSION, { cwd: vaultPath }) === 'true';
+      } catch (error: unknown) {
+        // A probe cut off by the readiness deadline is the budget running out, not a caller's closure overrunning the cap.
+        if (error instanceof EvalCapExceededError && Date.now() >= deadline) {
+          throw new Error(notReadyMessage, { cause: error });
+        }
+        throw error;
+      }
+      if (isLayoutReady) {
+        break;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(notReadyMessage);
+      }
+      await delay(LAYOUT_READY_POLL_INTERVAL_IN_MILLISECONDS);
+    }
     await this.evaluate('window.__obsidianIntegrationTesting.pollVaultBasePath()', { cwd: vaultPath });
   }
 

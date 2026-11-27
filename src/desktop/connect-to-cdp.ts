@@ -326,6 +326,15 @@ export interface ConnectToCdpOptions {
    * @default `undefined`
    */
   readonly vault?: string;
+
+  /**
+   * How long opening the vault may take before it fails. The layout-ready wait
+   * polls from Node, so a large vault whose layout takes minutes needs only this
+   * raised, never {@link commandTimeoutInMilliseconds}.
+   *
+   * @default `30000`
+   */
+  readonly vaultReadyTimeoutInMilliseconds?: number;
 }
 
 /**
@@ -458,7 +467,8 @@ function buildCdpTransportOptions(options?: ConnectToCdpOptions): ObsidianCdpTra
     shouldThrowOnIncompatibleInstaller: options?.shouldThrowOnIncompatibleInstaller,
     shouldThrowOnSilentAsarFallback: options?.shouldThrowOnSilentAsarFallback,
     shouldWarnOnCompatibilityIssues: options?.shouldWarnOnCompatibilityIssues,
-    type: 'obsidian-cdp'
+    type: 'obsidian-cdp',
+    vaultReadyTimeoutInMilliseconds: options?.vaultReadyTimeoutInMilliseconds
   });
 }
 

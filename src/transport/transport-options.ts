@@ -738,6 +738,17 @@ export interface ObsidianCdpTransportOptions extends FailureArtifactsTransportOp
    * Discriminant for the transport type.
    */
   readonly type: 'obsidian-cdp';
+
+  /**
+   * How long opening a vault may take before it fails: the owned instance's
+   * readiness poll, or the wait for a vault window the attached instance was asked
+   * to open. The layout-ready wait polls from Node, one short eval per poll, so a
+   * large vault whose layout takes minutes needs only this raised, never
+   * {@link commandTimeoutInMilliseconds}.
+   *
+   * @default `30000`
+   */
+  readonly vaultReadyTimeoutInMilliseconds?: number;
 }
 
 /**
