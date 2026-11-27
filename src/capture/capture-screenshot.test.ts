@@ -8,7 +8,8 @@ import {
   buildDeviceMetricsOverride,
   decodeBase64Png,
   isPng,
-  readPngDimensions
+  readPngDimensions,
+  resolveCaptureMetricsOverride
 } from './capture-screenshot.ts';
 
 /**
@@ -32,8 +33,35 @@ function buildPngHeader(widthInPixels: number, heightInPixels: number): Uint8Arr
 }
 
 describe('buildDeviceMetricsOverride', () => {
-  it('should return null when no size is requested', () => {
-    expect(buildDeviceMetricsOverride({})).toBeNull();
+  it('should pin only the density, at 2, when no size is requested', () => {
+    expect(buildDeviceMetricsOverride({})).toStrictEqual({
+      deviceScaleFactor: 2,
+      height: 0,
+      mobile: false,
+      width: 0
+    });
+  });
+
+  it('should return null when no size is requested and the density is 1', () => {
+    expect(buildDeviceMetricsOverride({ deviceScaleFactor: 1 })).toBeNull();
+  });
+
+  it('should lay a sized capture out at its size divided by the density', () => {
+    expect(buildDeviceMetricsOverride({ deviceScaleFactor: 2, heightInPixels: 1600, widthInPixels: 900 })).toStrictEqual({
+      deviceScaleFactor: 2,
+      height: 800,
+      mobile: false,
+      width: 450
+    });
+  });
+
+  it('should refuse a size the density does not divide into whole CSS pixels', () => {
+    expect(() => buildDeviceMetricsOverride({ deviceScaleFactor: 2, heightInPixels: 801, widthInPixels: 1200 })).toThrow('whole CSS pixels');
+  });
+
+  it('should refuse a density that is not a positive number', () => {
+    expect(() => buildDeviceMetricsOverride({ deviceScaleFactor: 0 })).toThrow('positive number');
+    expect(() => buildDeviceMetricsOverride({ deviceScaleFactor: NaN, heightInPixels: 800, widthInPixels: 1200 })).toThrow('positive number');
   });
 
   it('should pin the viewport to the requested size', () => {
@@ -56,6 +84,42 @@ describe('buildDeviceMetricsOverride', () => {
 
   it('should throw when only the height is given', () => {
     expect(() => buildDeviceMetricsOverride({ heightInPixels: 800 })).toThrow('must be given together');
+  });
+});
+
+describe('resolveCaptureMetricsOverride', () => {
+  const mobileViewport = { heightInPixels: 844, widthInPixels: 390 };
+
+  it('should leave an unsized capture under the mobile layout at the layout\'s own viewport', () => {
+    expect(resolveCaptureMetricsOverride({ captureParams: {}, mobileViewport })).toBeNull();
+  });
+
+  it('should keep the mobile layout\'s CSS size and change only the density when one is asked for', () => {
+    expect(resolveCaptureMetricsOverride({ captureParams: { deviceScaleFactor: 3 }, mobileViewport })).toStrictEqual({
+      deviceScaleFactor: 3,
+      height: 844,
+      mobile: false,
+      width: 390
+    });
+  });
+
+  it('should refuse a bad density under the mobile layout too', () => {
+    expect(() => resolveCaptureMetricsOverride({ captureParams: { deviceScaleFactor: -1 }, mobileViewport })).toThrow('positive number');
+  });
+
+  it('should build the ordinary override for a sized capture, or with no mobile layout', () => {
+    expect(resolveCaptureMetricsOverride({ captureParams: { heightInPixels: 800, widthInPixels: 1200 }, mobileViewport })).toStrictEqual({
+      deviceScaleFactor: 1,
+      height: 800,
+      mobile: false,
+      width: 1200
+    });
+    expect(resolveCaptureMetricsOverride({ captureParams: {}, mobileViewport: null })).toStrictEqual({
+      deviceScaleFactor: 2,
+      height: 0,
+      mobile: false,
+      width: 0
+    });
   });
 });
 

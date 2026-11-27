@@ -47,9 +47,9 @@ import type { OwnedObsidianInstance } from './owned-instance/obsidian-instance.t
 import type { StartupPluginLoad } from './owned-instance/startup-plugin-load.ts';
 
 import {
-  buildDeviceMetricsOverride,
   decodeBase64Png,
-  isPng
+  isPng,
+  resolveCaptureMetricsOverride
 } from '../capture/capture-screenshot.ts';
 import { ScreencastFrameRing } from '../capture/failure-artifacts-options.ts';
 import { errorToString } from '../error-to-string.ts';
@@ -549,7 +549,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
   // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `CaptureScreenshotParams` is one bag shared by the `captureScreenshot` of both transports, so no per-owner name can satisfy both.
   public async captureScreenshot(params: CaptureScreenshotParams): Promise<Uint8Array> {
     const ws = await this.ensureConnection(params.cwd);
-    const deviceMetricsOverride = buildDeviceMetricsOverride(params);
+    const mobileViewport = this.viewportOverrides.get(params.cwd);
+    const deviceMetricsOverride = resolveCaptureMetricsOverride({
+      captureParams: params,
+      mobileViewport: mobileViewport ?? null
+    });
     if (deviceMetricsOverride) {
       await this.sendCommand(ws, 'Emulation.setDeviceMetricsOverride', deviceMetricsOverride);
     }
@@ -575,9 +579,8 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return bytes;
     } finally {
       if (deviceMetricsOverride) {
-        const viewport = this.viewportOverrides.get(params.cwd);
-        await (viewport
-          ? this.sendCommand(ws, 'Emulation.setDeviceMetricsOverride', buildMobileLayoutOverridePayload(viewport))
+        await (mobileViewport
+          ? this.sendCommand(ws, 'Emulation.setDeviceMetricsOverride', buildMobileLayoutOverridePayload(mobileViewport))
           : this.sendCommand(ws, 'Emulation.clearDeviceMetricsOverride', {}));
       }
     }

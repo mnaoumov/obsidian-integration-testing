@@ -84,15 +84,37 @@ export {
 export type { CaptureObsidianScreenshotOptions } from './capture/capture-obsidian-screenshot.ts';
 export { captureObsidianScreenshot } from './capture/capture-obsidian-screenshot.ts';
 export type {
+  ResolveScreenshotGeometryOptions,
+  ScreenshotGeometry,
+  ScreenshotPreset,
+  ScreenshotPresetName
+} from './capture/capture-quality-options.ts';
+export {
+  buildForbiddenElementMessage,
+  resolveFrozenTimestamp,
+  resolveScreenshotGeometry,
+  SCREENSHOT_PRESETS
+} from './capture/capture-quality-options.ts';
+export type {
+  CaptureMobileViewport,
   CaptureScreenshotParams,
-  PngDimensions
+  PngDimensions,
+  ResolveCaptureMetricsOverrideParams
 } from './capture/capture-screenshot.ts';
 export {
   buildDeviceMetricsOverride,
   decodeBase64Png,
   isPng,
-  readPngDimensions
+  readPngDimensions,
+  resolveCaptureMetricsOverride,
+  SIZED_CAPTURE_DEVICE_SCALE_FACTOR,
+  UNSIZED_CAPTURE_DEVICE_SCALE_FACTOR
 } from './capture/capture-screenshot.ts';
+export type {
+  CleanedObsidianUi,
+  CleanObsidianUiOptions
+} from './capture/clean-obsidian-ui.ts';
+export { cleanObsidianUi } from './capture/clean-obsidian-ui.ts';
 export type { CaptureDeviceScreenshotParams } from './capture/device-screenshot.ts';
 export { captureDeviceScreenshot } from './capture/device-screenshot.ts';
 export type {
@@ -133,6 +155,18 @@ export {
   computeFitToCanvas,
   fitScreenshotToCanvas
 } from './capture/fit-screenshot.ts';
+export type { AssertNoForbiddenElementsParams } from './capture/forbidden-elements.ts';
+export { assertNoForbiddenElements } from './capture/forbidden-elements.ts';
+export type {
+  FreezeAnimationsOptions,
+  FrozenAnimations
+} from './capture/freeze-animations.ts';
+export { freezeAnimations } from './capture/freeze-animations.ts';
+export type {
+  FreezeObsidianTimeParams,
+  FrozenObsidianTime
+} from './capture/freeze-obsidian-time.ts';
+export { freezeObsidianTime } from './capture/freeze-obsidian-time.ts';
 export type {
   HiddenCaret,
   HideCaretOptions

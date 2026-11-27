@@ -23,6 +23,11 @@
  * And it refuses a frame whose theme has changed since `applyObsidianTheme` set
  * it — see `apply-obsidian-theme.ts` for the config reload that silently turns a
  * dark capture run light.
+ *
+ * It also holds the page still for the capture — see `freeze-animations.ts` —
+ * takes a named `preset` size, a `deviceScaleFactor`, and refuses a frame in
+ * which an element matching one of `forbiddenSelectors` is visible — see
+ * `forbidden-elements.ts`. A sized frame's PNG size is read back and checked.
  */
 
 /* v8 ignore start -- Integration-time code (drives a live Obsidian) covered by integration tests, not unit tests. */
@@ -30,6 +35,11 @@
 import process from 'node:process';
 
 import type { ObsidianTransport } from '../transport/transport.ts';
+import type {
+  ResolveScreenshotGeometryOptions,
+  ScreenshotGeometry,
+  ScreenshotPresetName
+} from './capture-quality-options.ts';
 import type { CaptureScreenshotParams } from './capture-screenshot.ts';
 
 import { normalizeOptionalProperties } from '../normalize-optional-properties.ts';
@@ -39,6 +49,10 @@ import {
 } from '../transport/context-provider.ts';
 import { getOrCreateTransport } from '../transport/transport-factory.ts';
 import { assertObsidianThemeUnchanged } from './apply-obsidian-theme.ts';
+import { resolveScreenshotGeometry } from './capture-quality-options.ts';
+import { readPngDimensions } from './capture-screenshot.ts';
+import { assertNoForbiddenElements } from './forbidden-elements.ts';
+import { freezeAnimations } from './freeze-animations.ts';
 import { hideCaret } from './hide-caret.ts';
 import { hideVaultName } from './hide-vault-name.ts';
 import { pinWindowFocus } from './pin-window-focus.ts';
@@ -48,6 +62,24 @@ import { pinWindowFocus } from './pin-window-focus.ts';
  */
 export interface CaptureObsidianScreenshotOptions {
   /**
+   * Device pixels per CSS pixel. Desktop only; see
+   * `CaptureScreenshotParams.deviceScaleFactor`.
+   *
+   * @default `1` with a size, `2` without one, the mobile layout's own factor
+   *   for an unsized capture under the mobile layout.
+   */
+  readonly deviceScaleFactor?: number;
+
+  /**
+   * CSS selectors no visible element may match when the frame is taken. A
+   * frame that would show one is refused, naming the selector.
+   *
+   * Screenshots are committed and published, so this is where a notice naming a
+   * real path, a token field or a personal note is kept out of them.
+   */
+  readonly forbiddenSelectors?: readonly string[];
+
+  /**
    * The exact height in pixels the captured image should have.
    *
    * Desktop only, and only meaningful together with {@link widthInPixels}.
@@ -56,6 +88,23 @@ export interface CaptureObsidianScreenshotOptions {
    * geometry.
    */
   readonly heightInPixels?: number;
+
+  /**
+   * A named destination size and density (`readme`, `listing-desktop`,
+   * `listing-phone`, `social`; see `SCREENSHOT_PRESETS`), instead of
+   * {@link widthInPixels}, {@link heightInPixels} and
+   * {@link deviceScaleFactor}, which it cannot be combined with. Desktop only.
+   */
+  readonly preset?: ScreenshotPresetName;
+
+  /**
+   * Whether to hold the page still for the capture: transitions off, finite
+   * animations jumped to their end, endless ones paused until the frame is
+   * taken. See `freeze-animations.ts`.
+   *
+   * @default `true`
+   */
+  readonly shouldFreezeAnimations?: boolean;
 
   /**
    * Whether to hide the focused element's caret while capturing, so the frame
@@ -133,6 +182,14 @@ export interface CaptureObsidianScreenshotOptions {
   readonly widthInPixels?: number;
 }
 
+interface CaptureStillFrameParams {
+  readonly cwd: string;
+  readonly forbiddenSelectors: readonly string[];
+  readonly geometry: ScreenshotGeometry;
+  readonly shouldFreezeAnimations: boolean;
+  readonly transport: ObsidianTransport;
+}
+
 /**
  * Captures a PNG screenshot of the running Obsidian instance, resolving the
  * transport and vault from the current test context.
@@ -156,7 +213,11 @@ export interface CaptureObsidianScreenshotOptions {
  */
 export async function captureObsidianScreenshot(options?: CaptureObsidianScreenshotOptions): Promise<Uint8Array> {
   const {
+    deviceScaleFactor,
+    forbiddenSelectors = [],
     heightInPixels,
+    preset,
+    shouldFreezeAnimations = true,
     shouldHideCaret = true,
     shouldHideVaultName = true,
     shouldPinWindowFocus = true,
@@ -166,6 +227,15 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
     widthInPixels
   } = options ?? {};
 
+  const geometry = resolveScreenshotGeometry(
+    normalizeOptionalProperties<ResolveScreenshotGeometryOptions>({
+      deviceScaleFactor,
+      heightInPixels,
+      preset,
+      widthInPixels
+    }),
+    'captureObsidianScreenshot'
+  );
   const cwd = vaultPath ?? getVaultPath() ?? process.cwd();
   const transport = transportOverride ?? await getOrCreateTransport(getTransportOptions());
 
@@ -203,14 +273,79 @@ export async function captureObsidianScreenshot(options?: CaptureObsidianScreens
     : undefined;
 
   try {
-    return await transport.captureScreenshot(normalizeOptionalProperties<CaptureScreenshotParams>({
+    return await captureStillFrame({
       cwd,
-      heightInPixels,
-      widthInPixels
-    }));
+      forbiddenSelectors,
+      geometry,
+      shouldFreezeAnimations,
+      transport
+    });
   } finally {
     await pinnedWindowFocus?.restore();
     await hiddenCaret?.restore();
+  }
+}
+
+/**
+ * Refuses a sized desktop frame that came back at another size.
+ *
+ * @param bytes - The captured PNG.
+ * @param geometry - The size the capture asked for.
+ * @throws Error if a sized desktop capture returned a PNG of another size.
+ */
+function assertCapturedSize(bytes: Uint8Array, geometry: ScreenshotGeometry): void {
+  if (geometry.widthInPixels === undefined || geometry.heightInPixels === undefined) {
+    return;
+  }
+  const actual = readPngDimensions(bytes);
+  if (actual.widthInPixels !== geometry.widthInPixels || actual.heightInPixels !== geometry.heightInPixels) {
+    throw new Error(
+      `captureObsidianScreenshot: asked for ${String(geometry.widthInPixels)} x ${String(geometry.heightInPixels)} pixels, `
+        + `got ${String(actual.widthInPixels)} x ${String(actual.heightInPixels)}.`
+    );
+  }
+}
+
+/**
+ * Freezes the page, checks the forbidden selectors, captures, checks the size,
+ * and releases the page.
+ *
+ * @param params - The capture's resolved options.
+ * @returns A {@link Promise} that resolves to the PNG bytes.
+ */
+async function captureStillFrame(params: CaptureStillFrameParams): Promise<Uint8Array> {
+  const { cwd, forbiddenSelectors, geometry, shouldFreezeAnimations, transport } = params;
+  const frozenAnimations = shouldFreezeAnimations
+    ? await freezeAnimations({
+      transport,
+      vaultPath: cwd
+    })
+    : undefined;
+  try {
+    await assertNoForbiddenElements({
+      action: 'captureObsidianScreenshot',
+      forbiddenSelectors,
+      transport,
+      vaultPath: cwd
+    });
+
+    if (!transport.captureScreenshot) {
+      throw new Error('captureObsidianScreenshot: the active transport cannot capture screenshots.');
+    }
+
+    const bytes = await transport.captureScreenshot(normalizeOptionalProperties<CaptureScreenshotParams>({
+      cwd,
+      deviceScaleFactor: geometry.deviceScaleFactor,
+      heightInPixels: geometry.heightInPixels,
+      widthInPixels: geometry.widthInPixels
+    }));
+    // Only the desktop transport honours a size, and only it has a viewport to override.
+    if (transport.setViewportOverride) {
+      assertCapturedSize(bytes, geometry);
+    }
+    return bytes;
+  } finally {
+    await frozenAnimations?.restore();
   }
 }
 
