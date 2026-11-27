@@ -25,9 +25,12 @@ import {
   setTransportOptionsResolver,
   setVaultPathResolver
 } from '../transport/context-provider.ts';
+import { registerFailureArtifactHooks } from './failure-artifacts.ts';
 
 setSetupErrorResolver(() => inject('setupError') ?? null);
 setTransportOptionsResolver(() => inject('obsidianTransport') ?? null);
 setVaultPathResolver(() => inject('temporaryVaultPath'));
+
+registerFailureArtifactHooks();
 
 /* v8 ignore stop */

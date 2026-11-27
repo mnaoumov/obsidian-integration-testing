@@ -5,10 +5,12 @@
  * via vitest `environmentOptions`.
  */
 
+import type { FailureArtifactsTransportOptions } from '../capture/failure-artifacts-options.ts';
+
 /**
  * Transport options for Android testing via Appium WebView injection.
  */
-export interface ObsidianAndroidAppiumTransportOptions {
+export interface ObsidianAndroidAppiumTransportOptions extends FailureArtifactsTransportOptions {
   /**
    * App package (Android) or bundle ID (iOS).
    * Defaults to `'md.obsidian'`
@@ -466,7 +468,7 @@ export interface ObsidianAndroidAppiumTransportOptions {
  * {@link ObsidianCdpTransportOptions.port} to instead attach to an
  * already-running Obsidian.
  */
-export interface ObsidianCdpTransportOptions {
+export interface ObsidianCdpTransportOptions extends FailureArtifactsTransportOptions {
   /**
    * Timeout in milliseconds for individual CDP commands.
    *

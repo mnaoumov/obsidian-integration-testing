@@ -31,6 +31,10 @@ import {
   getOrCreateTransport
 } from '../transport/transport-factory.ts';
 import {
+  forgetRegisteredVault,
+  recordRegisteredVault
+} from './registered-vaults.ts';
+import {
   registerVault,
   unregisterVault
 } from './vault-registry.ts';
@@ -129,6 +133,7 @@ export class TemporaryVault {
    *   When omitted, the transport `register` used, else the worker's cached one, else none.
    */
   public async dispose(transportOverride?: ObsidianTransport): Promise<void> {
+    forgetRegisteredVault(this.path);
     try {
       const transport = transportOverride ?? this.#registrationTransport ?? getCachedTransport();
       if (transport) {
@@ -201,6 +206,7 @@ export class TemporaryVault {
     this.#registrationTransport = transport;
     await this.syncToDevice(transport);
     await registerVault(this.path, transport);
+    recordRegisteredVault({ path: this.path, transport });
   }
 
   /**

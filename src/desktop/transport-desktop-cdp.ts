@@ -30,8 +30,11 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 import type { CaptureScreenshotParams } from '../capture/capture-screenshot.ts';
+import type { ScreencastFrame } from '../capture/failure-artifacts-options.ts';
 import type {
   ObsidianTransport,
+  ScreencastRecording,
+  StartScreencastParams,
   TransportEvalOptions
 } from '../transport/transport.ts';
 import type { AsarFallback } from './compatibility/asar-fallback-detection.ts';
@@ -46,6 +49,7 @@ import {
   decodeBase64Png,
   isPng
 } from '../capture/capture-screenshot.ts';
+import { ScreencastFrameRing } from '../capture/failure-artifacts-options.ts';
 import { errorToString } from '../error-to-string.ts';
 import { EvalCapExceededError } from '../eval/eval-cap-exceeded-error.ts';
 import { DEFAULT_EVAL_CAP_IN_MILLISECONDS } from '../eval/eval-cap.ts';
@@ -321,6 +325,24 @@ interface CdpResponseResult {
   readonly result?: CdpValue;
 }
 
+/**
+ * A `Page.screencastFrame` event, or any other message, read only far enough to tell which.
+ */
+interface CdpScreencastFrameEvent {
+  readonly method?: string;
+  readonly params?: CdpScreencastFrameParams;
+}
+
+interface CdpScreencastFrameMetadata {
+  readonly timestamp?: number;
+}
+
+interface CdpScreencastFrameParams {
+  readonly data: string;
+  readonly metadata?: CdpScreencastFrameMetadata;
+  readonly sessionId: number;
+}
+
 interface CdpTarget {
   readonly id: string;
   readonly title: string;
@@ -359,6 +381,8 @@ interface PendingCommand {
   readonly resolve: (response: CdpResponse) => void;
 }
 
+// A failure frame is read by a person looking for what was on screen, so a mid quality keeps each one small.
+const SCREENCAST_JPEG_QUALITY = 60;
 const VAULT_ID_BYTE_LENGTH = 8;
 const USER_DATA_RM_TIMEOUT_IN_MILLISECONDS = 10_000;
 const USER_DATA_RM_RETRY_INTERVAL_IN_MILLISECONDS = 500;
@@ -790,6 +814,73 @@ export class DesktopCdpTransport implements ObsidianTransport {
     if (didOpenWindow) {
       this.selfRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
     }
+  }
+
+  /**
+   * Starts a CDP `Page.startScreencast` of the window showing the given vault, keeping the most recent JPEG frames.
+   *
+   * Each frame is acknowledged as it arrives, since the renderer sends the next one only after the last is
+   * acknowledged. The acknowledgement goes out as a bare send with no pending command: its reply carries an id
+   * nothing waits for, which the dispatcher ignores (see {@link getPendingCommands}).
+   *
+   * @param params - Which vault window, and how many frames to keep.
+   * @returns The running recording.
+   * @throws Error if CDP refuses to start the screencast.
+   */
+  // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `StartScreencastParams` is the bag of the `ObsidianTransport.startScreencast` member, which this implements.
+  public async startScreencast(params: StartScreencastParams): Promise<ScreencastRecording> {
+    const ws = await this.ensureConnection(params.cwd);
+    const ring = new ScreencastFrameRing(params.frameCount);
+    let isStopped = false;
+
+    const onMessage = ($event: MessageEvent): void => {
+      let message: CdpScreencastFrameEvent;
+      try {
+        message = JSON.parse(String($event.data)) as CdpScreencastFrameEvent;
+      } catch {
+        return;
+      }
+      if (message.method !== 'Page.screencastFrame' || message.params === undefined) {
+        return;
+      }
+      const { data, metadata, sessionId } = message.params;
+      ring.push({
+        data: new Uint8Array(Buffer.from(data, 'base64')),
+        timestampInSeconds: metadata?.timestamp ?? null
+      });
+      if (isStopped || ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      try {
+        ws.send(JSON.stringify({ id: ++this.messageId, method: 'Page.screencastFrameAck', params: { sessionId } }));
+      } catch {
+        // A socket that cannot send has nothing left to record.
+      }
+    };
+    ws.addEventListener('message', onMessage);
+
+    const response = await this.sendCommand(ws, 'Page.startScreencast', { format: 'jpeg', quality: SCREENCAST_JPEG_QUALITY });
+    if (response.error) {
+      ws.removeEventListener('message', onMessage);
+      throw new Error(`CDP Page.startScreencast failed: ${response.error.message}`);
+    }
+
+    return {
+      snapshot: (): readonly ScreencastFrame[] => ring.snapshot(),
+      stop: async (): Promise<readonly ScreencastFrame[]> => {
+        if (!isStopped) {
+          isStopped = true;
+          ws.removeEventListener('message', onMessage);
+          try {
+            await this.sendCommand(ws, 'Page.stopScreencast', {});
+          } catch (error: unknown) {
+            log(`[cdp-transport] Could not stop the screencast (non-fatal): ${errorToString(error)}`);
+          }
+        }
+        return ring.snapshot();
+      },
+      totalFrameCount: (): number => ring.totalFrameCount
+    };
   }
 
   /**

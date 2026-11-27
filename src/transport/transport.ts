@@ -5,6 +5,7 @@
  */
 
 import type { CaptureScreenshotParams } from '../capture/capture-screenshot.ts';
+import type { ScreencastFrame } from '../capture/failure-artifacts-options.ts';
 
 /**
  * An opaque handle identifying a console-capture window opened by
@@ -171,6 +172,17 @@ export interface ObsidianTransport {
   readonly registerVault: (vaultPath: string) => Promise<void>;
 
   /**
+   * Starts a screencast of the window showing the given vault, keeping its most recent frames in a bounded buffer.
+   *
+   * Optional and platform-specific: implemented by {@link DesktopCdpTransport} (CDP `Page.startScreencast`), absent on
+   * {@link AppiumTransport}.
+   *
+   * @param params - Which window, and how many frames to keep.
+   * @returns The running recording.
+   */
+  readonly startScreencast?: (params: StartScreencastParams) => Promise<ScreencastRecording>;
+
+  /**
    * Unregisters a vault path from the running Obsidian instance.
    *
    * On desktop: closes the vault window and removes it from the registry.
@@ -179,6 +191,47 @@ export interface ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   readonly unregisterVault: (vaultPath: string) => Promise<void>;
+}
+
+/**
+ * A running screencast started by {@link ObsidianTransport.startScreencast}.
+ */
+export interface ScreencastRecording {
+  /**
+   * Returns the frames kept so far, oldest first, without stopping the recording.
+   *
+   * @returns The kept frames.
+   */
+  readonly snapshot: () => readonly ScreencastFrame[];
+
+  /**
+   * Stops the screencast. Safe to call more than once, and never throws.
+   *
+   * @returns The frames kept, oldest first.
+   */
+  readonly stop: () => Promise<readonly ScreencastFrame[]>;
+
+  /**
+   * How many frames the renderer sent in all, the dropped ones included.
+   *
+   * @returns The total count.
+   */
+  readonly totalFrameCount: () => number;
+}
+
+/**
+ * Parameters for {@link ObsidianTransport.startScreencast}.
+ */
+export interface StartScreencastParams {
+  /**
+   * The vault whose window to record.
+   */
+  readonly cwd: string;
+
+  /**
+   * How many of the most recent frames to keep.
+   */
+  readonly frameCount: number;
 }
 
 /**
