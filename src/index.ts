@@ -96,6 +96,35 @@ export {
 export type { CaptureDeviceScreenshotParams } from './capture/device-screenshot.ts';
 export { captureDeviceScreenshot } from './capture/device-screenshot.ts';
 export type {
+  BuildFailureArtifactBaseNameParams,
+  FailureArtifactsSettings,
+  FailureArtifactsTransportOptions,
+  ResolveFailureArtifactsSettingsParams,
+  ScreencastFrame
+} from './capture/failure-artifacts-options.ts';
+export {
+  buildFailureArtifactBaseName,
+  buildScreencastFrameFileName,
+  DEFAULT_FAILURE_ARTIFACTS_DIRECTORY,
+  FAILURE_SCREENCAST_FRAMES_ENVIRONMENT_VARIABLE_NAME,
+  FAILURE_SCREENSHOT_ENVIRONMENT_VARIABLE_NAME,
+  MAX_FAILURE_ARTIFACT_BASE_NAME_LENGTH,
+  MAX_FAILURE_SCREENCAST_FRAME_COUNT,
+  resolveFailureArtifactsSettings,
+  ScreencastFrameRing
+} from './capture/failure-artifacts-options.ts';
+export type {
+  FailureArtifactsResult,
+  StartFailureScreencastParams,
+  WriteFailureArtifactsParams
+} from './capture/failure-artifacts.ts';
+export {
+  describeFailureArtifacts,
+  FAILURE_ARTIFACT_STEP_TIMEOUT_IN_MILLISECONDS,
+  startFailureScreencast,
+  writeFailureArtifacts
+} from './capture/failure-artifacts.ts';
+export type {
   ComputeFitToCanvasParams,
   FitScreenshotToCanvasOptions,
   FitToCanvasGeometry
@@ -331,6 +360,8 @@ export { checkIsMobileTransport } from './transport/transport-options.ts';
 export type {
   ConsoleCaptureHandle,
   ObsidianTransport,
+  ScreencastRecording,
+  StartScreencastParams,
   TransportEvalOptions
 } from './transport/transport.ts';
 export type {
