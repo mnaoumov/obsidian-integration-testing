@@ -5,7 +5,10 @@ import {
 } from 'vitest';
 
 import {
+  buildPortOwnerQuery,
+  excludeProtectedPids,
   parsePosixLsofPids,
+  parseProcStatParentPid,
   parseWindowsNetstatPids
 } from './port-owner.ts';
 
@@ -85,5 +88,51 @@ describe('parsePosixLsofPids', () => {
 
   it('should return an empty array for empty output', () => {
     expect(parsePosixLsofPids('')).toEqual([]);
+  });
+});
+
+describe('buildPortOwnerQuery', () => {
+  it('should list the whole netstat table on Windows', () => {
+    expect(buildPortOwnerQuery({ platform: 'win32', port: APPIUM_PORT })).toEqual({ command: 'netstat', commandArguments: ['-ano'] });
+  });
+
+  // A CDP client holds a socket on the port too; without -sTCP:LISTEN the teardown killed its own test runner.
+  it('should ask lsof for listeners only on Linux', () => {
+    expect(buildPortOwnerQuery({ platform: 'linux', port: APPIUM_PORT })).toEqual({
+      command: 'lsof',
+      commandArguments: ['-ti', 'tcp:4723', '-sTCP:LISTEN']
+    });
+  });
+
+  it('should ask lsof for listeners only on macOS', () => {
+    expect(buildPortOwnerQuery({ platform: 'darwin', port: APPIUM_PORT }).commandArguments).toContain('-sTCP:LISTEN');
+  });
+});
+
+describe('excludeProtectedPids', () => {
+  it('should drop the protected PIDs and keep the order of the rest', () => {
+    expect(excludeProtectedPids({ pids: [30, 10, 20, 40], protectedPids: [10, 40] })).toEqual([30, 20]);
+  });
+
+  it('should return every PID when none is protected', () => {
+    expect(excludeProtectedPids({ pids: [1, 2], protectedPids: [] })).toEqual([1, 2]);
+  });
+});
+
+describe('parseProcStatParentPid', () => {
+  it('should read the parent PID', () => {
+    expect(parseProcStatParentPid('3014 (node) S 2990 3014 2990 0 -1 4194560')).toBe(2990);
+  });
+
+  it('should read past a command name holding spaces and parentheses', () => {
+    expect(parseProcStatParentPid('77 (vitest (fork) worker) R 42 77 42 0')).toBe(42);
+  });
+
+  it('should return null for a line with no command name', () => {
+    expect(parseProcStatParentPid('garbage')).toBeNull();
+  });
+
+  it('should return null for a line cut short after the command name', () => {
+    expect(parseProcStatParentPid('77 (node) S')).toBeNull();
   });
 });

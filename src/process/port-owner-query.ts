@@ -2,7 +2,7 @@
  * @file
  *
  * Runs the platform's "who is listening on this port?" query (`netstat -ano` on
- * Windows, `lsof -ti` elsewhere) and parses its answer.
+ * Windows, `lsof -ti tcp:<port> -sTCP:LISTEN` elsewhere) and parses its answer.
  *
  * Shared by the Appium teardown and the owned desktop instance's kill: both hold
  * a PID that is not always the process actually serving, and the port is the
@@ -18,7 +18,10 @@ import {
   execFile,
   execFileSync
 } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import process from 'node:process';
+
+import type { PortOwnerQuery } from './port-owner.ts';
 
 import {
   buildPortOwnerQueryMessage,
@@ -26,7 +29,10 @@ import {
   resolvePortOwnerQueryOutcome
 } from './port-owner-query-verdict.ts';
 import {
+  buildPortOwnerQuery,
+  excludeProtectedPids,
   parsePosixLsofPids,
+  parseProcStatParentPid,
   parseWindowsNetstatPids
 } from './port-owner.ts';
 
@@ -65,37 +71,52 @@ export interface ParsePortOwnerPidsParams {
   readonly port: number;
 }
 
-/**
- * A host command and its arguments.
- */
-export interface PortOwnerQuery {
-  /**
-  The executable to run.
-   */
-  readonly command: string;
-
-  /**
-  Its arguments.
-   */
-  readonly commandArguments: readonly string[];
-}
-
 // A busy host's whole `netstat -ano` table runs to a few hundred KB; 8 MiB is the budget the factory already gave it.
 const PORT_OWNER_QUERY_MAX_BUFFER_IN_BYTES = 8_388_608;
 
+// Bounds the ancestor walk; a real process tree is a handful of levels deep.
+const MAX_ANCESTOR_DEPTH = 64;
+
 /**
- * Builds the platform's "who holds this port" query.
- *
- * `netstat` cannot filter by port, so the whole table comes back and the parser
- * does the matching; `lsof` filters server-side and answers with bare PIDs.
+ * Builds this host's "who listens on this port" query.
  *
  * @param port - The port to query.
  * @returns The command and arguments to run.
  */
-export function buildPortOwnerQuery(port: number): PortOwnerQuery {
-  return process.platform === 'win32'
-    ? { command: 'netstat', commandArguments: ['-ano'] }
-    : { command: 'lsof', commandArguments: ['-ti', `tcp:${String(port)}`] };
+export function buildHostPortOwnerQuery(port: number): PortOwnerQuery {
+  return buildPortOwnerQuery({ platform: process.platform, port });
+}
+
+/**
+ * Lists the PIDs no port-owner kill may ever reach: this process and its
+ * ancestors. A test runner holds client sockets on the ports it tears down,
+ * so a listing that ever names it must not turn into a kill.
+ *
+ * On Linux the whole chain is read from `/proc`; elsewhere only the parent is
+ * known without spawning a process.
+ *
+ * @returns This process's PID and its known ancestors.
+ */
+export function listHarnessProtectedPids(): number[] {
+  const pids = [process.pid];
+  let currentPid = process.ppid;
+  for (let depth = 0; depth < MAX_ANCESTOR_DEPTH && currentPid > 0 && !pids.includes(currentPid); depth++) {
+    pids.push(currentPid);
+    if (process.platform !== 'linux') {
+      break;
+    }
+
+    let statText: string;
+    try {
+      statText = readFileSync(`/proc/${String(currentPid)}/stat`, 'utf-8');
+    } catch {
+      break;
+    }
+
+    currentPid = parseProcStatParentPid(statText) ?? 0;
+  }
+
+  return pids;
 }
 
 /**
@@ -105,7 +126,7 @@ export function buildPortOwnerQuery(port: number): PortOwnerQuery {
  * @returns The listening PIDs, or an empty list after a logged failure.
  */
 export function listPortOwnerPids(params: ListPortOwnerPidsParams): Promise<number[]> {
-  const query = buildPortOwnerQuery(params.port);
+  const query = buildHostPortOwnerQuery(params.port);
   const startedAtInMilliseconds = Date.now();
   return new Promise((resolve) => {
     execFile(query.command, [...query.commandArguments], {
@@ -154,7 +175,7 @@ export function listPortOwnerPids(params: ListPortOwnerPidsParams): Promise<numb
  */
 // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: both execution modes share the same port-query parameters.
 export function listPortOwnerPidsSync(params: ListPortOwnerPidsParams): number[] {
-  const query = buildPortOwnerQuery(params.port);
+  const query = buildHostPortOwnerQuery(params.port);
   const startedAtInMilliseconds = Date.now();
   try {
     const output = execFileSync(query.command, query.commandArguments, {
@@ -186,12 +207,15 @@ export function listPortOwnerPidsSync(params: ListPortOwnerPidsParams): number[]
  * Parses a port-owner listing with the platform's parser.
  *
  * @param params - The raw output and the port that was queried.
- * @returns The PIDs holding the port.
+ * Never returns this process or one of its ancestors (see {@link listHarnessProtectedPids}).
+ *
+ * @returns The PIDs listening on the port.
  */
 export function parsePortOwnerPids(params: ParsePortOwnerPidsParams): number[] {
-  return process.platform === 'win32'
+  const pids = process.platform === 'win32'
     ? parseWindowsNetstatPids({ netstatOutput: params.output, port: params.port })
     : parsePosixLsofPids(params.output);
+  return excludeProtectedPids({ pids, protectedPids: listHarnessProtectedPids() });
 }
 
 /* v8 ignore stop */
