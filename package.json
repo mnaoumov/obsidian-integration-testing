@@ -158,6 +158,7 @@
     "lint:fix": "jiti scripts/lint-fix.ts",
     "lint:md": "jiti scripts/lint-md.ts",
     "lint:md:fix": "jiti scripts/lint-md-fix.ts",
+    "list:new-release-versions": "jiti scripts/metadata/list-new-release-versions.ts",
     "merge:runtime-versions": "jiti scripts/metadata/merge-runtime-versions.ts",
     "prepare": "jiti scripts/prepare.ts",
     "probe:emulator-wedge": "jiti scripts/emulator-wedge-probe.ts",

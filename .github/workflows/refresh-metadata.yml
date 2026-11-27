@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Save the catalog before the refresh
+        run: cp metadata.json "$RUNNER_TEMP/metadata-before.json"
+
       - name: Refresh metadata.json
         run: npm run refresh:metadata
         env:
@@ -53,3 +56,26 @@ jobs:
           git add metadata.json
           git commit -m "chore: refresh metadata.json"
           git push
+
+      # A version that gained a public or catalyst channel (a new key, or a catalyst build that went public) gets an
+      # `obsidian-release` dispatch to obsidian-lib, whose workaround canaries then run within minutes instead of at
+      # their next daily run. A changelog or download edit changes no channel, so it sends nothing. The job's
+      # GITHUB_TOKEN cannot dispatch into another repository, so this needs OBSIDIAN_LIB_DISPATCH_TOKEN, a
+      # fine-grained token with Contents: read and write on mnaoumov/obsidian-lib; without it the step only warns.
+      - name: Tell obsidian-lib about new Obsidian versions
+        env:
+          GH_TOKEN: ${{ secrets.OBSIDIAN_LIB_DISPATCH_TOKEN }}
+        run: |
+          versions=$(npm run --silent list:new-release-versions -- --before "$RUNNER_TEMP/metadata-before.json")
+          if [ -z "$versions" ]; then
+            echo "No new public or catalyst Obsidian version."
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::New Obsidian version(s) $(echo $versions), but OBSIDIAN_LIB_DISPATCH_TOKEN is not set, so obsidian-lib was not told."
+            exit 0
+          fi
+          for version in $versions; do
+            gh api repos/mnaoumov/obsidian-lib/dispatches -f event_type=obsidian-release -f "client_payload[version]=$version"
+            echo "Sent obsidian-lib an obsidian-release dispatch for $version."
+          done
