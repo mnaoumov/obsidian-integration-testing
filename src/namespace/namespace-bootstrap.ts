@@ -766,7 +766,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
    * like `dragMouse`: a composition is driven to make it observable to a test.
    */
   async function composeIntoEditor(composeParams: ComposeIntoEditorParams): Promise<void> {
-    const { chunking = 'word', editor, text } = composeParams;
+    const { chunking = 'word', editor, shouldFailOnUnchangedDocument = false, text } = composeParams;
     const valueBeforeComposing = editor.getValue();
     const targetWindow = getEditorWindow(editor);
     // eslint-disable-next-line no-restricted-syntax -- Approved double cast: probes an optional-member view of `Editor.cm`, as `getEditorWindow` does.
@@ -795,11 +795,21 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
       }
     }
 
-    // Silent on timeout, like `typeIntoEditor`: a read-only editor rejecting the text is an expected outcome.
+    // Silent on timeout by default, like `typeIntoEditor`: a read-only editor rejecting the text is an expected outcome.
     const startTime = Date.now();
     while (editor.getValue() === valueBeforeComposing && Date.now() - startTime < INPUT_TIMEOUT_IN_MILLISECONDS) {
       await sleep(INPUT_POLL_INTERVAL_IN_MILLISECONDS);
     }
+
+    if (!shouldFailOnUnchangedDocument || text === '' || editor.getValue() !== valueBeforeComposing) {
+      return;
+    }
+
+    const activeElement = targetWindow.document.activeElement;
+    const activeElementDescription = activeElement ? `${activeElement.tagName.toLowerCase()}${activeElement.className ? `.${activeElement.className}` : ''}` : 'none';
+    throw new Error(
+      `composeIntoEditor: the document was unchanged ${String(INPUT_TIMEOUT_IN_MILLISECONDS)} ms after composing ${JSON.stringify(text)}. The editor has focus: ${String(editor.hasFocus())}; the active element: ${activeElementDescription}.`
+    );
   }
 
   async function setComposition(compositionParams: SetCompositionParams): Promise<void> {
