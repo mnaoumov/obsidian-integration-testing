@@ -144,6 +144,18 @@ export type {
   PinWindowFocusOptions
 } from './capture/pin-window-focus.ts';
 export { pinWindowFocus } from './capture/pin-window-focus.ts';
+export type {
+  PageNotSettledErrorConstructorParams,
+  PageSettleState,
+  SettleOptions
+} from './capture/settle-options.ts';
+export {
+  DEFAULT_SETTLE_QUIET_IN_MILLISECONDS,
+  DEFAULT_SETTLE_TIMEOUT_IN_MILLISECONDS,
+  PageNotSettledError
+} from './capture/settle-options.ts';
+export type { WaitForSettledPageOptions } from './capture/wait-for-settled-page.ts';
+export { waitForSettledPage } from './capture/wait-for-settled-page.ts';
 export type { CdpCommandTimeoutErrorConstructorParams } from './desktop/cdp-command-timeout-error.ts';
 export { CdpCommandTimeoutError } from './desktop/cdp-command-timeout-error.ts';
 export type {
