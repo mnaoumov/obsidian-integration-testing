@@ -13,6 +13,22 @@
 import type { Except } from 'type-fest';
 
 /**
+ * The CSS viewport the mobile layout pins a desktop window to, as far as a
+ * capture needs it.
+ */
+export interface CaptureMobileViewport {
+  /**
+   * The viewport height, in CSS pixels.
+   */
+  readonly heightInPixels: number;
+
+  /**
+   * The viewport width, in CSS pixels.
+   */
+  readonly widthInPixels: number;
+}
+
+/**
  * Parameters for capturing a screenshot of a running Obsidian instance.
  */
 export interface CaptureScreenshotParams {
@@ -24,6 +40,21 @@ export interface CaptureScreenshotParams {
    * vault windows, and the capture has to be routed to the right one.
    */
   readonly cwd: string;
+
+  /**
+   * Device pixels per CSS pixel for the capture.
+   *
+   * Desktop only. With a size, the PNG is still exactly
+   * {@link widthInPixels} x {@link heightInPixels}, and the page is laid out at
+   * that size divided by this factor, which must give whole CSS pixels. Without
+   * one, the window keeps its own CSS size and the PNG is that size times this
+   * factor.
+   *
+   * @default `1` with a size, so a sized frame keeps the layout it always had;
+   *   `2` without one, so an unsized frame is sharp. Under the mobile layout an
+   *   unsized capture keeps the layout's own factor instead.
+   */
+  readonly deviceScaleFactor?: number;
 
   /**
    * The exact height in pixels the captured image should have.
@@ -60,6 +91,21 @@ export interface PngDimensions {
    * The image width in pixels.
    */
   readonly widthInPixels: number;
+}
+
+/**
+ * Parameters for {@link resolveCaptureMetricsOverride}.
+ */
+export interface ResolveCaptureMetricsOverrideParams {
+  /**
+   * The requested capture size and density.
+   */
+  readonly captureParams: Except<CaptureScreenshotParams, 'cwd'>;
+
+  /**
+   * The viewport the mobile layout pins, or `null` when the window is not in it.
+   */
+  readonly mobileViewport: CaptureMobileViewport | null;
 }
 
 /**
@@ -108,39 +154,70 @@ const PNG_HEIGHT_OFFSET = 20;
 const PNG_HEADER_MIN_LENGTH = 24;
 
 /**
- * Device scale factor for a capture.
+ * Device scale factor of a capture given an exact size.
  *
- * Always `1`, so the emitted PNG is exactly the requested CSS pixel size rather
- * than a multiple of it.
+ * `1`, so a sized frame is laid out at its PNG size, as it always was: every
+ * committed store-listing frame was shot that way.
  */
-const CAPTURE_DEVICE_SCALE_FACTOR = 1;
+export const SIZED_CAPTURE_DEVICE_SCALE_FACTOR = 1;
+
+/**
+ * Device scale factor of a capture given no size.
+ *
+ * `2`, so a frame of the window as it is comes out sharp rather than at one
+ * device pixel per CSS pixel.
+ */
+export const UNSIZED_CAPTURE_DEVICE_SCALE_FACTOR = 2;
 
 /**
  * Builds the `Emulation.setDeviceMetricsOverride` payload that pins a desktop
- * capture to an exact pixel size.
+ * capture to an exact pixel size, a pixel density, or both.
  *
  * Takes only the size half of {@link CaptureScreenshotParams} — routing the
- * capture to a window is the transport's job, not the payload's.
+ * capture to a window is the transport's job, not the payload's. An unsized
+ * payload sends width and height `0`, which CDP reads as "keep the window's
+ * own size".
  *
- * @param params - The requested capture size.
- * @returns The CDP payload, or `null` when no size was requested (capture the window as it is).
- * @throws Error if exactly one of the two dimensions is given — a half-specified size cannot be honoured.
+ * @param params - The requested capture size and density.
+ * @returns The CDP payload, or `null` when the window is captured as it is (no size, and a density of `1`).
+ * @throws Error if exactly one of the two dimensions is given, if the density is not a positive number, or if the size
+ *   divided by the density is not whole CSS pixels.
  */
 export function buildDeviceMetricsOverride(params: Except<CaptureScreenshotParams, 'cwd'>): null | Record<string, unknown> {
   const { heightInPixels, widthInPixels } = params;
   if (heightInPixels === undefined && widthInPixels === undefined) {
-    return null;
+    const deviceScaleFactor = params.deviceScaleFactor ?? UNSIZED_CAPTURE_DEVICE_SCALE_FACTOR;
+    assertDeviceScaleFactor(deviceScaleFactor);
+    return deviceScaleFactor === 1
+      ? null
+      : {
+        deviceScaleFactor,
+        height: 0,
+        mobile: false,
+        width: 0
+      };
   }
 
   if (heightInPixels === undefined || widthInPixels === undefined) {
     throw new Error('captureScreenshot: widthInPixels and heightInPixels must be given together.');
   }
 
+  const deviceScaleFactor = params.deviceScaleFactor ?? SIZED_CAPTURE_DEVICE_SCALE_FACTOR;
+  assertDeviceScaleFactor(deviceScaleFactor);
+  const width = widthInPixels / deviceScaleFactor;
+  const height = heightInPixels / deviceScaleFactor;
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+    throw new TypeError(
+      `captureScreenshot: ${String(widthInPixels)} x ${String(heightInPixels)} pixels at deviceScaleFactor ${String(deviceScaleFactor)} `
+        + `is ${String(width)} x ${String(height)} CSS pixels; pick a size the factor divides into whole CSS pixels.`
+    );
+  }
+
   return {
-    deviceScaleFactor: CAPTURE_DEVICE_SCALE_FACTOR,
-    height: heightInPixels,
+    deviceScaleFactor,
+    height,
     mobile: false,
-    width: widthInPixels
+    width
   };
 }
 
@@ -194,6 +271,51 @@ export function readPngDimensions(bytes: Uint8Array): PngDimensions {
     heightInPixels: view.getUint32(PNG_HEIGHT_OFFSET),
     widthInPixels: view.getUint32(PNG_WIDTH_OFFSET)
   };
+}
+
+/**
+ * Builds the device-metrics override a desktop capture needs, given the viewport
+ * the window is pinned to by the mobile layout, if any.
+ *
+ * Under the mobile layout an unsized capture is the layout's own viewport, at
+ * its own factor, unless the capture asks for another factor; then the layout's
+ * CSS size is kept and only the factor changes. A width and height of `0` would
+ * drop the layout's viewport for the length of the capture.
+ *
+ * @param params - The requested capture and the mobile layout's viewport.
+ * @returns The CDP payload, or `null` when the window is captured as it is.
+ * @throws Error under the same conditions as {@link buildDeviceMetricsOverride}.
+ */
+export function resolveCaptureMetricsOverride(params: ResolveCaptureMetricsOverrideParams): null | Record<string, unknown> {
+  const { captureParams, mobileViewport } = params;
+  const isUnsized = captureParams.heightInPixels === undefined && captureParams.widthInPixels === undefined;
+  if (!isUnsized || mobileViewport === null) {
+    return buildDeviceMetricsOverride(captureParams);
+  }
+
+  if (captureParams.deviceScaleFactor === undefined) {
+    return null;
+  }
+
+  assertDeviceScaleFactor(captureParams.deviceScaleFactor);
+  return {
+    deviceScaleFactor: captureParams.deviceScaleFactor,
+    height: mobileViewport.heightInPixels,
+    mobile: false,
+    width: mobileViewport.widthInPixels
+  };
+}
+
+/**
+ * Refuses a device scale factor that is not a positive finite number.
+ *
+ * @param deviceScaleFactor - The factor to check.
+ * @throws Error if the factor is not a positive finite number.
+ */
+function assertDeviceScaleFactor(deviceScaleFactor: number): void {
+  if (!Number.isFinite(deviceScaleFactor) || deviceScaleFactor <= 0) {
+    throw new Error(`captureScreenshot: deviceScaleFactor must be a positive number, got ${String(deviceScaleFactor)}.`);
+  }
 }
 
 /**
