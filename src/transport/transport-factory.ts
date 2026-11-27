@@ -235,7 +235,7 @@ import {
   resolvePortOwnerQueryOutcome
 } from '../process/port-owner-query-verdict.ts';
 import {
-  buildPortOwnerQuery,
+  buildHostPortOwnerQuery,
   listPortOwnerPidsSync,
   parsePortOwnerPids
 } from '../process/port-owner-query.ts';
@@ -2046,7 +2046,7 @@ class AppiumTransportFactory {
    * @returns The listening PIDs, or an empty list when nothing holds the port or the query failed.
    */
   private async listPortOwnerPids(port: number): Promise<number[]> {
-    const query = buildPortOwnerQuery(port);
+    const query = buildHostPortOwnerQuery(port);
     const startedAtInMilliseconds = Date.now();
     const result = await new Promise<HostProcessQueryResult>((resolve) => {
       execFile(

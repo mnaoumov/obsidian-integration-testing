@@ -1,0 +1,43 @@
+name: Validate POSIX Port Owners
+
+# The owned-instance teardown kills whatever listens on the instance's CDP port.
+# On POSIX that list comes from lsof, which also names every CLIENT of the port,
+# and the test runner is one: a query without -sTCP:LISTEN made the teardown
+# kill its own runner (exit 137). This runs the port-owner integration test on
+# Linux and macOS, where Windows' netstat never showed the defect. It launches
+# no Obsidian, so it is cheap enough to run on every push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  port-owners:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      HUSKY: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate port-owner listing and teardown
+        run: npx vitest run --project integration-tests src/process/owned-process-cleanup.integration.test.ts
