@@ -3798,7 +3798,8 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
       cdpHost: options.host,
       cdpPort: options.port,
       commandTimeoutInMilliseconds: options.commandTimeoutInMilliseconds,
-      isHarnessOwnedInstance: options.isHarnessOwnedInstance
+      isHarnessOwnedInstance: options.isHarnessOwnedInstance,
+      vaultReadyTimeoutInMilliseconds: options.vaultReadyTimeoutInMilliseconds
     }));
   }
 
@@ -3819,7 +3820,8 @@ async function createCdpTransport(options?: ObsidianCdpTransportOptions): Promis
     ownedInstance,
     shouldDisableSandbox: options?.shouldDisableSandbox,
     shouldThrowOnSilentAsarFallback: willThrowOnSilentAsarFallback(options?.shouldThrowOnSilentAsarFallback),
-    shouldWarnOnCompatibilityIssues: willWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues)
+    shouldWarnOnCompatibilityIssues: willWarnOnCompatibilityIssues(options?.shouldWarnOnCompatibilityIssues),
+    vaultReadyTimeoutInMilliseconds: options?.vaultReadyTimeoutInMilliseconds
   }));
 }
 
