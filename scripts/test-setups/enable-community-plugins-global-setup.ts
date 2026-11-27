@@ -114,6 +114,31 @@ class P extends Plugin {
 module.exports = P; exports.default = P;
 `;
 
+/**
+ * A second dummy listed only in `community-plugins.json`, whose `onload` is asynchronous and takes
+ * {@link SLOW_STARTUP_ONLOAD_IN_MILLISECONDS}. `Plugins.loadPlugin` stores the instance in `app.plugins.plugins`
+ * BEFORE it awaits `onload`, so the instance exists for that whole time while `app.plugins.loadingPluginId`
+ * names it. Its `onload` records when it finished on `window`, which the companion test reads: the setup must
+ * not hand the vault to a worker before that.
+ */
+export const SLOW_STARTUP_PLUGIN_ID = 'enable-extra-slow-startup';
+
+/**
+ * How long the slow startup dummy's `onload` takes. Below Obsidian's 3 s "plugin is taking long to load" notice.
+ */
+export const SLOW_STARTUP_ONLOAD_IN_MILLISECONDS = 2500;
+
+const SLOW_STARTUP_PLUGIN_SOURCE = `const { Plugin } = require('obsidian');
+class P extends Plugin {
+  async onload() {
+    window.obsidianIntegrationTestingSlowStartup = { isFinished: false };
+    await new Promise((resolve) => { window.setTimeout(resolve, ${String(SLOW_STARTUP_ONLOAD_IN_MILLISECONDS)}); });
+    window.obsidianIntegrationTestingSlowStartup = { isFinished: true };
+  }
+}
+module.exports = P; exports.default = P;
+`;
+
 let demoVaultPath: string | undefined;
 
 const setupPair = createSetup({
@@ -150,7 +175,7 @@ function buildDemoVaultPopulateForTest(): PopulateFilesParams {
   demoVaultPath = mkdtempSync(join(tmpdir(), 'enable-community-plugins-demo-vault-'));
   writeFileSync(join(demoVaultPath, 'note.md'), '# Demo note\n');
 
-  const pluginIds = [...EXTRA_PLUGIN_IDS, STARTUP_PROBE_PLUGIN_ID];
+  const pluginIds = [...EXTRA_PLUGIN_IDS, STARTUP_PROBE_PLUGIN_ID, SLOW_STARTUP_PLUGIN_ID];
   for (const pluginId of pluginIds) {
     const pluginDirectory = join(demoVaultPath, '.obsidian', 'plugins', pluginId);
     mkdirSync(pluginDirectory, { recursive: true });
@@ -176,7 +201,7 @@ function buildDemoVaultPopulateForTest(): PopulateFilesParams {
     }),
     // `installPlugin: false` leaves this file to the populate map, so the startup probe is the only plugin
     // enabled when the vault opens.
-    '.obsidian/community-plugins.json': JSON.stringify([STARTUP_PROBE_PLUGIN_ID])
+    '.obsidian/community-plugins.json': JSON.stringify([STARTUP_PROBE_PLUGIN_ID, SLOW_STARTUP_PLUGIN_ID])
   };
 }
 
@@ -190,6 +215,9 @@ function resolvePluginSource(pluginId: string): string {
   switch (pluginId) {
     case PATCHING_PLUGIN_ID: {
       return PATCHING_PLUGIN_SOURCE;
+    }
+    case SLOW_STARTUP_PLUGIN_ID: {
+      return SLOW_STARTUP_PLUGIN_SOURCE;
     }
     case STARTUP_PROBE_PLUGIN_ID: {
       return STARTUP_PROBE_PLUGIN_SOURCE;

@@ -40,8 +40,8 @@ export interface EnablePluginResult {
   readonly isEnabled: boolean;
 
   /**
-   * Whether the plugin instance actually exists in `app.plugins.plugins`.
-   * This is the definitive check — a plugin that is enabled but not loaded has failed.
+   * Whether the plugin instance exists in `app.plugins.plugins` and its `onload` has settled (its id is not
+   * `app.plugins.loadingPluginId`). A plugin that is enabled but not loaded has failed.
    */
   readonly isLoaded: boolean;
 
@@ -82,6 +82,32 @@ interface IntegrationTestingHolder {
 export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArguments & EnablePluginParams): Promise<EnablePluginResult> {
   if (!app.plugins.isEnabled()) {
     await app.plugins.setEnable(true);
+  }
+
+  /*
+   * Wait out a load of this plugin that is already in flight. `Plugins.loadPlugin` stores the instance in
+   * `app.plugins.plugins` BEFORE it awaits `onload`, and returns an instance that is already there at once, so
+   * enabling a plugin whose `onload` is still running returns straight away — and its own `enablePlugin`
+   * clears `loadingPluginId` too, so nothing afterwards can tell. `loadingPluginId` names the plugin only
+   * until that first load's `onload` settles, which is the one signal there is. Measured on Obsidian 1.15.1.
+   * The wait stays well inside the per-eval cap.
+   */
+  const LOADING_WAIT_IN_MILLISECONDS = 20_000;
+  const LOADING_POLL_IN_MILLISECONDS = 50;
+  const loadingWaitStart = Date.now();
+  while (app.plugins.loadingPluginId === pluginId) {
+    if (Date.now() - loadingWaitStart > LOADING_WAIT_IN_MILLISECONDS) {
+      return {
+        errorMessage: `Plugin "${pluginId}" was still loading (app.plugins.loadingPluginId names it) after ${String(LOADING_WAIT_IN_MILLISECONDS)} ms: `
+          + 'its onload has not settled.',
+        isEnabled: app.plugins.enabledPlugins.has(pluginId),
+        isLoaded: false,
+        rendererConsoleErrors: undefined
+      };
+    }
+    await new Promise<void>((resolve) => {
+      globalThis.setTimeout(resolve, LOADING_POLL_IN_MILLISECONDS);
+    });
   }
 
   /*
@@ -191,7 +217,8 @@ export async function enablePluginWithErrorCapture({ app, pluginId }: CommonArgu
     globalThis.removeEventListener('unhandledrejection', onUnhandledRejection);
   }
 
-  const isLoaded = Object.hasOwn(app.plugins.plugins, pluginId);
+  // Registered is not loaded: an instance whose id is `loadingPluginId` is still in its `onload`.
+  const isLoaded = Object.hasOwn(app.plugins.plugins, pluginId) && app.plugins.loadingPluginId !== pluginId;
 
   let rendererConsoleErrors: string | undefined;
   if (!errorMessage && !isLoaded) {

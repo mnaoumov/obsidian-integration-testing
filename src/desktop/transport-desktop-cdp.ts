@@ -367,6 +367,11 @@ const OWNED_SURVIVOR_KILL_ROUND_COUNT = 3;
 const OWNED_SURVIVOR_SETTLE_IN_MILLISECONDS = 1000;
 const VAULT_POLL_INTERVAL_IN_MILLISECONDS = 500;
 const VAULT_POLL_TIMEOUT_IN_MILLISECONDS = 30_000;
+/**
+How long readiness waits for an enabled plugin's startup onload to settle.
+ */
+const STARTUP_PLUGIN_LOADING_WAIT_IN_MILLISECONDS = 60_000;
+const STARTUP_PLUGIN_LOADING_POLL_IN_MILLISECONDS = 100;
 // Old (Electron 10-era) Obsidian occasionally boots without the workspace ever
 // initializing, so the vault never becomes ready. A fresh instance is an
 // independent chance; relaunch up to this many times before giving up.
@@ -1951,7 +1956,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @returns Whether the window was reloaded.
    */
   private async reloadIfStartupPluginsSkipped(vaultPath: string): Promise<boolean> {
-    const load = await this.probeStartupPluginLoad(vaultPath);
+    const load = await this.waitForStartupPluginLoadsToSettle(vaultPath);
     if (load.state === 'loaded') {
       if (load.loadedPluginIds.length > 0) {
         log(`[cdp-transport] Community plugins loaded at startup: ${load.loadedPluginIds.join(', ')}.`);
@@ -1983,7 +1988,7 @@ export class DesktopCdpTransport implements ObsidianTransport {
    * @param vaultPath - The absolute path to the vault folder.
    */
   private async reportStartupPluginLoadAfterReload(vaultPath: string): Promise<void> {
-    const load = await this.probeStartupPluginLoad(vaultPath);
+    const load = await this.waitForStartupPluginLoadsToSettle(vaultPath);
     if (load.state === 'skipped') {
       log(`[cdp-transport] After the reload these enabled plugins were still not loaded at startup: ${load.skippedPluginIds.join(', ')}.`);
     } else if (load.state === 'loaded') {
@@ -2269,6 +2274,39 @@ export class DesktopCdpTransport implements ObsidianTransport {
       `The starter screen did not expose localStorage and the Electron IPC bridge within ${String(STARTER_SCREEN_TIMEOUT_IN_MILLISECONDS)}ms, `
         + 'so the config folder override could not be written.'
     );
+  }
+
+  /**
+   * Probes the startup plugin load until no enabled plugin is still in its `onload`, so a plugin that is
+   * registered but whose `onload` has not settled is never reported as loaded, nor handed to a test.
+   * `Plugins.loadPlugin` stores the instance before it awaits `onload`, and `loadingPluginId` is what says
+   * the load is still running. Obsidian 1.15.1 lays the workspace out only after the startup loads, so this
+   * normally finds nothing to wait for; it bounds the wait at
+   * {@link STARTUP_PLUGIN_LOADING_WAIT_IN_MILLISECONDS} and then reports what is still loading.
+   *
+   * @param vaultPath - The absolute path to the vault folder.
+   * @returns The first probe result that is not `loading`, or the last one when the wait ran out.
+   */
+  private async waitForStartupPluginLoadsToSettle(vaultPath: string): Promise<StartupPluginLoad> {
+    const start = Date.now();
+    let load = await this.probeStartupPluginLoad(vaultPath);
+    let lastLoggedId: null | string = null;
+    while (load.state === 'loading') {
+      if (Date.now() - start > STARTUP_PLUGIN_LOADING_WAIT_IN_MILLISECONDS) {
+        log(
+          `[cdp-transport] WARNING: Plugin "${load.loadingPluginId}" was still in its onload after `
+            + `${String(STARTUP_PLUGIN_LOADING_WAIT_IN_MILLISECONDS)}ms (app.plugins.loadingPluginId names it); going on without it settled.`
+        );
+        return load;
+      }
+      if (lastLoggedId !== load.loadingPluginId) {
+        log(`[cdp-transport] Waiting for plugin "${load.loadingPluginId}" to finish its onload (app.plugins.loadingPluginId names it).`);
+        lastLoggedId = load.loadingPluginId;
+      }
+      await delay(STARTUP_PLUGIN_LOADING_POLL_IN_MILLISECONDS);
+      load = await this.probeStartupPluginLoad(vaultPath);
+    }
+    return load;
   }
 }
 

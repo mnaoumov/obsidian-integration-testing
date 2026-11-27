@@ -28,7 +28,7 @@
 /**
  * The outcome of {@link STARTUP_PLUGIN_LOAD_PROBE_EXPRESSION}.
  */
-export type StartupPluginLoad = StartupPluginLoadLoaded | StartupPluginLoadSkipped | StartupPluginLoadUnsupported;
+export type StartupPluginLoad = StartupPluginLoadLoaded | StartupPluginLoadLoading | StartupPluginLoadSkipped | StartupPluginLoadUnsupported;
 
 /**
  * Every plugin enabled in `community-plugins.json` that has a manifest was
@@ -44,6 +44,22 @@ export interface StartupPluginLoadLoaded {
    * The discriminator.
    */
   readonly state: 'loaded';
+}
+
+/**
+ * An enabled plugin's `onload` is still running: `app.plugins.loadingPluginId` names it. Its instance is
+ * already in `app.plugins.plugins`, so registration alone would read it as loaded.
+ */
+export interface StartupPluginLoadLoading {
+  /**
+   * The id in `app.plugins.loadingPluginId`.
+   */
+  readonly loadingPluginId: string;
+
+  /**
+   * The discriminator.
+   */
+  readonly state: 'loading';
 }
 
 /**
@@ -91,7 +107,8 @@ export interface StartupPluginLoadUnsupported {
  * dismissal writes the key after `initialize` has already returned, so
  * `isEnabled()` can be true in a window that loaded nothing. The verdict is
  * whether each enabled plugin is in `app.plugins.plugins`, which `loadPlugin`
- * fills before `onload` runs.
+ * fills before `onload` runs — so a plugin named by `loadingPluginId`, whose
+ * `onload` has not settled, reads as `loading` rather than `loaded`.
  */
 export const STARTUP_PLUGIN_LOAD_PROBE_EXPRESSION = `(function() {
   var app = window.app;
@@ -100,6 +117,10 @@ export const STARTUP_PLUGIN_LOAD_PROBE_EXPRESSION = `(function() {
     return JSON.stringify({ state: 'unsupported' });
   }
   var has = Object.prototype.hasOwnProperty;
+  var loadingId = plugins.loadingPluginId;
+  if (typeof loadingId === 'string' && loadingId !== '' && has.call(plugins.manifests, loadingId)) {
+    return JSON.stringify({ loadingPluginId: loadingId, state: 'loading' });
+  }
   var loaded = [];
   var skipped = [];
   plugins.enabledPlugins.forEach(function(id) {
@@ -171,6 +192,9 @@ export function parseStartupPluginLoad(value: unknown): StartupPluginLoad {
     return unsupported;
   }
   const record = parsed as Record<string, unknown>;
+  if (record['state'] === 'loading' && typeof record['loadingPluginId'] === 'string') {
+    return { loadingPluginId: record['loadingPluginId'], state: 'loading' };
+  }
   if (record['state'] === 'loaded' && checkIsStringArray(record['loadedPluginIds'])) {
     return { loadedPluginIds: record['loadedPluginIds'], state: 'loaded' };
   }

@@ -25,6 +25,7 @@ import {
 } from 'vitest';
 
 import { evalInObsidian } from '../eval/eval-in-obsidian.ts';
+import { enablePluginWithErrorCapture } from './enable-plugin.ts';
 
 // Kept in sync with `EXTRA_PLUGIN_IDS` in `scripts/test-setups/enable-community-plugins-global-setup.ts`.
 const EXTRA_PLUGIN_IDS = ['enable-extra-patcher', 'enable-extra-a', 'enable-extra-b'];
@@ -68,6 +69,54 @@ describe('a plugin enabled in community-plugins.json', () => {
     // A fresh owned profile opens its vault in restricted mode; without the harness turning that off and
     // reloading, the probe never loads at all (nothing else enables it), and the record is missing.
     expect(probe).toEqual({ isLayoutReady: false, isRootSplitNull: true });
+  });
+});
+
+describe('a plugin whose startup onload is asynchronous', () => {
+  it('has finished its onload before the setup hands the vault to a worker', async () => {
+    const state = await evalInObsidian({
+      callback({ app }): unknown {
+        return {
+          // The property name and the id are duplicated from the global setup: this callback is serialized.
+          loadingPluginId: app.plugins.loadingPluginId ?? null,
+          record: Reflect.get(globalThis, 'obsidianIntegrationTestingSlowStartup') ?? null
+        };
+      }
+    });
+
+    // `Plugins.loadPlugin` puts the instance in `app.plugins.plugins` before it awaits `onload`, so a readiness
+    // check on registration alone passes while this `onload` still runs, and the record reads `isFinished: false`.
+    expect(state).toEqual({ loadingPluginId: null, record: { isFinished: true } });
+  });
+
+  it('is waited for when the enable helper runs while its load is still in flight', async () => {
+    // Start a load and do not await it, so the plugin is registered and its `onload` is still running.
+    await evalInObsidian({
+      async callback({ app }): Promise<void> {
+        const id = 'enable-extra-slow-startup';
+        await app.plugins.disablePlugin(id);
+        Reflect.deleteProperty(globalThis, 'obsidianIntegrationTestingSlowStartup');
+        // Deliberately not awaited; a failure surfaces in the assertions below.
+        app.plugins.enablePlugin(id).catch((error: unknown) => {
+          console.error(error);
+        });
+      }
+    });
+
+    const result = await evalInObsidian({
+      callback: enablePluginWithErrorCapture,
+      input: { pluginId: 'enable-extra-slow-startup' }
+    });
+    const record = await evalInObsidian({
+      callback(): unknown {
+        return Reflect.get(globalThis, 'obsidianIntegrationTestingSlowStartup') ?? null;
+      }
+    });
+
+    // `loadPlugin` returns an instance that is already registered at once, so without the wait the helper
+    // returns, reporting the plugin loaded, while the first load's `onload` is still running.
+    expect(result.isLoaded).toBe(true);
+    expect(record).toEqual({ isFinished: true });
   });
 });
 
