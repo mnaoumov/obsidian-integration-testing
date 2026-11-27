@@ -21,6 +21,7 @@ interface FakeApp {
 interface FakePlugins {
   readonly enabledPlugins?: Set<string>;
   readonly isEnabled?: () => boolean;
+  readonly loadingPluginId?: null | string;
   readonly manifests?: Record<string, unknown>;
   readonly plugins?: Record<string, unknown>;
 }
@@ -48,6 +49,36 @@ describe('STARTUP_PLUGIN_LOAD_PROBE_EXPRESSION', () => {
       }
     });
     expect(parseStartupPluginLoad(result)).toEqual({ loadedPluginIds: ['one'], state: 'loaded' });
+  });
+
+  it('reports loading while an enabled plugin with a manifest is still in its onload', () => {
+    const result = runProbe({
+      appId: 'a',
+      plugins: {
+        enabledPlugins: new Set(['one']),
+        isEnabled: (): boolean => true,
+        loadingPluginId: 'one',
+        manifests: { one: {} },
+        plugins: { one: {} }
+      }
+    });
+    expect(parseStartupPluginLoad(result)).toEqual({ loadingPluginId: 'one', state: 'loading' });
+  });
+
+  it('ignores a loadingPluginId that names no manifest, or is empty', () => {
+    for (const loadingPluginId of ['', 'other', null]) {
+      const result = runProbe({
+        appId: 'a',
+        plugins: {
+          enabledPlugins: new Set(['one']),
+          isEnabled: (): boolean => true,
+          loadingPluginId,
+          manifests: { one: {} },
+          plugins: { one: {} }
+        }
+      });
+      expect(parseStartupPluginLoad(result)).toEqual({ loadedPluginIds: ['one'], state: 'loaded' });
+    }
   });
 
   it('reports the skipped plugins in restricted mode', () => {
@@ -87,6 +118,8 @@ describe('parseStartupPluginLoad', () => {
     JSON.stringify({ state: 'loaded' }),
     JSON.stringify({ loadedPluginIds: [1], state: 'loaded' }),
     JSON.stringify({ appId: 'a', skippedPluginIds: ['x'], state: 'skipped' }),
+    JSON.stringify({ state: 'loading' }),
+    JSON.stringify({ loadingPluginId: 3, state: 'loading' }),
     JSON.stringify({ state: 'other' })
   ])('reads %j as unsupported', (value) => {
     expect(parseStartupPluginLoad(value)).toEqual({ state: 'unsupported' });
@@ -100,6 +133,7 @@ describe('checkShouldReloadForStartupPlugins', () => {
     expect(checkShouldReloadForStartupPlugins({ appId: 'undefined', isCommunityPluginsEnabled: false, skippedPluginIds: ['x'], state: 'skipped' }))
       .toBe(false);
     expect(checkShouldReloadForStartupPlugins({ loadedPluginIds: [], state: 'loaded' })).toBe(false);
+    expect(checkShouldReloadForStartupPlugins({ loadingPluginId: 'x', state: 'loading' })).toBe(false);
     expect(checkShouldReloadForStartupPlugins({ state: 'unsupported' })).toBe(false);
   });
 });

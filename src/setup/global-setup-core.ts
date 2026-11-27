@@ -1006,7 +1006,8 @@ async function logPluginStartupLoad(params: LogPluginStartupLoadParams): Promise
   try {
     isLoaded = await evalInObsidian({
       callback({ app, pluginId: id }: CommonArguments & PluginStartupLoadInput): boolean {
-        return Object.hasOwn(app.plugins.plugins, id);
+        // Registered is not loaded: the instance is in plugins before its onload settles.
+        return Object.hasOwn(app.plugins.plugins, id) && app.plugins.loadingPluginId !== id;
       },
       input: { pluginId },
       shouldSkipPreflightChecks: true,
