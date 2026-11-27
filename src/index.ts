@@ -247,6 +247,33 @@ export type { EvalResultLostErrorConstructorParams } from './eval/eval-result-lo
 export { EvalResultLostError } from './eval/eval-result-lost-error.ts';
 export type { PollInObsidianParams } from './eval/poll-in-obsidian.ts';
 export { pollInObsidian } from './eval/poll-in-obsidian.ts';
+export type {
+  AssertLayoutParams,
+  FindLayoutProblemsParams,
+  LayoutAssertionErrorConstructorParams
+} from './layout/assert-layout.ts';
+export {
+  assertLayout,
+  findLayoutProblems,
+  LayoutAssertionError
+} from './layout/assert-layout.ts';
+export type {
+  FocusRingCheckOptions,
+  LayoutCheckName,
+  LayoutCheckOptions,
+  LayoutCut,
+  LayoutFinding,
+  LayoutProblem,
+  OverflowCheckOptions,
+  TouchTargetCheckOptions
+} from './layout/layout-options.ts';
+export {
+  DEFAULT_MAXIMUM_FOCUS_STOP_COUNT,
+  DEFAULT_MINIMUM_TOUCH_SIZE_IN_PIXELS,
+  DEFAULT_TOUCH_TARGET_SELECTOR,
+  MAXIMUM_FINDINGS_PER_CHECK,
+  MAXIMUM_FOCUS_STOP_COUNT
+} from './layout/layout-options.ts';
 export type { LibResolver } from './namespace/lib-registry.ts';
 export { registerLibResolver } from './namespace/lib-registry.ts';
 export type { OpenObsidianSettingsTabParams } from './namespace/open-obsidian-settings-tab.ts';
