@@ -21,7 +21,7 @@ The trusted helpers flow through the real input pipeline, so text lands **only i
 | Helper                                         | Purpose                                                                                                                                                                                                                          |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `typeIntoEditor({ editor, text })`             | Focuses `editor` (caret to end), types `text` as trusted key events, then polls until the document reflects it.                                                                                                                  |
-| `composeIntoEditor({ editor, text, chunking })` | Focuses `editor` (caret to end) and enters `text` through IME composition, one composition per `'word'` (default) or `'character'`, then polls until the document reflects it. |
+| `composeIntoEditor({ editor, text, chunking })` | Focuses `editor` (caret to end) and enters `text` through IME composition, one composition per `'word'` (default) or `'character'`, then polls until the document reflects it. `shouldFailOnUnchangedDocument: true` makes a document still unchanged at the end an error. |
 | `setComposition({ text, selectionStart, selectionEnd, window })` | Opens an IME composition in the focused element or replaces the open one's text, and leaves it open. An empty `text` cancels it. Does **not** poll. |
 | `commitComposition({ text, window })`          | Commits the open composition as `text`. With none open, inserts `text` with no composition events. Does **not** poll. |
 | `pressKey({ key, modifiers, window })`         | Presses `key` with optional `modifiers` as a trusted `keyDown`→`char`→`keyUp` on the DOM-focused element (fires `keydown`/`keypress`/`beforeinput`/`input`/`keyup`). Does **not** poll — pair with `waitUntil`. |
@@ -152,6 +152,12 @@ Trusted input targets the single shared window's **global** focus and pointer, s
 Key presses never open a composition, but much real input arrives as one: Gboard keeps the current word in a composition, CJK input methods compose every word, and fcitx and ibus on Wayland can send each character as its own. While a composition is open, CodeMirror sets `view.composing`, and a plugin that reacts to typing has to wait for it to end.
 
 `composeIntoEditor` covers the usual shapes. With `chunking: 'word'`, each word grows one character at a time and its trailing whitespace is part of the commit, so `'brb '` commits as `'brb '`. To type the separator separately, compose `'brb'` and follow it with `pressKey`.
+
+When the document is still unchanged once the wait ends, `composeIntoEditor` returns silently, because a read-only editor rejecting the text is a legitimate outcome. A test that does not read the document back would then pass when the composition went nowhere, for example because something took the editor's focus. Pass `shouldFailOnUnchangedDocument: true` to make that an error naming the text and the element that held focus:
+
+```ts
+await composeIntoEditor({ editor, shouldFailOnUnchangedDocument: true, text: 'brb ' });
+```
 
 `setComposition` and `commitComposition` hold a composition open, so a test can assert on that state:
 

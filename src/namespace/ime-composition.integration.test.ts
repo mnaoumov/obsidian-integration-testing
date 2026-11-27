@@ -47,6 +47,22 @@ interface OpenCompositionResult {
   readonly valueWhileOpen: string;
 }
 
+/**
+ * The input of a compose run whose focus is stolen.
+ */
+interface StolenFocusInput extends Record<string, unknown> {
+  readonly notePath: string;
+  readonly shouldFailOnUnchangedDocument: boolean;
+}
+
+/**
+ * What a compose run whose focus is stolen reports back.
+ */
+interface StolenFocusResult {
+  readonly errorMessage: null | string;
+  readonly value: string;
+}
+
 describe('IME composition', () => {
   const vault = new TemporaryVault();
 
@@ -109,6 +125,86 @@ describe('IME composition', () => {
 
     expect(result.value).toBe('brb ');
     expect(result.commitCount).toBe('brb '.length);
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  async function composeWithStolenFocus(input: StolenFocusInput): Promise<StolenFocusResult> {
+    return await evalInObsidian<StolenFocusInput, StolenFocusResult>({
+      callback: async ({ app, lib: { composeIntoEditor }, notePath, obsidianModule, shouldFailOnUnchangedDocument }) => {
+        const file = await app.vault.create(notePath, '');
+        const leaf = app.workspace.getLeaf(true);
+        await leaf.openFile(file, { state: { mode: 'source' } });
+        if (!(leaf.view instanceof obsidianModule.MarkdownView)) {
+          throw new TypeError('The note did not open in a Markdown view.');
+        }
+
+        const { editor } = leaf.view;
+        const doc = editor.cm.contentDOM.ownerDocument;
+        // A focus trap: the editor's focus is handed straight to another field, so the composition goes there.
+        const trapInputEl = doc.body.createEl('input', { cls: 'oit-focus-trap' });
+        function stealFocus($event: FocusEvent): void {
+          if ($event.target instanceof Node && editor.cm.contentDOM.contains($event.target)) {
+            doc.win.setTimeout(() => {
+              trapInputEl.focus();
+            }, 0);
+          }
+        }
+
+        trapInputEl.focus();
+        doc.addEventListener('focusin', stealFocus);
+        let errorMessage: null | string = null;
+        try {
+          await composeIntoEditor({ editor, shouldFailOnUnchangedDocument, text: 'brb ' });
+        } catch (error) {
+          errorMessage = String(error);
+        } finally {
+          doc.removeEventListener('focusin', stealFocus);
+        }
+
+        const result = { errorMessage, value: editor.getValue() };
+        trapInputEl.remove();
+        leaf.detach();
+        return result;
+      },
+      input,
+      vaultPath: vault.path
+    });
+  }
+
+  it('should return silently by default when the composition left the document unchanged', async () => {
+    const result = await composeWithStolenFocus({ notePath: 'stolen-default.md', shouldFailOnUnchangedDocument: false });
+
+    expect(result).toEqual({ errorMessage: null, value: '' });
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should throw with shouldFailOnUnchangedDocument when the composition left the document unchanged', async () => {
+    const result = await composeWithStolenFocus({ notePath: 'stolen-strict.md', shouldFailOnUnchangedDocument: true });
+
+    expect(result.value).toBe('');
+    expect(result.errorMessage).toContain('the document was unchanged');
+    expect(result.errorMessage).toContain('"brb "');
+    expect(result.errorMessage).toContain('oit-focus-trap');
+  }, TEST_TIMEOUT_IN_MILLISECONDS);
+
+  it('should not throw with shouldFailOnUnchangedDocument when the composition landed', async () => {
+    const value = await evalInObsidian<Record<string, never>, string>({
+      callback: async ({ app, lib: { composeIntoEditor }, obsidianModule }) => {
+        const file = await app.vault.create('strict-landed.md', '');
+        const leaf = app.workspace.getLeaf(true);
+        await leaf.openFile(file, { state: { mode: 'source' } });
+        if (!(leaf.view instanceof obsidianModule.MarkdownView)) {
+          throw new TypeError('The note did not open in a Markdown view.');
+        }
+
+        const { editor } = leaf.view;
+        await composeIntoEditor({ editor, shouldFailOnUnchangedDocument: true, text: 'brb ' });
+        const result = editor.getValue();
+        leaf.detach();
+        return result;
+      },
+      vaultPath: vault.path
+    });
+
+    expect(value).toBe('brb ');
   }, TEST_TIMEOUT_IN_MILLISECONDS);
 
   it('should compose into an editor in a popout on desktop', async () => {

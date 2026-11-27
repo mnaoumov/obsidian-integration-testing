@@ -208,6 +208,20 @@ export interface ComposeIntoEditorParams {
   readonly editor: Editor;
 
   /**
+   * Whether a document still unchanged once the wait for it ends is an error.
+   *
+   * By default `composeIntoEditor` returns silently then, because a
+   * read-only editor rejecting the text is an expected outcome, so a test
+   * that does not read the document back passes when the composition did
+   * nothing (focus stolen, the composition sent elsewhere). With `true` it
+   * throws, naming the text and whether the editor held focus. An empty
+   * {@link ComposeIntoEditorParams.text} is never an error.
+   *
+   * @default `false`
+   */
+  readonly shouldFailOnUnchangedDocument?: boolean;
+
+  /**
    * The text to compose.
    */
   readonly text: string;
@@ -523,7 +537,9 @@ export interface Lib {
    *
    * It focuses the editor (caret to end), runs one composition per word or per
    * character, and polls until the document changes or a bounded timeout
-   * elapses, which is the expected outcome for a read-only editor.
+   * elapses, which is the expected outcome for a read-only editor. Pass
+   * {@link ComposeIntoEditorParams.shouldFailOnUnchangedDocument} to make an
+   * unchanged document an error instead.
    *
    * **On Android** the composition is sent to the WebView over CDP, so it can
    * exercise only the page's and CodeMirror's composition handling, not a real
