@@ -236,7 +236,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
      * `window.__obsidianIntegrationTesting` instead, declaring the shape locally.
      *
      * These are the **same function objects** `evalWrapper` puts in a closure's `lib` bag, not wrappers:
-     * each already branches on `Platform.isMobile` internally, so the mobile semantics live in exactly one
+     * each already branches on `Platform.isMobileApp` internally, so the mobile semantics live in exactly one
      * place and one seam serves both platforms.
      */
     readonly trustedInput: TrustedInputHelpers;
@@ -339,7 +339,7 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
 
   interface ObsidianPlatform {
     readonly isMacOS: boolean;
-    readonly isMobile: boolean;
+    readonly isMobileApp: boolean;
   }
 
   /**
@@ -854,10 +854,12 @@ function bootstrapNamespace(bootstrapParams: GenerateFunctionCallParams<Bootstra
   }
 
   // True when this closure is running in Obsidian Mobile rather than the Electron desktop app.
+  // `isMobileApp`, not `isMobile`: `app.emulateMobile(true)` sets `isMobile` on the desktop app, where the
+  // input still goes through Electron and there is no WebView channel to hand it to (**L96**).
   // Reading `Platform` off the resolved obsidian module is safe here: `evalWrapper` always resolves that
   // module before any callback can run, which is the same guarantee `toElectronModifiers` relies on.
   function checkIsMobile(): boolean {
-    return (ns.obsidianModule as ObsidianModuleWithPlatform).Platform.isMobile;
+    return (ns.obsidianModule as ObsidianModuleWithPlatform).Platform.isMobileApp;
   }
 
   // Hands one trusted-input request to the host and waits for it to be injected.

@@ -221,6 +221,31 @@ export type {
   ConnectToCdpOptions
 } from './desktop/connect-to-cdp.ts';
 export { connectToCdp } from './desktop/connect-to-cdp.ts';
+export type {
+  BuildMobileLayoutTimeoutMessageParams,
+  DescribeMobileLayoutPendingParams,
+  MobileLayoutPageState,
+  MobileLayoutTimeoutErrorConstructorParams,
+  MobileLayoutViewport,
+  MobileLayoutViewportOptions,
+  ResolveMobileLayoutViewportOptions,
+  WaitForMobileLayoutStateParams
+} from './desktop/mobile-layout-options.ts';
+export {
+  DEFAULT_MOBILE_LAYOUT_TIMEOUT_IN_MILLISECONDS,
+  DEFAULT_MOBILE_LAYOUT_VIEWPORT,
+  MobileLayoutTimeoutError
+} from './desktop/mobile-layout-options.ts';
+export type {
+  DisableMobileLayoutOptions,
+  EnableMobileLayoutOptions,
+  WithMobileLayoutParams
+} from './desktop/mobile-layout.ts';
+export {
+  disableMobileLayout,
+  enableMobileLayout,
+  withMobileLayout
+} from './desktop/mobile-layout.ts';
 export type { OwnedInstanceExitedErrorConstructorParams } from './desktop/owned-instance/owned-instance-exited-error.ts';
 export { OwnedInstanceExitedError } from './desktop/owned-instance/owned-instance-exited-error.ts';
 export type {
@@ -361,6 +386,7 @@ export type {
   ConsoleCaptureHandle,
   ObsidianTransport,
   ScreencastRecording,
+  SetViewportOverrideParams,
   StartScreencastParams,
   TransportEvalOptions
 } from './transport/transport.ts';

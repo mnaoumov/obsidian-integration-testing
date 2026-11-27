@@ -34,6 +34,7 @@ import type { ScreencastFrame } from '../capture/failure-artifacts-options.ts';
 import type {
   ObsidianTransport,
   ScreencastRecording,
+  SetViewportOverrideParams,
   StartScreencastParams,
   TransportEvalOptions
 } from '../transport/transport.ts';
@@ -41,6 +42,7 @@ import type { AsarFallback } from './compatibility/asar-fallback-detection.ts';
 import type { ElectronCompatibility } from './compatibility/electron-compatibility.ts';
 import type { InstallerCompatibility } from './compatibility/installer-compatibility.ts';
 import type { RendererBootObservation } from './compatibility/renderer-boot-detection.ts';
+import type { MobileLayoutViewport } from './mobile-layout-options.ts';
 import type { OwnedObsidianInstance } from './owned-instance/obsidian-instance.ts';
 import type { StartupPluginLoad } from './owned-instance/startup-plugin-load.ts';
 
@@ -87,6 +89,7 @@ import { RendererFailedToInitializeError } from './compatibility/renderer-failed
 import { SilentAsarFallbackError } from './compatibility/silent-asar-fallback-error.ts';
 import { ConfigDirectoryFallbackError } from './config-directory-fallback-error.ts';
 import { DISMISS_TRUST_DIALOG_EXPR } from './dismiss-trust-dialog.ts';
+import { buildMobileLayoutOverridePayload } from './mobile-layout-options.ts';
 import { DETERMINISTIC_RASTER_LAUNCH_FLAGS } from './owned-instance/deterministic-raster.ts';
 import { resolveObsidianExecutable } from './owned-instance/obsidian-executable.ts';
 import {
@@ -482,6 +485,11 @@ export class DesktopCdpTransport implements ObsidianTransport {
   private readonly shouldDisableSandbox: boolean;
   private readonly shouldThrowOnSilentAsarFallback: boolean;
   private readonly shouldWarnOnCompatibilityIssues: boolean;
+  /**
+   * The viewport each vault's window is pinned to through {@link setViewportOverride}. A CDP override dies with
+   * the socket that set it, so a new socket re-applies it, and a sized capture puts it back after its own.
+   */
+  private readonly viewportOverrides = new Map<string, MobileLayoutViewport>();
   private ws: null | WebSocket = null;
 
   /**
@@ -567,7 +575,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
       return bytes;
     } finally {
       if (deviceMetricsOverride) {
-        await this.sendCommand(ws, 'Emulation.clearDeviceMetricsOverride', {});
+        const viewport = this.viewportOverrides.get(params.cwd);
+        await (viewport
+          ? this.sendCommand(ws, 'Emulation.setDeviceMetricsOverride', buildMobileLayoutOverridePayload(viewport))
+          : this.sendCommand(ws, 'Emulation.clearDeviceMetricsOverride', {}));
       }
     }
   }
@@ -813,6 +824,31 @@ export class DesktopCdpTransport implements ObsidianTransport {
     // window on dispose, and with it the app.
     if (didOpenWindow) {
       this.selfRegisteredVaultPaths.add(normalizeVaultPathForComparison(vaultPath));
+    }
+  }
+
+  /**
+   * Pins the viewport of the window showing the given vault, or clears the pin with
+ull. The pin is
+   * remembered per vault, so it survives a reconnect and a sized capture.
+   *
+   * @param params - Which window, and the viewport or
+ull.
+   * @throws Error if CDP refuses the command.
+   */
+  // eslint-disable-next-line typescript-dev-toolkit/params-options-name-match -- Permanent: `SetViewportOverrideParams` is the bag of the `ObsidianTransport` member this implements, so it cannot carry a per-owner name.
+  public async setViewportOverride(params: SetViewportOverrideParams): Promise<void> {
+    const ws = await this.ensureConnection(params.cwd);
+    const response = params.viewport === null
+      ? await this.sendCommand(ws, 'Emulation.clearDeviceMetricsOverride', {})
+      : await this.sendCommand(ws, 'Emulation.setDeviceMetricsOverride', buildMobileLayoutOverridePayload(params.viewport));
+    if (response.error) {
+      throw new Error(`CDP viewport override failed: ${response.error.message}`);
+    }
+    if (params.viewport === null) {
+      this.viewportOverrides.delete(params.cwd);
+    } else {
+      this.viewportOverrides.set(params.cwd, params.viewport);
     }
   }
 
@@ -1272,6 +1308,10 @@ export class DesktopCdpTransport implements ObsidianTransport {
     const target = await this.findTargetForVault(vaultPath);
     this.ws = await this.connectToTarget(target);
     this.activeVaultPath = vaultPath;
+    const viewport = this.viewportOverrides.get(vaultPath);
+    if (viewport) {
+      await this.sendCommand(this.ws, 'Emulation.setDeviceMetricsOverride', buildMobileLayoutOverridePayload(viewport));
+    }
     return this.ws;
   }
 

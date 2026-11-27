@@ -6,6 +6,7 @@
 
 import type { CaptureScreenshotParams } from '../capture/capture-screenshot.ts';
 import type { ScreencastFrame } from '../capture/failure-artifacts-options.ts';
+import type { MobileLayoutViewport } from '../desktop/mobile-layout-options.ts';
 
 /**
  * An opaque handle identifying a console-capture window opened by
@@ -172,6 +173,21 @@ export interface ObsidianTransport {
   readonly registerVault: (vaultPath: string) => Promise<void>;
 
   /**
+   * Pins the viewport of the window showing the given vault to a size and pixel ratio until it is cleared, or
+   * clears it with
+ull.
+   *
+   * Optional and platform-specific: implemented by {@link DesktopCdpTransport} (CDP
+   * Emulation.setDeviceMetricsOverride), absent on {@link AppiumTransport}, whose device has a real screen. The
+   * override outlives a reload and a reconnect, and a sized capture puts it back after it.
+   *
+   * @param params - Which window, and the viewport or
+ull.
+   * @returns A {@link Promise} that resolves once the override is applied.
+   */
+  readonly setViewportOverride?: (params: SetViewportOverrideParams) => Promise<void>;
+
+  /**
    * Starts a screencast of the window showing the given vault, keeping its most recent frames in a bounded buffer.
    *
    * Optional and platform-specific: implemented by {@link DesktopCdpTransport} (CDP `Page.startScreencast`), absent on
@@ -217,6 +233,22 @@ export interface ScreencastRecording {
    * @returns The total count.
    */
   readonly totalFrameCount: () => number;
+}
+
+/**
+ * Parameters for {@link ObsidianTransport.setViewportOverride}.
+ */
+export interface SetViewportOverrideParams {
+  /**
+   * The vault whose window to size.
+   */
+  readonly cwd: string;
+
+  /**
+   * The viewport to pin, or
+ull to clear the override.
+   */
+  readonly viewport: MobileLayoutViewport | null;
 }
 
 /**
