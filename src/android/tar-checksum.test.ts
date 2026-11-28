@@ -255,8 +255,13 @@ describe('gzipTarForToybox', () => {
       expect(headerCount).toBeGreaterThan(0);
 
       writeFileSync(join(root, 'normalized.tar'), result);
-      const listed = execFileSync('tar', ['tf', 'normalized.tar'], { cwd: root, encoding: 'utf-8' });
-      expect(listed).toContain('Нотатка про активістів.md');
+      // Extracted rather than listed: the Windows host tar prints non-ASCII names in its listing through a lossy
+      // Codepage decode, while extraction restores them exactly, and reading the file back also proves the data.
+      const extracted = join(root, 'extracted');
+      mkdirSync(extracted);
+      execFileSync('tar', ['xf', 'normalized.tar', '-C', extracted], { cwd: root });
+      const extractedNote = join(extracted, ...LONG_CYRILLIC_DIRECTORY.split('/'), 'Нотатка про активістів.md');
+      expect(readFileSync(extractedNote, 'utf-8')).toBe('вміст');
     } finally {
       rmSync(root, { force: true, recursive: true });
     }
